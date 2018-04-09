@@ -1060,6 +1060,7 @@ typedef struct firedef_s {
 	int knockback;
 	int stun;
 	int splash_radius;
+	float splashfrac;
 	int mindamage;
 	int minknockback;
 
@@ -1067,6 +1068,9 @@ typedef struct firedef_s {
 	int speed;
 	int spread;     // horizontal spread
 	int v_spread;   // vertical spread
+	float friction;
+	float gravity;
+	int prestep;
 
 	// ammo amounts
 	int weapon_pickup;
