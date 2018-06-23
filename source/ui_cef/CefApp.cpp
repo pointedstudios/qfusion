@@ -363,6 +363,11 @@ void WswCefRenderProcessHandler::OnWebKitInitialized() {
 		"		native function executeCmd(whence, text, callback);"
 		"		executeCmd('append', text, callback);"
 		"	};"
+		"	ui.getVideoModes = function(callback) {"
+		"		native function getVideoModes(callback);"
+		"		/* Complex object are passed as a JSON string */"
+		"		getVideoModes(function(result) { callback(JSON.parse(result)); });"
+		"	};"
 		"})();";
 
 	v8Handler = CefRefPtr<WswCefV8Handler>( new WswCefV8Handler );
@@ -418,6 +423,12 @@ bool WswCefRenderProcessHandler::OnProcessMessageReceived( CefRefPtr<CefBrowser>
 	// Got reply for a JS-initiated call
 	if( !name.compare( "setCVar" ) ) {
 		v8Handler->FireSetCVarCallback( message );
+		return true;
+	}
+
+	// Got reply for a JS-initiated call
+	if( !name.compare( "getVideoModes" ) ) {
+		v8Handler->FireGetVideoModesCallback( message );
 		return true;
 	}
 
@@ -639,6 +650,23 @@ void WswCefClient::ReplyForExecuteCmdRequest( CefRefPtr<CefBrowser> browser, Cef
 	browser->SendProcessMessage( PID_RENDERER, outgoing );
 }
 
+void WswCefClient::ReplyToGetVideoModesRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) {
+	const int id = ingoing->GetArgumentList()->GetInt( 0 );
+
+	std::vector<std::pair<int, int>> modes( UiFacade::GetVideoModes() );
+
+	auto outgoing( CefProcessMessage::Create( "getVideoModes" ) );
+	auto args( outgoing->GetArgumentList() );
+	args->SetInt( 0, id );
+	size_t i = 1;
+	for( const auto &mode: modes ) {
+		args->SetInt( i++, mode.first );
+		args->SetInt( i++, mode.second );
+	}
+
+	browser->SendProcessMessage( PID_RENDERER, outgoing );
+}
+
 bool WswCefClient::OnProcessMessageReceived( CefRefPtr<CefBrowser> browser,
 											 CefProcessId source_process,
 											 CefRefPtr<CefProcessMessage> processMessage ) {
@@ -671,6 +699,11 @@ bool WswCefClient::OnProcessMessageReceived( CefRefPtr<CefBrowser> browser,
 
 	if( !name.compare( "setCVar" ) ) {
 		ReplyForSetCVarRequest( browser, processMessage );
+		return true;
+	}
+
+	if( !name.compare( "getVideoModes" ) ) {
+		ReplyToGetVideoModesRequest( browser, processMessage );
 		return true;
 	}
 
@@ -873,6 +906,29 @@ void WswCefV8Handler::PostExecuteCmdRequest( const CefV8ValueList &arguments,
 	context->GetBrowser()->SendProcessMessage( PID_BROWSER, message );
 }
 
+void WswCefV8Handler::PostGetVideoModesRequest( const CefV8ValueList &arguments,
+												CefRefPtr<CefV8Value> &retval,
+												CefString &exception ) {
+	if( arguments.size() != 1 ) {
+		exception = "Illegal arguments list size, must be a single argument";
+		return;
+	}
+
+	if( !ValidateCallback( arguments.back(), exception ) ) {
+		return;
+	}
+
+	auto context( CefV8Context::GetCurrentContext() );
+	const int id = NextCallId();
+	callbacks[id] = std::make_pair( context, arguments.back() );
+
+	auto message( CefProcessMessage::Create( "" ) );
+	message->GetArgumentList()->SetInt( 0, id );
+
+	retval = CefV8Value::CreateNull();
+	context->GetBrowser()->SendProcessMessage( PID_BROWSER, message );
+}
+
 bool WswCefV8Handler::TryUnregisterCallback( int id, CefRefPtr<CefV8Context> &context, CefRefPtr<CefV8Value> &callback ) {
 	auto it = callbacks.find( id );
 	if( it != callbacks.end() ) {
@@ -951,6 +1007,42 @@ void WswCefV8Handler::FireExecuteCmdCallback( CefRefPtr<CefProcessMessage> reply
 	}
 }
 
+void WswCefV8Handler::FireGetVideoModesCallback( CefRefPtr<CefProcessMessage> reply ) {
+	auto args( reply->GetArgumentList() );
+	const size_t numArgs = args->GetSize();
+	// 3 is the minimal feasible value (id + a single mode)
+	if( numArgs < 3 ) {
+		// TODO: Report an error
+		return;
+	}
+
+	CefRefPtr<CefV8Context> context;
+	CefRefPtr<CefV8Value> callback;
+	if( !TryUnregisterCallback( args->GetInt( 0 ), context, callback ) ) {
+		return;
+	}
+
+	// We pass args as a JSON string
+
+	std::stringstream ss;
+	ss << "{ ";
+	for( size_t i = 1; i < numArgs; i += 2 ) {
+		auto width = args->GetInt( i + 0 );
+		auto height = args->GetInt( i + 1 );
+		ss << "{ width : " << width << ", height :" << height << " },";
+	};
+	// Chop last comma (we're sure there was at least a single mode)
+	ss.get();
+	ss << " }";
+
+	CefV8ValueList callbackArgs;
+	callbackArgs.emplace_back( CefV8Value::CreateString( ss.str() ) );
+	if( !callback->ExecuteFunctionWithContext( context, nullptr, callbackArgs ).get() ) {
+		// TODO: Report execution error
+		return;
+	}
+}
+
 bool WswCefV8Handler::Execute( const CefString& name,
 							   CefRefPtr<CefV8Value> object,
 							   const CefV8ValueList& arguments,
@@ -975,6 +1067,11 @@ bool WswCefV8Handler::Execute( const CefString& name,
 
 	if( !name.compare( "setCVar" ) ) {
 		PostSetCVarRequest( arguments, retval, exception );
+		return true;
+	}
+
+	if( !name.compare( "getVideoModes" ) ) {
+		PostGetVideoModesRequest( arguments, retval, exception );
 		return true;
 	}
 
