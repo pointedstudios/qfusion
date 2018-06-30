@@ -232,7 +232,7 @@ static const char *CL_SoundModule_GetConfigString( int index ) {
 * CL_SoundModule_Init
 */
 void CL_SoundModule_Init( bool verbose ) {
-	static const char *sound_modules[] = { "qf", "openal" };
+	static const char *sound_modules[] = { "qf", "openal", "openal_soft" };
 	static const int num_sound_modules = sizeof( sound_modules ) / sizeof( sound_modules[0] );
 	int sm, smfb;
 	sound_import_t import;

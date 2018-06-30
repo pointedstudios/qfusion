@@ -10,3 +10,6 @@
 [submodule "third-party/recastnavigation"]
 	path = third-party/recastnavigation
 	url = https://github.com/Warsow/recastnavigation.git
+[submodule "third-party/openal-soft"]
+	path = third-party/openal-soft
+	url = https://github.com/Warsow/openal-soft.git

@@ -192,8 +192,12 @@ static bool S_Init( void *hwnd, int maxEntities, bool verbose ) {
 		return false;
 	}
 
+	if ( !QAL_Is_EFX_ExtensionSupported( alDevice ) ) {
+		trap_Cvar_ForceSet( s_environment_effects->name, "0" );
+	}
+
 	attrPtr = &attrList[0];
-	if( QAL_Is_EFX_ExtensionSupported( alDevice ) && s_environment_effects->integer ) {
+	if( s_environment_effects->integer ) {
 		// We limit each source to a single "auxiliary send" for optimization purposes.
 		// This means each source has a single auxiliary output that feeds an effect aside from a direct output.
 		*attrPtr++ = ALC_MAX_AUXILIARY_SENDS;
