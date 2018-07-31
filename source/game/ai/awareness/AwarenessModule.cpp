@@ -8,6 +8,7 @@ BotAwarenessModule::BotAwarenessModule( edict_t *self_, Bot *bot_, float skill_ 
 	, lostEnemies( bot_->lostEnemies )
 	, targetChoicePeriod( (unsigned)( 1500 - 500 * skill_ ) )
 	, reactionTime( 320u - (unsigned)( 300 * skill_ ) )
+	, alertTracker( bot_ )
 	, hazardsDetector( self_ )
 	, hazardsSelector( self_ )
 	, eventsTracker( self_ )
@@ -361,7 +362,7 @@ void BotAwarenessModule::RegisterVisibleEnemies() {
 		OnEnemyViewed( gameEdicts + entNum );
 	}
 
-	self->ai->botRef->CheckAlertSpots( visibleTargets );
+	alertTracker.CheckAlertSpots( visibleTargets );
 }
 
 void BotAwarenessModule::CheckForNewHazards() {

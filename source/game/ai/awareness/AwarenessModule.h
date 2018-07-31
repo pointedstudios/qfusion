@@ -1,6 +1,7 @@
 #ifndef QFUSION_BOT_THREAT_TRACKER_H
 #define QFUSION_BOT_THREAT_TRACKER_H
 
+#include "AlertTracker.h"
 #include "EnemiesTracker.h"
 #include "SelectedEnemies.h"
 #include "HazardsSelector.h"
@@ -21,6 +22,7 @@ class BotAwarenessModule: public AiFrameAwareUpdatable {
 	const unsigned targetChoicePeriod;
 	const unsigned reactionTime;
 
+	AlertTracker alertTracker;
 	HazardsDetector hazardsDetector;
 	HazardsSelector hazardsSelector;
 	EventsTracker eventsTracker;
@@ -138,6 +140,16 @@ public:
 
 	inline int64_t LastTargetTime( const edict_t *target ) const {
 		return ownEnemiesTracker.LastTargetTime( target );
+	}
+
+	void EnableAutoAlert( const AiAlertSpot &alertSpot,
+						  AlertTracker::AlertCallback callback,
+						  AiFrameAwareUpdatable *receiver ) {
+		alertTracker.EnableAutoAlert( alertSpot, callback, receiver );
+	}
+
+	void DisableAutoAlert( int id ) {
+		alertTracker.DisableAutoAlert( id );
 	}
 };
 

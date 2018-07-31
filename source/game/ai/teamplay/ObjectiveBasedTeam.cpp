@@ -110,7 +110,8 @@ void AiObjectiveBasedTeam::EnableDefenceSpotAutoAlert( DefenceSpot *defenceSpot 
 		if( ent->r.client->team != this->teamNum ) {
 			continue;
 		}
-		ent->ai->botRef->EnableAutoAlert( alertSpot, AlertCallback, this );
+		auto callback = (AlertTracker::AlertCallback)( &AiObjectiveBasedTeam::OnAlertReported );
+		ent->ai->botRef->EnableAutoAlert( alertSpot, callback, this );
 	}
 	defenceSpot->usesAutoAlert = true;
 }
@@ -127,10 +128,6 @@ void AiObjectiveBasedTeam::DisableDefenceSpotAutoAlert( DefenceSpot *defenceSpot
 		ent->ai->botRef->DisableAutoAlert( defenceSpot->id );
 	}
 	defenceSpot->usesAutoAlert = false;
-}
-
-void AiObjectiveBasedTeam::AlertCallback( void *receiver, Bot *bot, int id, float alertLevel ) {
-	( (AiObjectiveBasedTeam*)receiver )->OnAlertReported( bot, id, alertLevel );
 }
 
 void AiObjectiveBasedTeam::OnAlertReported( Bot *bot, int id, float alertLevel ) {
@@ -178,10 +175,12 @@ void AiObjectiveBasedTeam::OnAlertReported( Bot *bot, int id, float alertLevel )
 void AiObjectiveBasedTeam::OnBotAdded( Bot *bot ) {
 	AiSquadBasedTeam::OnBotAdded( bot );
 
-	for( auto &spot: defenceSpots )
+	for( auto &spot: defenceSpots ) {
 		if( spot.usesAutoAlert ) {
-			bot->EnableAutoAlert( spot.ToAlertSpot(), AlertCallback, this );
+			auto callback = (AlertTracker::AlertCallback)( &AiObjectiveBasedTeam::OnAlertReported );
+			bot->EnableAutoAlert( spot.ToAlertSpot(), callback, this );
 		}
+	}
 }
 
 void AiObjectiveBasedTeam::OnBotRemoved( Bot *bot ) {

@@ -119,8 +119,6 @@ class AiObjectiveBasedTeam : public AiSquadBasedTeam
 	void EnableDefenceSpotAutoAlert( DefenceSpot *defenceSpot );
 	void DisableDefenceSpotAutoAlert( DefenceSpot *defenceSpot );
 
-	static void AlertCallback( void *receiver, Bot *bot, int id, float alertLevel );
-
 	void OnAlertReported( Bot *bot, int id, float alertLevel );
 
 	template<typename Container >

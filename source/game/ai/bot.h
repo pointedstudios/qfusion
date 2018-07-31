@@ -20,25 +20,6 @@
 class AiSquad;
 class AiEnemiesTracker;
 
-struct AiAlertSpot {
-	int id;
-	Vec3 origin;
-	float radius;
-	float regularEnemyInfluenceScale;
-	float carrierEnemyInfluenceScale;
-
-	AiAlertSpot( int id_,
-				 const Vec3 &origin_,
-				 float radius_,
-				 float regularEnemyInfluenceScale_ = 1.0f,
-				 float carrierEnemyInfluenceScale_ = 1.0f )
-		: id( id_ ),
-		origin( origin_ ),
-		radius( radius_ ),
-		regularEnemyInfluenceScale( regularEnemyInfluenceScale_ ),
-		carrierEnemyInfluenceScale( carrierEnemyInfluenceScale_ ) {}
-};
-
 // This can be represented as an enum but feels better in the following form.
 // Many values that affect bot behaviour already are not boolean
 // (such as nav targets and special movement states like camping spots),
@@ -229,10 +210,15 @@ public:
 
 	inline const int *Inventory() const { return self->r.client->ps.inventory; }
 
-	typedef void (*AlertCallback)( void *receiver, Bot *bot, int id, float alertLevel );
+	void EnableAutoAlert( const AiAlertSpot &alertSpot,
+						  AlertTracker::AlertCallback callback,
+						  AiFrameAwareUpdatable *receiver ) {
+		awarenessModule.EnableAutoAlert( alertSpot, callback, receiver );
+	}
 
-	void EnableAutoAlert( const AiAlertSpot &alertSpot, AlertCallback callback, void *receiver );
-	void DisableAutoAlert( int id );
+	void DisableAutoAlert( int id ) {
+		awarenessModule.DisableAutoAlert( id );
+	}
 
 	inline int Health() const {
 		return self->r.client->ps.stats[STAT_HEALTH];
@@ -412,31 +398,6 @@ private:
 	AiSquad *squad;
 
 	ObjectiveSpotDef objectiveSpotDef;
-
-	struct AlertSpot : public AiAlertSpot {
-		int64_t lastReportedAt;
-		float lastReportedScore;
-		AlertCallback callback;
-		void *receiver;
-
-		AlertSpot( const AiAlertSpot &spot, AlertCallback callback_, void *receiver_ )
-			: AiAlertSpot( spot ),
-			lastReportedAt( 0 ),
-			lastReportedScore( 0.0f ),
-			callback( callback_ ),
-			receiver( receiver_ ) {};
-
-		inline void Alert( Bot *bot, float score ) {
-			callback( receiver, bot, id, score );
-			lastReportedAt = level.time;
-			lastReportedScore = score;
-		}
-	};
-
-	static constexpr unsigned MAX_ALERT_SPOTS = 3;
-	StaticVector<AlertSpot, MAX_ALERT_SPOTS> alertSpots;
-
-	void CheckAlertSpots( const StaticVector<uint16_t, MAX_CLIENTS> &visibleTargets );
 
 	int64_t lastTouchedTeleportAt;
 	int64_t lastTouchedJumppadAt;
