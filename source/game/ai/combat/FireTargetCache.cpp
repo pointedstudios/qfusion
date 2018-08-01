@@ -3,21 +3,20 @@
 #include "../ai_shutdown_hooks_holder.h"
 #include "../bot.h"
 
-class FixedBitVector
-{
+class FixedBitVector {
 private:
 	unsigned size;   // Count of bits this vector is capable to contain
 	uint32_t *words; // Actual bits data. We are limited 32-bit words to work fast on 32-bit processors.
 
 public:
-	FixedBitVector( unsigned size_ ) : size( size_ ) {
+	explicit FixedBitVector( unsigned size_ ) : size( size_ ) {
 		words = (uint32_t *)( G_Malloc( size_ / 8 + 4 ) );
 		Clear();
 	}
 
 	// These following move-related members are mandatory for intended BitVectorHolder behavior
 
-	FixedBitVector( FixedBitVector &&that ) {
+	explicit FixedBitVector( FixedBitVector &&that ) {
 		size = that.size;
 		words = that.words;
 		that.words = nullptr;
@@ -62,8 +61,7 @@ public:
 	}
 };
 
-class BitVectorHolder
-{
+class BitVectorHolder {
 private:
 	StaticVector<FixedBitVector, 1> vectorHolder;
 	unsigned size;
@@ -174,29 +172,32 @@ static void FindClosestAreasFacesPoints( float splashRadius, const vec3_t target
 				continue;
 			}
 
-			// If the area borders with a solid
-			if( areaBehindFace == 0 ) {
-				Vec3 projectedPoint = Vec3( target ) - pointToFaceDistance * Vec3( plane->normal );
-				// We are sure we always have a free slot (closestPoints.capacity() == MAX_CLOSEST_FACE_POINTS + 1)
-				closestPoints.push_back( PointAndDistance( projectedPoint, pointToFaceDistance ) );
-				std::push_heap( closestPoints.begin(), closestPoints.end() );
-				// Ensure that we have a free slot by evicting a largest distance point
-				// Do this afterward the addition to allow a newly added point win over some old one
-				if( closestPoints.size() == closestPoints.capacity() ) {
-					std::pop_heap( closestPoints.begin(), closestPoints.end() );
-					closestPoints.pop_back();
+			// If there is a non-solid are behind face
+			if( areaBehindFace ) {
+				// If the area behind face is not checked yet and areas BFS limit is not reached
+				if( !visitedAreas.IsSet( areaBehindFace ) && areasFringeTail != MAX_FRINGE_AREAS ) {
+					// Enqueue `areaBehindFace` to the fringe queue
+					areasFringe[areasFringeTail++] = areaBehindFace;
 				}
+				continue;
 			}
-			// If the area behind face is not checked yet and areas BFS limit is not reached
-			else if( !visitedAreas.IsSet( areaBehindFace ) && areasFringeTail != MAX_FRINGE_AREAS ) {
-				// Enqueue `areaBehindFace` to the fringe queue
-				areasFringe[areasFringeTail++] = areaBehindFace;
+
+			// If the area borders with a solid
+			Vec3 projectedPoint = Vec3( target ) - pointToFaceDistance * Vec3( plane->normal );
+			// We are sure we always have a free slot (closestPoints.capacity() == MAX_CLOSEST_FACE_POINTS + 1)
+			closestPoints.push_back( PointAndDistance( projectedPoint, pointToFaceDistance ) );
+			std::push_heap( closestPoints.begin(), closestPoints.end() );
+			// Ensure that we have a free slot by evicting a largest distance point
+			// Do this afterward the addition to allow a newly added point win over some old one
+			if( closestPoints.size() == closestPoints.capacity() ) {
+				std::pop_heap( closestPoints.begin(), closestPoints.end() );
+				closestPoints.pop_back();
 			}
 		}
 	}
 
-	// `closestPoints` is a heap arranged for quick eviction of the largest value.
-	// We have to sort it in ascending order
+	// `closestPoints` is a heap arranged for quick eviction of an item with the largest distance.
+	// We have to sort it in ascending order, so really closest points are first.
 	std::sort( closestPoints.begin(), closestPoints.end() );
 }
 
@@ -220,15 +221,16 @@ void BotFireTargetCache::AdjustAimParams( const SelectedEnemies &selectedEnemies
 	}
 }
 
-bool BotFireTargetCache::AdjustTargetByEnvironmentTracing( const SelectedEnemies &selectedEnemies, float splashRadius,
-														   AimParams *aimParams ) {
+bool BotFireTargetCache::AdjustForShootableEnvironmentRayCasting( const SelectedEnemies &selectedEnemies,
+																  float splashRadius,
+																  AimParams *aimParams ) {
 	trace_t trace;
 
 	float minSqDistance = 999999.0f;
-	vec_t nearestPoint[3] = { NAN, NAN, NAN };  // Avoid an "uninitialized" compiler/inspection warning
+	vec_t nearestPoint[3] = { 0, 0, 0 };
 
-	edict_t *traceKey = const_cast<edict_t *>( selectedEnemies.TraceKey() );
-	float *firePoint = const_cast<float*>( aimParams->fireOrigin );
+	auto *traceKey = const_cast<edict_t *>( selectedEnemies.TraceKey() );
+	auto *firePoint = const_cast<float*>( aimParams->fireOrigin );
 
 	if( selectedEnemies.OnGround() ) {
 		Vec3 groundPoint( aimParams->fireTarget );
@@ -288,8 +290,10 @@ bool BotFireTargetCache::AdjustTargetByEnvironmentTracing( const SelectedEnemies
 	return false;
 }
 
-bool BotFireTargetCache::AdjustTargetByEnvironmentWithAAS( const SelectedEnemies &selectedEnemies,
-														   float splashRadius, int areaNum, AimParams *aimParams ) {
+bool BotFireTargetCache::AdjustForShootableEnvironmentWithAas( const SelectedEnemies &selectedEnemies,
+															   float splashRadius,
+															   int areaNum,
+															   AimParams *aimParams ) {
 	// We can't just get a closest point from AAS world, it may be blocked for shooting.
 	// Also we can't check each potential point for being blocked, tracing is very expensive.
 	// Instead we get MAX_CLOSEST_FACE_POINTS best points and for each check whether it is blocked.
@@ -302,15 +306,15 @@ bool BotFireTargetCache::AdjustTargetByEnvironmentWithAAS( const SelectedEnemies
 
 	// On each step get a best point left and check it for being blocked for shooting
 	// We assume that FindClosestAreasFacesPoints() returns a sorted array where closest points are first
-	for( const PointAndDistance &pointAndDistance: closestAreaFacePoints ) {
-		float *traceEnd = const_cast<float*>( pointAndDistance.point.Data() );
-		edict_t *passent = game.edicts + bot->EntNum();
-		G_Trace( &trace, aimParams->fireOrigin, nullptr, nullptr, traceEnd, passent, MASK_AISOLID );
-
-		if( trace.fraction > 0.999f || selectedEnemies.TraceKey() == game.edicts + trace.ent ) {
-			VectorCopy( traceEnd, aimParams->fireTarget );
-			return true;
+	edict_t *ignore = game.edicts + bot->EntNum();
+	for( PointAndDistance &pointAndDistance: closestAreaFacePoints ) {
+		G_Trace( &trace, aimParams->fireOrigin, nullptr, nullptr, pointAndDistance.point.Data(), ignore, MASK_AISOLID );
+		if( trace.fraction < 0.999f && selectedEnemies.TraceKey() != game.edicts + trace.ent ) {
+			continue;
 		}
+
+		pointAndDistance.point.CopyTo( aimParams->fireTarget );
+		return true;
 	}
 
 	return false;
@@ -319,8 +323,9 @@ bool BotFireTargetCache::AdjustTargetByEnvironmentWithAAS( const SelectedEnemies
 constexpr float GENERIC_PROJECTILE_COORD_AIM_ERROR = 75.0f;
 constexpr float GENERIC_INSTANTHIT_COORD_AIM_ERROR = 100.0f;
 
-bool BotFireTargetCache::AdjustTargetByEnvironment( const SelectedEnemies &selectedEnemies,
-													float splashRaidus, AimParams *aimParams ) {
+bool BotFireTargetCache::AdjustForShootableEnvironment( const SelectedEnemies &selectedEnemies,
+														float splashRaidus,
+														AimParams *aimParams ) {
 	int targetAreaNum = 0;
 	// Reject AAS worlds that look like stripped
 	if( AiAasWorld::Instance()->NumFaces() > 512 ) {
@@ -328,10 +333,10 @@ bool BotFireTargetCache::AdjustTargetByEnvironment( const SelectedEnemies &selec
 	}
 
 	if( targetAreaNum ) {
-		return AdjustTargetByEnvironmentWithAAS( selectedEnemies, splashRaidus, targetAreaNum, aimParams );
+		return AdjustForShootableEnvironmentWithAas( selectedEnemies, splashRaidus, targetAreaNum, aimParams );
 	}
 
-	return AdjustTargetByEnvironmentTracing( selectedEnemies, splashRaidus, aimParams );
+	return AdjustForShootableEnvironmentRayCasting( selectedEnemies, splashRaidus, aimParams );
 }
 
 void BotFireTargetCache::AdjustPredictionExplosiveAimTypeParams( const SelectedEnemies &selectedEnemies,
@@ -343,9 +348,9 @@ void BotFireTargetCache::AdjustPredictionExplosiveAimTypeParams( const SelectedE
 	// If new generic predicted target origin has been computed, adjust it for target environment
 	if( !wasCached ) {
 		// First, modify temporary `target` value
-		AdjustTargetByEnvironment( selectedEnemies, fireDef.SplashRadius(), aimParams );
+		AdjustForShootableEnvironment( selectedEnemies, fireDef.SplashRadius(), aimParams );
 		// Copy modified `target` value to cached value
-		cachedFireTarget.origin = Vec3( aimParams->fireTarget );
+		cachedFireTarget.origin.Set( aimParams->fireTarget );
 	}
 	// Accuracy for air rockets is worse anyway (movement prediction in gravity field is approximate)
 	aimParams->suggestedBaseCoordError = 1.3f * ( 1.01f - bot->Skill() ) * GENERIC_PROJECTILE_COORD_AIM_ERROR;
@@ -358,17 +363,12 @@ void BotFireTargetCache::AdjustPredictionAimTypeParams( const SelectedEnemies &s
 														AimParams *aimParams ) {
 	aimParams->suggestedBaseCoordError = GENERIC_PROJECTILE_COORD_AIM_ERROR;
 	if( fireDef.IsBuiltin() ) {
-		switch( fireDef.WeaponNum() ) {
-			case WEAP_PLASMAGUN:
-				aimParams->suggestedBaseCoordError *= 0.5f * ( 1.0f - bot->Skill() );
-				break;
-			case WEAP_ELECTROBOLT:
-				// Do not apply any error in this case (set it to some very low feasible value)
-				aimParams->suggestedBaseCoordError = 1.0f;
-				break;
-			default:
-				// Shut up an analyzer
-				break;
+		if( fireDef.WeaponNum() == WEAP_PLASMAGUN ) {
+			aimParams->suggestedBaseCoordError *= 0.5f * ( 1.0f - bot->Skill() );
+		} else if( fireDef.WeaponNum() == WEAP_ELECTROBOLT ) {
+			// This is not a mistake, the code is for projectile EB.
+			// Do not apply any error in this case (set it to some very low feasible value)
+			aimParams->suggestedBaseCoordError = 1.0f;
 		}
 	}
 
@@ -379,34 +379,41 @@ void BotFireTargetCache::AdjustDropAimTypeParams( const SelectedEnemies &selecte
 												  const SelectedWeapons &selectedWeapons,
 												  const GenericFireDef &fireDef,
 												  AimParams *aimParams ) {
-	bool wasCached = cachedFireTarget.IsValidFor( selectedEnemies, selectedWeapons );
-	GetPredictedTargetOrigin( selectedEnemies, selectedWeapons, fireDef.ProjectileSpeed(), aimParams );
-	// If new generic predicted target origin has been computed, adjust it for gravity (changes will be cached)
-	if( !wasCached ) {
-		// It is not very accurate but satisfactory
-		Vec3 fireOriginToTarget = Vec3( aimParams->fireTarget ) - aimParams->fireOrigin;
-		Vec3 fireOriginToTarget2D( fireOriginToTarget.X(), fireOriginToTarget.Y(), 0 );
-		float squareDistance2D = fireOriginToTarget2D.SquaredLength();
-		if( squareDistance2D > 0 ) {
-			Vec3 velocity2DVec( fireOriginToTarget );
-			velocity2DVec.NormalizeFast();
-			velocity2DVec *= fireDef.ProjectileSpeed();
-			velocity2DVec.Z() = 0;
-			float squareVelocity2D = velocity2DVec.SquaredLength();
-			if( squareVelocity2D > 0 ) {
-				float distance2D = 1.0f / Q_RSqrt( squareDistance2D );
-				float velocity2D = 1.0f / Q_RSqrt( squareVelocity2D );
-				float time = distance2D / velocity2D;
-				float height = std::max( 0.0f, 0.5f * level.gravity * time * time - 32.0f );
-				// Modify both cached and temporary values
-				cachedFireTarget.origin.Z() += height;
-				aimParams->fireTarget[2] += height;
-			}
-		}
-	}
-
 	// This kind of weapons is not precise by its nature, do not add any more noise.
 	aimParams->suggestedBaseCoordError = 0.3f * ( 1.01f - bot->Skill() ) * GENERIC_PROJECTILE_COORD_AIM_ERROR;
+
+	const bool wasCached = cachedFireTarget.IsValidFor( selectedEnemies, selectedWeapons );
+	GetPredictedTargetOrigin( selectedEnemies, selectedWeapons, fireDef.ProjectileSpeed(), aimParams );
+	if( wasCached ) {
+		return;
+	}
+
+	// If new generic predicted target origin has been computed, adjust it for gravity (changes will be cached)
+	// This is not very accurate but satisfactory
+	Vec3 fireOriginToTarget = Vec3( aimParams->fireTarget ) - aimParams->fireOrigin;
+	Vec3 fireOriginToTarget2D( fireOriginToTarget.X(), fireOriginToTarget.Y(), 0 );
+	const float squareDistance2D = fireOriginToTarget2D.SquaredLength();
+	if( squareDistance2D < 8 * 8 ) {
+		return;
+	}
+
+	Vec3 velocity2DVec( fireOriginToTarget );
+	velocity2DVec.NormalizeFast();
+	velocity2DVec *= fireDef.ProjectileSpeed();
+	velocity2DVec.Z() = 0;
+	const float squareVelocity2D = velocity2DVec.SquaredLength();
+	if( squareVelocity2D < 32 * 32 ) {
+		return;
+	}
+
+	const float distance2D = 1.0f / Q_RSqrt( squareDistance2D );
+	const float velocity2D = 1.0f / Q_RSqrt( squareVelocity2D );
+	const float time = distance2D / velocity2D;
+	const float height = std::max( 0.0f, 0.5f * level.gravity * time * time - 32.0f );
+
+	// Modify both cached and temporary values
+	cachedFireTarget.origin.Z() += height;
+	aimParams->fireTarget[2] += height;
 }
 
 void BotFireTargetCache::AdjustInstantAimTypeParams( const SelectedEnemies &selectedEnemies,
@@ -417,11 +424,10 @@ void BotFireTargetCache::AdjustInstantAimTypeParams( const SelectedEnemies &sele
 
 void BotFireTargetCache::SetupCoarseFireTarget( const SelectedEnemies &selectedEnemies,
 												const GenericFireDef &fireDef,
-												vec_t *fire_origin, vec_t *target ) {
-	const float skill = bot->Skill();
+												vec3_t fire_origin, vec3_t target ) {
 	// For hard bots use actual enemy origin
 	// (last seen one may be outdated up to 3 frames, and it matter a lot for fast-moving enemies)
-	if( skill < 0.66f ) {
+	if( bot->Skill() < 0.66f ) {
 		VectorCopy( selectedEnemies.LastSeenOrigin().Data(), target );
 	} else {
 		VectorCopy( selectedEnemies.ActualOrigin().Data(), target );
@@ -431,52 +437,7 @@ void BotFireTargetCache::SetupCoarseFireTarget( const SelectedEnemies &selectedE
 	// We get a weighted last seen enemy origin/velocity and extrapolate origin a bit.
 	// Do not add extra aiming error for other aim styles (these aim styles are not precise by their nature).
 	if( fireDef.AimType() == AI_WEAPON_AIM_TYPE_INSTANT_HIT ) {
-		vec3_t velocity;
-		if( skill < 0.66f ) {
-			VectorCopy( selectedEnemies.LastSeenVelocity().Data(), velocity );
-		} else {
-			VectorCopy( selectedEnemies.ActualVelocity().Data(), velocity );
-		}
-
-		const auto &snapshots = selectedEnemies.LastSeenSnapshots();
-		const int64_t levelTime = level.time;
-		// Skilled bots have this value lesser (this means target will be closer to an actual origin)
-		const unsigned maxTimeDelta = (unsigned)( 900 - 550 * skill );
-		const float weightTimeDeltaScale = 1.0f / maxTimeDelta;
-		float weightsSum = 1.0f;
-		for( auto iter = snapshots.begin(), end = snapshots.end(); iter != end; ++iter ) {
-			const auto &snapshot = *iter;
-			unsigned timeDelta = (unsigned)( levelTime - snapshot.Timestamp() );
-			// If snapshot is too outdated, stop accumulation
-			if( timeDelta > maxTimeDelta ) {
-				break;
-			}
-
-			// Recent snapshots have greater weight
-			float weight = 1.0f - timeDelta * weightTimeDeltaScale;
-			// We have to store these temporarily unpacked values in locals
-			Vec3 snapshotOrigin( snapshot.Origin() );
-			Vec3 snapshotVelocity( snapshot.Velocity() );
-			// Accumulate snapshot target origin using the weight
-			VectorMA( target, weight, snapshotOrigin.Data(), target );
-			// Accumulate snapshot target velocity using the weight
-			VectorMA( velocity, weight, snapshotVelocity.Data(), velocity );
-			weightsSum += weight;
-		}
-		float invWeightsSum = 1.0f / weightsSum;
-		// Make `target` contain a weighted sum of enemy snapshot origin
-		VectorScale( target, invWeightsSum, target );
-		// Make `velocity` contain a weighted sum of enemy snapshot velocities
-		VectorScale( velocity, invWeightsSum, velocity );
-
-		if( extrapolationRandomTimeoutAt < levelTime ) {
-			// Make constant part lesser for higher skill
-			extrapolationRandom = ( 0.75f - 0.5f * skill ) * random() + 0.25f + 0.5f * ( 1.0f - skill );
-			extrapolationRandomTimeoutAt = levelTime + 150;
-		}
-		float extrapolationTimeSeconds = 0.0001f * ( 900 - 650 * skill ) * extrapolationRandom;
-		// Add some extrapolated target movement
-		VectorMA( target, extrapolationTimeSeconds, velocity, target );
+		AddHitscanAimingError( selectedEnemies, target );
 	}
 
 	const edict_t *self = game.edicts + bot->EntNum();
@@ -484,6 +445,59 @@ void BotFireTargetCache::SetupCoarseFireTarget( const SelectedEnemies &selectedE
 	fire_origin[0] = self->s.origin[0];
 	fire_origin[1] = self->s.origin[1];
 	fire_origin[2] = self->s.origin[2] + self->viewheight;
+}
+
+void BotFireTargetCache::AddHitscanAimingError( const SelectedEnemies &selectedEnemies, vec3_t target ) {
+	const float skill = bot->Skill();
+
+	vec3_t velocity;
+	if( skill < 0.66f ) {
+		VectorCopy( selectedEnemies.LastSeenVelocity().Data(), velocity );
+	} else {
+		VectorCopy( selectedEnemies.ActualVelocity().Data(), velocity );
+	}
+
+	const int64_t levelTime = level.time;
+	// Skilled bots have this value lesser (this means target will be closer to an actual origin)
+	const auto maxTimeDelta = (unsigned)( 900 - 800 * skill );
+	const float weightTimeDeltaScale = 1.0f / maxTimeDelta;
+	float weightsSum = 1.0f;
+
+	// Iterate from oldest to newest snapshot
+	// This is not so bad as reverse iteration steps are more expensive
+	for( const auto &snapshot : selectedEnemies.LastSeenSnapshots() ) {
+		auto timeDelta = (unsigned)( levelTime - snapshot.Timestamp() );
+		if( timeDelta > maxTimeDelta ) {
+			continue;
+		}
+
+		// Recent snapshots have greater weight
+		float weight = 1.0f - timeDelta * weightTimeDeltaScale;
+		// We have to store these temporarily unpacked values in locals
+		Vec3 snapshotOrigin( snapshot.Origin() );
+		Vec3 snapshotVelocity( snapshot.Velocity() );
+		// Accumulate snapshot target origin using the weight
+		VectorMA( target, weight, snapshotOrigin.Data(), target );
+		// Accumulate snapshot target velocity using the weight
+		VectorMA( velocity, weight, snapshotVelocity.Data(), velocity );
+		weightsSum += weight;
+	}
+
+	const float invWeightsSum = 1.0f / weightsSum;
+	// Make `target` contain a weighted sum of enemy snapshot origin
+	VectorScale( target, invWeightsSum, target );
+	// Make `velocity` contain a weighted sum of enemy snapshot velocities
+	VectorScale( velocity, invWeightsSum, velocity );
+
+	if( extrapolationRandomTimeoutAt < levelTime ) {
+		// Make constant part lesser for higher skill
+		extrapolationRandom = random();
+		extrapolationRandomTimeoutAt = levelTime + 250;
+	}
+
+	const float extrapolationTimeSeconds = 0.001f * ( 900 - 800 * skill ) * extrapolationRandom;
+	// Add some extrapolated target movement
+	VectorMA( target, extrapolationTimeSeconds, velocity, target );
 }
 
 // This is a port of public domain projectile prediction code by Kain Shin
@@ -572,7 +586,6 @@ static inline void TryAimingAtGround( trace_t *trace, AimParams *aimParams, edic
 
 class HitPointPredictor final: private AiTrajectoryPredictor {
 public:
-
 	struct ProblemParams {
 		const Vec3 fireOrigin;
 		const Vec3 targetVelocity;
@@ -585,44 +598,36 @@ public:
 			  enemyEnt( enemyEnt_ ), projectileSpeed( projectileSpeed_ ) {}
 	};
 
+	static bool Exec( const ProblemParams &problemParams_, float skill, vec3_t fireTarget_ );
 private:
-	const ProblemParams *problemParams;
-	float *fireTarget;
+	HitPointPredictor( const ProblemParams &problemParams_, vec3_t fireTarget_ )
+		: problemParams( problemParams_ ), fireTarget( fireTarget_ ) {}
 
-	bool tryHitInAir;
-	bool hasFailed;
+	const ProblemParams &problemParams;
+	float *const fireTarget;
+	bool tryHitInAir { true };
+	bool hasFailed { false };
 
 	bool OnPredictionStep( const Vec3 &segmentStart, const Results *results ) override;
-public:
-	HitPointPredictor()
-		: problemParams( nullptr ),
-		  fireTarget( nullptr ),
-		  tryHitInAir( true ),
-		  hasFailed( false ) {}
-
-	bool Run( const ProblemParams &problemParams_, float skill, vec3_t fireTarget_ );
 };
 
-bool HitPointPredictor::Run( const ProblemParams &problemParams_, float skill, vec3_t fireTarget_ ) {
-	SetStepMillis( (unsigned)( 200.0f - 100.0f * skill ) );
-	SetNumSteps( (unsigned)( 6 + 12 * skill ) );
+bool HitPointPredictor::Exec( const ProblemParams &problemParams_, float skill, vec3_t fireTarget_ ) {
+	HitPointPredictor predictor( problemParams_, fireTarget_ );
 
-	tryHitInAir = true;
-	hasFailed = false;
-	this->problemParams = &problemParams_;
-	this->fireTarget = fireTarget_;
+	predictor.SetStepMillis( (unsigned)( 200.0f - 100.0f * skill ) );
+	predictor.SetNumSteps( (unsigned)( 6 + 12 * skill ) );
 
-	SetEntitiesCollisionProps( true, ENTNUM( problemParams_.enemyEnt ) );
-	SetColliderBounds( vec3_origin, playerbox_stand_maxs );
-	AddStopEventFlags( HIT_SOLID );
-	SetExtrapolateLastStep( true );
+	predictor.SetEntitiesCollisionProps( true, ENTNUM( problemParams_.enemyEnt ) );
+	predictor.SetColliderBounds( vec3_origin, playerbox_stand_maxs );
+	predictor.AddStopEventFlags( HIT_SOLID );
+	predictor.SetExtrapolateLastStep( true );
 
 	Vec3 startOrigin( fireTarget_ );
 	AiTrajectoryPredictor::Results baseResults;
-	auto stopEvents = AiTrajectoryPredictor::Run( problemParams->targetVelocity, startOrigin, &baseResults );
+	auto stopEvents = predictor.Run( problemParams_.targetVelocity, startOrigin, &baseResults );
 
 	// If a hit point has been found in OnPredictionStep(), a prediction gets interrupted
-	return ( stopEvents & INTERRUPTED ) && !hasFailed;
+	return ( stopEvents & INTERRUPTED ) && !predictor.hasFailed;
 }
 
 bool HitPointPredictor::OnPredictionStep( const Vec3 &segmentStart, const Results *results ) {
@@ -650,7 +655,7 @@ bool HitPointPredictor::OnPredictionStep( const Vec3 &segmentStart, const Result
 	// const float zPartAtSegmentStart = 0.001f * ( results->millisAhead - stepMillis ) * level.gravity;
 	// const float zPartAtSegmentEnd = 0.001f * results->millisAhead * level.gravity;
 	// segmentTargetVelocity.Z() -= 0.5f * ( zPartAtSegmentStart + zPartAtSegmentEnd );
-	float newTargetZSpeed = problemParams->targetVelocity.Z();
+	float newTargetZSpeed = problemParams.targetVelocity.Z();
 	newTargetZSpeed -= 0.5f * 0.001f * ( 2.0f * results->millisAhead - stepMillis ) * level.gravity;
 
 	// Wait for a negative target velocity or for hitting a solid.
@@ -659,7 +664,7 @@ bool HitPointPredictor::OnPredictionStep( const Vec3 &segmentStart, const Result
 		return true;
 	}
 
-	Vec3 segmentTargetVelocity( problemParams->targetVelocity );
+	Vec3 segmentTargetVelocity( problemParams.targetVelocity );
 	segmentTargetVelocity.Z() = newTargetZSpeed;
 
 	// TODO: Projectile speed used in PredictProjectileNoClip() needs correction
@@ -667,7 +672,7 @@ bool HitPointPredictor::OnPredictionStep( const Vec3 &segmentStart, const Result
 	// Instead, increase projectile speed used in calculations according to currTime
 	// Exact formula is to be proven yet
 	Vec3 predictedTarget( segmentStart );
-	if( !PredictProjectileNoClip( problemParams->fireOrigin, problemParams->projectileSpeed,
+	if( !PredictProjectileNoClip( problemParams.fireOrigin, problemParams.projectileSpeed,
 								  predictedTarget.Data(), segmentTargetVelocity ) ) {
 		tryHitInAir = false;
 		// Wait for hitting a solid
@@ -695,23 +700,25 @@ bool HitPointPredictor::OnPredictionStep( const Vec3 &segmentStart, const Result
 	return true;
 }
 
-void BotFireTargetCache::PredictProjectileShot( const SelectedEnemies &selectedEnemies, float projectileSpeed,
-												AimParams *aimParams, bool applyTargetGravity ) {
+void BotFireTargetCache::PredictProjectileShot( const SelectedEnemies &selectedEnemies,
+												float projectileSpeed,
+												AimParams *aimParams,
+												bool applyTargetGravity ) {
 	if( projectileSpeed <= 0.0f ) {
 		return;
 	}
 
 	trace_t trace;
-	edict_t *traceKey = const_cast<edict_t*>( selectedEnemies.TraceKey() );
+	auto *traceKey = const_cast<edict_t*>( selectedEnemies.TraceKey() );
 
 	if( applyTargetGravity ) {
-		HitPointPredictor predictor;
-		HitPointPredictor::ProblemParams predictionParams( aimParams->fireOrigin,
-														   selectedEnemies.LastSeenVelocity().Data(),
-														   selectedEnemies.TraceKey(),
-														   projectileSpeed );
+		typedef HitPointPredictor::ProblemParams ProblemParams;
+		ProblemParams predictionParams( aimParams->fireOrigin,
+										selectedEnemies.LastSeenVelocity().Data(),
+										selectedEnemies.TraceKey(),
+										projectileSpeed );
 
-		if( !predictor.Run( predictionParams, bot->Skill(), aimParams->fireTarget ) ) {
+		if( !HitPointPredictor::Exec( predictionParams, bot->Skill(), aimParams->fireTarget ) ) {
 			TryAimingAtGround( &trace, aimParams, traceKey );
 		}
 		return;

@@ -372,9 +372,9 @@ bool BotWeaponsUsageModule::CheckShot( const AimParams &aimParams,
 			}
 		}
 
-		float testedSplashRadius = 0.5f * fireDef.SplashRadius();
-		if( !bot->ShouldKeepXhairOnEnemy() ) {
-			testedSplashRadius *= 1.5f;
+		float testedSplashRadius = fireDef.SplashRadius();
+		if( bot->ShouldKeepXhairOnEnemy() ) {
+			testedSplashRadius *= 0.75f;
 		}
 		return DistanceSquared( tr.endpos, aimParams.fireTarget ) < testedSplashRadius * testedSplashRadius;
 	}

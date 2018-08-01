@@ -246,7 +246,7 @@ public:
 		int16_t packedVelocity[3];
 	public:
 		Snapshot( const vec3_t origin_, const vec3_t velocity_, int64_t timestamp_ ) {
-			this->timestamp = timestamp;
+			this->timestamp = timestamp_;
 			SetPacked4uVec( origin_, this->packedOrigin );
 			SetPacked4uVec( velocity_, this->packedVelocity );
 		}

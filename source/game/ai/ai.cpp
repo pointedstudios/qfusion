@@ -12,7 +12,11 @@ ai_weapon_aim_type BuiltinWeaponAimType( int builtinWeapon, int fireMode ) {
 	assert( fireMode == FIRE_MODE_STRONG || fireMode == FIRE_MODE_WEAK );
 	switch( builtinWeapon ) {
 		case WEAP_GUNBLADE:
+			// This is not logically correct but produces better behaviour
+			// than using AI_WEAPON_AIM_TYPE_PREDICTION_EXPLOSIVE.
+			// Otherwise bots carrying only GB are an easy prey losing many chances for attacking.
 			// TODO: Introduce "melee" aim type for GB blade attack
+			return AI_WEAPON_AIM_TYPE_PREDICTION;
 		case WEAP_ROCKETLAUNCHER:
 			return AI_WEAPON_AIM_TYPE_PREDICTION_EXPLOSIVE;
 		case WEAP_GRENADELAUNCHER:
