@@ -132,4 +132,98 @@ public:
 	}
 };
 
+inline size_t WriteVec( CefListValue *argsList, size_t argNum, const float *vector, int size ) {
+	for( int i = 0; i < size; ++i ) {
+		argsList->SetDouble( argNum++, vector[i] );
+	}
+	return argNum;
+}
+
+inline size_t ReadVec( CefListValue *argsList, size_t argNum, float *vector, int size ) {
+	for( int i = 0; i < size; ++i ) {
+		vector[i] = (vec_t)argsList->GetDouble( argNum++ );
+	}
+	return argNum;
+}
+
+inline size_t WriteVec4( CefListValue *argsList, size_t argNum, const vec2_t vector ) {
+	return WriteVec( argsList, argNum, vector, 4 );
+}
+
+inline size_t ReadVec4( CefListValue *argsList, size_t argNum, vec2_t vector ) {
+	return ReadVec( argsList, argNum, vector, 4 );
+}
+
+inline size_t WriteVec3( CefListValue *argsList, size_t argNum, const vec3_t vector ) {
+	return WriteVec( argsList, argNum, vector, 3 );
+}
+
+inline size_t ReadVec3( CefListValue *argsList, size_t argNum, vec3_t vector ) {
+	return ReadVec( argsList, argNum, vector, 3 );
+}
+
+inline size_t WriteVec2( CefListValue *argsList, size_t argNum, const vec2_t vector ) {
+	return WriteVec( argsList, argNum, vector, 2 );
+}
+
+inline size_t ReadVec2( CefListValue *argsList, size_t argNum, vec2_t vector ) {
+	return ReadVec( argsList, argNum, vector, 2 );
+}
+
+inline size_t WriteSharedViewAnimFields( CefListValue *argsList, size_t argNum, const ViewAnimFrame &frame ) {
+	argNum = WriteVec4( argsList, argNum, frame.rotation );
+	argNum = WriteVec3( argsList, argNum, frame.origin );
+	argsList->SetInt( argNum++, (int)frame.timestamp );
+	return argNum;
+}
+
+inline size_t WriteViewAnimFrame( CefListValue *argsList, size_t argNum, const ViewAnimFrame &frame ) {
+	return WriteSharedViewAnimFields( argsList, argNum, frame );
+}
+
+inline size_t WriteViewAnimFrame( CefListValue *argsList, size_t argNum, const CameraAnimFrame &frame ) {
+	argNum = WriteSharedViewAnimFields( argsList, argNum, frame );
+	argsList->SetInt( argNum++, (int)frame.fov );
+	return argNum;
+}
+
+template <typename FrameImpl>
+size_t WriteViewAnim( CefListValue *argsList, size_t argNum, bool looping, const std::vector<FrameImpl> &frames ) {
+	argsList->SetBool( argNum++, looping );
+	argsList->SetInt( argNum++, (int)frames.size() );
+	for( const auto &frame: frames ) {
+		argNum = WriteViewAnimFrame( argsList, argNum, frame );
+	}
+	return argNum;
+}
+
+inline size_t ReadSharedViewAnimFields( CefListValue *argsList, size_t argNum, ViewAnimFrame *frame ) {
+	argNum = ReadVec4( argsList, argNum, frame->rotation );
+	argNum = ReadVec3( argsList, argNum, frame->origin );
+	frame->timestamp = (unsigned)argsList->GetInt( argNum++ );
+	return argNum;
+}
+
+inline size_t ReadViewAnimFrame( CefListValue *argsList, size_t argNum, ViewAnimFrame *frame ) {
+	return ReadSharedViewAnimFields( argsList, argNum, frame );
+}
+
+inline size_t ReadViewAnimFrame( CefListValue *argsList, size_t argNum, CameraAnimFrame *frame ) {
+	argNum = ReadSharedViewAnimFields( argsList, argNum, frame );
+	frame->fov = (float)argsList->GetInt( argNum++ );
+	return argNum;
+}
+
+template <typename FrameImpl>
+size_t ReadCameraAnim( CefListValue *argsList, size_t argNum, bool *looping, std::vector<FrameImpl> &frames ) {
+	*looping = argsList->GetBool( argNum++ );
+	int numFrames = argsList->GetInt( argNum++ );
+	for( int i = 0; i < numFrames; ++i ) {
+		FrameImpl frame;
+		argNum = ReadViewAnimFrame( argsList, argNum, &frame );
+		frames.emplace_back( frame );
+	}
+	return argNum;
+}
+
 #endif
