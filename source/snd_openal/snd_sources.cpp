@@ -204,10 +204,6 @@ float UnderwaterFlangerEffect::GetMasterGain( src_t *src ) const {
 		gain *= 0.25f;
 	}
 
-	if( !s_attenuate_on_obstruction->integer ) {
-		return gain;
-	}
-
 	// Modify the gain by the direct obstruction factor
 	// Lowering the gain by 1/3 on full obstruction is fairly sufficient (its not linearly perceived)
 	gain *= 1.0f - 0.33f * directObstruction;
@@ -225,15 +221,12 @@ void UnderwaterFlangerEffect::BindOrUpdate( src_t *src ) {
 
 float ReverbEffect::GetMasterGain( src_t *src ) const {
 	float gain = src->fvol * src->volumeVar->value;
-	if( !s_attenuate_on_obstruction->integer ) {
-		return gain;
-	}
 
 	// Both partial obstruction factors are within [0, 1] range, so we multiply by 0.5
 	float obstructionFactor = 0.5f * ( this->directObstruction + this->secondaryRaysObstruction );
 	assert( obstructionFactor >= 0.0f && obstructionFactor <= 1.0f );
-	// Lowering the gain by 1/3 is enough
-	gain *= 1.0f - 0.33f * obstructionFactor;
+	// The gain might be lowered up to 2x
+	gain *= 1.0f - 0.5f * obstructionFactor;
 	assert( gain >= 0.0f && gain <= 1.0f );
 	return gain;
 }
@@ -333,6 +326,13 @@ static void source_spatialize( src_t *src ) {
 	if( src->isTracking ) {
 		VectorCopy( entlist[src->entNum].origin, src->origin );
 		VectorCopy( entlist[src->entNum].velocity, src->velocity );
+	}
+
+	if( src->envUpdateState.lastEnvUpdateAt ) {
+		// Delegate setting source origin to the effect in this case
+		if( dynamic_cast<EaxReverbEffect *>( src->envUpdateState.effect ) ) {
+			return;
+		}
 	}
 
 	qalSourcei( src->source, AL_SOURCE_RELATIVE, AL_FALSE );

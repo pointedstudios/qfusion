@@ -102,7 +102,7 @@ extern cvar_t *s_environment_sampling_quality;
 extern cvar_t *s_effects_number_threshold;
 extern cvar_t *s_hrtf;
 // Has effect only if environment effects are turned on
-extern cvar_t *s_attenuate_on_obstruction;
+extern cvar_t *s_realistic_obstruction;
 
 extern cvar_t *s_globalfocus;
 
@@ -338,6 +338,13 @@ public:
 
 class EaxReverbEffect final: public ReverbEffect {
 	friend class ReverbEffectSampler;
+
+	const float *MakeFakeSourceOrigin( struct src_s *src,
+									   const vec3_t listenerOrigin,
+									   const vec3_t avgReflectionDir,
+									   const vec3_t *reflectionDirs );
+
+	vec3_t tmpSourceOrigin { 0, 0, 0 };
 public:
 	EaxReverbEffect(): ReverbEffect( AL_EFFECT_EAXREVERB ) {}
 
@@ -401,7 +408,7 @@ typedef struct {
 } samplingProps_t;
 
 struct PanningUpdateState {
-	static constexpr auto MAX_POINTS = 48;
+	static constexpr auto MAX_POINTS = 80;
 	int64_t timeoutAt;
 	vec3_t reflectionPoints[MAX_POINTS];
 	unsigned numReflectionPoints;

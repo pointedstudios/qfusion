@@ -42,7 +42,7 @@ cvar_t *s_environment_effects;
 cvar_t *s_environment_sampling_quality;
 cvar_t *s_effects_number_threshold;
 cvar_t *s_hrtf;
-cvar_t *s_attenuate_on_obstruction;
+cvar_t *s_realistic_obstruction;
 cvar_t *s_stereo2mono;
 cvar_t *s_globalfocus;
 
@@ -138,7 +138,7 @@ bool SF_Init( void *hwnd, int maxEntities, bool verbose ) {
 	}
 	s_effects_number_threshold = trap_Cvar_Get( "s_effects_number_threshold", "15", CVAR_ARCHIVE );
 	s_hrtf = trap_Cvar_Get( "s_hrtf", "1", CVAR_ARCHIVE | CVAR_LATCH_SOUND );
-	s_attenuate_on_obstruction = trap_Cvar_Get( "s_attenuate_on_obstruction", "1", CVAR_ARCHIVE );
+	s_realistic_obstruction = trap_Cvar_Get( "s_realistic_obstruction", "1", CVAR_ARCHIVE );
 
 #ifdef ENABLE_PLAY
 	trap_Cmd_AddCommand( "play", SF_Play_f );
