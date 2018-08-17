@@ -16,6 +16,7 @@ file(GLOB GAME_HEADERS
 	"../gameshared/*.h"
 	"../qalgo/base64.h"
 	"../qalgo/md5.h"
+	"../qalgo/Links.h"
 	"../../third-party/recastnavigation/Recast/Include/*.h"
 	"../../third-party/recastnavigation/Detour/Include/*.h"
 	"../qcommon/net.h" # constants and types for address parsing

@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "g_local.h"
 #include "../qcommon/net.h"
+#include "../qalgo/Links.h"
 
 #undef min
 #undef max
@@ -129,36 +130,6 @@ static void Cmd_Match_f( void ) {
 //==============================================================================
 
 #define MAX_IPFILTERS   1024
-
-// TODO: Lift these utilities to main headers and unify the linked lists codebase
-
-template<typename Node>
-static inline Node *Unlink( Node *node, Node **listHeadRef, int linksIndex ) {
-	if( auto *next = node->next[linksIndex] ) {
-		next->prev[linksIndex] = node->prev[linksIndex];
-	}
-	if( auto *prev = node->prev[linksIndex] ) {
-		prev->next[linksIndex] = node->next[linksIndex];
-	} else {
-		assert( node == *listHeadRef );
-		*listHeadRef = node->next[linksIndex];
-	}
-
-	node->prev[linksIndex] = nullptr;
-	node->next[linksIndex] = nullptr;
-	return node;
-}
-
-template<typename Node>
-static inline Node *Link( Node *node, Node **listHeadRef, int linksIndex ) {
-	if( *listHeadRef ) {
-		( *listHeadRef )->prev[linksIndex] = node;
-	}
-	node->prev[linksIndex] = nullptr;
-	node->next[linksIndex] = *listHeadRef;
-	*listHeadRef = node;
-	return node;
-}
 
 class GIPFilter {
 	struct GroupHeader;
