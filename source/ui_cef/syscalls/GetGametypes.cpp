@@ -94,9 +94,9 @@ public:
 
 	CefRefPtr<CefProcessMessage> FillMessage() override {
 		auto message( CefProcessMessage::Create( PendingCallbackRequest::getHuds ) );
-		auto args( message->GetArgumentList() );
-		args->SetInt( 0, callId );
-		AddEntries( gametypes, args, StringSetter(), StringSetter() );
+		MessageWriter writer( message );
+		writer << callId;
+		AddEntries( gametypes, writer, StringSetter(), StringSetter() );
 		return message;
 	}
 
@@ -105,8 +105,8 @@ public:
 
 class GetGametypesTask: public FSPendingCallbackRequestTask {
 public:
-	GetGametypesTask( CefRefPtr<CefBrowser> browser_, CefRefPtr<CefProcessMessage> message )
-		: FSPendingCallbackRequestTask( browser_, message ) {}
+	GetGametypesTask( CefRefPtr<CefBrowser> browser_, MessageReader &reader )
+		: FSPendingCallbackRequestTask( browser_, reader ) {}
 
 	CefRefPtr<IOPendingCallbackRequestTask> CreatePostResultsTask() override {
 		return AsCefPtr( new PostGametypesTask( this, GametypesRetrievalHelper().Exec() ) );
@@ -115,10 +115,10 @@ public:
 	IMPLEMENT_REFCOUNTING( GetGametypesTask );
 };
 
-void GetGametypesRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) {
-	CefPostTask( TID_FILE_BACKGROUND, AsCefPtr( new GetGametypesTask( browser, ingoing ) ) );
+void GetGametypesRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	CefPostTask( TID_FILE_BACKGROUND, AsCefPtr( new GetGametypesTask( browser, reader ) ) );
 }
 
-void GetGametypesRequest::FireCallback( CefRefPtr<CefProcessMessage> reply ) {
-	FireSingleArgAggregateCallback<ObjectBuildHelper>( reply );
+void GetGametypesRequest::FireCallback( MessageReader &reader ) {
+	FireSingleArgAggregateCallback<ObjectBuildHelper>( reader );
 }

@@ -23,9 +23,8 @@ void GetDemosAndSubDirsRequestLauncher::StartExec( const CefV8ValueList &args,
 	auto request( NewRequest( context, args.back() ) );
 
 	auto message( NewMessage() );
-	auto messageArgs( message->GetArgumentList() );
-	messageArgs->SetInt( 0, request->Id() );
-	messageArgs->SetString( 1, dir );
+	MessageWriter writer( message );
+	writer << request->Id() << dir;
 
 	Commit( std::move( request ), context, message, retval, exception );
 }
@@ -40,13 +39,13 @@ public:
 
 	CefRefPtr<CefProcessMessage> FillMessage() override {
 		auto message( CefProcessMessage::Create( PendingCallbackRequest::getDemosAndSubDirs ) );
-		auto args( message->GetArgumentList() );
+		MessageWriter writer( message );
 
-		args->SetInt( 0, callId );
-		args->SetInt( 1, (int)demos.size() );
-		size_t nextArgNum = AddEntries( demos, args, StringSetter() );
-		args->SetInt( nextArgNum, (int)subDirs.size() );
-		AddEntries( subDirs, args, StringSetter() );
+		writer << callId;
+		writer << (int)demos.size();
+		AddEntries( demos, writer, StringSetter() );
+		writer << (int)subDirs.size();
+		AddEntries( subDirs, writer, StringSetter() );
 
 		return message;
 	}
@@ -72,33 +71,27 @@ public:
 	IMPLEMENT_REFCOUNTING( GetDemosAndSubDirsTask );
 };
 
-void GetDemosAndSubDirsRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser,
-													   CefRefPtr<CefProcessMessage> ingoing ) {
-	auto ingoingArgs( ingoing->GetArgumentList() );
-	const int callId = ingoingArgs->GetInt( 1 );
-	std::string dir( ingoingArgs->GetString( 2 ) );
+void GetDemosAndSubDirsRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	int callId = reader.NextInt();
+	std::string dir = reader.NextString();
 	CefPostTask( TID_FILE_BACKGROUND, AsCefPtr( new GetDemosAndSubDirsTask( browser, callId, std::move( dir ) ) ) );
 }
 
-
-void GetDemosAndSubDirsRequest::FireCallback( CefRefPtr<CefProcessMessage> reply ) {
-	auto args( reply->GetArgumentList() );
-	const size_t numArgs = args->GetSize();
-	if( numArgs < 3 ) {
-		ReportNumArgsMismatch( numArgs, "at least 3" );
-		return;
-	}
-
-	size_t argNum = 1;
+void GetDemosAndSubDirsRequest::FireCallback( MessageReader &reader ) {
 	CefV8ValueList callbackArgs;
 	CefStringBuilder stringBuilder;
+	// We have two groups: demos and sub dirs
+	// Each group is written as an integer describing the group size
+	// and a following list of strings that has this size.
 	for( int arrayGroup = 0; arrayGroup < 2; ++arrayGroup ) {
 		stringBuilder.Clear();
 		ArrayBuildHelper buildHelper( stringBuilder );
-		size_t numGroupArgs = (size_t)args->GetInt( argNum++ );
-		buildHelper.PrintArgs( args, argNum, numGroupArgs );
-		argNum += numGroupArgs;
-		callbackArgs.emplace_back( CefV8Value::CreateString( stringBuilder.ReleaseOwnership() ) );
+		const auto groupSize = (size_t)reader.NextInt();
+		assert( groupSize <= reader.Offset() + reader.Limit() );
+		const size_t oldLimit = reader.Limit();
+		reader.SetLimit( reader.Offset() + groupSize );
+		buildHelper.PrintArgs( reader );
+		reader.SetLimit( oldLimit );
 	}
 
 	ExecuteCallback( callbackArgs );

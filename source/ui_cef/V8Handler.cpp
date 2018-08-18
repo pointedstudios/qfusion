@@ -53,14 +53,14 @@ bool WswCefV8Handler::TryHandle( CefRefPtr<CefBrowser> &browser, CefRefPtr<CefPr
 }
 
 void WswCefV8Handler::ProcessAsAwaitedReply( CefRefPtr<CefProcessMessage> &message ) {
-	auto args( message->GetArgumentList() );
-	if( args->GetSize() < 1 ) {
+	MessageReader reader( message );
+	if( !reader.HasNext() ) {
 		std::string name( message->GetName().ToString() );
 		Logger()->Error( "Empty arguments list for a message `%s` that is awaited for firing a callback", name.c_str() );
 		return;
 	}
 
-	const int id = args->GetInt( 0 );
+	int id = reader.NextInt();
 	// These non-atomic operations should be safe as all JS interaction is performed in the renderer thread
 	auto iter = callbacks.find( id );
 	if( iter == callbacks.end() ) {
@@ -69,6 +69,6 @@ void WswCefV8Handler::ProcessAsAwaitedReply( CefRefPtr<CefProcessMessage> &messa
 		return;
 	}
 
-	( *iter ).second->FireCallback( message );
+	( *iter ).second->FireCallback( reader );
 	callbacks.erase( iter );
 }

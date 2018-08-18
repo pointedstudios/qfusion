@@ -3,6 +3,8 @@
 
 #include "Allocator.h"
 #include "CefStringBuilder.h"
+#include "MessageReader.h"
+#include "MessageWriter.h"
 
 #include "include/cef_v8.h"
 #include "include/wrapper/cef_helpers.h"
@@ -28,45 +30,44 @@ protected:
 	inline RenderProcessLogger *Logger();
 
 	template<typename BuildHelper>
-	void FireSingleArgAggregateCallback( CefRefPtr<CefProcessMessage> &reply ) {
+	void FireSingleArgAggregateCallback( MessageReader &reader ) {
 		CefStringBuilder stringBuilder;
 		BuildHelper buildHelper( stringBuilder );
-		FireSingleArgAggregateCallback( reply->GetArgumentList(), buildHelper );
+		FireSingleArgAggregateCallback( reader, buildHelper );
 	}
 
 	template<typename BuildHelper, typename HelperArg1>
-	void FireSingleArgAggregateCallback( CefRefPtr<CefProcessMessage> &reply, const HelperArg1 &arg1 ) {
+	void FireSingleArgAggregateCallback( MessageReader &reader, const HelperArg1 &arg1 ) {
 		CefStringBuilder stringBuilder;
 		BuildHelper buildHelper( stringBuilder, arg1 );
-		FireSingleArgAggregateCallback( reply->GetArgumentList(), buildHelper );
+		FireSingleArgAggregateCallback( reader, buildHelper );
 	};
 
 	template <typename BuildHelper, typename HelperArg1, typename HelperArg2>
-	void FireSingleArgAggregateCallback( CefRefPtr<CefProcessMessage> &reply,
+	void FireSingleArgAggregateCallback( MessageReader &reader,
 										 const HelperArg1 &arg1,
 										 const HelperArg2 arg2 ) {
 		CefStringBuilder stringBuilder;
 		BuildHelper buildHelper( stringBuilder, arg1, arg2 );
-		FireSingleArgAggregateCallback( reply->GetArgumentList(), buildHelper );
+		FireSingleArgAggregateCallback( reader, buildHelper );
 	};
 
 	template <typename BuildHelper, typename HelperArg1, typename HelperArg2, typename HelperArg3>
-	void FireSingleArgAggregateCallback( CefRefPtr<CefProcessMessage> &reply,
+	void FireSingleArgAggregateCallback( MessageReader &reader,
 										 const HelperArg1 &arg1,
 										 const HelperArg2 &arg2,
 										 const HelperArg3 &arg3 ) {
 		CefStringBuilder stringBuilder;
 		BuildHelper buildHelper( stringBuilder, arg1, arg2, arg3 );
-		FireSingleArgAggregateCallback( reply->GetArgumentList(), buildHelper );
+		FireSingleArgAggregateCallback( reader, buildHelper );
 	};
 
 	// The first parameter differs from template ones intentionally to avoid ambiguous calls
-	inline void FireSingleArgAggregateCallback( CefRefPtr<CefListValue> args, AggregateBuildHelper &abh ) {
-		CefStringBuilder &stringBuilder = abh.PrintArgs( args, 1, args->GetSize() - 1 );
+	inline void FireSingleArgAggregateCallback( MessageReader &reader, AggregateBuildHelper &abh ) {
+		CefStringBuilder &stringBuilder = abh.PrintArgs( reader );
 		ExecuteCallback( { CefV8Value::CreateString( stringBuilder.ReleaseOwnership() ) } );
 	}
 
-	void ReportNumArgsMismatch( size_t actual, const char *expected );
 	void ExecuteCallback( const CefV8ValueList &args );
 public:
 	PendingCallbackRequest( WswCefV8Handler *parent_,
@@ -76,7 +77,7 @@ public:
 
 	int Id() const { return id; }
 
-	virtual void FireCallback( CefRefPtr<CefProcessMessage> reply ) = 0;
+	virtual void FireCallback( MessageReader &reader ) = 0;
 
 	static const CefString getCVar;
 	static const CefString setCVar;
@@ -169,7 +170,7 @@ protected:
 		auto context( CefV8Context::GetCurrentContext() );
 		auto request( NewRequest( context, jsArgs.back() ) );
 		auto message( NewMessage() );
-		message->GetArgumentList()->SetInt( 0, request->Id() );
+		MessageWriter::WriteSingleInt( message, request->Id() );
 
 		Commit( std::move( request ), context, message, retVal, exception );
 	}
@@ -197,7 +198,7 @@ public:
 	const CefString &Method() { return method; }
 	const std::string &LogTag() const { return logTag; }
 
-	virtual void ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) = 0;
+	virtual void ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &ingoing ) = 0;
 };
 
 #define DERIVE_PENDING_CALLBACK_REQUEST( Derived, method )                                                           \
@@ -205,7 +206,7 @@ class Derived: public PendingCallbackRequest {                                  
 public:																												 \
 	Derived( WswCefV8Handler *parent_, CefRefPtr<CefV8Context> context_, CefRefPtr<CefV8Value> callback_ )           \
 		: PendingCallbackRequest( parent_, context_, callback_, method ) {}                                          \
-	void FireCallback( CefRefPtr<CefProcessMessage> reply ) override;                                                \
+	void FireCallback( MessageReader &reader ) override;                                                             \
 }                                                                                                                    \
 
 #define DERIVE_PENDING_REQUEST_LAUNCHER( Derived, method )                                                           \
@@ -219,7 +220,7 @@ public:                                                                         
 class Derived##Handler: public CallbackRequestHandler {																 \
 public:																												 \
 	explicit Derived##Handler( WswCefClient *parent_ ): CallbackRequestHandler( parent_, method ) {}				 \
-	void ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) override;             \
+	void ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &ingoing ) override;                           \
 }
 
 #define  DERIVE_REQUEST_IPC_HELPERS( Derived, method )    \
@@ -253,7 +254,7 @@ public:
 	RequestForKeysHandler( WswCefClient *parent_, const CefString &method_ )
 		: CallbackRequestHandler( parent_, method_ ) {}
 
-	void ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) override;
+	void ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) override;
 };
 
 #define DERIVE_REQUEST_FOR_KEYS_LAUNCHER( Request, method )             \
@@ -292,7 +293,7 @@ public:
 							const CefString &method_ )
 		: PendingCallbackRequest( parent_, context_, callback_, method_ ) {}
 
-	void FireCallback( CefRefPtr<CefProcessMessage> reply ) override;
+	void FireCallback( MessageReader &reader ) override;
 };
 
 #define DERIVE_STOP_DRAWING_ITEM_REQUEST( Request, method )                                                   \
@@ -329,7 +330,7 @@ public:
 	StopDrawingItemRequestHandler( WswCefClient *parent_, const CefString &method_ )
 		: CallbackRequestHandler( parent_, method_ ) {}
 
-	void ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) override;
+	void ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) override;
 
 	virtual bool GetHandleProcessingResult( int drawnItemHandle ) = 0;
 };

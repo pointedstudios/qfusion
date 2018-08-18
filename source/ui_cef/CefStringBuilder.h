@@ -4,6 +4,8 @@
 #include "include/cef_base.h"
 #include "include/cef_values.h"
 
+#include "MessageReader.h"
+
 #include <iostream>
 #include <sstream>
 
@@ -142,23 +144,25 @@ protected:
 	const char openingChar;
 	const char closingChar;
 
-	virtual void PrintArgsAsBody( CefRefPtr<CefListValue> &args, size_t startArg, size_t numArgs ) = 0;
+	virtual void PrintArgsAsBody( MessageReader &reader ) = 0;
 public:
 	AggregateBuildHelper( CefStringBuilder &underlying_, char openingChar_, char closingChar_ )
 		: underlying( underlying_ ), openingChar( openingChar_ ), closingChar( closingChar_ ) {}
 
-	typedef std::function<void( CefStringBuilder &, CefRefPtr<CefListValue> &, size_t )> ArgPrinter;
+	typedef std::function<void( CefStringBuilder &, MessageReader & )> ArgPrinter;
 
 	static inline ArgPrinter QuotedStringPrinter( char quoteChar = '"' ) {
-		return [=]( CefStringBuilder &sb, CefRefPtr<CefListValue> &args, size_t argNum ) {
-			sb << quoteChar << args->GetString( argNum ) << quoteChar;
+		return [=]( CefStringBuilder &sb, MessageReader &reader ) -> void {
+			CefString s;
+			reader >> s;
+			sb << quoteChar << s << quoteChar;
 		};
 	}
 
-	CefStringBuilder &PrintArgs( CefRefPtr<CefListValue> &args, size_t startArg, size_t numArgs ) {
-		if( numArgs ) {
+	CefStringBuilder &PrintArgs( MessageReader &reader ) {
+		if( reader.HasNext() ) {
 			underlying << openingChar << ' ';
-			PrintArgsAsBody( args, startArg, numArgs );
+			PrintArgsAsBody( reader );
 			underlying << ' ' << closingChar;
 		} else {
 			underlying << openingChar << closingChar;
@@ -170,9 +174,9 @@ public:
 class ArrayBuildHelper: public AggregateBuildHelper {
 	const ArgPrinter &argPrinter;
 
-	void PrintArgsAsBody( CefRefPtr<CefListValue> &args, size_t startArg, size_t numArgs ) override {
-		for( size_t argNum = startArg; argNum < startArg + numArgs; ++argNum ) {
-			argPrinter( underlying, args, argNum );
+	void PrintArgsAsBody( MessageReader &reader ) override {
+		while( reader.HasNext() ) {
+			argPrinter( underlying, reader );
 			underlying << ',';
 		}
 		underlying.ChopLast();
@@ -186,12 +190,12 @@ class ObjectBuildHelper: public AggregateBuildHelper {
 	const ArgPrinter &keyPrinter;
 	const ArgPrinter &valuePrinter;
 
-	void PrintArgsAsBody( CefRefPtr<CefListValue> &args, size_t startArg, size_t numArgs ) override {
-		assert( !( numArgs % 2 ) );
-		for( size_t argNum = startArg; argNum < startArg + numArgs; argNum += 2 ) {
-			keyPrinter( underlying, args, argNum + 0 );
+	void PrintArgsAsBody( MessageReader &reader ) override {
+		while( reader.HasNext() ) {
+			keyPrinter( underlying, reader );
 			underlying << ':';
-			valuePrinter( underlying, args, argNum + 1 );
+			assert( reader.HasNext() );
+			valuePrinter( underlying, reader );
 			underlying << ',';
 		}
 		underlying.ChopLast();
@@ -211,13 +215,13 @@ class ArrayOfPairsBuildHelper: public AggregateBuildHelper {
 	const char *const secondName;
 	const ArgPrinter &argPrinter;
 
-	void PrintArgsAsBody( CefRefPtr<CefListValue> &args, size_t startArg, size_t numArgs ) override {
-		assert( !( numArgs % 2 ) );
-		for( size_t argNum = startArg; argNum < startArg + numArgs; argNum += 2 ) {
+	void PrintArgsAsBody( MessageReader &reader ) override {
+		while( reader.HasNext() ) {
 			underlying << '{' << '"' << firstName << '"' << ':';
-			argPrinter( underlying, args, argNum + 0 );
+			argPrinter( underlying, reader );
 			underlying << ',' << '"' << secondName << '"' << ':';
-			argPrinter( underlying, args, argNum + 1 );
+			assert( reader.HasNext() );
+			argPrinter( underlying, reader );
 			underlying << "},";
 		}
 		underlying.ChopLast();

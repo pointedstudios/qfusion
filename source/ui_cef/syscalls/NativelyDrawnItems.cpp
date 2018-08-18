@@ -171,15 +171,10 @@ void StartDrawingModelRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 	auto request( NewRequest( context, jsArgs.back() ) );
 
 	auto message( NewMessage() );
-	auto messageArgs( message->GetArgumentList() );
-	size_t argNum = 0;
-	messageArgs->SetString( argNum++, model );
-	messageArgs->SetString( argNum++, skin );
-	messageArgs->SetInt( argNum++, colorRGBA );
-	argNum = WriteVec2( messageArgs, argNum, topLeft );
-	argNum = WriteVec2( messageArgs, argNum, dimensions );
-	messageArgs->SetInt( argNum++, zIndex );
-	WriteViewAnim( messageArgs, argNum, isAnimLooping, parser.Frames() );
+	MessageWriter writer( message );
+	writer << model << skin << colorRGBA;
+	writer << topLeft << dimensions << zIndex;
+	WriteViewAnim( writer, isAnimLooping, parser.Frames() );
 
 	Commit( std::move( request ), context, message, retVal, exception );
 }
@@ -222,12 +217,8 @@ void StartDrawingImageRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 	auto request( NewRequest( context, jsArgs.back() ) );
 
 	auto message( NewMessage() );
-	auto messageArgs( message->GetArgumentList() );
-	size_t argNum = 0;
-	messageArgs->SetString( argNum++, shader );
-	argNum = WriteVec2( messageArgs, argNum, topLeft );
-	argNum = WriteVec2( messageArgs, argNum, dimensions );
-	messageArgs->SetInt( argNum++, zIndex );
+	MessageWriter writer( message );
+	writer << shader << topLeft << dimensions << zIndex;
 
 	Commit( std::move( request ), context, message, retVal, exception );
 }
@@ -274,20 +265,16 @@ struct ImageDrawParamsView final: public virtual ImageDrawParams, public virtual
 	const CefString &Shader() const override { return CheckAndGet( shader, "shader" ); }
 };
 
-void StartDrawingModelRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser,
-													  CefRefPtr<CefProcessMessage> ingoing ) {
-	auto ingoingArgs( ingoing->GetArgumentList() );
-	size_t argNum = 0;
-	CefString model( ingoingArgs->GetString( argNum++ ) );
-	CefString skin( ingoingArgs->GetString( argNum++ ) );
-	int colorRgba = ingoingArgs->GetInt( argNum++ );
+void StartDrawingModelRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	CefString model, skin;
+	int colorRgba, zIndex;
 	vec2_t topLeft, dimensions;
-	argNum = ReadVec2( ingoingArgs, argNum, topLeft );
-	argNum = ReadVec2( ingoingArgs, argNum, dimensions );
-	int zIndex = ingoingArgs->GetInt( argNum++ );
+
+	reader >> model >> skin >> colorRgba >> topLeft >> dimensions >> zIndex;
+
 	std::vector<ViewAnimFrame> animFrames;
 	bool isAnimLooping = false;
-	ReadCameraAnim( ingoingArgs, argNum, &isAnimLooping, animFrames );
+	ReadCameraAnim( reader, &isAnimLooping, animFrames );
 
 	// TODO: Use SetFoo() calls from the beginning instead?
 	ModelDrawParamsView params;
@@ -303,19 +290,16 @@ void StartDrawingModelRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> brow
 	const int drawnModelHandle = UiFacade::Instance()->StartDrawingModel( params );
 
 	auto outgoingMessage( NewMessage() );
-	outgoingMessage->GetArgumentList()->SetInt( 0, drawnModelHandle );
+	MessageWriter::WriteSingleInt( outgoingMessage, drawnModelHandle );
 	browser->SendProcessMessage( PID_RENDERER, outgoingMessage );
 }
 
-void StartDrawingImageRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser,
-													  CefRefPtr<CefProcessMessage> ingoing ) {
-	auto ingoingArgs( ingoing->GetArgumentList() );
-	size_t argNum = 0;
-	CefString shader( ingoingArgs->GetString( argNum++ ) );
+void StartDrawingImageRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	CefString shader;
 	vec2_t topLeft, dimensions;
-	argNum = ReadVec2( ingoingArgs, argNum, topLeft );
-	argNum = ReadVec2( ingoingArgs, argNum, dimensions );
-	const int zIndex = ingoingArgs->GetInt( argNum++ );
+	int zIndex;
+
+	reader >> shader >> topLeft >> dimensions >> zIndex;
 
 	// TODO: Use SetFoo() calls from the beginning instead?
 	ImageDrawParamsView params;
@@ -327,16 +311,16 @@ void StartDrawingImageRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> brow
 	const int drawnImageHandle = UiFacade::Instance()->StartDrawingImage( params );
 
 	auto outgoingMessage( NewMessage() );
-	outgoingMessage->GetArgumentList()->SetInt( 0, drawnImageHandle );
+	MessageWriter::WriteSingleInt( outgoingMessage, drawnImageHandle );
 	browser->SendProcessMessage( PID_RENDERER, outgoingMessage );
 }
 
-void StartDrawingModelRequest::FireCallback( CefRefPtr<CefProcessMessage> reply ) {
-	ExecuteCallback( { CefV8Value::CreateInt( reply->GetArgumentList()->GetInt( 0 ) ) } );
+void StartDrawingModelRequest::FireCallback( MessageReader &reader ) {
+	ExecuteCallback( { CefV8Value::CreateInt( reader.NextInt() ) } );
 }
 
-void StartDrawingImageRequest::FireCallback( CefRefPtr<CefProcessMessage> reply ) {
-	ExecuteCallback( { CefV8Value::CreateInt( reply->GetArgumentList()->GetInt( 0 ) ) } );
+void StartDrawingImageRequest::FireCallback( MessageReader &reader ) {
+	ExecuteCallback( { CefV8Value::CreateInt( reader.NextInt() ) } );
 }
 
 void StopDrawingItemRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
@@ -365,16 +349,14 @@ void StopDrawingItemRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 	auto context( CefV8Context::GetCurrentContext() );
 	auto request( NewRequest( context, jsArgs.back() ) );
 	auto message( NewMessage() );
-	message->GetArgumentList()->SetInt( 0, handle );
+	MessageWriter::WriteSingleInt( message, handle );
 
 	Commit( std::move( request ), context, message, retVal, exception );
 }
 
-void StopDrawingItemRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser,
-													CefRefPtr<CefProcessMessage> ingoing ) {
-	const int drawnModelHandle = ingoing->GetArgumentList()->GetInt( 0 );
+void StopDrawingItemRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
 	auto outgoing( NewMessage() );
-	outgoing->GetArgumentList()->SetBool( 0, this->GetHandleProcessingResult( drawnModelHandle ) );
+	MessageWriter::WriteSingleBool( outgoing, this->GetHandleProcessingResult( reader.NextInt() ) );
 	browser->SendProcessMessage( PID_RENDERER, outgoing );
 }
 
@@ -386,6 +368,6 @@ bool StopDrawingImageRequestHandler::GetHandleProcessingResult( int drawnItemHan
 	return UiFacade::Instance()->StopDrawingImage( drawnItemHandle );
 }
 
-void StopDrawingItemRequest::FireCallback( CefRefPtr<CefProcessMessage> reply ) {
-	ExecuteCallback( { CefV8Value::CreateBool( reply->GetArgumentList()->GetBool( 0 ) ) } );
+void StopDrawingItemRequest::FireCallback( MessageReader &reader ) {
+	ExecuteCallback( { CefV8Value::CreateBool( reader.NextBool() ) } );
 }

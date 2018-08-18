@@ -20,13 +20,13 @@ public:
 	}
 };
 
-void GetMapsRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) {
-	const int id = ingoing->GetArgumentList()->GetInt( 0 );
-	auto message( CefProcessMessage::Create( PendingCallbackRequest::getMaps ) );
-	auto args( message->GetArgumentList() );
+void GetMapsRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	const int id = reader.NextInt();
 
-	size_t argNum = 0;
-	args->SetInt( argNum++, id );
+	auto message( CefProcessMessage::Create( PendingCallbackRequest::getMaps ) );
+	MessageWriter writer( message->GetArgumentList() );
+
+	writer << id;
 
 	// TODO: Is not it all so expensive that worth a different thread?
 	// Unfortunately heap operations that lock everything are the most expensive part.
@@ -34,14 +34,13 @@ void GetMapsRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRe
 	const char *shortName, *fullName;
 	MapsListSource mapsListSource;
 	while( mapsListSource.Next( &shortName, &fullName ) ) {
-		args->SetString( argNum++, shortName );
-		args->SetString( argNum++, fullName );
+		writer << shortName << fullName;
 	}
 
 	browser->SendProcessMessage( PID_RENDERER, message );
 }
 
-void GetMapsRequest::FireCallback( CefRefPtr<CefProcessMessage> reply ) {
+void GetMapsRequest::FireCallback( MessageReader &reader ) {
 	auto printer = AggregateBuildHelper::QuotedStringPrinter();
-	FireSingleArgAggregateCallback<ObjectBuildHelper>( reply, printer, printer );
+	FireSingleArgAggregateCallback<ObjectBuildHelper>( reader, printer, printer );
 }

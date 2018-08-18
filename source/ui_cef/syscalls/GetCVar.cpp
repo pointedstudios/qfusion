@@ -60,44 +60,33 @@ void GetCVarRequestLauncher::StartExec( const CefV8ValueList &arguments, CefRefP
 
 	auto context( CefV8Context::GetCurrentContext() );
 	auto message( NewMessage() );
-	auto messageArgs( message->GetArgumentList() );
-
 	auto request( NewRequest( context, arguments.back() ) );
 
-	messageArgs->SetInt( 0, request->Id() );
-	messageArgs->SetString( 1, name );
-	messageArgs->SetString( 2, defaultValue );
-	messageArgs->SetInt( 3, flags );
+	MessageWriter writer( message );
+	writer << request->Id() << name << defaultValue << flags;
 
 	Commit( std::move( request ), context, message, retval, exception );
 }
 
-void GetCVarRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) {
-	auto ingoingArgs( ingoing->GetArgumentList() );
-	int id = ingoingArgs->GetInt( 1 );
-	std::string name( ingoingArgs->GetString( 1 ).ToString() );
-	std::string value( ingoingArgs->GetString( 2 ).ToString() );
-	int flags = 0;
-	if( ingoingArgs->GetSize() == 4 ) {
-		flags = ingoingArgs->GetInt( 3 );
+void GetCVarRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	std::string name, value;
+	int id, flags = 0;
+
+	reader >> id >> name >> value;
+	if( reader.HasNext() ) {
+		reader >> flags;
 	}
 
 	cvar_t *var = api->Cvar_Get( name.c_str(), value.c_str(), flags );
+
 	auto outgoing( NewMessage() );
-	auto outgoingArgs( outgoing->GetArgumentList() );
-	outgoingArgs->SetInt( 0, id );
-	outgoingArgs->SetString( 1, name );
-	outgoingArgs->SetString( 2, var->string );
+	MessageWriter writer( outgoing );
+	writer << id << name << var->string;
 	browser->SendProcessMessage( PID_RENDERER, outgoing );
 }
 
-void GetCVarRequest::FireCallback( CefRefPtr<CefProcessMessage> reply ) {
-	auto args( reply->GetArgumentList() );
-	size_t numArgs = args->GetSize();
-	if( numArgs != 3 ) {
-		ReportNumArgsMismatch( numArgs, "3" );
-		return;
-	}
-
-	ExecuteCallback( { CefV8Value::CreateString( args->GetString( 2 ) ) } );
+void GetCVarRequest::FireCallback( MessageReader &reader ) {
+	// Just skip the name
+	reader.NextString();
+	ExecuteCallback( { CefV8Value::CreateString( reader.NextString() ) } );
 }

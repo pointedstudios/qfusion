@@ -35,27 +35,23 @@ void SetCVarRequestLauncher::StartExec( const CefV8ValueList &arguments,
 
 	auto context( CefV8Context::GetCurrentContext() );
 	auto request( NewRequest( context, arguments.back() ) );
-
-	auto message( CefProcessMessage::Create( "setCVar" ) );
-	auto messageArgs( message->GetArgumentList() );
-	messageArgs->SetInt( 0, request->Id() );
-	messageArgs->SetString( 1, name );
-	messageArgs->SetString( 2, value );
+	auto message( NewMessage() );
+	MessageWriter writer( message );
+	writer << request->Id() << name << value;
 	if( forceSet ) {
-		messageArgs->SetBool( 3, forceSet );
+		writer << forceSet;
 	}
 
 	Commit( std::move( request ), context, message, retval, exception );
 }
 
-void SetCVarRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) {
-	auto ingoingArgs( ingoing->GetArgumentList() );
-	const int id = ingoingArgs->GetInt( 0 );
-	std::string name( ingoingArgs->GetString( 1 ).ToString() );
-	std::string value( ingoingArgs->GetString( 2 ).ToString() );
+void SetCVarRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	const int id = reader.NextInt();
+	std::string name, value;
+	reader >> name >> value;
 	bool force = false;
-	if( ingoingArgs->GetSize() == 4 ) {
-		force = ingoingArgs->GetBool( 3 );
+	if( reader.HasNext() ) {
+		force = reader.NextBool();
 	}
 
 	bool forced = false;
@@ -66,25 +62,19 @@ void SetCVarRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRe
 	}
 
 	auto outgoing( NewMessage() );
-	outgoing->GetArgumentList()->SetInt( 0, id );
+	MessageWriter writer( outgoing );
+	writer << id;
 	if( force ) {
-		outgoing->GetArgumentList()->SetBool( 1, forced );
+		writer << force;
 	}
 
 	browser->SendProcessMessage( PID_RENDERER, outgoing );
 }
 
-void SetCVarRequest::FireCallback( CefRefPtr<CefProcessMessage> reply ) {
-	auto args( reply->GetArgumentList() );
-	auto size = args->GetSize();
-	if( size != 1 && size != 2 ) {
-		ReportNumArgsMismatch( size, "1 or 2" );
-		return;
-	}
-
+void SetCVarRequest::FireCallback( MessageReader &reader ) {
 	CefV8ValueList callbackArgs;
-	if( size == 2 ) {
-		callbackArgs.emplace_back( CefV8Value::CreateBool( args->GetBool( 1 ) ) );
+	if( reader.HasNext() ) {
+		callbackArgs.emplace_back( CefV8Value::CreateBool( reader.NextBool() ) );
 	}
 
 	ExecuteCallback( callbackArgs );

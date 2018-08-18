@@ -6,6 +6,9 @@
 #include "../CefApp.h"
 #include "../UiFacade.h"
 
+#include "../MessageReader.h"
+#include "../MessageWriter.h"
+
 // Hack for (temporarily) downgraded CEF distribution
 #define TID_FILE_BACKGROUND ( TID_FILE )
 
@@ -21,8 +24,8 @@ public:
 	FSPendingCallbackRequestTask( CefRefPtr<CefBrowser> browser_, int callId_ )
 		: browser( browser_ ), callId( callId_ ) {}
 
-	FSPendingCallbackRequestTask( CefRefPtr<CefBrowser> browser_, const CefRefPtr<CefProcessMessage> &message )
-		: browser( browser_ ), callId( message->GetArgumentList()->GetInt( 0 ) ) {}
+	FSPendingCallbackRequestTask( CefRefPtr<CefBrowser> browser_, MessageReader &reader )
+		: browser( browser_ ), callId( reader.NextInt() ) {}
 
 	virtual CefRefPtr<IOPendingCallbackRequestTask> CreatePostResultsTask() = 0;
 
@@ -41,32 +44,29 @@ protected:
 	virtual CefRefPtr<CefProcessMessage> FillMessage() = 0;
 
 	template <typename Container, typename Item>
-	size_t AddEntries( const Container &container,
-					   CefRefPtr<CefListValue> messageArgs,
-					   std::function<void( CefRefPtr<CefListValue> &, size_t, const Item & )> argSetter ) {
-		size_t argNum = messageArgs->GetSize();
+	MessageWriter &AddEntries( const Container &container, MessageWriter &writer,
+							   std::function<void( MessageWriter &, const Item & )> argSetter ) {
 		for( const Item &item: container ) {
-			argSetter( messageArgs, argNum++, item );
+			argSetter( writer, item );
 		}
-		return argNum;
+		return writer;
 	};
 
 	template <typename Container, typename First, typename Second>
-	size_t AddEntries( const Container &container,
-					   CefRefPtr<CefListValue> messageArgs,
-					   std::function<void( CefRefPtr<CefListValue> &, size_t, const First & )> setterFor1st,
-					   std::function<void( CefRefPtr<CefListValue> &, size_t, const Second & )> setterFor2nd ) {
-		size_t argNum = messageArgs->GetSize();
+	MessageWriter &AddEntries( const Container &container,
+							   MessageWriter &writer,
+							   std::function<void( MessageWriter &, const First & )> setterFor1st,
+							   std::function<void( MessageWriter &, const Second & )> setterFor2nd ) {
 		for( const std::pair<First, Second> &pair: container ) {
-			setterFor1st( messageArgs, argNum++, pair.first );
-			setterFor2nd( messageArgs, argNum++, pair.second );
+			setterFor1st( writer, pair.first );
+			setterFor2nd( writer, pair.second );
 		}
-		return argNum;
+		return writer;
 	};
 
-	inline std::function<void( CefRefPtr<CefListValue> &, size_t, const std::string & )> StringSetter() {
-		return []( CefRefPtr<CefListValue> &args, size_t argNum, const std::string &s ) {
-			args->SetString( argNum, s );
+	inline std::function<void( MessageWriter &, const std::string & )> StringSetter() {
+		return [=]( MessageWriter &writer, const std::string &s ) {
+			writer << s;
 		};
 	};
 public:
@@ -77,15 +77,18 @@ public:
 		CEF_REQUIRE_IO_THREAD();
 
 		auto message( FillMessage() );
+
 #ifndef PUBLIC_BUILD
-		auto args( message->GetArgumentList() );
-		if( args->GetSize() < 1 ) {
+		MessageReader reader( message );
+		if( !reader.HasNext() ) {
 			// TODO: Crash...
 		}
-		if( args->GetInt( 0 ) != callId ) {
+		const int id = reader.NextInt();
+		if( id != callId ) {
 			// TODO: Crash...
 		}
 #endif
+
 		browser->SendProcessMessage( PID_RENDERER, message );
 	}
 };
@@ -132,98 +135,43 @@ public:
 	}
 };
 
-inline size_t WriteVec( CefListValue *argsList, size_t argNum, const float *vector, int size ) {
-	for( int i = 0; i < size; ++i ) {
-		argsList->SetDouble( argNum++, vector[i] );
-	}
-	return argNum;
+inline MessageWriter &operator<<( MessageWriter &writer, const ViewAnimFrame &frame ) {
+	return writer << frame.rotation << frame.origin << frame.timestamp;
 }
 
-inline size_t ReadVec( CefListValue *argsList, size_t argNum, float *vector, int size ) {
-	for( int i = 0; i < size; ++i ) {
-		vector[i] = (vec_t)argsList->GetDouble( argNum++ );
-	}
-	return argNum;
-}
-
-inline size_t WriteVec4( CefListValue *argsList, size_t argNum, const vec2_t vector ) {
-	return WriteVec( argsList, argNum, vector, 4 );
-}
-
-inline size_t ReadVec4( CefListValue *argsList, size_t argNum, vec2_t vector ) {
-	return ReadVec( argsList, argNum, vector, 4 );
-}
-
-inline size_t WriteVec3( CefListValue *argsList, size_t argNum, const vec3_t vector ) {
-	return WriteVec( argsList, argNum, vector, 3 );
-}
-
-inline size_t ReadVec3( CefListValue *argsList, size_t argNum, vec3_t vector ) {
-	return ReadVec( argsList, argNum, vector, 3 );
-}
-
-inline size_t WriteVec2( CefListValue *argsList, size_t argNum, const vec2_t vector ) {
-	return WriteVec( argsList, argNum, vector, 2 );
-}
-
-inline size_t ReadVec2( CefListValue *argsList, size_t argNum, vec2_t vector ) {
-	return ReadVec( argsList, argNum, vector, 2 );
-}
-
-inline size_t WriteSharedViewAnimFields( CefListValue *argsList, size_t argNum, const ViewAnimFrame &frame ) {
-	argNum = WriteVec4( argsList, argNum, frame.rotation );
-	argNum = WriteVec3( argsList, argNum, frame.origin );
-	argsList->SetInt( argNum++, (int)frame.timestamp );
-	return argNum;
-}
-
-inline size_t WriteViewAnimFrame( CefListValue *argsList, size_t argNum, const ViewAnimFrame &frame ) {
-	return WriteSharedViewAnimFields( argsList, argNum, frame );
-}
-
-inline size_t WriteViewAnimFrame( CefListValue *argsList, size_t argNum, const CameraAnimFrame &frame ) {
-	argNum = WriteSharedViewAnimFields( argsList, argNum, frame );
-	argsList->SetInt( argNum++, (int)frame.fov );
-	return argNum;
+inline MessageWriter &operator<<( MessageWriter &writer, const CameraAnimFrame &frame ) {
+	return writer << frame.rotation << frame.origin << frame.timestamp << frame.fov;
 }
 
 template <typename FrameImpl>
-size_t WriteViewAnim( CefListValue *argsList, size_t argNum, bool looping, const std::vector<FrameImpl> &frames ) {
-	argsList->SetBool( argNum++, looping );
-	argsList->SetInt( argNum++, (int)frames.size() );
+MessageWriter &WriteViewAnim( MessageWriter &writer, bool looping, const std::vector<FrameImpl> &frames ) {
+	writer << looping << (int)frames.size();
 	for( const auto &frame: frames ) {
-		argNum = WriteViewAnimFrame( argsList, argNum, frame );
+		writer << frame;
 	}
-	return argNum;
+	return writer;
 }
 
-inline size_t ReadSharedViewAnimFields( CefListValue *argsList, size_t argNum, ViewAnimFrame *frame ) {
-	argNum = ReadVec4( argsList, argNum, frame->rotation );
-	argNum = ReadVec3( argsList, argNum, frame->origin );
-	frame->timestamp = (unsigned)argsList->GetInt( argNum++ );
-	return argNum;
+
+inline MessageReader &operator>>( MessageReader &reader, ViewAnimFrame &frame ) {
+	return reader >> frame.rotation >> frame.origin >> frame.timestamp;
 }
 
-inline size_t ReadViewAnimFrame( CefListValue *argsList, size_t argNum, ViewAnimFrame *frame ) {
-	return ReadSharedViewAnimFields( argsList, argNum, frame );
-}
-
-inline size_t ReadViewAnimFrame( CefListValue *argsList, size_t argNum, CameraAnimFrame *frame ) {
-	argNum = ReadSharedViewAnimFields( argsList, argNum, frame );
-	frame->fov = (float)argsList->GetInt( argNum++ );
-	return argNum;
+inline MessageReader &operator>>( MessageReader &reader, CameraAnimFrame &frame ) {
+	return reader >> frame.rotation >> frame.origin >> frame.timestamp >> frame.fov;
 }
 
 template <typename FrameImpl>
-size_t ReadCameraAnim( CefListValue *argsList, size_t argNum, bool *looping, std::vector<FrameImpl> &frames ) {
-	*looping = argsList->GetBool( argNum++ );
-	int numFrames = argsList->GetInt( argNum++ );
+MessageReader &ReadCameraAnim( MessageReader &reader, bool *looping, std::vector<FrameImpl> &frames ) {
+	int numFrames;
+	reader >> *looping >> numFrames;
+	frames.reserve( (unsigned)numFrames );
 	for( int i = 0; i < numFrames; ++i ) {
 		FrameImpl frame;
-		argNum = ReadViewAnimFrame( argsList, argNum, &frame );
+		reader >> frame;
 		frames.emplace_back( frame );
 	}
-	return argNum;
+	return reader;
 }
 
 #endif

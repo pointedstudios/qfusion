@@ -5,9 +5,8 @@ void RenderProcessLogger::SendLogMessage( cef_log_severity_t severity, const cha
 	vsnprintf( buffer, sizeof( buffer ), format, va );
 
 	auto message( CefProcessMessage::Create( "log" ) );
-	auto args( message->GetArgumentList() );
-	args->SetString( 0, buffer );
-	args->SetInt( 1, severity );
+	MessageWriter writer( message );
+	writer << buffer << (int)severity;
 	browser->SendProcessMessage( PID_BROWSER, message );
 }
 
@@ -166,23 +165,21 @@ bool WswCefRenderProcessHandler::OnProcessMessageReceived( CefRefPtr<CefBrowser>
 }
 
 // Extracted to reduce template object code duplication
-static bool SetKeysAsArgs( const CefV8ValueList &jsArgs, CefRefPtr<CefListValue> messageArgs, CefString &exception ) {
+static bool SetKeysAsArgs( const CefV8ValueList &jsArgs, MessageWriter &writer, CefString &exception ) {
 	if( jsArgs.size() < 2 ) {
 		return true;
 	}
 
 	auto keysArray( jsArgs.front() );
-
-	size_t argNum = 1;
 	for( int i = 0, length = keysArray->GetArrayLength(); i < length; ++i ) {
 		auto elemValue( keysArray->GetValue( i ) );
 		if( !elemValue->IsInt() ) {
-			std::stringstream ss;
-			ss << "An array element at index " << i << " is not an integer";
-			exception = ss.str();
+			CefStringBuilder s;
+			s << "An array element at index " << i << " is not an integer";
+			exception = s.ReleaseOwnership();
 			return false;
 		}
-		messageArgs->SetInt( argNum++, elemValue->GetIntValue() );
+		writer << elemValue->GetIntValue();
 	}
 
 	return true;
@@ -212,9 +209,9 @@ void RequestForKeysLauncher<Request>::StartExec( const CefV8ValueList &jsArgs,
 	auto context( CefV8Context::GetCurrentContext() );
 	auto request( TypedPendingRequestLauncher<Request>::NewRequest( context, jsArgs.back() ) );
 	auto message( PendingRequestLauncher::NewMessage() );
-	auto messageArgs( message->GetArgumentList() );
-	messageArgs->SetInt( 0, request->Id() );
-	if( !SetKeysAsArgs( jsArgs, messageArgs, exception ) ) {
+	MessageWriter writer( message );
+	writer << request->Id();
+	if( !SetKeysAsArgs( jsArgs, writer, exception ) ) {
 		return;
 	}
 

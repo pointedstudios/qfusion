@@ -3,22 +3,7 @@
 void GetVideoModesRequestLauncher::StartExec( const CefV8ValueList &arguments,
 											  CefRefPtr<CefV8Value> &retval,
 											  CefString &exception ) {
-	if( arguments.size() != 1 ) {
-		exception = "Illegal arguments list size, must be a single argument";
-		return;
-	}
-
-	if( !ValidateCallback( arguments.back(), exception ) ) {
-		return;
-	}
-
-	auto context( CefV8Context::GetCurrentContext() );
-	auto request( NewRequest( context, arguments.back() ) );
-
-	auto message( NewMessage() );
-	message->GetArgumentList()->SetInt( 0, request->Id() );
-
-	Commit( std::move( request ), context, message, retval, exception );
+	DefaultSingleArgStartExecImpl( arguments, retval, exception );
 }
 
 class VideoModesSource {
@@ -48,27 +33,25 @@ public:
 	}
 };
 
-void GetVideoModesRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) {
-	const int id = ingoing->GetArgumentList()->GetInt( 0 );
+void GetVideoModesRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	const int id = reader.NextInt();
 
 	auto outgoing( NewMessage() );
-	auto args( outgoing->GetArgumentList() );
-	size_t argNum = 0;
-	args->SetInt( argNum++, id );
+	MessageWriter writer( outgoing );
+	writer << id;
 
 	int width, height;
 	VideoModesSource videoModesSource;
 	while( videoModesSource.Next( &width, &height ) ) {
-		args->SetInt( argNum++, width );
-		args->SetInt( argNum++, height );
+		writer << width << height;
 	}
 
 	browser->SendProcessMessage( PID_RENDERER, outgoing );
 }
 
-void GetVideoModesRequest::FireCallback( CefRefPtr<CefProcessMessage> reply ) {
-	auto argPrinter = []( CefStringBuilder &sb, CefRefPtr<CefListValue> &args, size_t argNum ) {
-		sb << args->GetInt( argNum );
+void GetVideoModesRequest::FireCallback( MessageReader &reader ) {
+	auto argPrinter = []( CefStringBuilder &sb, MessageReader &reader ) {
+		sb << reader.NextInt();
 	};
-	FireSingleArgAggregateCallback<ArrayOfPairsBuildHelper>( reply, "width", "height", argPrinter );
+	FireSingleArgAggregateCallback<ArrayOfPairsBuildHelper>( reader, "width", "height", argPrinter );
 }

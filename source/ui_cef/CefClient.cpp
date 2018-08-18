@@ -15,11 +15,14 @@ bool WswCefClient::OnProcessMessageReceived( CefRefPtr<CefBrowser> browser,
 	CEF_REQUIRE_UI_THREAD();
 
 	auto name( processMessage->GetName() );
-	auto messageArgs( processMessage->GetArgumentList() );
+	MessageReader reader( processMessage );
+
 	if( !name.compare( "log" ) ) {
-		std::string message( messageArgs->GetString( 0 ).ToString() );
+		std::string message;
+		int severity;
+		reader >> message >> severity;
 		const char *format = "[UI-PROCESS]: %s";
-		switch( (cef_log_severity_t)messageArgs->GetInt( 1 ) ) {
+		switch( (cef_log_severity_t)severity ) {
 			case LOGSEVERITY_WARNING:
 				Logger()->Warning( format, message.c_str() );
 				break;
@@ -35,7 +38,7 @@ bool WswCefClient::OnProcessMessageReceived( CefRefPtr<CefBrowser> browser,
 	for( CallbackRequestHandler *handler = requestHandlersHead; handler; handler = handler->Next() ) {
 		if( !handler->Method().compare( name ) ) {
 			Logger()->Debug( "Found a handler %s for a request\n", handler->LogTag().c_str() );
-			handler->ReplyToRequest( browser, processMessage );
+			handler->ReplyToRequest( browser, reader );
 			return true;
 		}
 	}

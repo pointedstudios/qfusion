@@ -8,7 +8,6 @@ WswCefApp::WswCefApp( int width, int height )
 
 void WswCefApp::OnBeforeCommandLineProcessing( const CefString& process_type, CefRefPtr<CefCommandLine> command_line ) {
 	command_line->AppendSwitch( "no-proxy-server" );
-	command_line->AppendSwitchWithValue( "lang", "en-US" );
 	command_line->AppendSwitch( "in-process-gpu" );
 }
 

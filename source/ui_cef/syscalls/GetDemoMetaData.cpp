@@ -21,11 +21,10 @@ void GetDemoMetaDataRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 
 	auto context( CefV8Context::GetCurrentContext() );
 	auto request( NewRequest( context, jsArgs.back() ) );
-
 	auto message( NewMessage() );
-	auto messageArgs( message->GetArgumentList() );
-	messageArgs->SetInt( 0, request->Id() );
-	messageArgs->SetString( 1, path );
+
+	MessageWriter writer( message );
+	writer << request->Id() << path;
 
 	Commit( std::move( request ), context, message, retVal, exception );
 }
@@ -91,9 +90,9 @@ public:
 
 	CefRefPtr<CefProcessMessage> FillMessage() override {
 		auto message( CefProcessMessage::Create( PendingCallbackRequest::getDemoMetaData ) );
-		auto args( message->GetArgumentList() );
-		args->SetInt( 0, callId );
-		AddEntries( metaData, args, StringSetter(), StringSetter() );
+		MessageWriter writer( message );
+		writer << callId;
+		AddEntries( metaData, writer, StringSetter(), StringSetter() );
 		return message;
 	}
 
@@ -113,21 +112,11 @@ public:
 	IMPLEMENT_REFCOUNTING( GetDemoMetaDataTask );
 };
 
-void GetDemoMetaDataRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) {
-	auto ingoingArgs( ingoing->GetArgumentList() );
-	const int callId = ingoingArgs->GetInt( 0 );
-	std::string path( ingoingArgs->GetString( 1 ) );
-	CefPostTask( TID_FILE, AsCefPtr( new GetDemoMetaDataTask( browser, callId, std::move( path ) ) ) );
+void GetDemoMetaDataRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	CefPostTask( TID_FILE, AsCefPtr( new GetDemoMetaDataTask( browser, reader.NextInt(), reader.NextString() ) ) );
 }
 
-void GetDemoMetaDataRequest::FireCallback( CefRefPtr<CefProcessMessage> reply ) {
-	auto args( reply->GetArgumentList() );
-	size_t numArgs = args->GetSize();
-	if( numArgs < 1 || !( numArgs % 2 ) ) {
-		ReportNumArgsMismatch( numArgs, "at least 1, an odd value" );
-		return;
-	}
-
+void GetDemoMetaDataRequest::FireCallback( MessageReader &reader ) {
 	auto printer = AggregateBuildHelper::QuotedStringPrinter();
-	FireSingleArgAggregateCallback<ObjectBuildHelper>( reply, printer, printer );
+	FireSingleArgAggregateCallback<ObjectBuildHelper>( reader, printer, printer );
 }

@@ -38,26 +38,27 @@ void ExecuteCmdRequestLauncher::StartExec( const CefV8ValueList &arguments,
 	auto context( CefV8Context::GetCurrentContext() );
 	auto request( NewRequest( context, arguments.back() ) );
 
-	auto message( CefProcessMessage::Create( "executeCmd" ) );
-	auto messageArgs( message->GetArgumentList() );
-	messageArgs->SetInt( 0, request->Id() );
-	messageArgs->SetInt( 1, whence );
-	messageArgs->SetString( 2, text );
+	auto message( NewMessage() );
+	MessageWriter writer( message );
+	writer << request->Id() << whence << text;
 
 	Commit( std::move( request ), context, message, retval, exception );
 }
 
-void ExecuteCmdRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) {
-	auto ingoingArgs( ingoing->GetArgumentList() );
-	const int id = ingoingArgs->GetInt( 0 );
+void ExecuteCmdRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	std::string text;
 
-	api->Cmd_ExecuteText( ingoingArgs->GetInt( 1 ), ingoingArgs->GetString( 2 ).ToString().c_str() );
+	int whence;
+	const int id = reader.NextInt();
+	reader >> whence >> text;
+
+	api->Cmd_ExecuteText( whence, text.c_str() );
 
 	auto outgoing( NewMessage() );
-	outgoing->GetArgumentList()->SetInt( 0, id );
+	MessageWriter::WriteSingleInt( outgoing, id );
 	browser->SendProcessMessage( PID_RENDERER, outgoing );
 }
 
-void ExecuteCmdRequest::FireCallback( CefRefPtr<CefProcessMessage> ) {
+void ExecuteCmdRequest::FireCallback( MessageReader & ) {
 	ExecuteCallback( CefV8ValueList() );
 }

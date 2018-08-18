@@ -40,11 +40,6 @@ PendingCallbackRequest::PendingCallbackRequest( WswCefV8Handler *parent_,
 	, callback( callback_ )
 	, method( method_ ) {}
 
-void PendingCallbackRequest::ReportNumArgsMismatch( size_t actual, const char *expected ) {
-	std::string tag = "PendingCallbackRequest@" + method.ToString();
-	Logger()->Error( "%s: message args size %d does not match expected %s", tag.c_str(), (int)actual, expected );
-}
-
 void PendingCallbackRequest::ExecuteCallback( const CefV8ValueList &args ) {
 	if( !callback->ExecuteFunctionWithContext( context, nullptr, args ).get() ) {
 		std::string tag = "PendingCallbackRequest@" + method.ToString();

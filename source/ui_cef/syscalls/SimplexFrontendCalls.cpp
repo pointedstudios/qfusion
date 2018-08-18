@@ -70,10 +70,10 @@ void GameCommandSender::AcquireAndSend( SimplexMessage *genericMessage ) {
 	auto command = As<GameCommandMessage *>( genericMessage );
 
 	auto outgoing( NewProcessMessage() );
-	auto outgoingArgs( outgoing->GetArgumentList() );
-	CefString reuse;
+	MessageWriter writer( outgoing );
+
 	for( int i = 0, numArgs = command->GetNumArgs(); i < numArgs; ++i ) {
-		outgoingArgs->SetString( (size_t)i, command->GetArg( i ) );
+		writer << command->GetArg( i );
 	}
 
 	SendProcessMessage( outgoing );
@@ -83,6 +83,7 @@ void GameCommandSender::AcquireAndSend( SimplexMessage *genericMessage ) {
 SimplexMessage *GameCommandHandler::DeserializeMessage( CefRefPtr<CefProcessMessage> &processMessage ) {
 	auto ingoingArgs( processMessage->GetArgumentList() );
 	size_t numArgs = ingoingArgs->GetSize();
+	// TODO: Rewrite in "Get next arg" style
 	return ProxyingGameCommandMessage::NewPooledObject( (int)numArgs, [=]( int argNum ) {
 		return ingoingArgs->GetString( (size_t)argNum );
 	} );
@@ -108,25 +109,20 @@ bool GameCommandHandler::GetCodeToCall( const SimplexMessage *genericMessage, Ce
 
 void MouseSetSender::AcquireAndSend( SimplexMessage *genericMessage ) {
 	auto mouseSet = As<MouseSetMessage *>( genericMessage );
-
 	auto outgoing( NewProcessMessage() );
-	auto outgoingArgs( outgoing->GetArgumentList() );
-	outgoingArgs->SetInt( 0, mouseSet->context );
-	outgoingArgs->SetInt( 1, mouseSet->mx );
-	outgoingArgs->SetInt( 2, mouseSet->my );
-	outgoingArgs->SetBool( 3, mouseSet->showCursor );
+
+	MessageWriter writer( outgoing );
+	writer << mouseSet->context << mouseSet->mx << mouseSet->my << mouseSet->showCursor;
 
 	SendProcessMessage( outgoing );
 	DeleteMessage( mouseSet );
 }
 
 SimplexMessage *MouseSetHandler::DeserializeMessage( CefRefPtr<CefProcessMessage> &processMessage ) {
-	auto args( processMessage->GetArgumentList() );
-	size_t argNum = 0;
-	int context = args->GetInt( argNum++ );
-	int mx = args->GetInt( argNum++ );
-	int my = args->GetInt( argNum++ );
-	bool showCursor = args->GetBool( argNum++ );
+	int context, mx, my;
+	bool showCursor;
+	MessageReader reader( processMessage->GetArgumentList() );
+	reader >> context >> mx >> my >> showCursor;
 	return MouseSetMessage::NewPooledObject( context, mx, my, showCursor );
 }
 
@@ -231,15 +227,10 @@ void UpdateScreenSender::AcquireAndSend( SimplexMessage *genericMessage ) {
 	}
 
 	auto processMessage( CefProcessMessage::Create( SimplexMessage::updateScreen ) );
-	auto args( processMessage->GetArgumentList() );
+	MessageWriter writer( processMessage );
 
 	// Write the main part, no reasons to use a delta encoding for it
-
-	size_t argNum = 0;
-	args->SetInt( argNum++, currState->clientState );
-	args->SetInt( argNum++, currState->serverState );
-	args->SetBool( argNum++, currState->showCursor );
-	args->SetBool( argNum++, currState->background );
+	writer << currState->clientState << currState->serverState << currState->showCursor << currState->background;
 
 	if( !currState->connectionState && !currState->demoPlaybackState ) {
 		SendProcessMessage( processMessage );
@@ -249,28 +240,26 @@ void UpdateScreenSender::AcquireAndSend( SimplexMessage *genericMessage ) {
 
 	// Write attachments, either demo playback state or connection (process of connection) state
 	if( const auto *dps = currState->demoPlaybackState ) {
-		args->SetInt( argNum++, MainScreenState::DEMO_PLAYBACK_ATTACHMENT );
-		args->SetInt( argNum++, (int)dps->time );
-		args->SetBool( argNum++, dps->paused );
+		writer << (int)MainScreenState::DEMO_PLAYBACK_ATTACHMENT;
+		writer << (int)dps->time << dps->paused;
 		// Send a demo name only if it is needed
 		if( !prevState->demoPlaybackState || ( dps->demoName != prevState->demoPlaybackState->demoName ) ) {
-			args->SetString( argNum++, dps->demoName );
+			writer << dps->demoName;
 		}
 		SendProcessMessage( processMessage );
 		SaveStateAndRelease( currUpdateMessage );
 		return;
 	}
 
-	args->SetInt( argNum++, MainScreenState::CONNECTION_ATTACHMENT );
+	writer << (int)MainScreenState::CONNECTION_ATTACHMENT;
+
 	auto *currConnState = currState->connectionState;
 	assert( currConnState );
 	auto *prevConnState = prevState->connectionState;
 
 	// Write shared fields (download numbers are always written to simplify parsing of transmitted result)
-	args->SetInt( argNum++, currConnState->connectCount );
-	args->SetInt( argNum++, currConnState->downloadType );
-	args->SetDouble( argNum++, currConnState->downloadSpeed );
-	args->SetDouble( argNum++, currConnState->downloadPercent );
+	writer << currConnState->connectCount << currConnState->downloadType;
+	writer << currConnState->downloadSpeed << currConnState->downloadPercent;
 
 	int flags = 0;
 	if( !prevConnState ) {
@@ -295,15 +284,15 @@ void UpdateScreenSender::AcquireAndSend( SimplexMessage *genericMessage ) {
 		}
 	}
 
-	args->SetInt( argNum++, flags );
+	writer << flags;
 	if( flags & ConnectionState::SERVER_NAME_ATTACHMENT ) {
-		args->SetString( argNum++, currConnState->serverName );
+		writer << currConnState->serverName;
 	}
 	if( flags & ConnectionState::REJECT_MESSAGE_ATTACHMENT ) {
-		args->SetString( argNum++, currConnState->rejectMessage );
+		writer << currConnState->rejectMessage;
 	}
 	if( flags & ConnectionState::DOWNLOAD_FILENAME_ATTACHMENT ) {
-		args->SetString( argNum++, currConnState->downloadFileName );
+		writer << currConnState->downloadFileName;
 	}
 
 	SendProcessMessage( processMessage );
@@ -311,28 +300,25 @@ void UpdateScreenSender::AcquireAndSend( SimplexMessage *genericMessage ) {
 }
 
 SimplexMessage *UpdateScreenHandler::DeserializeMessage( CefRefPtr<CefProcessMessage> &ingoing ) {
-	auto args( ingoing->GetArgumentList() );
+	MessageReader reader( ingoing );
 
 	auto *screenState = MainScreenState::NewPooledObject();
 	auto *updateScreenMessage = UpdateScreenMessage::NewPooledObject( screenState );
 
-	size_t argNum = 0;
-	screenState->clientState = args->GetInt( argNum++ );
-	screenState->serverState = args->GetInt( argNum++ );
-	screenState->showCursor = args->GetBool( argNum++ );
-	screenState->background = args->GetBool( argNum++ );
+	reader >> screenState->clientState >> screenState->serverState >> screenState->showCursor >> screenState->background;
 
-	const int attachments = args->GetInt( argNum++ );
-	if( !attachments ) {
+	if( !reader.HasNext() ) {
 		return updateScreenMessage;
 	}
 
+	int attachments = reader.NextInt();
+	assert( attachments & ( MainScreenState::DEMO_PLAYBACK_ATTACHMENT | MainScreenState::CONNECTION_ATTACHMENT ) );
+
 	if( attachments & MainScreenState::DEMO_PLAYBACK_ATTACHMENT ) {
 		auto *demoState = DemoPlaybackState::NewPooledObject();
-		demoState->time = (unsigned)args->GetInt( argNum++ );
-		demoState->paused = args->GetBool( argNum++ );
-		if( argNum < args->GetSize() ) {
-			demoName = args->GetString( argNum++ );
+		reader >> demoState->time >> demoState->paused;
+		if( reader.HasNext() ) {
+			reader >> demoName;
 		}
 		demoState->demoName.assign( demoName.begin(), demoName.end() );
 		screenState->demoPlaybackState = demoState;
@@ -341,20 +327,19 @@ SimplexMessage *UpdateScreenHandler::DeserializeMessage( CefRefPtr<CefProcessMes
 
 	auto *connectionState = ConnectionState::NewPooledObject();
 	// Read always transmitted args
-	connectionState->connectCount = args->GetInt( argNum++ );
-	connectionState->downloadType = args->GetInt( argNum++ );
-	connectionState->downloadSpeed = (float)args->GetDouble( argNum++ );
-	connectionState->downloadPercent = (float)args->GetDouble( argNum++ );
+	reader >> connectionState->connectCount >> connectionState->downloadType;
+	reader >> connectionState->downloadSpeed >> connectionState->downloadPercent;
 
-	int stringAttachmentFlags = args->GetInt( argNum++ );
+	int stringAttachmentFlags;
+	reader >> stringAttachmentFlags;
 	if( stringAttachmentFlags & ConnectionState::SERVER_NAME_ATTACHMENT ) {
-		serverName = args->GetString( argNum++ );
+		reader >> serverName;
 	}
 	if( stringAttachmentFlags & ConnectionState::REJECT_MESSAGE_ATTACHMENT ) {
-		rejectMessage = args->GetString( argNum++ );
+		reader >> rejectMessage;
 	}
 	if( stringAttachmentFlags & ConnectionState::DOWNLOAD_FILENAME_ATTACHMENT ) {
-		downloadFileName = args->GetString( argNum++ );
+		reader >> downloadFileName;
 	}
 
 	connectionState->serverName.assign( serverName.begin(), serverName.end() );

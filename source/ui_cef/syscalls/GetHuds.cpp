@@ -29,9 +29,9 @@ public:
 
 	CefRefPtr<CefProcessMessage> FillMessage() override {
 		auto message( CefProcessMessage::Create( PendingCallbackRequest::getHuds ) );
-		auto args( message->GetArgumentList() );
-		args->SetInt( 0, callId );
-		AddEntries( huds, args, StringSetter() );
+		MessageWriter writer( message );
+		writer << callId;
+		AddEntries( huds, writer, StringSetter() );
 		return message;
 	}
 
@@ -39,9 +39,10 @@ public:
 };
 
 class GetHudsTask: public FSPendingCallbackRequestTask {
+	CefRefPtr<CefListValue> messageArgs;
 public:
-	GetHudsTask( CefRefPtr<CefBrowser> browser_, CefRefPtr<CefProcessMessage> message )
-		: FSPendingCallbackRequestTask( browser_, message ) {}
+	GetHudsTask( CefRefPtr<CefBrowser> browser_, MessageReader &reader )
+		: FSPendingCallbackRequestTask( browser_, reader ) {}
 
 	CefRefPtr<IOPendingCallbackRequestTask> CreatePostResultsTask() override {
 		return AsCefPtr( new PostHudsTask( this, FindHuds() ) );
@@ -50,10 +51,10 @@ public:
 	IMPLEMENT_REFCOUNTING( GetHudsTask );
 };
 
-void GetHudsRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, CefRefPtr<CefProcessMessage> ingoing ) {
-	CefPostTask( TID_FILE_BACKGROUND, AsCefPtr( new GetHudsTask( browser, ingoing ) ) );
+void GetHudsRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	CefPostTask( TID_FILE_BACKGROUND, AsCefPtr( new GetHudsTask( browser, reader ) ) );
 }
 
-void GetHudsRequest::FireCallback( CefRefPtr<CefProcessMessage> reply ) {
-	FireSingleArgAggregateCallback<ArrayBuildHelper>( reply );
+void GetHudsRequest::FireCallback( MessageReader &reader ) {
+	FireSingleArgAggregateCallback<ArrayBuildHelper>( reader );
 }

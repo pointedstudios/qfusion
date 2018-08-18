@@ -41,34 +41,26 @@ void GetLocalizedStringsRequestLauncher::StartExec( const CefV8ValueList &jsArgs
 	Commit( std::move( request ), context, message, retVal, exception );
 }
 
-void GetLocalizedStringsRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser,
-														CefRefPtr<CefProcessMessage> ingoing ) {
-	auto ingoingArgs( ingoing->GetArgumentList() );
-	const size_t ingoingArgsSize = ingoingArgs->GetSize();
-	const int id = ingoingArgs->GetInt( 0 );
+void GetLocalizedStringsRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	const int id = reader.NextInt();
 
-	auto message( CefProcessMessage::Create( method ) );
-	auto outgoingArgs( message->GetArgumentList() );
+	auto outgoing( CefProcessMessage::Create( method ) );
+	MessageWriter writer( outgoing );
+	writer << id;
 
-	size_t argNum = 0;
-	outgoingArgs->SetInt( argNum++, id );
-	for( size_t i = 1; i < ingoingArgsSize; ++i ) {
-#ifdef CEF_STRING_TYPE_UTF8
-		const char *raw = ingoingArgs->GetString( i ).c_str();
-#else
-		const char *raw = ingoingArgs->GetString( i ).ToString().c_str();
-#endif
-		const char *localized = api->L10n_TranslateString( raw );
+	std::string raw;
+	while( reader.HasNext() ) {
+		reader >> raw;
+		const char *localized = api->L10n_TranslateString( raw.c_str() );
 		if( !localized ) {
-			localized = raw;
+			localized = "";
 		}
-		outgoingArgs->SetString( argNum, raw );
-		outgoingArgs->SetString( argNum, localized );
+		writer << raw << localized;
 	}
 
-	browser->SendProcessMessage( PID_RENDERER, message );
+	browser->SendProcessMessage( PID_RENDERER, outgoing );
 }
 
-void GetLocalizedStringsRequest::FireCallback( CefRefPtr<CefProcessMessage> reply ) {
-	FireSingleArgAggregateCallback<ObjectBuildHelper>( reply );
+void GetLocalizedStringsRequest::FireCallback( MessageReader &reader ) {
+	FireSingleArgAggregateCallback<ObjectBuildHelper>( reader );
 }

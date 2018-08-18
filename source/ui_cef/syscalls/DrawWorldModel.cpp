@@ -67,26 +67,24 @@ void DrawWorldModelRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 	auto request( NewRequest( context, jsArgs.back() ) );
 
 	auto message( NewMessage() );
-	auto messageArgs( message->GetArgumentList() );
-	size_t argNum = 0;
+	MessageWriter writer( message );
 
-	messageArgs->SetString( argNum++, map );
-	messageArgs->SetBool( argNum++, blurred );
-	WriteViewAnim( messageArgs, argNum, isAnimLooping, parser.Frames() );
+	writer << map << blurred;
+	WriteViewAnim( writer, isAnimLooping, parser.Frames() );
 
 	Commit( std::move( request ), context, message, retVal, exception );
 }
 
-void DrawWorldModelRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser,
-												   CefRefPtr<CefProcessMessage> ingoing ) {
-	auto ingoingArgs( ingoing->GetArgumentList() );
-	size_t argNum = 0;
-	const std::string map( ingoingArgs->GetString( argNum++ ).ToString() );
-	const bool blurred = ingoingArgs->GetBool( argNum++ );
+void DrawWorldModelRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
+	std::string map;
+	bool blurred;
+
+	reader >> map >> blurred;
 
 	bool looping = false;
 	std::vector<ViewAnimFrame> frames;
-	ReadCameraAnim( ingoingArgs, argNum, &looping, frames );
+
+	ReadCameraAnim( reader, &looping, frames );
 
 	auto outgoing( NewMessage() );
 
@@ -95,15 +93,15 @@ void DrawWorldModelRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser
 
 	// Validate map presence. This is tricky as "ui" map is not listed in the maplist.
 	if( api->FS_FileMTime( mapPath.c_str() ) <= 0 ) {
-		outgoing->GetArgumentList()->SetString( 0, "no such map " + mapPath );
+		MessageWriter::WriteSingleString( outgoing, "no such map " + mapPath );
 		browser->SendProcessMessage( PID_RENDERER, outgoing );
 	}
 
 	UiFacade::Instance()->StartShowingWorldModel( mapPath.c_str(), blurred, looping, frames );
-	outgoing->GetArgumentList()->SetString( 0, "success" );
+	MessageWriter::WriteSingleString( outgoing, "success" );
 	browser->SendProcessMessage( PID_RENDERER, outgoing );
 }
 
-void DrawWorldModelRequest::FireCallback( CefRefPtr<CefProcessMessage> message ) {
-	ExecuteCallback( { CefV8Value::CreateString( message->GetArgumentList()->GetString( 0 ) ) } );
+void DrawWorldModelRequest::FireCallback( MessageReader &reader ) {
+	ExecuteCallback( { CefV8Value::CreateString( reader.NextString() ) } );
 }
