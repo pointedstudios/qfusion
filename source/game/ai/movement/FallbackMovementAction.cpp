@@ -81,8 +81,8 @@ void FallbackMovementAction::PlanPredictionStep( Context *context ) {
 		} else {
 			// This often leads to bot blocking and suicide. TODO: Invesigate what else can be done.
 			botInput->Clear();
-			if( bot->keptInFovPoint.IsActive() ) {
-				Vec3 intendedLookVec( bot->keptInFovPoint.Origin() );
+			if( const float *keptInFovPoint = bot->GetKeptInFovPoint() ) {
+				Vec3 intendedLookVec( keptInFovPoint );
 				intendedLookVec -= entityPhysicsState.Origin();
 				botInput->SetIntendedLookDir( intendedLookVec, false );
 			}

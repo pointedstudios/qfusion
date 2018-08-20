@@ -156,6 +156,7 @@ float SelectedEnemies::GetThreatFactor( int enemyNum ) const {
 }
 
 float SelectedEnemies::ComputeThreatFactor( int enemyNum ) const {
+	assert( enemyNum >= 0 );
 	const auto *enemy = activeEnemies[enemyNum];
 	float entFactor = ComputeThreatFactor( enemy->ent, enemyNum );
 	if( level.time - activeEnemies[enemyNum]->LastAttackedByTime() < 1000 ) {
@@ -183,20 +184,26 @@ float SelectedEnemies::ComputeThreatFactor( const edict_t *ent, int enemyNum ) c
 	enemyToBotDir.NormalizeFast();
 
 	float dot;
-
-	if( ent->ai && ent->ai->botRef ) {
-		dot = enemyToBotDir.Dot( ent->ai->botRef->EntityPhysicsState()->ForwardDir() );
-		if( dot < self->ai->botRef->FovDotFactor() ) {
-			return 0.0f;
-		}
+	if( enemyNum >= 0 ) {
+		// Try reusing this value that is very likely to be cached
+		dot = GetEnemyViewDirDotToBotDirValues()[enemyNum];
 	} else {
 		vec3_t enemyLookDir;
 		AngleVectors( ent->s.angles, enemyLookDir, nullptr, nullptr );
 		dot = enemyToBotDir.Dot( enemyLookDir );
-		// There is no threat if the bot is not in fov for a client (but not for a turret for example)
-		if ( ent->r.client && dot < 0.2f ) {
+	}
+
+	// Check whether the enemy is itself a bot.
+	// Check whether the bot is an tracked/selected enemy of other bot?
+	// This however would make other bots way too special.
+	// The code should work fine for all kind of enemies.
+	if( ent->ai && ent->ai->botRef ) {
+		if( dot < ent->ai->botRef->FovDotFactor() ) {
 			return 0.0f;
 		}
+	} else if( ent->r.client && dot < 0.2f ) {
+		// There is no threat if the bot is not in fov for a client (but not for a turret for example)
+		return 0.0f;
 	}
 
 	if( !EntitiesPvsCache::Instance()->AreInPvs( ent, self ) ) {
@@ -218,15 +225,18 @@ float SelectedEnemies::ComputeThreatFactor( const edict_t *ent, int enemyNum ) c
 		return 0.5f * dot;
 	}
 
+	float result = dot;
+	// If the enemy belongs to these "selected enemies", try using a probably cached value of the "can hit" test.
+	// Otherwise perform a computation (there is no cache for enemies not belonging to this selection)
 	if( enemyNum >= 0 ) {
-		if( !GetCanHit( enemyNum, GetEnemyViewDirDotToBotDirValues()[enemyNum] ) ) {
-			dot *= 0.5f;
+		if( !GetCanHit( enemyNum, dot ) ) {
+			result *= 0.5f;
 		}
-	} else if( !TestCanHit( ent, GetEnemyViewDirDotToBotDirValues()[enemyNum] ) ) {
-		dot *= 0.5f;
+	} else if( !TestCanHit( ent, dot ) ) {
+		result *= 0.5f;
 	}
 
-	return sqrtf( dot );
+	return sqrtf( result );
 }
 
 float SelectedEnemies::TotalInflictedDamage() const {

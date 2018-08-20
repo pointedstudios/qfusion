@@ -12,6 +12,7 @@ BotAwarenessModule::BotAwarenessModule( edict_t *self_, Bot *bot_, float skill_ 
 	, hazardsDetector( self_ )
 	, hazardsSelector( self_ )
 	, eventsTracker( self_ )
+	, keptInFovPointTracker( bot_, this )
 	, ownEnemiesTracker( self_, this, skill_ ) {}
 
 void BotAwarenessModule::OnAttachedToSquad( AiSquad *squad_ ) {
@@ -86,6 +87,8 @@ void BotAwarenessModule::Think() {
 		UpdateSelectedEnemies();
 		UpdateBlockedAreasStatus();
 	}
+
+	keptInFovPointTracker.Update();
 
 	TryTriggerPlanningForNewHazard();
 }

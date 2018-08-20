@@ -390,7 +390,8 @@ bool BotMovementModule::TryRotateInput( BotInput *input, MovementPredictionConte
 		prevRotation = &movementState.inputRotation;
 	}
 
-	if( !bot->keptInFovPoint.IsActive() || nextRotateInputAttemptAt > level.time ) {
+	const float *const keptInFovPoint = bot->GetKeptInFovPoint();
+	if( !keptInFovPoint || nextRotateInputAttemptAt > level.time ) {
 		*prevRotation = BotInputRotation::NONE;
 		return false;
 	}
@@ -398,13 +399,13 @@ bool BotMovementModule::TryRotateInput( BotInput *input, MovementPredictionConte
 	// Cut off an expensive PVS call early
 	if( input->IsRotationAllowed( BotInputRotation::ALL_KINDS_MASK ) ) {
 		// We do not utilize PVS cache since it might produce different results for predicted and actual bot origin
-		if( !trap_inPVS( bot->keptInFovPoint.Origin().Data(), botOrigin ) ) {
+		if( !trap_inPVS( keptInFovPoint, botOrigin ) ) {
 			*prevRotation = BotInputRotation::NONE;
 			return false;
 		}
 	}
 
-	Vec3 selfToPoint( bot->keptInFovPoint.Origin() );
+	Vec3 selfToPoint( keptInFovPoint );
 	selfToPoint -= botOrigin;
 	selfToPoint.NormalizeFast();
 

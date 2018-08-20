@@ -428,92 +428,6 @@ private:
 		return level.time - noItemAvailableSince > 3000;
 	}
 
-	class KeptInFovPoint
-	{
-		const edict_t *self;
-		Vec3 origin;
-		unsigned instanceId;
-		float viewDot;
-		bool isActive;
-
-		float ComputeViewDot( const vec3_t origin_ ) {
-			Vec3 selfToOrigin( origin_ );
-			selfToOrigin -= self->s.origin;
-			selfToOrigin.NormalizeFast();
-			vec3_t forward;
-			AngleVectors( self->s.angles, forward, nullptr, nullptr );
-			return selfToOrigin.Dot( forward );
-		}
-
-public:
-		KeptInFovPoint( const edict_t *self_ ) :
-			self( self_ ), origin( 0, 0, 0 ), instanceId( 0 ), viewDot( -1.0f ), isActive( false ) {}
-
-		void Activate( const Vec3 &origin_, unsigned instanceId_ ) {
-			Activate( origin_.Data(), instanceId_ );
-		}
-
-		void Activate( const vec3_t origin_, unsigned instanceId_ ) {
-			this->origin.Set( origin_ );
-			this->instanceId = instanceId_;
-			this->isActive = true;
-			this->viewDot = ComputeViewDot( origin_ );
-		}
-
-		inline void TryDeactivate( const Vec3 &actualOrigin, unsigned instanceId_ ) {
-			TryDeactivate( actualOrigin.Data(), instanceId_ );
-		}
-
-		inline void TryDeactivate( const vec3_t actualOrigin, unsigned instanceId_ ) {
-			if( !this->isActive ) {
-				return;
-			}
-
-			if( this->instanceId != instanceId_ ) {
-				Deactivate();
-				return;
-			}
-
-			if( this->origin.SquareDistanceTo( actualOrigin ) < 32 * 32 ) {
-				return;
-			}
-
-			float actualDot = ComputeViewDot( actualOrigin );
-			// Do not deactivate if an origin has been changed but the view angles are approximately the same
-			if( fabsf( viewDot - actualDot ) > 0.1f ) {
-				Deactivate();
-				return;
-			}
-		}
-
-		inline void Update( const Vec3 &actualOrigin, unsigned instanceId_ ) {
-			Update( actualOrigin.Data(), instanceId );
-		}
-
-		inline void Update( const vec3_t actualOrigin, unsigned instanceId_ ) {
-			TryDeactivate( actualOrigin, instanceId_ );
-
-			if( !IsActive() ) {
-				Activate( actualOrigin, instanceId_ );
-			}
-		}
-
-		inline void Deactivate() { isActive = false; }
-		inline bool IsActive() const { return isActive; }
-		inline const Vec3 &Origin() const {
-			assert( isActive );
-			return origin;
-		}
-		inline unsigned InstanceIdOrDefault( unsigned default_ = 0 ) const {
-			return isActive ? instanceId : default_;
-		}
-	};
-
-	KeptInFovPoint keptInFovPoint;
-
-	const TrackedEnemy *lastChosenLostOrHiddenEnemy;
-	unsigned lastChosenLostOrHiddenEnemyInstanceId;
-
 	float baseOffensiveness;
 
 	class AiNavMeshQuery *navMeshQuery;
@@ -523,8 +437,6 @@ public:
 	const NavEntity *prevSelectedNavEntity;
 
 	BotItemsSelector itemsSelector;
-
-	void UpdateKeptInFovPoint();
 
 	bool CanChangeWeapons() const {
 		return movementModule.CanChangeWeapons();
@@ -617,6 +529,10 @@ public:
 
 	const BotAwarenessModule::HurtEvent *ActiveHurtEvent() const {
 		return awarenessModule.GetValidHurtEvent();
+	}
+
+	const float *GetKeptInFovPoint() const {
+		return awarenessModule.GetKeptInFovPoint();
 	}
 
 	inline bool WillAdvance() const { return selectedTactics.willAdvance; }

@@ -2,8 +2,9 @@
 #define QFUSION_SELECTEDENEMIES_H
 
 #include "EnemiesTracker.h"
+#include "../Selection.h"
 
-class SelectedEnemies {
+class SelectedEnemies: public Selection {
 	friend class Bot;
 	friend class BotThreatTracker;
 
@@ -71,6 +72,8 @@ class SelectedEnemies {
 public:
 	bool AreValid() const;
 
+	bool ValidAsSelection() const override { return AreValid(); }
+
 	inline void Invalidate() {
 		timeoutAt = 0;
 		maxThreatFactorComputedAt = 0;
@@ -90,7 +93,7 @@ public:
 			  unsigned timeoutPeriod,
 			  const TrackedEnemy *firstActiveEnemy );
 
-	inline unsigned InstanceId() const { return instanceId; }
+	unsigned InstanceId() const override { return instanceId; }
 
 	bool IsPrimaryEnemy( const edict_t *ent ) const {
 		return primaryEnemy && primaryEnemy->ent == ent;

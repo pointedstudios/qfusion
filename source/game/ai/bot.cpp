@@ -73,9 +73,6 @@ Bot::Bot( edict_t *self_, float skillLevel_ )
 	, lastItemSelectedAt( 0 )
 	, noItemAvailableSince( 0 )
 	, lastBlockedNavTargetReportedAt( 0 )
-	, keptInFovPoint( self_ )
-	, lastChosenLostOrHiddenEnemy( nullptr )
-	, lastChosenLostOrHiddenEnemyInstanceId( 0 )
 	, selectedNavEntity( nullptr, 0, 0, 0 )
 	, itemsSelector( self ) {
 	self->r.client->movestyle = GS_CLASSICBUNNY;
@@ -94,70 +91,6 @@ Bot::~Bot() {
 	if( navMeshQuery ) {
 		AiNavMeshManager::Instance()->FreeQuery( navMeshQuery );
 	}
-}
-
-
-
-void Bot::UpdateKeptInFovPoint() {
-	if( GetMiscTactics().shouldRushHeadless ) {
-		keptInFovPoint.Deactivate();
-		return;
-	}
-
-	if( selectedEnemies.AreValid() ) {
-		Vec3 origin( selectedEnemies.ClosestEnemyOrigin( self->s.origin ) );
-		if( !GetMiscTactics().shouldKeepXhairOnEnemy ) {
-			if( !selectedEnemies.HaveQuad() && !selectedEnemies.HaveCarrier() ) {
-				float distanceThreshold = 768.0f + 1024.0f * selectedEnemies.MaxThreatFactor();
-				distanceThreshold *= 0.5f + 0.5f * self->ai->botRef->GetEffectiveOffensiveness();
-				if( origin.SquareDistanceTo( self->s.origin ) > distanceThreshold * distanceThreshold ) {
-					return;
-				}
-			}
-		}
-
-		keptInFovPoint.Update( origin, selectedEnemies.InstanceId() );
-		return;
-	}
-
-	unsigned timeout = GetMiscTactics().shouldKeepXhairOnEnemy ? 2000 : 1000;
-	if( GetMiscTactics().willRetreat ) {
-		timeout = ( timeout * 3u ) / 2u;
-	}
-
-	if( const TrackedEnemy *lostOrHiddenEnemy = awarenessModule.ChooseLostOrHiddenEnemy( timeout ) ) {
-		if( !lastChosenLostOrHiddenEnemy ) {
-			lastChosenLostOrHiddenEnemyInstanceId++;
-		} else if( lastChosenLostOrHiddenEnemy->ent != lostOrHiddenEnemy->ent ) {
-			lastChosenLostOrHiddenEnemyInstanceId++;
-		}
-
-		Vec3 origin( lostOrHiddenEnemy->LastSeenOrigin() );
-		if( !GetMiscTactics().shouldKeepXhairOnEnemy ) {
-			float distanceThreshold = 384.0f;
-			if( lostOrHiddenEnemy->ent ) {
-				distanceThreshold += 1024.0f * selectedEnemies.ComputeThreatFactor( lostOrHiddenEnemy->ent );
-			}
-			distanceThreshold *= 0.5f + 0.5f * self->ai->botRef->GetEffectiveOffensiveness();
-			if( origin.SquareDistanceTo( self->s.origin ) > distanceThreshold * distanceThreshold ) {
-				lastChosenLostOrHiddenEnemy = nullptr;
-				return;
-			}
-		}
-
-		lastChosenLostOrHiddenEnemy = lostOrHiddenEnemy;
-		keptInFovPoint.Update( origin, lastChosenLostOrHiddenEnemyInstanceId );
-		return;
-	}
-
-	lastChosenLostOrHiddenEnemy = nullptr;
-
-	if( const auto *hurtEvent = awarenessModule.GetValidHurtEvent() ) {
-		keptInFovPoint.Activate( hurtEvent->possibleOrigin, (unsigned)hurtEvent->lastHitTimestamp );
-		return;
-	}
-
-	keptInFovPoint.Deactivate();
 }
 
 void Bot::TouchedOtherEntity( const edict_t *entity ) {
@@ -275,8 +208,6 @@ void Bot::OnBlockedTimeout() {
 void Bot::GhostingFrame() {
 	selectedEnemies.Invalidate();
 
-	lastChosenLostOrHiddenEnemy = nullptr;
-
 	botPlanner.ClearGoalAndPlan();
 
 	movementModule.Reset();
@@ -345,8 +276,6 @@ void Bot::Think() {
 	if( IsGhosting() ) {
 		return;
 	}
-
-	UpdateKeptInFovPoint();
 
 	// TODO: Let the weapons usage module decide?
 	if( CanChangeWeapons() ) {
