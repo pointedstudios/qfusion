@@ -206,6 +206,22 @@ bool KeepHighSpeedMovingToNavTargetPredictor::OnPredictionStep( const Vec3 &segm
 	return false;
 }
 
+bool BotMovementModule::CanChangeWeapons() const {
+	auto &weaponJumpState = movementState.weaponJumpMovementState;
+	if( weaponJumpState.IsActive() ) {
+		return weaponJumpState.hasTriggeredWeaponJump;
+	}
+	const int64_t levelTime = level.time;
+	// If there were no recent failed weapon jump attempts
+	if( levelTime - lastWeaponJumpTriggeringFailedAt > 512 ) {
+		return true;
+	}
+	// Hack... make a copy of the rate limiter (it's cheap) to avoid modifying its state
+	RateLimiter limiter( this->weaponJumpAttemptsRateLimiter );
+	// Check whether the rate limiter would allow next weapon jumping attempt soon and disable switching in this case
+	return !limiter.TryAcquire( levelTime + 384 );
+}
+
 bool BotMovementModule::CanInterruptMovement() const {
 	if( movementState.jumppadMovementState.IsActive() ) {
 		return false;

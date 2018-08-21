@@ -42,7 +42,7 @@ class alignas( 4 )RateLimiter {
 	int value;
 
 	int GetNewValue( int64_t millisNow ) const {
-		int64_t diff = level.time - refilledAt;
+		int64_t diff = millisNow - refilledAt;
 		auto tokensToAdd = (int)(diff * refillRatePerMillis);
 		if( tokensToAdd <= 0 ) {
 			return value;
@@ -76,10 +76,14 @@ public:
 		, refillRatePerMillis( actionsPerSecond / 1000.0f )
 		, intervalMillis( (unsigned)( 1000.0f / actionsPerSecond ) )
 		, size( actionsPerSecond )
-		, value( 0 ) {}
+		, value( 1 ) {
+		// Note: initializing the value by 1 is important.
+		// Otherwise the first TryAcquire() attempt fails.
+		// This algorithm converges to theoretical values well according to tests.
+	}
 
-	bool TryAcquire() {
-		Refill( level.time );
+	bool TryAcquire( int64_t levelTime ) {
+		Refill( levelTime );
 		value -= 1;
 		return value >= 0;
 	}
@@ -109,6 +113,8 @@ class BotMovementModule {
 	friend class WalkOrSlideInterpolatingReachChainAction;
 	friend class CombatDodgeSemiRandomlyToTargetAction;
 	friend class ScheduleWeaponJumpAction;
+	friend class TryTriggerWeaponJumpAction;
+	friend class CorrectWeaponJumpAction;
 
 	friend class GenericGroundMovementFallback;
 	friend class UseWalkableNodeFallback;
@@ -128,6 +134,8 @@ class BotMovementModule {
 	// (consequential attempts are allowed but no more than several frames,
 	// otherwise a bot might loop attempts forever)
 	RateLimiter weaponJumpAttemptsRateLimiter;
+	// Is not for rate limiting but for preventing instant weapon switch for shooting after a failed attempt
+	Int64Align4 lastWeaponJumpTriggeringFailedAt { 0 };
 
 	VisibleNextReachCache visibleNextReachCache;
 
@@ -181,6 +189,12 @@ class BotMovementModule {
 	inline void TurnInputToSide( vec3_t sideDir, int sign, BotInput *input, MovementPredictionContext *context = nullptr );
 	inline bool TryRotateInput( BotInput *input, MovementPredictionContext *context = nullptr );
 	void CheckBlockingDueToInputRotation();
+
+	void ResetFailedWeaponJumpAttempt( MovementPredictionContext *context ) {
+		assert( context->movementState->weaponJumpMovementState.IsActive() );
+		context->movementState->weaponJumpMovementState.Deactivate();
+		this->lastWeaponJumpTriggeringFailedAt = level.time;
+	}
 public:
 	BotMovementModule( Bot *bot_ );
 
@@ -222,10 +236,7 @@ public:
 		movementState.jumppadMovementState.Activate( jumppadEnt );
 	}
 
-	inline bool CanChangeWeapons() const {
-		auto &weaponJumpState = movementState.weaponJumpMovementState;
-		return !weaponJumpState.IsActive() || weaponJumpState.hasTriggeredWeaponJump;
-	}
+	bool CanChangeWeapons() const;
 
 	void Reset() {
 		movementState.Reset();

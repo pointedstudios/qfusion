@@ -12,7 +12,7 @@ void BunnyToStairsOrRampExitAction::PlanPredictionStep( MovementPredictionContex
 		return;
 	}
 
-	if( !context->topOfStackIndex ) {
+	if( !intendedLookDir ) {
 		if( !TryFindAndSaveLookDir( context ) ) {
 			this->isDisabledForPlanning = true;
 			context->SetPendingRollback();
@@ -20,7 +20,6 @@ void BunnyToStairsOrRampExitAction::PlanPredictionStep( MovementPredictionContex
 		}
 	}
 
-	Assert( intendedLookDir );
 	if( !SetupBunnying( Vec3( intendedLookDir ), context ) ) {
 		return;
 	}
