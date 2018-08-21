@@ -549,7 +549,7 @@ public:
 
 	// Whether the bot should stop bunnying even if it could produce
 	// good predicted results and concentrate on combat/dodging
-	bool ForceCombatKindOfMovement() const;
+	bool ShouldSkinBunnyInFavorOfCombatMovement() const;
 	// Whether it is allowed to dash right now
 	bool IsCombatDashingAllowed() const;
 	// Whether it is allowed to crouch right now

@@ -455,7 +455,7 @@ int Bot::GetWeaponsForWeaponJumping( int *weaponNumsBuffer ) {
 	return numSuitableWeapons;
 }
 
-bool Bot::ForceCombatKindOfMovement() const {
+bool Bot::ShouldSkinBunnyInFavorOfCombatMovement() const {
 	// Return a feasible value for this case
 	if( !selectedEnemies.AreValid() ) {
 		return false;
@@ -510,7 +510,7 @@ bool Bot::IsCombatDashingAllowed() const {
 
 bool Bot::IsCombatCrouchingAllowed() const {
 	if( !selectedEnemies.AreValid() ) {
-		return true;
+		return false;
 	}
 
 	// If they're with EB and IG and are about to hit me

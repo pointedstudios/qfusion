@@ -540,14 +540,27 @@ inline BaseMovementAction *MovementPredictionContext::SuggestAnyAction() {
 		return action;
 	}
 
+	auto *const combatDodgeAction = &module->combatDodgeSemiRandomlyToTargetAction;
+
 	// If no action has been suggested, use a default/dummy one.
 	// We have to check the combat action since it might be disabled due to planning stack overflow.
-	if( bot->ShouldAttack() && bot->ShouldKeepXhairOnEnemy() ) {
+	if( bot->ShouldKeepXhairOnEnemy() ) {
 		const auto &selectedEnemies = bot->GetSelectedEnemies();
 		if( selectedEnemies.AreValid() && selectedEnemies.ArePotentiallyHittable() ) {
-			if( !module->combatDodgeSemiRandomlyToTargetAction.IsDisabledForPlanning() ) {
-				return &module->combatDodgeSemiRandomlyToTargetAction;
+			if( !combatDodgeAction->IsDisabledForPlanning() ) {
+				return combatDodgeAction;
 			}
+		}
+	}
+	if( bot->GetKeptInFovPoint() && !bot->ShouldRushHeadless() && bot->NavTargetAasAreaNum() ) {
+		if( !combatDodgeAction->IsDisabledForPlanning() ) {
+			// The fallback movement action produces fairly reliable results.
+			// However the fallback movement looks poor.
+			// Try using this "combat dodge action" using the "kept in fov" point as an enemy
+			// and apply stricter success/termination checks.
+			// If this combat action fails, the fallback action gets control.
+			combatDodgeAction->allowFailureUsingThatAsNextAction = &module->fallbackMovementAction;
+			return combatDodgeAction;
 		}
 	}
 

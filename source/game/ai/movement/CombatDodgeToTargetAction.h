@@ -5,6 +5,12 @@
 
 class CombatDodgeSemiRandomlyToTargetAction : public BaseMovementAction
 {
+	friend class MovementPredictionContext;
+	friend class WalkCarefullyAction;
+
+	float *lookDir { nullptr };
+	vec3_t tmpDir { 0, 0, 0 };
+
 	int bestTravelTimeSoFar { std::numeric_limits<int>::max() };
 	int bestFloorClusterSoFar { 0 };
 
@@ -14,6 +20,16 @@ class CombatDodgeSemiRandomlyToTargetAction : public BaseMovementAction
 	// Results for the corresponding Bot:: calls precached at application sequence start
 	bool isCombatDashingAllowed { false };
 	bool isCompatCrouchingAllowed { false };
+
+	// If we are in "combat" mode and should keep crosshair on enemies
+	// the CombatDodgeSemiRandomlyToTargetAction action is a terminal action.
+	// This means prediction stops on this action with the only very rare exception:
+	// an overflow of prediction stack.
+	// Otherwise the combat action might be marked as disabled if all tested action application sequences fail
+	// and the control is transferred to this "next" action.
+	BaseMovementAction *allowFailureUsingThatAsNextAction { nullptr };
+
+	inline bool IsAllowedToFail() { return allowFailureUsingThatAsNextAction != nullptr; }
 
 	inline bool ShouldTryRandomness() { return attemptNum < maxAttempts / 2; }
 	inline bool ShouldTrySpecialMovement() {
