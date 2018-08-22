@@ -341,8 +341,13 @@ class EaxReverbEffect final: public ReverbEffect {
 
 	const float *MakeFakeSourceOrigin( struct src_s *src,
 									   const vec3_t listenerOrigin,
-									   const vec3_t avgReflectionDir,
-									   const vec3_t *reflectionDirs );
+									   const vec3_t *reflectionDirs,
+									   unsigned numReflectionDirs );
+
+	void UpdateDelegatedSpatialization( struct src_s *src,
+										const vec3_t listenerOrigin,
+										const vec3_t *reflectionDirs,
+										unsigned numReflectionDirs );
 
 	vec3_t tmpSourceOrigin { 0, 0, 0 };
 public:
@@ -356,7 +361,7 @@ public:
 
 	void CopyReverbProps( const ReverbEffect *that ) override;
 
-	virtual void UpdatePanning( src_s *src, const vec3_t listenerOrigin, const mat3_t listenerAxes ) override;
+	void UpdatePanning( src_s *src, const vec3_t listenerOrigin, const mat3_t listenerAxes ) override;
 };
 
 class ChorusEffect final: public Effect {

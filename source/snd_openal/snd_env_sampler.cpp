@@ -1613,6 +1613,8 @@ float GenericRaycastSampler::ComputeRoomSizeFactor() const {
 	return prevDistance / REVERB_ENV_DISTANCE_THRESHOLD;
 }
 
+static constexpr auto MAX_REVERB_DECAY = 3.10f + 0.001f;
+
 void ReverbEffectSampler::ProcessPrimaryEmissionResults() {
 	// Instead of trying to compute these factors every sampling call,
 	// reuse pre-computed properties of CM map leafs that briefly resemble rooms/convex volumes.
@@ -1630,37 +1632,35 @@ void ReverbEffectSampler::ProcessPrimaryEmissionResults() {
 
 	effect->density = 1.0f - 0.7f * metalFactor;
 
-	// Let diffusion be lower for huge open spaces
-	effect->diffusion = 1.0f - 0.75f * skyFactor - 0.5f * roomSizeFactor;
-	clamp_low( effect->diffusion, 0.0f );
+	effect->diffusion = 1.0f;
+	if( !skyFactor ) {
+		effect->diffusion = 1.0f - 0.7f * roomSizeFactor;
+	}
 
-	// Let decay time depend of:
-	// * mainly of effects scale
-	// * room size
-	// * diffusion (that's an extra hack to hear long "colorated" echoes in open spaces)
-	// Since diffusion depends itself of the room size factor, add only sky factor component
-	effect->decayTime = 0.55f + 3.0f * roomSizeFactor + 2.0f * skyFactor;
+	effect->decayTime = 0.60f + 2.0f * roomSizeFactor + 0.5f * skyFactor;
+	assert( effect->decayTime <= MAX_REVERB_DECAY );
 
-	// Compute "gain factors" that are dependent of room size
-	const float lateReverbGainFactor = ( 1.0f - roomSizeFactor ) * ( 1.0f - roomSizeFactor );
+	// Let reflections (early reverb) gain be larger for small rooms
+	const float reflectionsGainFactor = ( 1.0f - roomSizeFactor ) * ( 1.0f - roomSizeFactor ) * ( 1.0f - roomSizeFactor );
+	assert( reflectionsGainFactor >= 0.0f && reflectionsGainFactor <= 1.0f );
+	// Let late reverb gain be larger for huge rooms
+	const float lateReverbGainFactor = roomSizeFactor * roomSizeFactor;
 	assert( lateReverbGainFactor >= 0.0f && lateReverbGainFactor <= 1.0f );
 
-	effect->lateReverbGain = 0.10f + 0.20f * lateReverbGainFactor * ( 1.0f - skyFactor );
-	// Keep it default, its hard to tweak... except the "cave" case
-	effect->reflectionsGain = 0.05f;
+	effect->lateReverbGain = 0.125f + 0.105f * lateReverbGainFactor * ( 1.0f - 0.7f * skyFactor );
+	effect->reflectionsGain = 0.05f + 0.75f * reflectionsGainFactor;
 
 	if( !skyFactor ) {
 		// Hack: try to detect sewers/caves
 		if( leafProps.WaterFactor() ) {
-			const float reflectionsGainFactor = lateReverbGainFactor * ( 1.0f - roomSizeFactor );
-			assert( reflectionsGainFactor >= 0.0f && reflectionsGainFactor <= 1.0f );
-			effect->reflectionsGain += 1.25f * reflectionsGainFactor;
-			effect->lateReverbGain += 0.75f * lateReverbGainFactor;
+			effect->reflectionsGain += 0.50f + 0.75f * reflectionsGainFactor;
+			effect->lateReverbGain += 0.50f * lateReverbGainFactor;
 		}
 	}
 
-	effect->reflectionsDelay = 0.007f + 0.150f * roomSizeFactor;
-	effect->lateReverbDelay = 0.011f + 0.075f * roomSizeFactor;
+	// Keep it default... it's hard to tweak
+	effect->reflectionsDelay = 0.007f;
+	effect->lateReverbDelay = 0.011f + 0.088f * roomSizeFactor;
 
 	if( auto *eaxEffect = Effect::Cast<EaxReverbEffect *>( effect ) ) {
 		if( skyFactor ) {
@@ -1683,12 +1683,12 @@ void ReverbEffectSampler::SetMinimalReverbProps() {
 	effect->gain = 0.1f;
 	effect->density = 1.0f;
 	effect->diffusion = 1.0f;
-	effect->decayTime = 0.55f;
+	effect->decayTime = 0.60f;
 	effect->reflectionsGain = 0.05f;
 	effect->reflectionsDelay = 0.007f;
 	effect->lateReverbGain = 0.15f;
 	effect->lateReverbDelay = 0.011f;
-	effect->gainHf = 0.1f;
+	effect->gainHf = 0.0f;
 	if( auto *eaxEffect = Effect::Cast<EaxReverbEffect *>( effect ) ) {
 		eaxEffect->echoTime = 0.25f;
 		eaxEffect->echoDepth = 0.0f;
@@ -1738,7 +1738,7 @@ void ReverbEffectSampler::EmitSecondaryRays() {
 		effect->secondaryRaysObstruction = 1.0f - frac;
 		// A absence of a HF attenuation sounds poor, metallic/reflective environments should be the only exception.
 		const LeafProps &leafProps = ::leafPropsCache->GetPropsForLeaf( src->envUpdateState.leafNum );
-		effect->gainHf = 0.0f + ( 0.3f + 0.5f * leafProps.MetalFactor() ) * frac;
+		effect->gainHf = ( 0.4f + 0.5f * leafProps.MetalFactor() ) * frac;
 		// We also modify effect gain by a fraction of secondary rays passed to listener.
 		// This is not right in theory, but is inevitable in the current game sound model
 		// where you can hear across the level through solid walls
@@ -1748,7 +1748,7 @@ void ReverbEffectSampler::EmitSecondaryRays() {
 		// Set minimal feasible values
 		effect->secondaryRaysObstruction = 1.0f;
 		effect->gainHf = 0.0f;
-		effect->gain *= 0.75f;
+		effect->gain *= 0.5f;
 	}
 }
 
@@ -1762,8 +1762,6 @@ void EaxReverbEffect::UpdatePanning( src_s *src, const vec3_t listenerOrigin, co
 	}
 
 	unsigned numReflectionDirs = 0;
-	// An average direction. Will be used for fake source origin selection.
-	vec3_t avgReflectionDir = { 0, 0, 0 };
 	// A weighted sum of directions. Will be used for reflections panning.
 	vec3_t reverbPanDir = { 0, 0, 0 };
 	for( unsigned i = 0; i < updateState->numReflectionPoints; ++i ) {
@@ -1776,23 +1774,71 @@ void EaxReverbEffect::UpdatePanning( src_s *src, const vec3_t listenerOrigin, co
 		}
 
 		numReflectionDirs++;
-		float distance = sqrtf( squareDistance );
+		const float distance = sqrtf( squareDistance );
 		VectorScale( dir, 1.0f / distance, dir );
-		VectorAdd( avgReflectionDir, dir, avgReflectionDir );
+		// Store the distance as the 4-th vector component
+
 		// Note: let's apply a factor giving far reflection points direction greater priority.
 		// Otherwise the reverb is often panned to a nearest wall and that's totally wrong.
-		float factor = 0.1f + 0.9f * ( distance / REVERB_ENV_DISTANCE_THRESHOLD );
+		float factor = 0.3f + 0.7f * ( distance / REVERB_ENV_DISTANCE_THRESHOLD );
 		VectorMA( reverbPanDir, factor, dir, reverbPanDir );
 	}
 
 	if( numReflectionDirs ) {
 		VectorNormalize( reverbPanDir );
-		if( numReflectionDirs > 1 ) {
-			VectorScale( avgReflectionDir, 1.0f / numReflectionDirs, avgReflectionDir );
-		}
 	}
 
 	// "If there is an active EaxReverbEffect, setting source origin/velocity is delegated to it".
+	UpdateDelegatedSpatialization( src, listenerOrigin, reflectionDirs, numReflectionDirs );
+
+	vec3_t basePan;
+	// Convert to "speakers" coordinate system
+	basePan[0] = -DotProduct( reverbPanDir, &listenerAxes[AXIS_RIGHT] );
+	// Not sure about "minus" sign in this case...
+	// We need something like 9.1 sound system (that has channels distinction in height) to test that
+	basePan[1] = -DotProduct( reverbPanDir, &listenerAxes[AXIS_UP] );
+	basePan[2] = -DotProduct( reverbPanDir, &listenerAxes[AXIS_FORWARD] );
+
+	float reflectionsPanScale;
+	float lateReverbPanScale;
+	// Let late reverb be more focused for huge/vast environments
+	// Do not pan early reverb for own sounds.
+	// Pan early reverb much less for own sounds.
+	const float decayFrac = std::min( 1.0f, decayTime / MAX_REVERB_DECAY );
+	// If the sound is relative to the listener, lower the panning
+	if( src->attenuation == 1.0f ) {
+		lateReverbPanScale = 0.25f * decayFrac;
+		reflectionsPanScale = 0.0f;
+	} else {
+		lateReverbPanScale = 0.5f * decayFrac;
+		reflectionsPanScale = 0.5f * lateReverbPanScale;
+	}
+
+	vec3_t reflectionsPan, lateReverbPan;
+	VectorCopy( basePan, reflectionsPan );
+	VectorScale( reflectionsPan, reflectionsPanScale, reflectionsPan );
+	VectorCopy( basePan, lateReverbPan );
+	VectorScale( lateReverbPan, lateReverbPanScale, lateReverbPan );
+
+	qalEffectfv( src->effect, AL_EAXREVERB_REFLECTIONS_PAN, reflectionsPan );
+	qalEffectfv( src->effect, AL_EAXREVERB_LATE_REVERB_PAN, lateReverbPan );
+}
+
+void EaxReverbEffect::UpdateDelegatedSpatialization( struct src_s *src,
+													 const vec3_t listenerOrigin,
+													 const vec3_t *reflectionDirs,
+													 unsigned numReflectionDirs ) {
+	if( src->attenuation == 1.0f ) {
+		// It MUST already be a relative sound
+#ifndef PUBLIC_BUILD
+		ALint value;
+		qalGetSourcei( src->source, AL_SOURCE_RELATIVE, &value );
+		assert( value == AL_FALSE );
+#endif
+		qalSourcei( src->source, AL_SOURCE_RELATIVE, AL_FALSE );
+		return;
+	}
+
 	qalSourcei( src->source, AL_SOURCE_RELATIVE, AL_FALSE );
 	// The velocity is kept untouched for now.
 	qalSourcefv( src->source, AL_VELOCITY, src->velocity );
@@ -1808,59 +1854,42 @@ void EaxReverbEffect::UpdatePanning( src_s *src, const vec3_t listenerOrigin, co
 	if( s_realistic_obstruction->integer && numReflectionDirs && directObstruction == 1.0f ) {
 		// Provide a fake origin for the source that is at the same distance
 		// as the real origin and is aligned to the sound propagation "window"
-		sourceOrigin = MakeFakeSourceOrigin( src, listenerOrigin, avgReflectionDir, reflectionDirs );
+		sourceOrigin = MakeFakeSourceOrigin( src, listenerOrigin, reflectionDirs, numReflectionDirs );
 	}
 
 	qalSourcefv( src->source, AL_POSITION, sourceOrigin );
-
-	vec3_t pan;
-	// Convert to "speakers" coordinate system
-	pan[0] = -DotProduct( reverbPanDir, &listenerAxes[AXIS_RIGHT] );
-	pan[1] = DotProduct( reverbPanDir, &listenerAxes[AXIS_UP] );
-	pan[2] = -DotProduct( reverbPanDir, &listenerAxes[AXIS_FORWARD] );
-
-	// Lower the vector magnitude, otherwise panning is way too strong and feels weird.
-	// The multiplier has been lowered since we pan the source origin too.
-	// Also it should be lower in tight/constrained environment.
-	// (we assume that echo depth is greater for open spaces and diffusion is lower)
-	float panScale = 0.25f * echoDepth + 0.25f * ( 1.0f - diffusion );
-	clamp_high( panScale, 0.25f );
-	VectorScale( pan, panScale, pan );
-
-	qalEffectfv( src->effect, AL_EAXREVERB_REFLECTIONS_PAN, pan );
-	qalEffectfv( src->effect, AL_EAXREVERB_LATE_REVERB_PAN, pan );
 }
 
 const float *EaxReverbEffect::MakeFakeSourceOrigin( struct src_s *src,
 													const vec3_t listenerOrigin,
-													const vec3_t avgReflectionDir,
-													const vec3_t *reflectionDirs ) {
-	// A reflection point that is a finest fit to the average reflection direction.
-	// This point acts as a "window" where the sound is intended to propagate.
-	// We are sure this point exist (as there is a definite reflected sound path)
+													const vec3_t *reflectionDirs,
+													unsigned numReflectionDirs ) {
+	assert( numReflectionDirs );
 
-	float bestDot = -1;
-	const float *bestDir = nullptr;
-	for( unsigned i = 0; i < src->panningUpdateState.numReflectionPoints; ++i ) {
-		// If the dir does not contribute to panning
-		if( reflectionDirs[i][0] == std::numeric_limits<float>::infinity() ) {
-			continue;
-		}
-		const float dot = DotProduct( reflectionDirs[i], avgReflectionDir );
+	// A sound is intended to propagate along this dir.
+	const float *propagationDir = nullptr;
+	// Take the dir that has the best conformance to the straight source-to-listener dir as a propagation dir
+	vec3_t sourceToListenerDir;
+	VectorSubtract( listenerOrigin, src->origin, sourceToListenerDir );
+	// We must preserve this distance from source to listener for the same attenuation
+	const float distance = sqrtf( VectorLengthSquared( sourceToListenerDir ) );
+	VectorScale( sourceToListenerDir, 1.0f / distance, sourceToListenerDir );
+
+	float bestDot = -1.0f;
+	for( unsigned i = 0; i < numReflectionDirs; ++i ) {
+		float dot = DotProduct( reflectionDirs[i], sourceToListenerDir );
 		if( dot < bestDot ) {
 			continue;
 		}
 		bestDot = dot;
-		bestDir = &reflectionDirs[i][0];
+		propagationDir = reflectionDirs[i];
 	}
 
-	assert( bestDir );
+	assert( propagationDir );
 
 	float *const fakeOrigin = this->tmpSourceOrigin;
-	// We must preserve this distance from source to listener for the same attenuation
-	const float distance = sqrtf( DistanceSquared( src->origin, listenerOrigin ) );
-	// Note: "bestDir" points from a reflection point to the listener, we have to negate it
-	VectorSubtract( vec3_origin, bestDir, fakeOrigin );
+	// Note: "propagationDir" points from a reflection point to the listener, we have to negate it
+	VectorSubtract( vec3_origin, propagationDir, fakeOrigin );
 	VectorScale( fakeOrigin, distance, fakeOrigin );
 	// Make an origin that is `distance` units away of the listener and is aligned along the `bestDir`
 	VectorAdd( fakeOrigin, listenerOrigin, fakeOrigin );

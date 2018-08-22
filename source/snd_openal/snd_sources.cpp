@@ -315,6 +315,13 @@ void EchoEffect::BindOrUpdate( struct src_s *src ) {
 * source_spatialize
 */
 static void source_spatialize( src_t *src ) {
+	if( src->envUpdateState.lastEnvUpdateAt ) {
+		// Delegate setting source origin to the effect in this case
+		if( dynamic_cast<EaxReverbEffect *>( src->envUpdateState.effect ) ) {
+			return;
+		}
+	}
+
 	if( !src->attenuation ) {
 		qalSourcei( src->source, AL_SOURCE_RELATIVE, AL_TRUE );
 		// this was set at source_setup, no need to redo every frame
@@ -326,13 +333,6 @@ static void source_spatialize( src_t *src ) {
 	if( src->isTracking ) {
 		VectorCopy( entlist[src->entNum].origin, src->origin );
 		VectorCopy( entlist[src->entNum].velocity, src->velocity );
-	}
-
-	if( src->envUpdateState.lastEnvUpdateAt ) {
-		// Delegate setting source origin to the effect in this case
-		if( dynamic_cast<EaxReverbEffect *>( src->envUpdateState.effect ) ) {
-			return;
-		}
 	}
 
 	qalSourcei( src->source, AL_SOURCE_RELATIVE, AL_FALSE );
