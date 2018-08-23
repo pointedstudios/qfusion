@@ -1,21 +1,21 @@
 #include "SyscallsLocal.h"
 
-void GetLocalizedStringsRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
+bool GetLocalizedStringsRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 													CefRefPtr<CefV8Value> &retVal,
 													CefString &exception ) {
 	if( jsArgs.size() != 2 ) {
 		exception = "Illegal arguments list size, there must be two arguments";
-		return;
+		return false;
 	}
 
 	auto stringsArray( jsArgs[0] );
 	if( !stringsArray->IsArray() ) {
 		exception = "The first argument must be an array of strings";
-		return;
+		return false;
 	}
 
 	if( !ValidateCallback( jsArgs.back(), exception ) ) {
-		return;
+		return false;
 	}
 
 	// TODO: Fetch and validate array args before this?
@@ -33,12 +33,12 @@ void GetLocalizedStringsRequestLauncher::StartExec( const CefV8ValueList &jsArgs
 			std::stringstream ss;
 			ss << "The array value at " << i << " is not a string";
 			exception = ss.str();
-			return;
+			return false;
 		}
 		messageArgs->SetString( argNum++, elemValue->GetStringValue() );
 	}
 
-	Commit( std::move( request ), context, message, retVal, exception );
+	return Commit( std::move( request ), context, message, retVal, exception );
 }
 
 void GetLocalizedStringsRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {

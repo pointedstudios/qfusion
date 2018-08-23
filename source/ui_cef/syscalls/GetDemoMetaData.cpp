@@ -1,22 +1,22 @@
 #include "SyscallsLocal.h"
 
-void GetDemoMetaDataRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
+bool GetDemoMetaDataRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 												CefRefPtr<CefV8Value> &retVal,
 												CefString &exception ) {
 	if( jsArgs.size() != 2 ) {
 		exception = "Illegal arguments list size, there must be two arguments";
-		return;
+		return false;
 	}
 
 	CefString path;
 	if( !TryGetString( jsArgs[0], "path", path, exception ) ) {
-		return;
+		return false;
 	}
 
 	// TODO: Validate path, JS is very error-prone
 
 	if( !ValidateCallback( jsArgs.back(), exception ) ) {
-		return;
+		return false;
 	}
 
 	auto context( CefV8Context::GetCurrentContext() );
@@ -26,7 +26,7 @@ void GetDemoMetaDataRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 	MessageWriter writer( message );
 	writer << request->Id() << path;
 
-	Commit( std::move( request ), context, message, retVal, exception );
+	return Commit( std::move( request ), context, message, retVal, exception );
 }
 
 typedef std::vector<std::pair<std::string, std::string>> DemoMetaData;

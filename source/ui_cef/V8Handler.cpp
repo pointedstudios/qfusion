@@ -14,8 +14,15 @@ bool WswCefV8Handler::Execute( const CefString& name,
 
 	for( PendingRequestLauncher *launcher = requestLaunchersHead; launcher; launcher = launcher->Next() ) {
 		if( !launcher->Method().compare( name ) ) {
-			Logger()->Debug( "Found a launcher %s for a request", launcher->LogTag().c_str() );
-			launcher->StartExec( arguments, retval, exception );
+			const char *tag = launcher->LogTag().c_str();
+			Logger()->Debug( "Found a launcher %s for a request", tag );
+			if( launcher->StartExec( arguments, retval, exception ) ) {
+				if( !exception.empty() ) {
+					Logger()->Error( "The launcher %s returned true from StartExec() but the exception is set\n", tag );
+				}
+			} else if( exception.empty() ) {
+				Logger()->Error( "The launcher %s returned false from StartExec() without setting an exception\n", tag );
+			}
 			return true;
 		}
 	}

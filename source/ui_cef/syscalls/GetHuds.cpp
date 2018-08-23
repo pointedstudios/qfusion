@@ -1,6 +1,6 @@
 #include "SyscallsLocal.h"
 
-void GetHudsRequestLauncher::StartExec( const CefV8ValueList &jsArgs, CefRefPtr<CefV8Value> &retVal, CefString &ex ) {
+bool GetHudsRequestLauncher::StartExec( const CefV8ValueList &jsArgs, CefRefPtr<CefV8Value> &retVal, CefString &ex ) {
 	return DefaultSingleArgStartExecImpl( jsArgs, retVal, ex );
 }
 

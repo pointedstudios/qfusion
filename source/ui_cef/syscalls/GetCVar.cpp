@@ -13,17 +13,18 @@ static const std::map<CefString, int> cvarFlagNamesTable = {
 	{ "developer"     , CVAR_DEVELOPER }
 };
 
-void GetCVarRequestLauncher::StartExec( const CefV8ValueList &arguments, CefRefPtr<CefV8Value> &retval, CefString &exception ) {
+bool GetCVarRequestLauncher::StartExec( const CefV8ValueList &arguments, CefRefPtr<CefV8Value> &retval, CefString &exception ) {
 	if( arguments.size() < 3 ) {
 		exception = "Illegal arguments list size, should be 3 or 4";
-		return;
+		return false;
 	}
+
 	CefString name, defaultValue;
 	if( !TryGetString( arguments[0], "name", name, exception ) ) {
-		return;
+		return false;
 	}
 	if( !TryGetString( arguments[1], "defaultValue", defaultValue, exception ) ) {
-		return;
+		return false;
 	}
 
 	int flags = 0;
@@ -31,31 +32,31 @@ void GetCVarRequestLauncher::StartExec( const CefV8ValueList &arguments, CefRefP
 		auto flagsArray( arguments[2] );
 		if( !flagsArray->IsArray() ) {
 			exception = "An array of flags is expected for a 3rd argument in this case";
-			return;
+			return false;
 		}
 		for( int i = 0, end = flagsArray->GetArrayLength(); i < end; ++i ) {
 			CefRefPtr<CefV8Value> flagValue( flagsArray->GetValue( i ) );
 			// See GetValue() documentation
 			if( !flagValue.get() ) {
 				exception = "Can't get an array value";
-				return;
+				return false;
 			}
 			if( !flagValue->IsString() ) {
 				exception = "A flags array is allowed to hold only string values";
-				return;
+				return false;
 			}
 			auto flagString( flagValue->GetStringValue() );
 			auto it = ::cvarFlagNamesTable.find( flagString );
 			if( it == ::cvarFlagNamesTable.end() ) {
 				exception = std::string( "Unknown CVar flag value " ) + flagString.ToString();
-				return;
+				return false;
 			}
 			flags |= ( *it ).second;
 		}
 	}
 
 	if( !ValidateCallback( arguments.back(), exception ) ) {
-		return;
+		return false;
 	}
 
 	auto context( CefV8Context::GetCurrentContext() );
@@ -65,7 +66,7 @@ void GetCVarRequestLauncher::StartExec( const CefV8ValueList &arguments, CefRefP
 	MessageWriter writer( message );
 	writer << request->Id() << name << defaultValue << flags;
 
-	Commit( std::move( request ), context, message, retval, exception );
+	return Commit( std::move( request ), context, message, retval, exception );
 }
 
 void GetCVarRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {

@@ -7,60 +7,60 @@ static const CefString blurredField( "blurred" );
 static const CefString seqField( "animSeq" );
 static const CefString loopField( "animLoop" );
 
-void DrawWorldModelRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
+bool DrawWorldModelRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 											   CefRefPtr<CefV8Value> &retVal,
 											   CefString &exception ) {
 	if( jsArgs.size() != 2 ) {
 		exception = "Illegal arguments list size, expected 2";
-		return;
+		return false;
 	}
 
 	if( !ValidateCallback( jsArgs[1], exception ) ) {
-		return;
+		return false;
 	}
 
 	auto paramsObject( jsArgs[0] );
 	if( !paramsObject->IsObject() ) {
 		exception = "The first argument must be an object containing the call parameters";
-		return;
+		return false;
 	}
 
 	ObjectFieldsGetter fieldsGetter( paramsObject );
 
 	CefString map;
 	if( !fieldsGetter.GetString( mapField, map, exception ) ) {
-		return;
+		return false;
 	}
 
 	// Try doing a minimal validation here, JS is very error-prone
 	std::string testedMap( map );
 	if( testedMap.size() < 4 || strcmp( testedMap.data() + testedMap.size() - 4, ".bsp" ) != 0 ) {
 		exception = "A \".bsp\" extension of the map is expected";
-		return;
+		return false;
 	}
 
 	if( testedMap.find( '/' ) != std::string::npos ) {
 		exception = "Specify just a map name and not an absolute path (it is assumed to be found in maps/)";
-		return;
+		return false;
 	}
 
 	bool blurred = false;
 	if( fieldsGetter.ContainsField( blurredField ) ) {
 		if( !fieldsGetter.GetBool( blurredField, &blurred, exception ) ) {
-			return;
+			return false;
 		}
 	}
 
 	const CefString *animFieldName = nullptr;
 	auto animArrayField( ViewAnimParser::FindAnimField( fieldsGetter, seqField, loopField, &animFieldName, exception ) );
 	if( !animArrayField ) {
-		return;
+		return false;
 	}
 
 	CameraAnimParser parser( animArrayField, *animFieldName );
 	const bool isAnimLooping = ( animFieldName == &loopField );
 	if( !parser.Parse( isAnimLooping, exception ) ) {
-		return;
+		return false;
 	}
 
 	auto context( CefV8Context::GetCurrentContext() );
@@ -72,7 +72,7 @@ void DrawWorldModelRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 	writer << map << blurred;
 	WriteViewAnim( writer, isAnimLooping, parser.Frames() );
 
-	Commit( std::move( request ), context, message, retVal, exception );
+	return Commit( std::move( request ), context, message, retVal, exception );
 }
 
 void DrawWorldModelRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {

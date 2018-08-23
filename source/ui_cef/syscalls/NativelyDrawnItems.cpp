@@ -110,61 +110,61 @@ static bool GetValidViewportParams( ObjectFieldsGetter &fieldsGetter, vec2_t top
 	return true;
 }
 
-void StartDrawingModelRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
+bool StartDrawingModelRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 												  CefRefPtr<CefV8Value> &retVal,
 												  CefString &exception ) {
 	if( jsArgs.size() != 2 ) {
 		exception = "Illegal arguments list size, expected 2";
-		return;
+		return false;
 	}
 
 	if( !ValidateCallback( jsArgs.back(), exception ) ) {
-		return;
+		return false;
 	}
 
 	if( !jsArgs.front()->IsObject() ) {
 		exception = "The first argument must be an object";
-		return;
+		return false;
 	}
 
 	ObjectFieldsGetter fieldsGetter( jsArgs.front() );
 
 	CefString model, skin, color;
 	if( !fieldsGetter.GetString( modelField, model, exception ) ) {
-		return;
+		return false;
 	}
 	if( !fieldsGetter.GetString( skinField, skin, exception ) ) {
-		return;
+		return false;
 	}
 	if( !fieldsGetter.GetString( colorField, color, exception ) ) {
-		return;
+		return false;
 	}
 
 	int colorRGBA = 0;
 	if( !ParseColor( color, &colorRGBA, exception ) ) {
-		return;
+		return false;
 	}
 
 	int zIndex = 0;
 	if( !GetValidZIndex( fieldsGetter, &zIndex, exception ) ) {
-		return;
+		return false;
 	}
 
 	vec2_t topLeft, dimensions;
 	if( !GetValidViewportParams( fieldsGetter, topLeft, dimensions, exception ) ) {
-		return;
+		return false;
 	}
 
 	const CefString *animFieldName = nullptr;
 	auto animArrayField( ViewAnimParser::FindAnimField( fieldsGetter, seqField, loopField, &animFieldName, exception ) );
 	if( !animArrayField ) {
-		return;
+		return false;
 	}
 
 	ViewAnimParser parser( animArrayField, *animFieldName );
 	const bool isAnimLooping = ( animFieldName == &loopField );
 	if( !parser.Parse( isAnimLooping, exception ) ) {
-		return;
+		return false;
 	}
 
 	auto context( CefV8Context::GetCurrentContext() );
@@ -176,41 +176,41 @@ void StartDrawingModelRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 	writer << topLeft << dimensions << zIndex;
 	WriteViewAnim( writer, isAnimLooping, parser.Frames() );
 
-	Commit( std::move( request ), context, message, retVal, exception );
+	return Commit( std::move( request ), context, message, retVal, exception );
 }
 
-void StartDrawingImageRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
+bool StartDrawingImageRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 												  CefRefPtr<CefV8Value> &retVal,
 												  CefString &exception ) {
 	if( jsArgs.size() != 2 ) {
 		exception = "Illegal arguments list size, expected 2";
-		return;
+		return false;
 	}
 
 	if( !ValidateCallback( jsArgs.back(), exception ) ) {
-		return;
+		return false;
 	}
 
 	if( !jsArgs.front()->IsObject() ) {
 		exception = "The first argument must be an object";
-		return;
+		return false;
 	}
 
 	ObjectFieldsGetter fieldsGetter( jsArgs.front() );
 
 	CefString shader;
 	if( !fieldsGetter.GetString( shaderField, shader, exception ) ) {
-		return;
+		return false;
 	}
 
 	int zIndex = 0;
 	if( !GetValidZIndex( fieldsGetter, &zIndex, exception ) ) {
-		return;
+		return false;
 	}
 
 	vec2_t topLeft, dimensions;
 	if( !GetValidViewportParams( fieldsGetter, topLeft, dimensions, exception ) ) {
-		return;
+		return false;
 	}
 
 	auto context( CefV8Context::GetCurrentContext() );
@@ -220,7 +220,7 @@ void StartDrawingImageRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 	MessageWriter writer( message );
 	writer << shader << topLeft << dimensions << zIndex;
 
-	Commit( std::move( request ), context, message, retVal, exception );
+	return Commit( std::move( request ), context, message, retVal, exception );
 }
 
 /**
@@ -323,27 +323,27 @@ void StartDrawingImageRequest::FireCallback( MessageReader &reader ) {
 	ExecuteCallback( { CefV8Value::CreateInt( reader.NextInt() ) } );
 }
 
-void StopDrawingItemRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
+bool StopDrawingItemRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 												CefRefPtr<CefV8Value> &retVal,
 												CefString &exception ) {
 	if( jsArgs.size() != 2 ) {
 		exception = "Illegal arguments list size, expected 2";
-		return;
+		return false;
 	}
 
 	if( !jsArgs.front()->IsInt() ) {
 		exception = "The first parameter must be an integer drawn model handle";
-		return;
+		return false;
 	}
 
 	if( !ValidateCallback( jsArgs.back(), exception ) ) {
-		return;
+		return false;
 	}
 
 	const int handle = jsArgs.front()->GetIntValue();
 	if( !handle ) {
 		exception = "A valid handle must be non-zero";
-		return;
+		return false;
 	}
 
 	auto context( CefV8Context::GetCurrentContext() );
@@ -351,7 +351,7 @@ void StopDrawingItemRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 	auto message( NewMessage() );
 	MessageWriter::WriteSingleInt( message, handle );
 
-	Commit( std::move( request ), context, message, retVal, exception );
+	return Commit( std::move( request ), context, message, retVal, exception );
 }
 
 void StopDrawingItemRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {

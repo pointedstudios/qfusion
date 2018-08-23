@@ -133,7 +133,7 @@ protected:
 		return CefProcessMessage::Create( method );
 	}
 
-	void Commit( std::shared_ptr<PendingCallbackRequest> request,
+	bool Commit( std::shared_ptr<PendingCallbackRequest> request,
 				 const CefRefPtr<CefV8Context> &context,
 				 CefRefPtr<CefProcessMessage> message,
 				 CefRefPtr<CefV8Value> &retVal,
@@ -145,7 +145,7 @@ public:
 	PendingRequestLauncher *Next() { return next; }
 	const std::string &LogTag() const { return logTag; }
 
-	virtual void StartExec( const CefV8ValueList &jsArgs, CefRefPtr<CefV8Value> &retVal, CefString &exception ) = 0;
+	virtual bool StartExec( const CefV8ValueList &jsArgs, CefRefPtr<CefV8Value> &retVal, CefString &exception ) = 0;
 };
 
 template <typename Request>
@@ -155,16 +155,16 @@ protected:
 		return std::make_shared<Request>( parent, context, callback );
 	}
 
-	void DefaultSingleArgStartExecImpl( const CefV8ValueList &jsArgs,
+	bool DefaultSingleArgStartExecImpl( const CefV8ValueList &jsArgs,
 										CefRefPtr<CefV8Value> &retVal,
 										CefString &exception ) {
 		if( jsArgs.size() != 1 ) {
 			exception = "Illegal arguments list size, there must be a single argument";
-			return;
+			return false;
 		}
 
 		if( !ValidateCallback( jsArgs.back(), exception ) ) {
-			return;
+			return false;
 		}
 
 		auto context( CefV8Context::GetCurrentContext() );
@@ -172,7 +172,7 @@ protected:
 		auto message( NewMessage() );
 		MessageWriter::WriteSingleInt( message, request->Id() );
 
-		Commit( std::move( request ), context, message, retVal, exception );
+		return Commit( std::move( request ), context, message, retVal, exception );
 	}
 public:
 	TypedPendingRequestLauncher( WswCefV8Handler *parent_, const CefString &method_ )
@@ -213,7 +213,7 @@ public:																												 \
 class Derived##Launcher: public virtual TypedPendingRequestLauncher<Derived> {                                       \
 public:                                                                                                              \
 	explicit Derived##Launcher( WswCefV8Handler *parent_ ): TypedPendingRequestLauncher( parent_, method ) {}        \
-	void StartExec( const CefV8ValueList &jsArgs, CefRefPtr<CefV8Value> &retVal, CefString &exception ) override;    \
+	bool StartExec( const CefV8ValueList &jsArgs, CefRefPtr<CefV8Value> &retVal, CefString &exception ) override;    \
 }																													 \
 
 #define DERIVE_CALLBACK_REQUEST_HANDLER( Derived, method )															 \
@@ -245,7 +245,7 @@ public:
 	RequestForKeysLauncher( WswCefV8Handler *parent_, const CefString &method_ )
 		: TypedPendingRequestLauncher<Request>( parent_, method_ ) {}
 
-	void StartExec( const CefV8ValueList &jsArgs, CefRefPtr<CefV8Value> &retVal, CefString &exception ) override;
+	bool StartExec( const CefV8ValueList &jsArgs, CefRefPtr<CefV8Value> &retVal, CefString &exception ) override;
 };
 
 class RequestForKeysHandler: public CallbackRequestHandler {
@@ -308,7 +308,7 @@ protected:
 	StopDrawingItemRequestLauncher( WswCefV8Handler *parent_, const CefString &method_ )
 		: PendingRequestLauncher( parent_, method_ ) {}
 
-	void StartExec( const CefV8ValueList &jsArgs, CefRefPtr<CefV8Value> &retVal, CefString &exception ) override;
+	bool StartExec( const CefV8ValueList &jsArgs, CefRefPtr<CefV8Value> &retVal, CefString &exception ) override;
 
 	virtual std::shared_ptr<PendingCallbackRequest>
 		NewRequest( CefRefPtr<CefV8Context> ctx, CefRefPtr<CefV8Value> cb ) = 0;

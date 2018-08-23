@@ -3,20 +3,20 @@
 // For demo protocol version
 #include "../../qcommon/version.warsow.h"
 
-void GetDemosAndSubDirsRequestLauncher::StartExec( const CefV8ValueList &args,
+bool GetDemosAndSubDirsRequestLauncher::StartExec( const CefV8ValueList &args,
 												   CefRefPtr<CefV8Value> &retval,
 												   CefString &exception ) {
 	if( args.size() != 2 ) {
 		exception = "Illegal arguments list size, there must be two arguments";
-		return;
+		return false;
 	}
 
 	CefString dir;
 	if( !TryGetString( args[0], "dir", dir, exception ) ) {
-		return;
+		return false;
 	}
 	if( !ValidateCallback( args.back(), exception ) ) {
-		return;
+		return false;
 	}
 
 	auto context( CefV8Context::GetCurrentContext() );
@@ -26,7 +26,7 @@ void GetDemosAndSubDirsRequestLauncher::StartExec( const CefV8ValueList &args,
 	MessageWriter writer( message );
 	writer << request->Id() << dir;
 
-	Commit( std::move( request ), context, message, retval, exception );
+	return Commit( std::move( request ), context, message, retval, exception );
 }
 
 typedef std::vector<std::string> FilesList;

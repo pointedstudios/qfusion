@@ -1,36 +1,36 @@
 #include "SyscallsLocal.h"
 
-void SetCVarRequestLauncher::StartExec( const CefV8ValueList &arguments,
+bool SetCVarRequestLauncher::StartExec( const CefV8ValueList &arguments,
 										CefRefPtr<CefV8Value> &retval,
 										CefString &exception ) {
 	if( arguments.size() != 3 && arguments.size() != 4 ) {
 		exception = "Illegal arguments list size, should be 2 or 3";
-		return;
+		return false;
 	}
 
 	CefString name, value;
 	if( !TryGetString( arguments[0], "name", name, exception ) ) {
-		return;
+		return false;
 	}
 	if( !TryGetString( arguments[1], "value", value, exception ) ) {
-		return;
+		return false;
 	}
 
 	bool forceSet = false;
 	if( arguments.size() == 4 ) {
 		CefString s;
 		if( !TryGetString( arguments[2], "force", s, exception ) ) {
-			return;
+			return false;
 		}
 		if( s.compare( "force" ) ) {
 			exception = "Only a string literal \"force\" is expected for a 3rd argument in this case";
-			return;
+			return false;
 		}
 		forceSet = true;
 	}
 
 	if( !ValidateCallback( arguments.back(), exception ) ) {
-		return;
+		return false;
 	}
 
 	auto context( CefV8Context::GetCurrentContext() );
@@ -42,7 +42,7 @@ void SetCVarRequestLauncher::StartExec( const CefV8ValueList &arguments,
 		writer << forceSet;
 	}
 
-	Commit( std::move( request ), context, message, retval, exception );
+	return Commit( std::move( request ), context, message, retval, exception );
 }
 
 void SetCVarRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {

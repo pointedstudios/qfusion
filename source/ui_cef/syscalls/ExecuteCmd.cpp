@@ -1,17 +1,17 @@
 #include "SyscallsLocal.h"
 
-void ExecuteCmdRequestLauncher::StartExec( const CefV8ValueList &arguments,
+bool ExecuteCmdRequestLauncher::StartExec( const CefV8ValueList &arguments,
 										   CefRefPtr<CefV8Value> &retval,
 										   CefString &exception ) {
 	if( arguments.size() != 3 ) {
 		exception = "Illegal arguments list size, expected 3";
-		return;
+		return false;
 	}
 
 	// We prefer passing `whence` as a string to simplify debugging, even if an integer is sufficient.
 	CefString whenceString;
 	if( !TryGetString( arguments[0], "whence", whenceString, exception ) ) {
-		return;
+		return false;
 	}
 
 	int whence;
@@ -23,16 +23,16 @@ void ExecuteCmdRequestLauncher::StartExec( const CefV8ValueList &arguments,
 		whence = EXEC_APPEND;
 	} else {
 		exception = "Illegal `whence` parameter. `now`, `insert` or `append` are expected";
-		return;
+		return false;
 	}
 
 	CefString text;
 	if( !TryGetString( arguments[1], "text", text, exception ) ) {
-		return;
+		return false;
 	}
 
 	if( !ValidateCallback( arguments.back(), exception ) ) {
-		return;
+		return false;
 	}
 
 	auto context( CefV8Context::GetCurrentContext() );
@@ -42,7 +42,7 @@ void ExecuteCmdRequestLauncher::StartExec( const CefV8ValueList &arguments,
 	MessageWriter writer( message );
 	writer << request->Id() << whence << text;
 
-	Commit( std::move( request ), context, message, retval, exception );
+	return Commit( std::move( request ), context, message, retval, exception );
 }
 
 void ExecuteCmdRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {

@@ -1,9 +1,9 @@
 #include "SyscallsLocal.h"
 
-void GetVideoModesRequestLauncher::StartExec( const CefV8ValueList &arguments,
+bool GetVideoModesRequestLauncher::StartExec( const CefV8ValueList &arguments,
 											  CefRefPtr<CefV8Value> &retval,
 											  CefString &exception ) {
-	DefaultSingleArgStartExecImpl( arguments, retval, exception );
+	return DefaultSingleArgStartExecImpl( arguments, retval, exception );
 }
 
 class VideoModesSource {

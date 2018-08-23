@@ -59,7 +59,7 @@ CallbackRequestHandler::CallbackRequestHandler( WswCefClient *parent_, const Cef
 	parent->requestHandlersHead = this;
 }
 
-void PendingRequestLauncher::Commit( std::shared_ptr<PendingCallbackRequest> request,
+bool PendingRequestLauncher::Commit( std::shared_ptr<PendingCallbackRequest> request,
 									 const CefRefPtr<CefV8Context> &context,
 									 CefRefPtr<CefProcessMessage> message,
 									 CefRefPtr<CefV8Value> &retVal,
@@ -93,9 +93,11 @@ void PendingRequestLauncher::Commit( std::shared_ptr<PendingCallbackRequest> req
 	}
 	if( succeeded ) {
 		retVal = CefV8Value::CreateNull();
-	} else {
-		exception = "Can't send a message to the browser process";
+		return true;
 	}
+
+	exception = "Can't send a message to the browser process";
+	return false;
 }
 
 const CefString SimplexMessage::updateScreen( "updateScreen" );

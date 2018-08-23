@@ -187,23 +187,23 @@ static bool SetKeysAsArgs( const CefV8ValueList &jsArgs, MessageWriter &writer, 
 
 // Unfortunately we have to define it here and not in syscalls/SyscallsForKeys.cpp
 template <typename Request>
-void RequestForKeysLauncher<Request>::StartExec( const CefV8ValueList &jsArgs,
+bool RequestForKeysLauncher<Request>::StartExec( const CefV8ValueList &jsArgs,
 												 CefRefPtr<CefV8Value> &retVal,
 												 CefString &exception ) {
 	if( jsArgs.size() != 1 && jsArgs.size() != 2 ) {
 		exception = "Illegal arguments list size, 1 or 2 arguments are expected";
-		return;
+		return false;
 	}
 
 	if( jsArgs.size() == 2 ) {
 		if( !jsArgs[0]->IsArray() ) {
 			exception = "An array is expected as a first argument in this case\n";
-			return;
+			return false;
 		}
 	}
 
 	if( !PendingRequestLauncher::ValidateCallback( jsArgs.back(), exception ) ) {
-		return;
+		return false;
 	}
 
 	auto context( CefV8Context::GetCurrentContext() );
@@ -212,8 +212,8 @@ void RequestForKeysLauncher<Request>::StartExec( const CefV8ValueList &jsArgs,
 	MessageWriter writer( message );
 	writer << request->Id();
 	if( !SetKeysAsArgs( jsArgs, writer, exception ) ) {
-		return;
+		return false;
 	}
 
-	PendingRequestLauncher::Commit( std::move( request ), context, message, retVal, exception );
+	return PendingRequestLauncher::Commit( std::move( request ), context, message, retVal, exception );
 }
