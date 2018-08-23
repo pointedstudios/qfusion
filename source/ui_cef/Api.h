@@ -174,6 +174,9 @@ typedef struct {
 	bool ( *Init )( int argc, char **argv, void *hInstance, int vidWidth, int vidHeight, int protocol, const char *demoExtension, const char *basePath );
 	void ( *Shutdown )( void );
 
+	void ( *OnRendererDeviceLost )( void );
+	void ( *OnRendererDeviceObtained )( void );
+
 	void ( *TouchAllAssets )( void );
 
 	void ( *Refresh )( int64_t time, int clientState, int serverState,

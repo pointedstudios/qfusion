@@ -128,6 +128,11 @@ void CL_UIModule_Init( void ) {
 	void *( *GetUIAPI )( void * ) = NULL;
 #endif
 
+	if( uie ) {
+		CL_UIModule_OnRendererDeviceObtained();
+		return;
+	}
+
 	CL_UIModule_Shutdown();
 
 	Com_Printf( "------- UI initialization -------\n" );
@@ -328,6 +333,22 @@ void CL_UIModule_Shutdown( void ) {
 	uie = NULL;
 
 	CL_UIModule_L10n_ClearDomain();
+}
+
+void CL_UIModule_OnRendererDeviceLost( void ) {
+	if( !uie ) {
+		return;
+	}
+
+	uie->OnRendererDeviceLost();
+}
+
+void CL_UIModule_OnRendererDeviceObtained( void ) {
+	if( !uie ) {
+		return;
+	}
+
+	uie->OnRendererDeviceObtained();
 }
 
 /*

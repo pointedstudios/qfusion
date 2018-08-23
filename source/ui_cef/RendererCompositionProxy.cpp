@@ -38,29 +38,14 @@ inline void RendererCompositionProxy::ResetBackground() {
 int RendererCompositionProxy::StartDrawingModel( const ModelDrawParams &params ) {
 	const auto zIndex = params.ZIndex();
 
-	std::string modelName( params.Model() );
-	auto *model = api->R_RegisterModel( modelName.c_str() );
-	if( !model ) {
-		parent->Logger()->Error( "No such model %s", modelName.c_str() );
-		return 0;
-	}
-
-	std::string skinName( params.Skin() );
-	auto *skin = api->R_RegisterSkinFile( skinName.c_str() );
-	if( !skin ) {
-		// Just print a warning... a default skin will be used (???)
-		parent->Logger()->Warning( "No such skin %s", skinName.c_str() );
-	}
-
 	if( !zIndicesSet.TrySet( zIndex ) ) {
 		parent->Logger()->Error( "Can't reserve a z-index for a model: z-index %d is already in use", (int)zIndex );
 		return 0;
 	}
 
-
 	DrawnAliasModel *newDrawnModel;
 	try {
-		newDrawnModel = new DrawnAliasModel( this, params, model, skin );
+		newDrawnModel = new DrawnAliasModel( this, params );
 	} catch( ... ) {
 		zIndicesSet.Unset( zIndex );
 		throw;
@@ -72,13 +57,6 @@ int RendererCompositionProxy::StartDrawingModel( const ModelDrawParams &params )
 int RendererCompositionProxy::StartDrawingImage( const ImageDrawParams &params ) {
 	const auto zIndex = params.ZIndex();
 
-	std::string shaderName( params.Shader() );
-	auto *shader = api->R_RegisterPic( shaderName.c_str() );
-	if( !shader ) {
-		parent->Logger()->Error( "No such shader %s", shaderName.c_str() );
-		return 0;
-	}
-
 	if( !zIndicesSet.TrySet( params.ZIndex() ) ) {
 		parent->Logger()->Error( "Can't reserve a zIndex for an image: z-index %d is already in use", (int)zIndex );
 		return 0;
@@ -86,7 +64,7 @@ int RendererCompositionProxy::StartDrawingImage( const ImageDrawParams &params )
 
 	Drawn2DImage *newDrawnImage;
 	try {
-		newDrawnImage = new Drawn2DImage( this, params, shader );
+		newDrawnImage = new Drawn2DImage( this, params );
 	} catch( ... ) {
 		zIndicesSet.Unset( zIndex );
 		throw;
@@ -223,6 +201,11 @@ void RendererCompositionProxy::UpdateChromiumBuffer( const CefRenderHandler::Rec
 }
 
 void RendererCompositionProxy::Refresh( int64_t time, bool showCursor, bool background ) {
+	if( isRendererDeviceLost ) {
+		wasRendererDeviceLost = true;
+		return;
+	}
+
 	const int width = parent->width;
 	const int height = parent->height;
 
@@ -255,6 +238,8 @@ void RendererCompositionProxy::Refresh( int64_t time, bool showCursor, bool back
 		int cursorX = parent->mouseXY[0], cursorY = parent->mouseXY[1];
 		api->R_DrawStretchPic( cursorX, cursorY, 32, 32, 0.0f, 0.0f, 1.0f, 1.0f, color, cursorShader );
 	}
+
+	wasRendererDeviceLost = isRendererDeviceLost;
 }
 
 void RendererCompositionProxy::CheckAndDrawBackground( int64_t time, int width, int height, bool blurred ) {
@@ -317,9 +302,7 @@ RendererCompositionProxy::NativelyDrawnItem::NativelyDrawnItem( RendererComposit
 }
 
 RendererCompositionProxy::DrawnAliasModel::DrawnAliasModel( RendererCompositionProxy *parent_,
-															const ModelDrawParams &drawParams,
-															model_s *validatedModel,
-															skinfile_s *validatedSkin )
+															const ModelDrawParams &drawParams )
 	: NativelyDrawnItem( parent_, drawParams ) {
 	const ViewAnimFrame *animBegin = drawParams.AnimFrames().data();
 	const ViewAnimFrame *animEnd = animBegin + drawParams.AnimFrames().size();
@@ -332,9 +315,8 @@ RendererCompositionProxy::DrawnAliasModel::DrawnAliasModel( RendererCompositionP
 	memset( &entity, 0, sizeof( entity ) );
 	const int color = drawParams.ColorRgba();
 	Vector4Set( entity.color, COLOR_R( color ), COLOR_G( color ), COLOR_B( color ), COLOR_A( color ) );
-	entity.model = validatedModel;
-	entity.customSkin = validatedSkin;
-	// TODO... check whether it's a skeletal model
+	this->modelName = drawParams.Model();
+	this->skinName = drawParams.Skin();
 }
 
 void RendererCompositionProxy::DrawnAliasModel::DrawSelf( int64_t time ) {
@@ -348,14 +330,15 @@ void RendererCompositionProxy::DrawnAliasModel::DrawSelf( int64_t time ) {
 }
 
 RendererCompositionProxy::Drawn2DImage::Drawn2DImage( RendererCompositionProxy *parent_,
-													  const ImageDrawParams &drawParams,
-													  struct shader_s *validatedShader )
-	: NativelyDrawnItem( parent_, drawParams ), shader( validatedShader ) {}
+													  const ImageDrawParams &drawParams )
+	: NativelyDrawnItem( parent_, drawParams ) {
+	this->shaderName = drawParams.Shader();
+}
 
 void RendererCompositionProxy::Drawn2DImage::DrawSelf( int64_t time ) {
 	int x = viewportTopLeft[0];
 	int y = viewportTopLeft[1];
 	int w = viewportDimensions[0];
 	int h = viewportDimensions[1];
-	api->R_DrawStretchPic( x, y, w, h, 0.0f, 0.0f, 1.0f, 1.0f, colorWhite, shader );
+	api->R_DrawStretchPic( x, y, w, h, 0.0f, 0.0f, 1.0f, 1.0f, colorWhite, api->R_RegisterPic( shaderName.c_str() ) );
 }

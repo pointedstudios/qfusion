@@ -21,6 +21,14 @@ void UI_Shutdown() {
 	UiFacade::Shutdown();
 }
 
+void UI_OnRendererDeviceLost() {
+	UiFacade::Instance()->OnRendererDeviceLost();
+}
+
+void UI_OnRendererDeviceObtained() {
+	UiFacade::Instance()->OnRendererDeviceObtained();
+}
+
 void UI_TouchAllAssets() {
 	// Unused for now...
 }
@@ -104,6 +112,8 @@ extern "C" QF_DLL_EXPORT ui_export_t *GetUIAPI( ui_import_t *import ) {
 
 	exported.Init = UI_Init;
 	exported.Shutdown = UI_Shutdown;
+	exported.OnRendererDeviceLost = UI_OnRendererDeviceLost;
+	exported.OnRendererDeviceObtained = UI_OnRendererDeviceObtained;
 	exported.API = UI_API;
 	exported.TouchAllAssets = UI_TouchAllAssets;
 	exported.Refresh = UI_Refresh;

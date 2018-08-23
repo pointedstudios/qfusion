@@ -461,6 +461,8 @@ void CL_Mumble_Shutdown( void );
 //
 void CL_UIModule_Init( void );
 void CL_UIModule_Shutdown( void );
+void CL_UIModule_OnRendererDeviceLost( void );
+void CL_UIModule_OnRendererDeviceObtained( void );
 void CL_UIModule_TouchAllAssets( void );
 void CL_UIModule_Keydown( int key );
 void CL_UIModule_Keyup( int key );

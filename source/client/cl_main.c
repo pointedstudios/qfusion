@@ -1839,7 +1839,7 @@ void CL_ShutdownMedia( void ) {
 	CL_GameModule_Shutdown();
 
 	// shutdown user interface
-	CL_UIModule_Shutdown();
+	CL_UIModule_OnRendererDeviceLost();
 
 	SCR_ShutDownConsoleMedia();
 

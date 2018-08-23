@@ -37,6 +37,9 @@ class RendererCompositionProxy {
 
 	bool blurWorldModel { false };
 
+	bool wasRendererDeviceLost { false };
+	bool isRendererDeviceLost { false };
+
 	void DrawWorldModel( int64_t time, int width, int height, bool blurred = false );
 
 	void CheckAndDrawBackground( int64_t time, int width, int height, bool blurred = false );
@@ -70,21 +73,21 @@ class RendererCompositionProxy {
 	class DrawnAliasModel: public NativelyDrawnItem {
 		entity_t entity;
 		ViewAnimator animator;
+		// We have to save it to be able to recover from "device lost" situation
+		std::string modelName;
+		// We have to save it to be able to recover from "device lost" situation
+		std::string skinName;
 	public:
-		DrawnAliasModel( RendererCompositionProxy *parent_,
-						 const ModelDrawParams &drawParams,
-						 model_s *validatedModel,
-						 skinfile_s *validatedSkin );
+		DrawnAliasModel( RendererCompositionProxy *parent_, const ModelDrawParams &drawParams );
 
 		void DrawSelf( int64_t time ) override;
 	};
 
 	class Drawn2DImage: public NativelyDrawnItem {
-		shader_s *const shader;
+		// We have to stave it to be able to recover from "device lost" situation
+		std::string shaderName;
 	public:
-		Drawn2DImage( RendererCompositionProxy *parent_,
-					  const ImageDrawParams &drawParams,
-					  struct shader_s *validatedShader );
+		Drawn2DImage( RendererCompositionProxy *parent_, const ImageDrawParams &drawParams );
 
 		void DrawSelf( int64_t time ) override;
 	};
@@ -228,6 +231,16 @@ public:
 
 	bool StopDrawingImage( int drawnImageHandle ) {
 		return StopDrawingItem( drawnImageHandle, typeid( Drawn2DImage ) );
+	}
+
+	void OnRendererDeviceLost() {
+		wasRendererDeviceLost = false;
+		isRendererDeviceLost = true;
+	}
+
+	void OnRendererDeviceObtained() {
+		wasRendererDeviceLost = true;
+		isRendererDeviceLost = false;
 	}
 };
 

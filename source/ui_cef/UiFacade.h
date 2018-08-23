@@ -150,6 +150,14 @@ public:
 		messagePipe.ShowQuickMenu( show );
 	}
 
+	void OnRendererDeviceLost() {
+		rendererCompositionProxy.OnRendererDeviceLost();
+	}
+
+	void OnRendererDeviceObtained() {
+		rendererCompositionProxy.OnRendererDeviceObtained();
+	}
+
 	void StartShowingWorldModel( const char *name, bool blurred, bool looping, const std::vector<ViewAnimFrame> &frames ) {
 		rendererCompositionProxy.StartShowingWorldModel( name, blurred, looping, frames );
 	}
