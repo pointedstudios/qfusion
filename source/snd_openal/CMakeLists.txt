@@ -23,10 +23,10 @@ else ()
         set(SND_OPENAL_PLATFORM_LIBRARIES "")
 endif()
 
-add_library(snd_openal SHARED ${SND_OPENAL_HEADERS} ${SND_OPENAL_SOURCES})
-target_include_directories(snd_openal BEFORE PRIVATE ${OPENAL_INCLUDE_DIR})
-target_link_libraries(snd_openal PRIVATE ${OGG_LIBRARY} ${VORBIS_LIBRARIES} ${SND_OPENAL_PLATFORM_LIBRARIES})
-qf_set_output_dir(snd_openal libs)
+add_library(snd_openal_system SHARED ${SND_OPENAL_HEADERS} ${SND_OPENAL_SOURCES})
+target_include_directories(snd_openal_system BEFORE PRIVATE ${OPENAL_INCLUDE_DIR})
+target_link_libraries(snd_openal_system PRIVATE ${OGG_LIBRARY} ${VORBIS_LIBRARIES} ${SND_OPENAL_PLATFORM_LIBRARIES})
+qf_set_output_dir(snd_openal_system libs)
 
 set(OPENAL_SOFT_DIR "${CMAKE_HOME_DIRECTORY}/../third-party/openal-soft")
 
