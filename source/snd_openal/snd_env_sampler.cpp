@@ -1,5 +1,5 @@
 #include "snd_env_sampler.h"
-#include "snd_local.h"
+#include "snd_cached_computation.h"
 
 #include "../gameshared/q_comref.h"
 
@@ -301,28 +301,25 @@ protected:
 class LeafPropsSampler;
 class LeafPropsReader;
 
-class LeafPropsCache {
-	char mapName[MAX_CONFIGSTRING_CHARS];
-	char mapChecksum[MAX_CONFIGSTRING_CHARS];
-	mutable int numLeafs;
-	LeafProps *leafProps;
+class LeafPropsCache: public CachedComputation {
+	LeafProps *leafProps { nullptr };
 
 	LeafProps ComputeLeafProps( int leafNum, LeafPropsSampler *sampler, bool fastAndCoarse );
 
 	bool TryReadFromFile( LeafPropsReader *reader, int actualLeafsNum );
-	void SaveToFile( const char *actualMap, const char *actualChecksum, int actualLeafsNum );
-public:
-	LeafPropsCache(): numLeafs( -1 ), leafProps( nullptr ) {
-		mapName[0] = mapChecksum[0] = '\0';
-	}
 
-	~LeafPropsCache() {
+	void ResetExistingState( const char *actualMap, int actualNumLeafs ) override;
+	bool TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) override;
+	void ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) override;
+	bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) override;
+public:
+	LeafPropsCache(): CachedComputation( "LeafPropsCache" ) {}
+
+	~LeafPropsCache() override {
 		if( leafProps ) {
 			S_Free( leafProps );
 		}
 	}
-
-	void EnsureValid();
 
 	const LeafProps &GetPropsForLeaf( int leafNum ) const {
 		return leafProps[leafNum];
@@ -351,60 +348,15 @@ public:
 
 class LeafPropsIOHelper {
 protected:
-	char fileName[MAX_STRING_CHARS];
-	const char *const map;
-	const char *const checksum;
-	int fd;
-	int fsResult;
-
+	int leafCounter { 0 };
 public:
-	LeafPropsIOHelper( const char *map_, const char *checksum_, int fileFlags )
-		: map( map_ ), checksum( checksum_ ) {
-		Q_snprintfz( fileName, sizeof( fileName ), "sounds/%s", map );
-		COM_StripExtension( fileName );
-		Q_strncatz( fileName, ".envcache", sizeof( fileName ) );
-		fsResult = trap_FS_FOpenFile( fileName, &fd, fileFlags );
-	}
-
-	virtual ~LeafPropsIOHelper() {
-		if( fd >= 0 ) {
-			trap_FS_FCloseFile( fd );
-		}
-	}
+	virtual ~LeafPropsIOHelper() = default;
 };
 
-class LeafPropsReader: public LeafPropsIOHelper {
-	char *fileData;
-	char *dataPtr;
-	int fileSize;
-	int leafCounter;
-
-	void ReadFileData();
-
-	inline void SkipWhiteSpace() {
-		size_t skippedLen = strspn( dataPtr, "\t \n");
-		dataPtr += skippedLen;
-	}
-
-	bool ExpectString( const char *string );
+class LeafPropsReader final: public CachedComputationReader, public LeafPropsIOHelper {
 public:
 	LeafPropsReader( const char *map_, const char *checksum_, int fileFlags )
-		: LeafPropsIOHelper( map_, checksum_, fileFlags )
-		, fileData( nullptr )
-		, dataPtr( nullptr )
-		, fileSize( 0 )
-		, leafCounter( 0 ) {
-		if( fsResult >= 0 ) {
-			fileSize = fsResult;
-			ReadFileData();
-		}
-	}
-
-	~LeafPropsReader() {
-		if( fileData ) {
-			S_Free( ( void * )fileData );
-		}
-	}
+		: CachedComputationReader( map_, checksum_, fileFlags, true ) {}
 
 	enum Status {
 		OK,
@@ -415,74 +367,16 @@ public:
 	Status ReadNextProps( LeafProps *props );
 };
 
-
-class LeafPropsWriter: public LeafPropsIOHelper {
-	int leafCounter;
-
-	bool WriteString( const char *string );
+class LeafPropsWriter final: public CachedComputationWriter, public LeafPropsIOHelper {
 public:
-	LeafPropsWriter( const char *map_, const char *checksum_ );
+	LeafPropsWriter( const char *map_, const char *checksum_ )
+		: CachedComputationWriter( map_, checksum_ ) {}
 
 	bool WriteProps( const LeafProps &props );
 };
 
-void LeafPropsReader::ReadFileData() {
-	assert( fsResult >= 0 && fileSize >= 0 );
-
-	fileData = (char *)S_Malloc( fileSize + 1 );
-	if( !fileData ) {
-		return;
-	}
-
-	int bytesRead = trap_FS_Read( fileData, (size_t)fileSize, fd );
-	if( bytesRead != fileSize ) {
-		fsResult = -1;
-		return;
-	}
-
-	dataPtr = fileData;
-
-	// Simplify further parsing
-	for( int i = 0; i < fileSize; ++i ) {
-		if( fileData[i] == '\r' ) {
-			fileData[i] = '\n';
-		}
-	}
-	fileData[fileSize] = '\0';
-
-	if( !ExpectString( map ) ) {
-		goto parsingError;
-	}
-	if( !ExpectString( checksum ) ) {
-		goto parsingError;
-	}
-
-	return;
-parsingError:
-	if( fileData ) {
-		S_Free( fileData );
-	}
-	fileData = nullptr;
-}
-
-bool LeafPropsReader::ExpectString( const char *string ) {
-	SkipWhiteSpace();
-	char *nextLine = strchr( dataPtr, '\n' );
-	if( !nextLine ) {
-		return false;
-	}
-
-	*nextLine = '\0';
-	if( strcmp( string, dataPtr ) ) {
-		return false;
-	}
-
-	dataPtr = nextLine + 1;
-	return true;
-}
-
 LeafPropsReader::Status LeafPropsReader::ReadNextProps( LeafProps *props ) {
-	if( fsResult < 0 || !fileData ) {
+	if( fsResult < 0 ) {
 		return ERROR;
 	}
 
@@ -531,22 +425,6 @@ LeafPropsReader::Status LeafPropsReader::ReadNextProps( LeafProps *props ) {
 	return OK;
 }
 
-bool LeafPropsWriter::WriteString( const char *string ) {
-	char buffer[MAX_STRING_CHARS];
-	unsigned charsPrinted = (unsigned)Q_snprintfz( buffer, sizeof( buffer ), "%s\r\n", string );
-	return charsPrinted == trap_FS_Write( buffer, charsPrinted, fd );
-}
-
-LeafPropsWriter::LeafPropsWriter( const char *map_, const char *checksum_ )
-	: LeafPropsIOHelper( map_, checksum_, FS_WRITE | FS_CACHE ), leafCounter( 0 ) {
-	if( fsResult < 0 ) {
-		return;
-	}
-	if( !WriteString( map_ ) || !WriteString( checksum_ ) ) {
-		fsResult = -1;
-	}
-}
-
 bool LeafPropsWriter::WriteProps( const LeafProps &props ) {
 	if( fsResult < 0 ) {
 		return false;
@@ -568,41 +446,21 @@ bool LeafPropsWriter::WriteProps( const LeafProps &props ) {
 	return true;
 }
 
-void LeafPropsCache::EnsureValid() {
-	const char *actualMap = trap_GetConfigString( CS_WORLDMODEL );
-	const int actualNumLeafs = trap_NumLeafs();
-	// Should not be used for empty maps
-	if( !*actualMap || !actualNumLeafs ) {
-		return;
-	}
-
-	const char *actualChecksum = trap_GetConfigString( CS_MAPCHECKSUM );
-	if( actualNumLeafs == numLeafs && !strcmp( actualMap, mapName ) && !strcmp( actualChecksum, mapChecksum ) ) {
-		return;
-	}
-
+void LeafPropsCache::ResetExistingState( const char *, int actualNumLeafs ) {
 	if( leafProps ) {
 		S_Free( leafProps );
 	}
 
 	leafProps = (LeafProps *)S_Malloc( sizeof( LeafProps ) * actualNumLeafs );
+}
 
-	LeafPropsSampler *sampler = nullptr;
+bool LeafPropsCache::TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) {
+	LeafPropsReader reader( actualMap, actualChecksum, fsFlags );
+	return TryReadFromFile( &reader, actualNumLeafs );
+}
 
-	// Has to be initialized before goto that is way too convenient in this case to get rid of it
-	const bool fastAndCoarse = !trap_Cvar_Value( "developer" );
-	// Try reading from the base game filesystem, then from the cache.
-	// We should supply precomputed environment props for maps.
-	for( int flags : { FS_READ, ( FS_READ | FS_CACHE ) } ) {
-		LeafPropsReader reader( actualMap, actualChecksum, flags );
-		if( TryReadFromFile( &reader, actualNumLeafs ) ) {
-			goto done;
-		}
-	}
-
-	Com_Printf( S_COLOR_YELLOW "Can't load a sound environment cache. Computing a new one (this may take a while)\n" );
-
-	sampler = new( S_Malloc( sizeof( LeafPropsSampler ) ) )LeafPropsSampler( fastAndCoarse );
+void LeafPropsCache::ComputeNewState( const char *, int actualNumLeafs, bool fastAndCoarse ) {
+	auto *sampler = new( S_Malloc( sizeof( LeafPropsSampler ) ) )LeafPropsSampler( fastAndCoarse );
 
 	leafProps[0] = LeafProps();
 	for( int i = 1; i < actualNumLeafs; ++i ) {
@@ -611,13 +469,6 @@ void LeafPropsCache::EnsureValid() {
 
 	sampler->~LeafPropsSampler();
 	S_Free( sampler );
-
-	// Always saves to cache
-	SaveToFile( actualMap, actualChecksum, actualNumLeafs );
-done:
-	numLeafs = actualNumLeafs;
-	Q_strncpyz( mapName, actualMap, MAX_CONFIGSTRING_CHARS );
-	Q_strncpyz( mapChecksum, actualChecksum, MAX_CONFIGSTRING_CHARS );
 }
 
 bool LeafPropsCache::TryReadFromFile( LeafPropsReader *reader, int actualLeafsNum ) {
@@ -640,14 +491,16 @@ bool LeafPropsCache::TryReadFromFile( LeafPropsReader *reader, int actualLeafsNu
 	}
 }
 
-void LeafPropsCache::SaveToFile( const char *actualMap, const char *actualChecksum, int actualLeafsNum ) {
+bool LeafPropsCache::SaveToCache( const char *actualMap, const char *actualChecksum, int actualLeafsNum ) {
 	LeafPropsWriter writer( actualMap, actualChecksum );
 	for( int i = 0; i < actualLeafsNum; ++i ) {
 		if( !writer.WriteProps( this->leafProps[i] ) ) {
 			Com_Printf( S_COLOR_YELLOW "LeafPropsCache: Can't save a cache to file\n" );
-			break;
+			return false;
 		}
 	}
+
+	return true;
 }
 
 bool LeafPropsSampler::ComputeLeafProps( const vec3_t origin, LeafProps *props ) {
