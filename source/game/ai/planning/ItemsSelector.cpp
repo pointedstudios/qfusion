@@ -205,16 +205,16 @@ class EnemyPathBlockingDetector {
 	// Extra enemies are just not taken into account in these rare cases.
 	StaticVector<const TrackedEnemy *, 16> potentialBlockers;
 
-	float damageToKillBot;
+	float damageToKillBot { 0.0f };
 
-	int startAreaNums[2];
-	int numStartAreas;
+	int startAreaNums[2] { 0, 0 };
+	int numStartAreas { 0 };
 
 	bool IsAPotentialBlocker( const TrackedEnemy *enemy, float damageToKillBot, int botBestWeaponTier ) const;
 
 	bool GetInitialRoutingParams( const NavEntity *navEntity, int *travelFlags, int *fromAreaNum ) const;
 public:
-	EnemyPathBlockingDetector( const edict_t *self_ );
+	explicit EnemyPathBlockingDetector( const edict_t *self_ );
 
 	bool IsPathToNavEntityBlocked( const NavEntity *navEntity ) const;
 };

@@ -5,33 +5,23 @@
 
 class JumpToSpotFallback: public MovementFallback {
 protected:
-	vec3_t targetOrigin;
-	vec3_t startOrigin;
-	unsigned timeout;
-	float reachRadius;
-	float startAirAccelFrac;
-	float endAirAccelFrac;
-	float jumpBoostSpeed;
-	bool hasAppliedJumpBoost;
-	bool allowCorrection;
+	vec3_t targetOrigin { 0, 0, 0 };
+	vec3_t startOrigin { 0, 0, 0 };
+	unsigned timeout { 0 };
+	float reachRadius { 0.0f };
+	float startAirAccelFrac { 0.0f };
+	float endAirAccelFrac { 0.0f };
+	float jumpBoostSpeed { 0.0f };
+	bool hasAppliedJumpBoost { false };
+	bool allowCorrection { false };
 public:
-	int undesiredAasContents;
-	int undesiredAasFlags;
-	int desiredAasContents;
-	int desiredAasFlags;
+	int undesiredAasContents { AREACONTENTS_LAVA | AREACONTENTS_SLIME | AREACONTENTS_DONOTENTER };
+	int undesiredAasFlags { AREA_DISABLED };
+	int desiredAasContents { 0 };
+	int desiredAasFlags { AREA_GROUNDED };
 
 	JumpToSpotFallback( const Bot *bot_, BotMovementModule *module_ )
-		: MovementFallback( bot_, module_, COLOR_RGB( 255, 0, 128 ) )
-		, timeout( 0 )
-		, startAirAccelFrac( 0 )
-		, endAirAccelFrac( 0 )
-		, jumpBoostSpeed( 0 )
-		, hasAppliedJumpBoost( false )
-		, allowCorrection( false )
-		, undesiredAasContents( AREACONTENTS_LAVA | AREACONTENTS_SLIME | AREACONTENTS_DONOTENTER )
-		, undesiredAasFlags( AREA_DISABLED )
-		, desiredAasContents( 0 )
-		, desiredAasFlags( AREA_GROUNDED ) {}
+		: MovementFallback( bot_, module_, COLOR_RGB( 255, 0, 128 ) ) {}
 
 	void Activate( const vec3_t startOrigin_,
 				   const vec3_t targetOrigin_,

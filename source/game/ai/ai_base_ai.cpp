@@ -2,14 +2,14 @@
 #include "planning/BasePlanner.h"
 #include "ai_ground_trace_cache.h"
 
-Ai::Ai( edict_t *self_
-	  , BasePlanner *planner_
-	  , AiAasRouteCache *routeCache_
-	  , AiEntityPhysicsState *entityPhysicsState_
-	  , int allowedAasTravelFlags_
-	  , int preferredAasTravelFlags_
-	  , float yawSpeed
-	  , float pitchSpeed )
+Ai::Ai( edict_t *self_,
+		BasePlanner *planner_,
+		AiAasRouteCache *routeCache_,
+		AiEntityPhysicsState *entityPhysicsState_,
+		int allowedAasTravelFlags_,
+		int preferredAasTravelFlags_,
+		float yawSpeed,
+		float pitchSpeed )
 	: self( self_ )
 	, basePlanner( planner_ )
 	, routeCache( routeCache_ )

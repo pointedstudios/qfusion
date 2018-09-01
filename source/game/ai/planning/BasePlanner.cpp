@@ -71,12 +71,10 @@ void PoolBase::Free( PoolItem *item ) {
 }
 
 PoolBase::PoolBase( char *basePtr_, const char *tag_, uint16_t itemSize, uint16_t itemsCount )
-	: basePtr( basePtr_ ),
-	tag( tag_ ),
-	linksOffset( LinksOffset( itemSize ) ),
-	alignedChunkSize( AlignedChunkSize( itemSize ) ) {
-	listFirst[FREE_LIST] = 0;
-	listFirst[USED_LIST] = -1;
+	: basePtr( basePtr_ )
+	, tag( tag_ )
+	, linksOffset( LinksOffset( itemSize ) )
+	, alignedChunkSize( AlignedChunkSize( itemSize ) ) {
 
 	// Link all items to the free list
 	int16_t lastIndex = (int16_t)( itemsCount - 1 );
@@ -99,13 +97,6 @@ void PoolBase::Clear() {
 		item.DeleteSelf();
 	}
 }
-
-BasePlanner::BasePlanner( edict_t *self_ )
-	: self( self_ )
-	, planHead( nullptr )
-	, activeGoal( nullptr )
-	, nextActiveGoalUpdateAt( 0 )
-	, plannerNodesPool( "PlannerNodesPool" ) {}
 
 struct GoalRef {
 	AiBaseGoal *goal;

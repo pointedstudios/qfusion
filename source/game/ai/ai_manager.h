@@ -17,15 +17,16 @@ protected:
 	AiManager( const char *gametype, const char *mapname );
 
 	int teams[MAX_CLIENTS];
-	ai_handle_t *last;
-	ai_handle_t *cpuQuotaOwner;
-	int64_t cpuQuotaGivenAt;
+	ai_handle_t *last { nullptr };
+	ai_handle_t *cpuQuotaOwner { nullptr };
+	int64_t cpuQuotaGivenAt { 0 };
 
 	int hubAreas[16];
-	int numHubAreas;
+	int numHubAreas { 0 };
 
 	static AiManager *instance;
-	virtual void Frame() override;
+
+	void Frame() override;
 
 	bool CheckCanSpawnBots();
 	void CreateUserInfo( char *buffer, size_t bufferSize );
@@ -39,12 +40,9 @@ protected:
 	class StringValueMap
 	{
 		StaticVector<std::pair<const char *, T>, N> keyValuePairs;
-		unsigned clearLimit;
-
+		unsigned clearLimit { 0 };
 public:
-		inline StringValueMap() : clearLimit( 0 ) {}
 		inline ~StringValueMap() {
-			clearLimit = 0;
 			ClearToLimit();
 		}
 

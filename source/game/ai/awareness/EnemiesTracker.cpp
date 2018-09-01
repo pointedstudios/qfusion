@@ -262,16 +262,11 @@ bool TrackedEnemy::IsAreaInPVS( int areaNum, const AiAasWorld *aasWorld ) const 
 }
 
 AiEnemiesTracker::AiEnemiesTracker( float avgSkill_ )
-	: avgSkill( avgSkill_ ),
-	numTrackedEnemies( 0 ),
-	maxTrackedAttackers( From1UpToMax( MAX_TRACKED_ATTACKERS, avgSkill_ ) ),
-	maxTrackedTargets( From1UpToMax( MAX_TRACKED_TARGETS, avgSkill_ ) ),
-	maxActiveEnemies( From1UpToMax( MAX_ACTIVE_ENEMIES, avgSkill_ ) ),
-	reactionTime( 320 - From0UpToMax( 300, avgSkill_ ) ),
-	prevThinkLevelTime( 0 ),
-	hasQuad( false ),
-	hasShell( false ),
-	damageToBeKilled( 0.0f ) {
+	: avgSkill( avgSkill_ )
+	, maxTrackedAttackers( From1UpToMax( MAX_TRACKED_ATTACKERS, avgSkill_ ) )
+	, maxTrackedTargets( From1UpToMax( MAX_TRACKED_TARGETS, avgSkill_ ) )
+	, maxActiveEnemies( From1UpToMax( MAX_ACTIVE_ENEMIES, avgSkill_ ) )
+	, reactionTime( 320 - From0UpToMax( 300, avgSkill_ ) ) {
 	// Initialize table slots
 	for( TrackedEnemy &enemy: entityToEnemyTable ) {
 		enemy.Clear();
@@ -279,11 +274,13 @@ AiEnemiesTracker::AiEnemiesTracker( float avgSkill_ )
 		enemy.entNum = (int)( &enemy - entityToEnemyTable );
 	}
 
-	for( unsigned i = 0; i < maxTrackedAttackers; ++i )
-		attackers.push_back( AttackStats() );
+	for( unsigned i = 0; i < maxTrackedAttackers; ++i ) {
+		new( attackers.unsafe_grow_back() )AttackStats();
+	}
 
-	for( unsigned i = 0; i < maxTrackedTargets; ++i )
-		targets.push_back( AttackStats() );
+	for( unsigned i = 0; i < maxTrackedTargets; ++i ) {
+		new( targets.unsafe_grow_back() )AttackStats();
+	}
 }
 
 void AiEnemiesTracker::Frame() {

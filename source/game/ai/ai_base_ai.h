@@ -251,33 +251,33 @@ class Ai : public AiFrameAwareUpdatable
 
 protected:
 	edict_t *const self;
-	// Must be set in a subclass constructor. A subclass manages memory for its brain
+	// Must be set in a subclass constructor. A subclass manages memory for its planner
 	// (it either has it as an intrusive member of allocates it on heap)
 	// and provides a reference to it to this base class via this pointer.
-	class BasePlanner *basePlanner;
+	class BasePlanner *basePlanner { nullptr };
 	// Must be set in a subclass constructor.
 	// A subclass should decide whether a shared or separated route cache should be used.
 	// A subclass should destroy the cache instance if necessary.
-	AiAasRouteCache *routeCache;
+	AiAasRouteCache *routeCache { nullptr };
 	// A cached reference to an AAS world, set by this class
 	AiAasWorld *aasWorld;
 	// Must be set in a subclass constructor. Can be arbitrary changed later.
 	// Can point to external (predicted) entity physics state during movement planning.
-	AiEntityPhysicsState *entityPhysicsState;
+	AiEntityPhysicsState *entityPhysicsState { nullptr };
 
 	// Preferred and allowed travel flags
 	int travelFlags[2];
 	ArrayRange<int> travelFlagsRange;
 
 	int64_t blockedTimeoutAt;
-	int64_t prevThinkAt;
-	int64_t lastNavTargetReachedAt;
+	int64_t prevThinkAt { 0 };
+	int64_t lastNavTargetReachedAt { 0 };
 
 	vec3_t angularViewSpeed;
 
 	// An actually used nav target, be it a nav entity or a spot
-	NavTarget *navTarget;
-	const NavTarget *lastReachedNavTarget;
+	NavTarget *navTarget { nullptr };
+	const NavTarget *lastReachedNavTarget { nullptr };
 	// A storage navTarget might point to in case when it is just a spot and not a nav entity
 	NavTarget localNavTargetStorage;
 

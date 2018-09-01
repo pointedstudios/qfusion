@@ -69,8 +69,7 @@ bool AiManager::StringValueMap<T, N>::Insert( const char *key, T &&value ) {
 #define REGISTER_BUILTIN_GOAL( goal ) this->RegisterBuiltinGoal(#goal )
 #define REGISTER_BUILTIN_ACTION( action ) this->RegisterBuiltinAction(#action )
 
-AiManager::AiManager( const char *gametype, const char *mapname )
-	: last( nullptr ), cpuQuotaOwner( nullptr ), cpuQuotaGivenAt( 0 ) {
+AiManager::AiManager( const char *gametype, const char *mapname ) {
 	std::fill_n( teams, MAX_CLIENTS, TEAM_SPECTATOR );
 
 	REGISTER_BUILTIN_GOAL( BotGrabItemGoal );

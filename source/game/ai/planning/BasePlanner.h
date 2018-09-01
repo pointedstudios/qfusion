@@ -17,21 +17,20 @@ class AiBaseGoal
 	static inline void Register( Ai *ai, AiBaseGoal *goal );
 
 protected:
-	edict_t *self;
+	edict_t *const self;
 	const char *name;
 	const unsigned updatePeriod;
-	int debugColor;
-
-	float weight;
+	int debugColor { 0 };
+	float weight { 0.0f };
 
 public:
 	// Don't pass self as a constructor argument (self->ai ptr might not been set yet)
 	inline AiBaseGoal( Ai *ai, const char *name_, unsigned updatePeriod_ )
-		: self( ai->self ), name( name_ ), updatePeriod( updatePeriod_ ), debugColor( 0 ), weight( 0.0f ) {
+		: self( ai->self ), name( name_ ), updatePeriod( updatePeriod_ ) {
 		Register( ai, this );
 	}
 
-	virtual ~AiBaseGoal() {};
+	virtual ~AiBaseGoal() = default;
 
 	virtual void UpdateWeight( const WorldState &worldState ) = 0;
 	virtual void GetDesiredWorldState( WorldState *worldState ) = 0;
@@ -53,8 +52,7 @@ public:
 	inline unsigned UpdatePeriod() const { return updatePeriod; }
 };
 
-class alignas ( sizeof( void * ) )PoolBase
-{
+class alignas ( sizeof( void * ) )PoolBase {
 	friend class PoolItem;
 
 	char *basePtr;
@@ -65,7 +63,9 @@ class alignas ( sizeof( void * ) )PoolBase
 	static constexpr auto FREE_LIST = 0;
 	static constexpr auto USED_LIST = 1;
 
-	int16_t listFirst[2];
+	// The head of the free list initially points at the first element.
+	// The head of the used list is not initially defined (is "null").
+	int16_t listFirst[2] { 0, -1 };
 
 #ifdef _DEBUG
 	inline const char *ListName( int index ) {
@@ -143,16 +143,12 @@ public:
 	void Clear();
 };
 
-class alignas ( sizeof( void * ) )PoolItem
-{
+class alignas ( sizeof( void * ) )PoolItem {
 	friend class PoolBase;
 	PoolBase *pool;
-
 public:
-	PoolItem( PoolBase * pool_ ) : pool( pool_ ) {
-	}
-	virtual ~PoolItem() {
-	}
+	explicit PoolItem( PoolBase * pool_ ) : pool( pool_ ) {}
+	virtual ~PoolItem() = default;
 
 	inline void DeleteSelf() {
 		this->~PoolItem();
@@ -161,8 +157,7 @@ public:
 };
 
 template<class Item, unsigned N>
-class alignas ( sizeof( void * ) )Pool : public PoolBase
-{
+class alignas ( sizeof( void * ) )Pool : public PoolBase {
 	// We have to introduce these intermediates instead of variables since we are limited to C++11 (not 14) standard.
 
 	static constexpr unsigned OffsetRemainder() {
@@ -240,12 +235,11 @@ public:
 	};
 };
 
-class AiBaseActionRecord : public PoolItem
-{
+class AiBaseActionRecord : public PoolItem {
 	friend class AiBaseAction;
 
 protected:
-	edict_t *self;
+	edict_t *const self;
 	const char *name;
 
 #ifndef _MSC_VER
@@ -261,12 +255,10 @@ protected:
 	}
 
 public:
-	AiBaseActionRecord *nextInPlan;
+	AiBaseActionRecord *nextInPlan { nullptr };
 
 	inline AiBaseActionRecord( PoolBase *pool_, edict_t *self_, const char *name_ )
-		: PoolItem( pool_ ), self( self_ ), name( name_ ), nextInPlan( nullptr ) {}
-
-	virtual ~AiBaseActionRecord() {}
+		: PoolItem( pool_ ), self( self_ ), name( name_ ) {}
 
 	virtual void Activate() {
 		Debug( "About to activate\n" );
@@ -290,56 +282,48 @@ struct PlannerNode : PoolItem {
 	// World state after applying an action
 	WorldState worldState;
 	// An action record to apply
-	AiBaseActionRecord *actionRecord;
+	AiBaseActionRecord *actionRecord { nullptr };
 	// Used to reconstruct a plan
-	PlannerNode *parent;
+	PlannerNode *parent { nullptr };
 	// Next in linked list of transitions for current node
-	PlannerNode *nextTransition;
-
-	// AStar edge "distance"
-	float transitionCost;
-	// AStar node G
-	float costSoFar;
-	// Priority queue parameter
-	float heapCost;
-	// Utility for retrieval an actual index in heap array by a node value
-	unsigned heapArrayIndex;
+	PlannerNode *nextTransition { nullptr };
 
 	// Utilities for storing the node in a hash set
-	PlannerNode *prevInHashBin;
-	PlannerNode *nextInHashBin;
-	uint32_t worldStateHash;
+	PlannerNode *prevInHashBin { nullptr };
+	PlannerNode *nextInHashBin { nullptr };
 
-	inline PlannerNode( PoolBase *pool, edict_t *self )
-		: PoolItem( pool ),
-		worldState( self ),
-		actionRecord( nullptr ),
-		parent( nullptr ),
-		nextTransition( nullptr ),
-		transitionCost( std::numeric_limits<float>::max() ),
-		costSoFar( std::numeric_limits<float>::max() ),
-		heapCost( std::numeric_limits<float>::max() ),
-		heapArrayIndex( ~0u ),
-		prevInHashBin( nullptr ),
-		nextInHashBin( nullptr ),
-		worldStateHash( 0 ) {}
+	// An A-star edge "distance"
+	float transitionCost { std::numeric_limits<float>::max() };
+	// An A-star node "G"
+	float costSoFar { std::numeric_limits<float>::max() };
+	// A priority queue parameter
+	float heapCost { std::numeric_limits<float>::max() };
+	// An utility for retrieval an actual index in heap array by a node value
+	unsigned heapArrayIndex { std::numeric_limits<unsigned>::max() };
+
+	// A hash of the associated world state (put here for optimal members alignment)
+	uint32_t worldStateHash { 0 };
+
+	PlannerNode( PoolBase *pool, edict_t *self )
+		: PoolItem( pool ),	worldState( self ) {}
 
 	~PlannerNode() override {
 		if( actionRecord ) {
 			actionRecord->DeleteSelf();
 		}
 
-		// Prevent use-after-free
+#ifndef PUBLIC_BUILD
+		// Prevent use-after-free.
 		actionRecord = nullptr;
 		parent = nullptr;
 		nextTransition = nullptr;
 		prevInHashBin = nullptr;
 		nextInHashBin = nullptr;
+#endif
 	}
 };
 
-class AiBaseAction
-{
+class AiBaseAction {
 	friend class Ai;
 	friend class BasePlanner;
 
@@ -361,59 +345,61 @@ protected:
 		va_end( va );
 	}
 
-	class PlannerNodePtr
-	{
+	class PlannerNodePtr {
 		PlannerNode *node;
+	public:
 		PlannerNodePtr( const PlannerNodePtr &that ) = delete;
 		PlannerNodePtr &operator=( const PlannerNodePtr &that ) = delete;
 
-public:
-		inline explicit PlannerNodePtr( PlannerNode *node_ ) : node( node_ ) {}
-		inline PlannerNodePtr( PlannerNodePtr &&that ) : node( that.node ) {
+		explicit PlannerNodePtr( PlannerNode *node_ ) : node( node_ ) {}
+
+		PlannerNodePtr( PlannerNodePtr &&that ) : node( that.node ) {
 			that.node = nullptr;
 		}
-		inline PlannerNodePtr &operator=( PlannerNodePtr &&that ) {
+
+		PlannerNodePtr &operator=( PlannerNodePtr &&that ) {
 			node = that.node;
 			that.node = nullptr;
 			return *this;
 		}
-		inline PlannerNode *ReleaseOwnership() {
+
+		PlannerNode *ReleaseOwnership() {
 			PlannerNode *result = node;
 			// Clear node reference to avoid being deleted in the destructor
 			node = nullptr;
 			return result;
 		}
+
 		inline ~PlannerNodePtr();
 		inline PlannerNode *PrepareActionResult();
 		inline class WorldState &WorldState();
 		inline float &Cost();
-		inline operator bool() const { return node != nullptr; }
+		operator bool() const { return node != nullptr; }
 	};
 
 	inline PlannerNodePtr NewNodeForRecord( AiBaseActionRecord *record );
 
 public:
 	// Don't pass self as a constructor argument (self->ai ptr might not been set yet)
-	inline AiBaseAction( Ai *ai, const char *name_ ) : self( ai->self ), name( name_ ) {
+	inline AiBaseAction( Ai *ai, const char *name_ )
+		: self( ai->self ), name( name_ ) {
 		Register( ai, this );
 	}
 
-	virtual ~AiBaseAction() {}
+	virtual ~AiBaseAction() = default;
 
 	const char *Name() const { return name; }
 
 	virtual PlannerNode *TryApply( const WorldState &worldState ) = 0;
 };
 
-class BasePlanner : public AiFrameAwareUpdatable
-{
+class BasePlanner : public AiFrameAwareUpdatable {
 	friend class Ai;
 	friend class AiManager;
 	friend class AiBaseTeam;
 	friend class AiBaseGoal;
 	friend class AiBaseAction;
 	friend class AiBaseActionRecord;
-	friend class BotGutsActionsAccessor;
 
 public:
 	static constexpr unsigned MAX_GOALS = 12;
@@ -422,17 +408,17 @@ public:
 protected:
 	edict_t *const self;
 
-	AiBaseActionRecord *planHead;
-	AiBaseGoal *activeGoal;
-	int64_t nextActiveGoalUpdateAt;
+	AiBaseActionRecord *planHead { nullptr };
+	AiBaseGoal *activeGoal { nullptr };
+	int64_t nextActiveGoalUpdateAt { 0 };
 
 	StaticVector<AiBaseGoal *, MAX_GOALS> goals;
 	StaticVector<AiBaseAction *, MAX_ACTIONS> actions;
 
 	static constexpr unsigned MAX_PLANNER_NODES = 384;
-	Pool<PlannerNode, MAX_PLANNER_NODES> plannerNodesPool;
+	Pool<PlannerNode, MAX_PLANNER_NODES> plannerNodesPool { "PlannerNodesPool" };
 
-	BasePlanner( edict_t *self );
+	explicit BasePlanner( edict_t *self_ ): self( self_ ) {}
 
 	virtual void PrepareCurrWorldState( WorldState *worldState ) = 0;
 
@@ -454,8 +440,6 @@ protected:
 	virtual void BeforePlanning() {}
 	virtual void AfterPlanning() {}
 public:
-	~BasePlanner() override {}
-
 	inline bool HasPlan() const { return planHead != nullptr; }
 
 	void ClearGoalAndPlan();
@@ -464,10 +448,14 @@ public:
 };
 
 inline void AiBaseGoal::Register( Ai *ai, AiBaseGoal *goal ) {
+	assert( ai );
+	assert( ai->basePlanner );
 	ai->basePlanner->goals.push_back( goal );
 }
 
 inline void AiBaseAction::Register( Ai *ai, AiBaseAction *action ) {
+	assert( ai );
+	assert( ai->basePlanner );
 	ai->basePlanner->actions.push_back( action );
 }
 

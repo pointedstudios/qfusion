@@ -10,12 +10,10 @@
 #include "Actions.h"
 #include "Goals.h"
 
-class BotPlanner : public BasePlanner
-{
+class BotPlanner : public BasePlanner {
 	friend class Bot;
 	friend class BotItemsSelector;
 	friend class BotBaseGoal;
-	friend class BotGutsActionsAccessor;
 
 	StaticVector<BotScriptGoal, MAX_GOALS> scriptGoals;
 	StaticVector<BotScriptAction, MAX_ACTIONS> scriptActions;

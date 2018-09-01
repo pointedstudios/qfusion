@@ -340,13 +340,13 @@ public:
 	static constexpr unsigned MAX_ACTIVE_ENEMIES = 3;
 
 private:
-	float avgSkill; // (0..1)
+	const float avgSkill; // (0..1)
 
 	// An i-th element corresponds to i-th entity
 	TrackedEnemy entityToEnemyTable[MAX_EDICTS];
 
 	// List heads for tracked and active enemies lists
-	TrackedEnemy *listHeads[2];
+	TrackedEnemy *listHeads[2] { nullptr, nullptr };
 
 	unsigned numTrackedEnemies;
 	const unsigned maxTrackedAttackers;
@@ -355,7 +355,7 @@ private:
 
 	const unsigned reactionTime;
 
-	int64_t prevThinkLevelTime;
+	int64_t prevThinkLevelTime { 0 };
 
 	StaticVector<AttackStats, MAX_TRACKED_ATTACKERS> attackers;
 	StaticVector<AttackStats, MAX_TRACKED_TARGETS> targets;
@@ -369,9 +369,9 @@ private:
 	int EnqueueAttacker( const edict_t *attacker, int damage );
 
 	// Precache results of virtual Check* calls in these vars in PreThink()
-	bool hasQuad;
-	bool hasShell;
-	float damageToBeKilled;
+	bool hasQuad { false };
+	bool hasShell { false };
+	float damageToBeKilled { 0.0f };
 
 	enum {
 		TRACKED_LIST_INDEX = TrackedEnemy::TRACKED_LIST_INDEX,
@@ -463,8 +463,8 @@ protected:
 	TrackedEnemy *TrackedEnemiesHead() { return listHeads[TRACKED_LIST_INDEX]; }
 	TrackedEnemy *ActiveEnemiesHead() { return listHeads[ACTIVE_LIST_INDEX]; }
 public:
-	AiEnemiesTracker( float avgSkill_ );
-	virtual ~AiEnemiesTracker() {}
+	explicit AiEnemiesTracker( float avgSkill_ );
+	virtual ~AiEnemiesTracker() = default;
 
 	// If a weight is set > 0, this bot requires reinforcements
 	virtual void SetBotRoleWeight( const edict_t *bot, float weight ) = 0;
