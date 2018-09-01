@@ -355,9 +355,10 @@ public:
 	// Frame index is restricted to topOfStack or topOfStack + 1
 	inline void MarkSavepoint( BaseMovementAction *markedBy, unsigned frameIndex );
 
+	inline const char *ActiveActionName() const;
+
 	inline void SetPendingRollback();
 	inline void RollbackToSavepoint();
-	inline void SetPendingWeapon( int weapon );
 	inline void SaveSuggestedActionForNextFrame( BaseMovementAction *action );
 	inline unsigned MillisAheadForFrameStart( unsigned frameIndex ) const;
 
