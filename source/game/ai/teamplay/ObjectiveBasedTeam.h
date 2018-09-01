@@ -23,22 +23,18 @@ struct AiOffenseSpot {
 	unsigned maxAttackers;
 };
 
-class AiObjectiveBasedTeam : public AiSquadBasedTeam
-{
+class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 	static constexpr unsigned MAX_SPOT_ATTACKERS = 16;
 	static constexpr unsigned MAX_SPOT_DEFENDERS = 16;
 
 	// Extended definition based on one visible for script
 	struct DefenceSpot : public AiDefenceSpot {
-		float weight;
-		float alertLevel;
-		int64_t alertTimeoutAt;
+		float weight { 0.0f };
+		float alertLevel { 0.0f };
+		int64_t alertTimeoutAt { 0 };
 
-		DefenceSpot( const AiDefenceSpot &spot )
-			: AiDefenceSpot( spot ),
-			weight( 0.0f ),
-			alertLevel( 0.0f ),
-			alertTimeoutAt( 0 ) {
+		explicit DefenceSpot( const AiDefenceSpot &spot )
+			: AiDefenceSpot( spot ) {
 			clamp_low( radius, 16.0f );
 			clamp( regularEnemyAlertScale, 0.0f, 1.0f );
 			clamp( carrierEnemyAlertScale, 0.0f, 1.0f );
@@ -54,9 +50,9 @@ class AiObjectiveBasedTeam : public AiSquadBasedTeam
 
 	// Extended definition based on one visible for script
 	struct OffenseSpot : public AiOffenseSpot {
-		float weight;
+		float weight { 0.0f };
 
-		OffenseSpot( const AiOffenseSpot &spot )
+		explicit OffenseSpot( const AiOffenseSpot &spot )
 			: AiOffenseSpot( spot ), weight( 0.0f ) {
 			clamp_high( minAttackers, MAX_SPOT_ATTACKERS );
 			clamp( maxAttackers, 1, MAX_SPOT_ATTACKERS );
@@ -92,9 +88,9 @@ class AiObjectiveBasedTeam : public AiSquadBasedTeam
 
 	struct BotAndScore {
 		edict_t *bot;
-		float rawScore;
-		float effectiveScore;
-		BotAndScore( edict_t *bot_ ) : bot( bot_ ), rawScore( 0 ), effectiveScore( 0 ) {}
+		float rawScore { 0 };
+		float effectiveScore { 0 };
+		explicit BotAndScore( edict_t *bot_ ) : bot( bot_ ) {}
 		bool operator<( const BotAndScore &that ) const {
 			return this->effectiveScore < that.effectiveScore;
 		}
@@ -124,8 +120,7 @@ class AiObjectiveBasedTeam : public AiSquadBasedTeam
 	template<typename Container >
 	const edict_t *GetUnderlyingEntity( const Container &container, int spotId ) const;
 public:
-	AiObjectiveBasedTeam( int team_ ) : AiSquadBasedTeam( team_ ) {}
-	virtual ~AiObjectiveBasedTeam() override {}
+	explicit AiObjectiveBasedTeam( int team_ ) : AiSquadBasedTeam( team_ ) {}
 
 	void AddDefenceSpot( const AiDefenceSpot &spot );
 	void RemoveDefenceSpot( int id );
@@ -139,10 +134,10 @@ public:
 	// Note: this signature is actually user friendly contrary to the first impression and typed alternatives.
 	const edict_t *GetSpotUnderlyingEntity( int spotId, bool isDefenceSpot ) const;
 
-	virtual void OnBotAdded( Bot *bot ) override;
-	virtual void OnBotRemoved( Bot *bot ) override;
+	void OnBotAdded( Bot *bot ) override;
+	void OnBotRemoved( Bot *bot ) override;
 
-	virtual void Think() override;
+	void Think() override;
 };
 
 #endif

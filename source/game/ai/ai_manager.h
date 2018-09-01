@@ -42,13 +42,13 @@ protected:
 	 */
 	template <typename T, unsigned N>
 	class StringValueMap {
-		typedef std::pair<const char *, T> value_type;
+		using value_type = std::pair<const char *, T>;
 
 		StaticVector<value_type, N> keyValuePairs;
 		unsigned clearLimit { 0 };
 public:
-		typedef value_type *iterator;
-		typedef const value_type *const_iterator;
+		using iterator = value_type *;
+		using const_iterator = const value_type *;
 
 		~StringValueMap() {
 			ClearToLimit();

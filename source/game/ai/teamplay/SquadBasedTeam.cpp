@@ -5,9 +5,9 @@
 #include <algorithm>
 #include <limits>
 
-int CachedTravelTimesMatrix::GetAASTravelTime( const edict_t *client1, const edict_t *client2 ) {
-	int client1Num = client1 - game.edicts;
-	int client2Num = client2 - game.edicts;
+int CachedTravelTimesMatrix::GetTravelTime( const edict_t *client1, const edict_t *client2 ) {
+	const auto client1Num = (int)( client1 - game.edicts );
+	const auto client2Num = (int)( client2 - game.edicts );
 
 #ifdef _DEBUG
 	if( client1Num <= 0 || client1Num > gs.maxclients ) {
@@ -19,17 +19,17 @@ int CachedTravelTimesMatrix::GetAASTravelTime( const edict_t *client1, const edi
 #endif
 	int index = client1Num * MAX_CLIENTS + client2Num;
 	if( aasTravelTimes[index] < 0 ) {
-		aasTravelTimes[index] = FindAASTravelTime( client1, client2 );
+		aasTravelTimes[index] = FindTravelTime( client1, client2 );
 	}
 	return aasTravelTimes[index];
 }
 
 // Can't be defined in header since Bot class is not visible in it
-int CachedTravelTimesMatrix::GetAASTravelTime( const Bot *from, const Bot *to ) {
-	return GetAASTravelTime( from->self, to->self );
+int CachedTravelTimesMatrix::GetTravelTime( const Bot *from, const Bot *to ) {
+	return GetTravelTime( from->self, to->self );
 }
 
-int CachedTravelTimesMatrix::FindAASTravelTime( const edict_t *client1, const edict_t *client2 ) {
+int CachedTravelTimesMatrix::FindTravelTime( const edict_t *client1, const edict_t *client2 ) {
 	AiGroundTraceCache *groundTraceCache = AiGroundTraceCache::Instance();
 	AiAasWorld *aasWorld = AiAasWorld::Instance();
 	AiAasRouteCache *routeCache = AiAasRouteCache::Shared();
@@ -66,10 +66,11 @@ AiSquad::SquadEnemiesTracker::SquadEnemiesTracker( AiSquad *squad_, float skill 
 }
 
 unsigned AiSquad::SquadEnemiesTracker::GetBotSlot( const Bot *bot ) const {
-	for( unsigned i = 0, end = squad->bots.size(); i < end; ++i )
+	for( unsigned i = 0, end = squad->bots.size(); i < end; ++i ) {
 		if( bot == squad->bots[i] ) {
 			return i;
 		}
+	}
 
 	if( bot ) {
 		FailWith( "Can't find a slot for bot %s", bot->Tag() );
@@ -80,10 +81,10 @@ unsigned AiSquad::SquadEnemiesTracker::GetBotSlot( const Bot *bot ) const {
 
 void AiSquad::SquadEnemiesTracker::CheckSquadValid() const {
 	if( !squad->InUse() ) {
-		FailWith( "Squad %s is not in use", squad->Tag() );
+		FailWith( "The squad %s is not in use", squad->Tag() );
 	}
 	if( !squad->IsValid() ) {
-		FailWith( "Squad %s is not valit id", squad->Tag() );
+		FailWith( "The squad %s is not valid", squad->Tag() );
 	}
 }
 
@@ -92,44 +93,49 @@ void AiSquad::SquadEnemiesTracker::CheckSquadValid() const {
 void AiSquad::SquadEnemiesTracker::OnHurtByNewThreat( const edict_t *newThreat ) {
 	CheckSquadValid();
 	// TODO: Use more sophisticated bot selection?
-	for( Bot *bot: squad->bots )
+	for( Bot *bot: squad->bots ) {
 		if( !bot->IsGhosting() ) {
 			bot->OnHurtByNewThreat( newThreat, this );
 		}
+	}
 }
 
 bool AiSquad::SquadEnemiesTracker::CheckHasQuad() const {
 	CheckSquadValid();
-	for( Bot *bot: squad->bots )
+	for( Bot *bot: squad->bots ) {
 		if( !bot->IsGhosting() && ::HasQuad( bot->Self() ) ) {
 			return true;
 		}
+	}
 	return false;
 }
 
 bool AiSquad::SquadEnemiesTracker::CheckHasShell() const {
 	CheckSquadValid();
-	for( Bot *bot: squad->bots )
+	for( Bot *bot: squad->bots ) {
 		if( !bot->IsGhosting() && ::HasShell( bot->Self() ) ) {
 			return true;
 		}
+	}
 	return false;
 }
 
 float AiSquad::SquadEnemiesTracker::ComputeDamageToBeKilled() const {
 	CheckSquadValid();
 	float result = 0.0f;
-	for( Bot *bot: squad->bots )
+	for( Bot *bot: squad->bots ) {
 		if( !bot->IsGhosting() ) {
 			result += DamageToKill( bot->self );
 		}
+	}
 	return result;
 }
 
 void AiSquad::SquadEnemiesTracker::OnEnemyRemoved( const TrackedEnemy *enemy ) {
 	CheckSquadValid();
-	for( Bot *bot: squad->bots )
+	for( Bot *bot: squad->bots ) {
 		bot->OnEnemyRemoved( enemy );
+	}
 }
 
 void AiSquad::SquadEnemiesTracker::SetBotRoleWeight( const edict_t *bot, float weight ) {
@@ -166,13 +172,7 @@ void AiSquad::SquadEnemiesTracker::OnBotEnemyAssigned( const edict_t *bot, const
 }
 
 AiSquad::AiSquad( CachedTravelTimesMatrix &travelTimesMatrix_ )
-	: isValid( false )
-	, inUse( false )
-	, canFightTogether( false )
-	, canMoveTogether( false )
-	, brokenConnectivityTimeoutAt( 0 )
-	, botsDetached( false )
-	, travelTimesMatrix( travelTimesMatrix_ ) {
+	: travelTimesMatrix( travelTimesMatrix_ ) {
 	std::fill_n( lastDroppedByBotTimestamps, MAX_SIZE, 0 );
 	std::fill_n( lastDroppedForBotTimestamps, MAX_SIZE, 0 );
 
@@ -250,11 +250,17 @@ bool AiSquad::IsSupporter( const edict_t *bot ) const {
 	return false;
 }
 
-// Squad connectivity should be restored in this limit of time, otherwise a squad should be invalidated
+/**
+ * A squad connectivity should be restored in this limit of time, otherwise a squad should be invalidated
+ */
 constexpr unsigned CONNECTIVITY_TIMEOUT = 750;
-// This value defines a distance limit for quick rejection of non-feasible bot pairs for new squads
+/**
+ * This value defines a distance limit for quick rejection of non-feasible bot pairs for new squads
+ */
 constexpr float CONNECTIVITY_PROXIMITY = 500;
-// This value defines summary aas move time limit from one bot to other and back
+/**
+ * This value defines summary AAS movement time limit from one bot to other and back
+ */
 constexpr int CONNECTIVITY_MOVE_CENTISECONDS = 400;
 
 void AiSquad::Frame() {
@@ -329,13 +335,13 @@ bool AiSquad::CheckCanMoveTogether() const {
 	for( unsigned i = 0; i < bots.size(); ++i ) {
 		for( unsigned j = i + 1; j < bots.size(); ++j ) {
 			// Check direct travel time (it's given in seconds^-2)
-			aasTravelTime = travelTimesMatrix.GetAASTravelTime( bots[i], bots[j] );
+			aasTravelTime = travelTimesMatrix.GetTravelTime( bots[i], bots[j] );
 			// At least bot j is reachable from bot i, move to next bot
 			if( aasTravelTime && aasTravelTime < CONNECTIVITY_MOVE_CENTISECONDS / 2 ) {
 				continue;
 			}
 			// Bot j is not reachable from bot i, check travel time from j to i
-			aasTravelTime = travelTimesMatrix.GetAASTravelTime( bots[j], bots[i] );
+			aasTravelTime = travelTimesMatrix.GetTravelTime( bots[j], bots[i] );
 			if( !aasTravelTime || aasTravelTime >= CONNECTIVITY_MOVE_CENTISECONDS / 2 ) {
 				return false;
 			}
@@ -350,8 +356,8 @@ bool AiSquad::CheckCanFightTogether() const {
 	const auto *pvsCache = EntitiesPvsCache::Instance();
 	for( unsigned i = 0; i < bots.size(); ++i ) {
 		for( unsigned j = i + 1; j < bots.size(); ++j ) {
-			edict_t *firstEnt = const_cast<edict_t*>( bots[i]->Self() );
-			edict_t *secondEnt = const_cast<edict_t*>( bots[j]->Self() );
+			auto *const firstEnt = const_cast<edict_t*>( bots[i]->Self() );
+			auto *const secondEnt = const_cast<edict_t*>( bots[j]->Self() );
 			if( !pvsCache->AreInPvs( firstEnt, secondEnt ) ) {
 				continue;
 			}
@@ -391,8 +397,9 @@ void AiSquad::UpdateBotRoleWeights() {
 		}
 	}
 	if( !hasCarriers ) {
-		for( Bot *bot: bots )
+		for( Bot *bot: bots ) {
 			squadEnemiesTracker->SetBotRoleWeight( bot->Self(), 0.25f );
+		}
 	} else {
 		for( Bot *bot: bots ) {
 			if( !bot->IsGhosting() && IsCarrier( bot->Self() ) ) {
@@ -417,8 +424,7 @@ static void InitWeaponDefHelpers() {
 		return;
 	}
 
-	struct WeaponAndTier
-	{
+	struct WeaponAndTier {
 		int weapon, tier;
 		WeaponAndTier(): weapon( 0 ), tier( 0 ) {}
 		WeaponAndTier( int weapon_, int tier_ ) : weapon( weapon_ ), tier( tier_ ) {}
@@ -438,16 +444,19 @@ static void InitWeaponDefHelpers() {
 	weaponTiers[WEAP_ELECTROBOLT]     = WeaponAndTier( WEAP_ELECTROBOLT, 3 );
 	weaponTiers[WEAP_INSTAGUN]        = WeaponAndTier( WEAP_INSTAGUN, 3 );
 
-	static_assert( WEAP_NONE == 0, "This loop assume zero lower bound" );
-	for( int weapon = WEAP_NONE; weapon < WEAP_TOTAL; ++weapon )
+	static_assert( WEAP_NONE == 0, "This loop assumes zero lower bound" );
+	for( int weapon = WEAP_NONE; weapon < WEAP_TOTAL; ++weapon ) {
 		tiersForWeapon[weapon] = weaponTiers[weapon].tier;
+	}
 
 	std::sort( weaponTiers, weaponTiers + WEAP_TOTAL );
-	for( int i = 0; i < WEAP_TOTAL; ++i )
+	for( int i = 0; i < WEAP_TOTAL; ++i ) {
 		bestWeapons[i] = weaponTiers[i].weapon;
+	}
 
-	for( int weapon = WEAP_NONE; weapon < WEAP_TOTAL; ++weapon )
+	for( int weapon = WEAP_NONE; weapon < WEAP_TOTAL; ++weapon ) {
 		weaponDefs[weapon] = GS_GetWeaponDef( weapon );
+	}
 
 	areWeaponDefHelpersInitialized = true;
 }
@@ -483,20 +492,22 @@ int AiSquad::FindBotWeaponsTiers( int *maxBotWeaponTiers ) const {
 
 int AiSquad::FindLowestBotHealth() const {
 	int result = bots[0]->Health();
-	for( unsigned botNum = 1; botNum < bots.size(); ++botNum )
+	for( unsigned botNum = 1; botNum < bots.size(); ++botNum ) {
 		if( bots[botNum]->Health() < result ) {
 			result = bots[botNum]->Health();
 		}
+	}
 
 	return result;
 }
 
 int AiSquad::FindLowestBotArmor() const {
 	int result = bots[0]->Armor();
-	for( unsigned botNum = 1; botNum < bots.size(); ++botNum )
+	for( unsigned botNum = 1; botNum < bots.size(); ++botNum ) {
 		if( bots[botNum]->Armor() < result ) {
 			result = bots[botNum]->Armor();
 		}
+	}
 
 	return result;
 }
@@ -575,10 +586,10 @@ void AiSquad::CheckMembersInventory() {
 			}
 		}
 
-		bool needsWeapon = maxBotWeaponTiers[botNum] <= 2;
+		const bool needsWeapon = maxBotWeaponTiers[botNum] <= 2;
 		// TODO: Check player class abilities
-		bool needsHealth = bots[botNum]->Health() < 75;
-		bool needsArmor = bots[botNum]->Armor() < 50;
+		const bool needsHealth = bots[botNum]->Health() < 75;
+		const bool needsArmor = bots[botNum]->Armor() < 50;
 
 		// Skip expensive FindSupplierCandidates() call by doing this cheap test first
 		if( !needsWeapon && !needsHealth && !needsArmor ) {
@@ -608,8 +619,8 @@ void AiSquad::CheckMembersInventory() {
 
 bool AiSquad::ShouldNotDropItemsNow() const {
 	// First, compute squad AABB
-	vec3_t mins = { +999999, +999999, +999999 };
-	vec3_t maxs = { -999999, -999999, -999999 };
+	vec3_t mins, maxs;
+	ClearBounds( mins, maxs );
 	for( const Bot *bot: bots ) {
 		const float *origin = bot->Self()->s.origin;
 		for( int i = 0; i < 3; ++i ) {
@@ -621,25 +632,25 @@ bool AiSquad::ShouldNotDropItemsNow() const {
 			}
 		}
 	}
+
 	Vec3 squadCenter( mins );
 	squadCenter += maxs;
 	squadCenter *= 0.5f;
 
-	struct PotentialStealer
-	{
+	struct MaybeStealer {
 		const TrackedEnemy *enemy;
 		Vec3 extrapolatedOrigin;
-		PotentialStealer( const TrackedEnemy *enemy_, const Vec3 &extrapolatedOrigin_ )
+		MaybeStealer( const TrackedEnemy *enemy_, const Vec3 &extrapolatedOrigin_ )
 			: enemy( enemy_ ), extrapolatedOrigin( extrapolatedOrigin_ ) {}
 
 		// Recently seen stealers should be first in a sorted list
-		bool operator<( const PotentialStealer &that ) const {
+		bool operator<( const MaybeStealer &that ) const {
 			return enemy->LastSeenAt() > that.enemy->LastSeenAt();
 		}
 	};
 
 	// First reject enemies by distance
-	StaticVector<PotentialStealer, MAX_EDICTS> potentialStealers;
+	StaticVector<MaybeStealer, MAX_EDICTS> potentialStealers;
 	for( const TrackedEnemy *enemy = squadEnemiesTracker->TrackedEnemiesHead(); enemy; enemy = enemy->NextInTrackedList() ) {
 		// Check whether an enemy has been invalidated and invalidation is not processed yet to prevent crash
 		if( !enemy->IsValid() || G_ISGHOSTING( enemy->ent ) ) {
@@ -666,20 +677,21 @@ bool AiSquad::ShouldNotDropItemsNow() const {
 		Vec3 enemyToSquadCenterDir( squadCenter );
 		enemyToSquadCenterDir -= extrapolatedLastSeenPosition;
 		if( enemyToSquadCenterDir.SquaredLength() < 1 ) {
-			potentialStealers.push_back( PotentialStealer( enemy, extrapolatedLastSeenPosition ) );
+			potentialStealers.push_back( MaybeStealer( enemy, extrapolatedLastSeenPosition ) );
 			continue;
 		}
+
 		enemyToSquadCenterDir.NormalizeFast();
 
 		float directionFactor = enemyToSquadCenterDir.Dot( enemyVelocityDir );
 		if( directionFactor < 0 ) {
 			if( BoundsAndSphereIntersect( mins, maxs, extrapolatedLastSeenPosition.Data(), 192.0f ) ) {
-				potentialStealers.push_back( PotentialStealer( enemy, extrapolatedLastSeenPosition ) );
+				potentialStealers.push_back( MaybeStealer( enemy, extrapolatedLastSeenPosition ) );
 			}
 		} else {
 			float radius = 192.0f + extrapolationSeconds * enemySpeed * directionFactor;
 			if( BoundsAndSphereIntersect( mins, maxs, extrapolatedLastSeenPosition.Data(), radius ) ) {
-				potentialStealers.push_back( PotentialStealer( enemy, extrapolatedLastSeenPosition ) );
+				potentialStealers.push_back( MaybeStealer( enemy, extrapolatedLastSeenPosition ) );
 			}
 		}
 	}
@@ -692,9 +704,9 @@ bool AiSquad::ShouldNotDropItemsNow() const {
 	trace_t trace;
 	const auto *pvsCache = EntitiesPvsCache::Instance();
 	for( unsigned i = 0, end = std::min( 4u, potentialStealers.size() ); i < end; ++i ) {
-		PotentialStealer stealer = potentialStealers[i];
+		MaybeStealer stealer = potentialStealers[i];
 		for( const Bot *bot: bots ) {
-			edict_t *botEnt = const_cast<edict_t*>( bot->self );
+			auto *const botEnt = const_cast<edict_t*>( bot->self );
 			if( !pvsCache->AreInPvs( botEnt, stealer.enemy->ent ) ) {
 				continue;
 			}
@@ -721,8 +733,7 @@ void AiSquad::FindSupplierCandidates( unsigned botNum, StaticVector<unsigned, Ai
 		applyDirectionFactor = true;
 	}
 
-	struct BotAndScore
-	{
+	struct BotAndScore {
 		unsigned botNum;
 		float score;
 		BotAndScore( unsigned botNum_, float score_ ) : botNum( botNum_ ), score( score_ ) {}
@@ -740,7 +751,7 @@ void AiSquad::FindSupplierCandidates( unsigned botNum, StaticVector<unsigned, Ai
 		}
 
 		// The lowest feasible AAS travel time is 1, 0 means that thatBot is not reachable for currBot
-		int travelTime = travelTimesMatrix.GetAASTravelTime( bots[botNum], bots[thatBotNum] );
+		int travelTime = travelTimesMatrix.GetTravelTime( bots[botNum], bots[thatBotNum] );
 		if( !travelTime ) {
 			continue;
 		}
@@ -760,8 +771,9 @@ void AiSquad::FindSupplierCandidates( unsigned botNum, StaticVector<unsigned, Ai
 
 	// Copy sorted mates nums to result
 	result.clear();
-	for( BotAndScore &botAndScore: candidates )
+	for( BotAndScore &botAndScore: candidates ) {
 		result.push_back( botAndScore.botNum );
+	}
 }
 
 // See definition explanation why the code is weird
@@ -992,8 +1004,9 @@ bool AiSquad::RequestDrop( unsigned botNum, bool wouldSupply[MAX_SIZE], Supplier
 }
 
 void AiSquad::ReleaseBotsTo( StaticVector<Bot *, MAX_CLIENTS> &orphans ) {
-	for( Bot *bot: bots )
+	for( Bot *bot: bots ) {
 		orphans.push_back( bot );
+	}
 
 	bots.clear();
 	inUse = false;
@@ -1049,11 +1062,11 @@ bool AiSquad::MayAttachBot( const Bot *bot ) const {
 			continue;
 		}
 
-		int toPresentTravelTime = travelTimesMatrix.GetAASTravelTime( bot, presentBot );
+		int toPresentTravelTime = travelTimesMatrix.GetTravelTime( bot, presentBot );
 		if( !toPresentTravelTime ) {
 			continue;
 		}
-		int fromPresentTravelTime = travelTimesMatrix.GetAASTravelTime( presentBot, bot );
+		int fromPresentTravelTime = travelTimesMatrix.GetTravelTime( presentBot, bot );
 		if( !fromPresentTravelTime ) {
 			continue;
 		}
@@ -1094,8 +1107,9 @@ void AiSquadBasedTeam::Frame() {
 	// Call squads Update() (and, thus, Frame() and, maybe, Think()) each frame as it is expected
 	// even if all squad AI logic is performed only in AiSquad::Think()
 	// to prevent further errors if we decide later to put some logic in Frame()
-	for( auto &squad: squads )
+	for( auto &squad: squads ) {
 		squad.Update();
+	}
 }
 
 void AiSquadBasedTeam::OnBotAdded( Bot *bot ) {
@@ -1103,8 +1117,9 @@ void AiSquadBasedTeam::OnBotAdded( Bot *bot ) {
 }
 
 void AiSquadBasedTeam::OnBotRemoved( Bot *bot ) {
-	for( auto &squad: squads )
+	for( auto &squad: squads ) {
 		squad.OnBotRemoved( bot );
+	}
 
 	// Remove from orphans as well
 	for( auto it = orphanBots.begin(); it != orphanBots.end(); ++it ) {
@@ -1126,8 +1141,7 @@ void AiSquadBasedTeam::Think() {
 
 class NearbyMatesList;
 
-struct NearbyBotProps
-{
+struct NearbyBotProps {
 	Bot *bot;
 	unsigned botOrphanIndex;
 	NearbyMatesList *botMates;
@@ -1139,25 +1153,22 @@ struct NearbyBotProps
 	bool operator<( const NearbyBotProps &that ) const { return distance < that.distance; }
 };
 
-class NearbyMatesList
-{
+class NearbyMatesList {
 	StaticVector<NearbyBotProps, AiSquad::MAX_SIZE> mates;
 
-	float minDistance;
+	float minDistance { std::numeric_limits<float>::max() };
 
 public:
-	unsigned botIndex;
+	unsigned botIndex { std::numeric_limits<unsigned>::max() };
 	typedef const NearbyBotProps *const_iterator;
 
-	NearbyMatesList() : minDistance( std::numeric_limits<float>::max() ), botIndex( (unsigned)-1 ) {}
-
-	inline const_iterator begin() const { return &( *mates.cbegin() ); }
-	inline const_iterator end() const { return &( *mates.cend() ); }
-	inline bool empty() const { return mates.empty(); }
+	const_iterator begin() const { return &( *mates.cbegin() ); }
+	const_iterator end() const { return &( *mates.cend() ); }
+	bool empty() const { return mates.empty(); }
 
 	void Add( const NearbyBotProps &props );
 
-	inline bool operator<( const NearbyMatesList &that ) const { return minDistance < that.minDistance; }
+	bool operator<( const NearbyMatesList &that ) const { return minDistance < that.minDistance; }
 };
 
 void NearbyMatesList::Add( const NearbyBotProps &props ) {
@@ -1172,7 +1183,8 @@ void NearbyMatesList::Add( const NearbyBotProps &props ) {
 	}
 }
 
-static void SelectNearbyMates( NearbyMatesList *nearbyMates, StaticVector<Bot*, MAX_CLIENTS> &orphanBots,
+static void SelectNearbyMates( NearbyMatesList *nearbyMates,
+							   StaticVector<Bot*, MAX_CLIENTS> &orphanBots,
 							   CachedTravelTimesMatrix &travelTimesMatrix ) {
 	for( unsigned i = 0; i < orphanBots.size(); ++i ) {
 		nearbyMates[i].botIndex = i;
@@ -1189,8 +1201,8 @@ static void SelectNearbyMates( NearbyMatesList *nearbyMates, StaticVector<Bot*, 
 				continue;
 			}
 
-			edict_t *firstEnt = orphanBots[i]->Self();
-			edict_t *secondEnt = orphanBots[j]->Self();
+			const edict_t *firstEnt = orphanBots[i]->Self();
+			const edict_t *secondEnt = orphanBots[j]->Self();
 
 			// Reject mismatching pair by doing a cheap vector distance test first
 			if( DistanceSquared( firstEnt->s.origin, secondEnt->s.origin ) > CONNECTIVITY_PROXIMITY * CONNECTIVITY_PROXIMITY ) {
@@ -1200,19 +1212,19 @@ static void SelectNearbyMates( NearbyMatesList *nearbyMates, StaticVector<Bot*, 
 			// Check whether bots may mutually reach each other in short amount of time
 			// (this means bots are not clustered across boundaries of teleports and other triggers)
 			// (implementing clustering across teleports breaks cheap distance rejection)
-			int firstToSecondAasTime = travelTimesMatrix.GetAASTravelTime( firstEnt, secondEnt );
-			if( !firstToSecondAasTime ) {
+			int firstToSecondTime = travelTimesMatrix.GetTravelTime( firstEnt, secondEnt );
+			if( !firstToSecondTime ) {
 				continue;
 			}
-			int secondToFirstAasTime = travelTimesMatrix.GetAASTravelTime( secondEnt, firstEnt );
-			if( !secondToFirstAasTime ) {
+			int secondToFirstTime = travelTimesMatrix.GetTravelTime( secondEnt, firstEnt );
+			if( !secondToFirstTime ) {
 				continue;
 			}
 
 			// AAS time is measured in seconds^-2
-			if( firstToSecondAasTime + secondToFirstAasTime < CONNECTIVITY_MOVE_CENTISECONDS ) {
+			if( firstToSecondTime + secondToFirstTime < CONNECTIVITY_MOVE_CENTISECONDS ) {
 				// Use the sum as a similar to distance thing
-				float distanceLike = firstToSecondAasTime + secondToFirstAasTime;
+				float distanceLike = firstToSecondTime + secondToFirstTime;
 				nearbyMates[i].Add( NearbyBotProps( orphanBots[j], j, nearbyMates + j, distanceLike ) );
 			}
 		}
@@ -1221,27 +1233,27 @@ static void SelectNearbyMates( NearbyMatesList *nearbyMates, StaticVector<Bot*, 
 
 static void MakeSortedNearbyMatesLists( NearbyMatesList **sortedMatesLists, NearbyMatesList *nearbyMates, unsigned listsCount ) {
 	// First, fill array of references
-	for( unsigned i = 0; i < listsCount; ++i )
+	for( unsigned i = 0; i < listsCount; ++i ) {
 		sortedMatesLists[i] = nearbyMates + i;
+	}
+
 	// Then, sort by referenced values
-	auto cmp = [ = ]( const NearbyMatesList *a, const NearbyMatesList *b ) {
-				   return *a < *b;
-			   };
+	auto cmp = [=]( const NearbyMatesList *a, const NearbyMatesList *b ) { return *a < *b; };
 	std::sort( sortedMatesLists, sortedMatesLists + listsCount, cmp );
 }
 
 // For i-th orphan sets orphanSquadIds[i] to a numeric id of a new squad (that starts from 1),
 // or 0 if bot has not been assigned to a new squad.
 // Returns count of new squads.
-static unsigned MakeNewSquads( NearbyMatesList **sortedMatesLists, unsigned listsCount, unsigned char *orphanSquadIds ) {
-	static_assert( std::numeric_limits<unsigned char>::max() >= AiSquad::MAX_SIZE,
-				   "Use ushort type for squads larger than 256(!) clients" );
-	unsigned char orphanSquadMatesCount[MAX_CLIENTS];
+static unsigned MakeNewSquads( NearbyMatesList **sortedMatesLists, unsigned listsCount, uint8_t *orphanSquadIds ) {
+	static_assert( std::numeric_limits<uint8_t>::max() > AiSquad::MAX_SIZE,
+				   "Use uint16_t type for squads larger than 256(!) clients" );
+	uint8_t orphanSquadMatesCount[MAX_CLIENTS];
 
 	std::fill_n( orphanSquadIds, listsCount, 0 );
 	std::fill_n( orphanSquadMatesCount, listsCount, 0 );
 
-	unsigned char newSquadsCount = 0;
+	uint8_t newSquadsCount = 0;
 
 	// For each bot and its mates list starting from bot that has closest teammates
 	// (note that i-th list does not correspond to i-th orphan
@@ -1282,8 +1294,9 @@ static unsigned MakeNewSquads( NearbyMatesList **sortedMatesLists, unsigned list
 			orphanSquadMatesCount[ownerOrphanIndex]++;
 			const auto matesCount = orphanSquadMatesCount[ownerOrphanIndex];
 			// For all already assigned mates modify their mates count
-			for( unsigned orphanId: assignedMatesOrphanIds )
+			for( unsigned orphanId: assignedMatesOrphanIds ) {
 				orphanSquadMatesCount[orphanId] = matesCount;
+			}
 
 			// Make new squad id only when we are sure that there are some selected squad members
 			// (squad ids must be sequential and indicate feasible squads)
@@ -1317,8 +1330,8 @@ void AiSquadBasedTeam::SetupSquads() {
 	NearbyMatesList *sortedMatesLists[MAX_CLIENTS];
 	MakeSortedNearbyMatesLists( sortedMatesLists, nearbyMates, orphanBots.size() );
 
-	unsigned char orphanSquadIds[MAX_CLIENTS];
-	unsigned newSquadsCount = MakeNewSquads( sortedMatesLists, orphanBots.size(), orphanSquadIds );
+	uint8_t orphanSquadIds[MAX_CLIENTS];
+	const auto newSquadsCount = MakeNewSquads( sortedMatesLists, orphanBots.size(), orphanSquadIds );
 
 	bool isSquadJustCreated[MAX_CLIENTS];
 	std::fill_n( isSquadJustCreated, MAX_CLIENTS, false );
@@ -1363,8 +1376,9 @@ void AiSquadBasedTeam::SetupSquads() {
 
 	// There are no `orphanBot` ops left, `orphanBots` can be modified now
 	orphanBots.clear();
-	for( unsigned i = 0; i < keptOrphans.size(); ++i )
+	for( unsigned i = 0; i < keptOrphans.size(); ++i ) {
 		orphanBots.push_back( keptOrphans[i] );
+	}
 }
 
 unsigned AiSquadBasedTeam::GetFreeSquadSlot() {
@@ -1388,8 +1402,9 @@ AiSquadBasedTeam *AiSquadBasedTeam::InstantiateTeam( int teamNum ) {
 
 AiSquadBasedTeam *AiSquadBasedTeam::InstantiateTeam( int teamNum, const std::type_info &desiredType ) {
 	if( !typeid( AiBaseTeam ).before( desiredType ) ) {
-		AI_FailWith( "AiSquadBasedTeam",
-					 "InstantiateTeam(): Desired type %s is not a descendant of AiBaseTeam", desiredType.name() );
+		const char *tag = "AiSquadBasedTeam";
+		const char *format = "InstantiateTeam(): Desired type %s is not a descendant of AiBaseTeam";
+		AI_FailWith( tag, format, desiredType.name() );
 	}
 
 	if( typeid( AiSquadBasedTeam ) == desiredType ) {

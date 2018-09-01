@@ -20,11 +20,13 @@
 class AiSquad;
 class AiEnemiesTracker;
 
-// This can be represented as an enum but feels better in the following form.
-// Many values that affect bot behaviour already are not boolean
-// (such as nav targets and special movement states like camping spots),
-// and thus controlling a bot by a single flags field already is not possible.
-// This struct is likely to be extended by non-boolean values later.
+/**
+ * This can be represented as an enum but feels better in the following form.
+ * Many values that affect bot behaviour already are not boolean
+ * (such as nav targets and special movement states like camping spots),
+ * and thus controlling a bot by a single flags field already is not possible.
+ * This struct is likely to be extended by non-boolean values later.
+ */
 struct SelectedMiscTactics {
 	bool willAdvance;
 	bool willRetreat;
@@ -38,9 +40,9 @@ struct SelectedMiscTactics {
 	bool willAttackMelee;
 	bool shouldRushHeadless;
 
-	inline SelectedMiscTactics() { Clear(); };
+	SelectedMiscTactics() { Clear(); };
 
-	inline void Clear() {
+	void Clear() {
 		willAdvance = false;
 		willRetreat = false;
 
@@ -54,19 +56,18 @@ struct SelectedMiscTactics {
 		shouldRushHeadless = false;
 	}
 
-	inline void PreferAttackRatherThanRun() {
+	void PreferAttackRatherThanRun() {
 		shouldAttack = true;
 		shouldKeepXhairOnEnemy = true;
 	}
 
-	inline void PreferRunRatherThanAttack() {
+	void PreferRunRatherThanAttack() {
 		shouldAttack = true;
 		shouldKeepXhairOnEnemy = false;
 	}
 };
 
-class Bot : public Ai
-{
+class Bot: public Ai {
 	friend class AiManager;
 	friend class BotEvolutionManager;
 	friend class AiBaseTeam;
@@ -83,7 +84,6 @@ class Bot : public Ai
 	friend class BotRoamingManager;
 	friend class TacticalSpotsRegistry;
 	friend class BotNavMeshQueryCache;
-	friend class BotFallbackMovementPath;
 	friend class BotSameFloorClusterAreasCache;
 	friend class BotBaseGoal;
 	friend class BotGrabItemGoal;
@@ -127,8 +127,8 @@ public:
 	const float *Origin() const { return self->s.origin; }
 	const float *Velocity() const { return self->velocity; }
 
-	inline float Skill() const { return skillLevel; }
-	inline bool IsReady() const { return level.ready[PLAYERNUM( self )]; }
+	float Skill() const { return skillLevel; }
+	bool IsReady() const { return level.ready[PLAYERNUM( self )]; }
 
 	void OnPain( const edict_t *enemy, float kick, int damage ) {
 		if( enemy != self ) {
@@ -164,13 +164,13 @@ public:
 		awarenessModule.RegisterEvent( ent, event, parm );
 	}
 
-	inline void OnAttachedToSquad( AiSquad *squad_ ) {
+	void OnAttachedToSquad( AiSquad *squad_ ) {
 		this->squad = squad_;
 		awarenessModule.OnAttachedToSquad( squad_ );
 		ForcePlanBuilding();
 	}
 
-	inline void OnDetachedFromSquad( AiSquad *squad_ ) {
+	void OnDetachedFromSquad( AiSquad *squad_ ) {
 		this->squad = nullptr;
 		awarenessModule.OnDetachedFromSquad( squad_ );
 		ForcePlanBuilding();
@@ -178,37 +178,51 @@ public:
 
 	inline bool IsInSquad() const { return squad != nullptr; }
 
-	inline int64_t LastAttackedByTime( const edict_t *attacker ) {
+	/**
+	 * Returns a timestamp of last attack (being hit) by an attacker.
+	 * @note bots forget attack stats in a dozen of seconds.
+	 * @param attacker an entity that (maybe) initiated an attack.
+	 * @return a timestamp of last attack or 0 if a record of such event can't be found.
+	 */
+	int64_t LastAttackedByTime( const edict_t *attacker ) {
 		return awarenessModule.LastAttackedByTime( attacker );
 	}
-	inline int64_t LastTargetTime( const edict_t *target ) {
+	/**
+	 * Returns a timestamp of last selection of a target by the bot.
+	 * @note bots forget attack stats in a dozen of seconds.
+	 * @param target an entity that (maybe) was selected as a target.
+	 * @return a timestamp of last selection as a target or 0 if a record of such event can't be found.
+	 */
+	int64_t LastTargetTime( const edict_t *target ) {
 		return awarenessModule.LastTargetTime( target );
 	}
-	inline void OnEnemyRemoved( const TrackedEnemy *enemy ) {
+
+	void OnEnemyRemoved( const TrackedEnemy *enemy ) {
 		awarenessModule.OnEnemyRemoved( enemy );
 	}
-	inline void OnHurtByNewThreat( const edict_t *newThreat, const AiFrameAwareUpdatable *threatDetector ) {
+
+	void OnHurtByNewThreat( const edict_t *newThreat, const AiFrameAwareUpdatable *threatDetector ) {
 		awarenessModule.OnHurtByNewThreat( newThreat, threatDetector );
 	}
 
-	inline float GetBaseOffensiveness() const { return baseOffensiveness; }
+	float GetBaseOffensiveness() const { return baseOffensiveness; }
 
 	float GetEffectiveOffensiveness() const;
 
-	inline void SetBaseOffensiveness( float baseOffensiveness_ ) {
+	void SetBaseOffensiveness( float baseOffensiveness_ ) {
 		this->baseOffensiveness = baseOffensiveness_;
 		clamp( this->baseOffensiveness, 0.0f, 1.0f );
 	}
 
-	inline void ClearOverriddenEntityWeights() {
+	void ClearOverriddenEntityWeights() {
 		itemsSelector.ClearOverriddenEntityWeights();
 	}
 
-	inline void OverrideEntityWeight( const edict_t *ent, float weight ) {
+	void OverrideEntityWeight( const edict_t *ent, float weight ) {
 		itemsSelector.OverrideEntityWeight( ent, weight );
 	}
 
-	inline const int *Inventory() const { return self->r.client->ps.inventory; }
+	const int *Inventory() const { return self->r.client->ps.inventory; }
 
 	void EnableAutoAlert( const AiAlertSpot &alertSpot,
 						  AlertTracker::AlertCallback callback,
@@ -220,39 +234,51 @@ public:
 		awarenessModule.DisableAutoAlert( id );
 	}
 
-	inline int Health() const {
+	int Health() const {
 		return self->r.client->ps.stats[STAT_HEALTH];
 	}
-	inline int Armor() const {
+	int Armor() const {
 		return self->r.client->ps.stats[STAT_ARMOR];
 	}
-	inline bool CanAndWouldDropHealth() const {
+
+	bool CanAndWouldDropHealth() const {
 		return GT_asBotWouldDropHealth( self->r.client );
 	}
-	inline void DropHealth() {
+
+	void DropHealth() {
 		GT_asBotDropHealth( self->r.client );
 	}
-	inline bool CanAndWouldDropArmor() const {
+
+	bool CanAndWouldDropArmor() const {
 		return GT_asBotWouldDropArmor( self->r.client );
 	}
-	inline void DropArmor() {
+
+	void DropArmor() {
 		GT_asBotDropArmor( self->r.client );
 	}
-	inline float PlayerDefenciveAbilitiesRating() const {
+
+	float PlayerDefenciveAbilitiesRating() const {
 		return GT_asPlayerDefenciveAbilitiesRating( self->r.client );
 	}
-	inline float PlayerOffenciveAbilitiesRating() const {
+
+	float PlayerOffenciveAbilitiesRating() const {
 		return GT_asPlayerOffensiveAbilitiesRating( self->r.client );
 	}
 
+	/**
+	 * Tracks record of what objective spot a bot is assigned to.
+	 */
 	struct ObjectiveSpotDef {
-		int id;
-		float navWeight;
-		float goalWeight;
-		bool isDefenceSpot;
-
-		ObjectiveSpotDef()
-			: id( -1 ), navWeight( 0.0f ), goalWeight( 0.0f ), isDefenceSpot( false ) {}
+		int id { -1 };
+		/**
+		 * A weight of a spot as a nav entity for selection of a best nav entity.
+		 */
+		float navWeight { 0.0f };
+		/**
+		 * A weight of a planning goal if this spot is selected as a nav entity.
+		 */
+		float goalWeight { 0.0f };
+		bool isDefenceSpot { false };
 
 		void Invalidate() { id = -1; }
 		bool IsActive() const { return id >= 0; }
@@ -269,40 +295,47 @@ public:
 	}
 
 	// TODO: Provide goal weight as well as nav weight?
-	inline void SetDefenceSpot( int spotId, float weight ) {
+	void SetDefenceSpot( int spotId, float weight ) {
 		objectiveSpotDef.id = spotId;
 		objectiveSpotDef.navWeight = objectiveSpotDef.goalWeight = weight;
 		objectiveSpotDef.isDefenceSpot = false;
 	}
 
 	// TODO: Provide goal weight as well as nav weight?
-	inline void SetOffenseSpot( int spotId, float weight ) {
+	void SetOffenseSpot( int spotId, float weight ) {
 		objectiveSpotDef.id = spotId;
 		objectiveSpotDef.navWeight = objectiveSpotDef.goalWeight = weight;
 		objectiveSpotDef.isDefenceSpot = false;
 	}
 
-	inline float Fov() const { return 110.0f + 69.0f * Skill(); }
-	inline float FovDotFactor() const { return cosf( (float)DEG2RAD( Fov() / 2 ) ); }
+	/**
+	 * Returns a field of view of the bot in degrees (dependent of skill level).
+	 */
+	float Fov() const { return 110.0f + 69.0f * Skill(); }
+	/**
+	 * Returns a value based on {@code Fov()} that is ready to be used
+	 * in comparison of dot products of normalized vectors to determine visibility.
+	 */
+	float FovDotFactor() const { return cosf( (float)DEG2RAD( Fov() / 2 ) ); }
 
-	inline BotBaseGoal *GetGoalByName( const char *name ) { return botPlanner.GetGoalByName( name ); }
-	inline BotBaseAction *GetActionByName( const char *name ) { return botPlanner.GetActionByName( name ); }
+	BotBaseGoal *GetGoalByName( const char *name ) { return botPlanner.GetGoalByName( name ); }
+	BotBaseAction *GetActionByName( const char *name ) { return botPlanner.GetActionByName( name ); }
 
-	inline BotScriptGoal *AllocScriptGoal() { return botPlanner.AllocScriptGoal(); }
-	inline BotScriptAction *AllocScriptAction() { return botPlanner.AllocScriptAction(); }
+	BotScriptGoal *AllocScriptGoal() { return botPlanner.AllocScriptGoal(); }
+	BotScriptAction *AllocScriptAction() { return botPlanner.AllocScriptAction(); }
 
-	inline const BotWeightConfig &WeightConfig() const { return weightConfig; }
-	inline BotWeightConfig &WeightConfig() { return weightConfig; }
+	const BotWeightConfig &WeightConfig() const { return weightConfig; }
+	BotWeightConfig &WeightConfig() { return weightConfig; }
 
-	inline void OnInterceptedPredictedEvent( int ev, int parm ) {
+	void OnInterceptedPredictedEvent( int ev, int parm ) {
 		movementModule.OnInterceptedPredictedEvent( ev, parm );
 	}
 
-	inline void OnInterceptedPMoveTouchTriggers( pmove_t *pm, const vec3_t previousOrigin ) {
+	void OnInterceptedPMoveTouchTriggers( pmove_t *pm, const vec3_t previousOrigin ) {
 		movementModule.OnInterceptedPMoveTouchTriggers( pm, previousOrigin );
 	}
 
-	inline const AiEntityPhysicsState *EntityPhysicsState() const {
+	const AiEntityPhysicsState *EntityPhysicsState() const {
 		return entityPhysicsState;
 	}
 
@@ -310,28 +343,28 @@ public:
 	// feasible ways to continue traveling to the nav target.
 	void OnMovementToNavTargetBlocked();
 protected:
-	virtual void Frame() override;
-	virtual void Think() override;
+	void Frame() override;
+	void Think() override;
 
-	virtual void PreFrame() override {
+	void PreFrame() override {
 		// We should update weapons status each frame since script weapons may be changed each frame.
 		// These statuses are used by firing methods, so actual weapon statuses are required.
 		weaponsUsageModule.UpdateScriptWeaponsStatus();
 	}
 
-	virtual void SetFrameAffinity( unsigned modulo, unsigned offset ) override {
+	void SetFrameAffinity( unsigned modulo, unsigned offset ) override {
 		AiFrameAwareUpdatable::SetFrameAffinity( modulo, offset );
 		botPlanner.SetFrameAffinity( modulo, offset );
 		awarenessModule.SetFrameAffinity( modulo, offset );
 	}
 
-	virtual void OnNavTargetTouchHandled() override {
+	void OnNavTargetTouchHandled() override {
 		selectedNavEntity.InvalidateNextFrame();
 	}
 
-	virtual void TouchedOtherEntity( const edict_t *entity ) override;
+	void TouchedOtherEntity( const edict_t *entity ) override;
 private:
-	inline bool IsPrimaryAimEnemy( const edict_t *enemy ) const {
+	bool IsPrimaryAimEnemy( const edict_t *enemy ) const {
 		return selectedEnemies.IsPrimaryEnemy( enemy );
 	}
 
@@ -393,26 +426,24 @@ private:
 
 	BotMovementModule movementModule;
 
-	int64_t vsayTimeout;
-
 	AiSquad *squad;
 
 	ObjectiveSpotDef objectiveSpotDef;
 
-	int64_t lastTouchedTeleportAt;
-	int64_t lastTouchedJumppadAt;
-	int64_t lastTouchedElevatorAt;
-	int64_t lastKnockbackAt;
-	int64_t lastOwnKnockbackAt;
-	int lastOwnKnockbackKick;
+	int64_t lastTouchedTeleportAt { 0 };
+	int64_t lastTouchedJumppadAt { 0 };
+	int64_t lastTouchedElevatorAt { 0 };
+	int64_t lastKnockbackAt { 0 };
+	int64_t lastOwnKnockbackAt { 0 };
+	int lastOwnKnockbackKick { 0 };
 	vec3_t lastKnockbackBaseDir;
 
-	unsigned similarWorldStateInstanceId;
+	unsigned similarWorldStateInstanceId { 0 };
 
-	int64_t lastItemSelectedAt;
-	int64_t noItemAvailableSince;
+	int64_t lastItemSelectedAt { 0 };
+	int64_t noItemAvailableSince { 0 };
 
-	int64_t lastBlockedNavTargetReportedAt;
+	int64_t lastBlockedNavTargetReportedAt { 0 };
 
 	inline bool ShouldUseRoamSpotAsNavTarget() const {
 		const auto &selectedNavEntity = GetSelectedNavEntity();
@@ -428,13 +459,13 @@ private:
 		return level.time - noItemAvailableSince > 3000;
 	}
 
-	float baseOffensiveness;
+	float baseOffensiveness { 0.5f };
 
-	class AiNavMeshQuery *navMeshQuery;
+	class AiNavMeshQuery *navMeshQuery { nullptr };
 
 	SelectedNavEntity selectedNavEntity;
 	// For tracking picked up items
-	const NavEntity *prevSelectedNavEntity;
+	const NavEntity *prevSelectedNavEntity { nullptr };
 
 	BotItemsSelector itemsSelector;
 
@@ -443,7 +474,7 @@ private:
 	}
 
 	void ChangeWeapons( const SelectedWeapons &selectedWeapons_ );
-	virtual void OnBlockedTimeout() override;
+	void OnBlockedTimeout() override;
 	void GhostingFrame();
 	void ActiveFrame();
 	void CallGhostingClientThink( const BotInput &input );
@@ -468,30 +499,30 @@ public:
 
 	void ForceSetNavEntity( const SelectedNavEntity &selectedNavEntity_ );
 
-	inline void ForcePlanBuilding() {
+	void ForcePlanBuilding() {
 		basePlanner->ClearGoalAndPlan();
 	}
 
-	inline void SetCampingSpot( const AiCampingSpot &campingSpot ) {
+	void SetCampingSpot( const AiCampingSpot &campingSpot ) {
 		movementModule.SetCampingSpot( campingSpot );
 	}
-	inline void ResetCampingSpot() {
+	void ResetCampingSpot() {
 		movementModule.ResetCampingSpot();
 	}
-	inline bool HasActiveCampingSpot() const {
+	bool HasActiveCampingSpot() const {
 		return movementModule.HasActiveCampingSpot();
 	}
-	inline void SetPendingLookAtPoint( const AiPendingLookAtPoint &lookAtPoint, unsigned timeoutPeriod ) {
+	void SetPendingLookAtPoint( const AiPendingLookAtPoint &lookAtPoint, unsigned timeoutPeriod ) {
 		return movementModule.SetPendingLookAtPoint( lookAtPoint, timeoutPeriod );
 	}
-	inline void ResetPendingLookAtPoint() {
+	void ResetPendingLookAtPoint() {
 		movementModule.ResetPendingLookAtPoint();
 	}
-	inline bool HasPendingLookAtPoint() const {
+	bool HasPendingLookAtPoint() const {
 		return movementModule.HasPendingLookAtPoint();
 	}
 
-	inline bool CanInterruptMovement() const {
+	bool CanInterruptMovement() const {
 		return movementModule.CanInterruptMovement();
 	}
 
@@ -535,17 +566,17 @@ public:
 		return awarenessModule.GetKeptInFovPoint();
 	}
 
-	inline bool WillAdvance() const { return selectedTactics.willAdvance; }
-	inline bool WillRetreat() const { return selectedTactics.willRetreat; }
+	bool WillAdvance() const { return selectedTactics.willAdvance; }
+	bool WillRetreat() const { return selectedTactics.willRetreat; }
 
-	inline bool ShouldBeSilent() const { return selectedTactics.shouldBeSilent; }
-	inline bool ShouldMoveCarefully() const { return selectedTactics.shouldMoveCarefully; }
+	bool ShouldBeSilent() const { return selectedTactics.shouldBeSilent; }
+	bool ShouldMoveCarefully() const { return selectedTactics.shouldMoveCarefully; }
 
-	inline bool ShouldAttack() const { return selectedTactics.shouldAttack; }
-	inline bool ShouldKeepXhairOnEnemy() const { return selectedTactics.shouldKeepXhairOnEnemy; }
+	bool ShouldAttack() const { return selectedTactics.shouldAttack; }
+	bool ShouldKeepXhairOnEnemy() const { return selectedTactics.shouldKeepXhairOnEnemy; }
 
-	inline bool WillAttackMelee() const { return selectedTactics.willAttackMelee; }
-	inline bool ShouldRushHeadless() const { return selectedTactics.shouldRushHeadless; }
+	bool WillAttackMelee() const { return selectedTactics.willAttackMelee; }
+	bool ShouldRushHeadless() const { return selectedTactics.shouldRushHeadless; }
 
 	// Whether the bot should stop bunnying even if it could produce
 	// good predicted results and concentrate on combat/dodging

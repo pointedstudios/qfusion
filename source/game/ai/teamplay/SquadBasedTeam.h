@@ -11,22 +11,21 @@
 
 class Bot;
 
-class CachedTravelTimesMatrix
-{
+class CachedTravelTimesMatrix {
 	int aasTravelTimes[MAX_CLIENTS * MAX_CLIENTS];
-	int FindAASTravelTime( const edict_t *fromClient, const edict_t *toClient );
+	int FindTravelTime( const edict_t *fromClient, const edict_t *toClient );
 
 public:
 	inline void Clear() {
-		// -1 means that a value should be lazily computed on demand
+		// negative values mean that a value should be lazily computed on demand
 		std::fill( aasTravelTimes, aasTravelTimes + MAX_CLIENTS * MAX_CLIENTS, -1 );
 	}
-	int GetAASTravelTime( const edict_t *fromClient, const edict_t *toClient );
-	int GetAASTravelTime( const Bot *from, const Bot *to );
+
+	int GetTravelTime( const edict_t *fromClient, const edict_t *toClient );
+	int GetTravelTime( const Bot *from, const Bot *to );
 };
 
-class AiSquad : public AiFrameAwareUpdatable
-{
+class AiSquad : public AiFrameAwareUpdatable {
 	friend class AiSquadBasedTeam;
 
 public:
@@ -34,20 +33,22 @@ public:
 	typedef StaticVector<Bot*, MAX_SIZE> BotsList;
 
 private:
-	bool isValid;
-	bool inUse;
+	bool isValid { false };
+	bool inUse { false };
 
 	// If bots can see at least a single teammate
-	bool canFightTogether;
+	bool canFightTogether { false };
 	// If bots can move in a single group
-	bool canMoveTogether;
+	bool canMoveTogether { false };
 
-	// If a connectivity of squad members is violated
-	// (bots can't neither fight, nor move together)
-	// and not restored to this timestamps, squad should be invalidated.
-	int64_t brokenConnectivityTimeoutAt;
+	/**
+	 * If a connectivity of squad members is violated
+	 * (bots can't neither fight, nor move together)
+	 * and is not restored to this moment, the squad should be invalidated.
+	 */
+	int64_t brokenConnectivityTimeoutAt { false };
 
-	bool botsDetached;
+	bool botsDetached { false };
 
 	BotsList bots;
 
@@ -57,7 +58,6 @@ private:
 	bool CheckCanMoveTogether() const;
 
 	int GetBotFloorCluster( Bot *bot ) const;
-	bool IsInTheSameFloorCluster( Bot *bot, int givenClusterNum ) const;
 
 	void UpdateBotRoleWeights();
 
@@ -95,8 +95,7 @@ private:
 	// Hack! To be able to access bot's private methods, define this entity physics callback as a (static) member
 	static void SetDroppedEntityAsBotGoal( edict_t *ent );
 
-	class SquadEnemiesTracker : public AiEnemiesTracker
-	{
+	class SquadEnemiesTracker: public AiEnemiesTracker {
 		friend class AiSquad;
 		AiSquad *squad;
 
@@ -105,28 +104,25 @@ private:
 
 		unsigned GetBotSlot( const Bot *bot ) const;
 		void CheckSquadValid() const;
-
 protected:
-		virtual void OnHurtByNewThreat( const edict_t *newThreat ) override;
-		virtual bool CheckHasQuad() const override;
-		virtual bool CheckHasShell() const override;
-		virtual float ComputeDamageToBeKilled() const override;
-		virtual void OnEnemyRemoved( const TrackedEnemy *enemy ) override;
+		void OnHurtByNewThreat( const edict_t *newThreat ) override;
+		bool CheckHasQuad() const override;
+		bool CheckHasShell() const override;
+		float ComputeDamageToBeKilled() const override;
+		void OnEnemyRemoved( const TrackedEnemy *enemy ) override;
 
 		void SetBotRoleWeight( const edict_t *bot, float weight ) override;
 		float GetAdditionalEnemyWeight( const edict_t *bot, const edict_t *enemy ) const override;
 		void OnBotEnemyAssigned( const edict_t *bot, const TrackedEnemy *enemy ) override;
-
 public:
 		SquadEnemiesTracker( AiSquad *squad_, float skill );
-		virtual ~SquadEnemiesTracker() override {}
 	};
 
 	// We can't use it as a value member because squads should be copyable or moveable
 	SquadEnemiesTracker *squadEnemiesTracker;
 
 protected:
-	virtual void SetFrameAffinity( unsigned modulo, unsigned offset ) override {
+	void SetFrameAffinity( unsigned modulo, unsigned offset ) override {
 		// Call super method first
 		AiFrameAwareUpdatable::SetFrameAffinity( modulo, offset );
 		// Allow enemy pool to think
@@ -136,15 +132,14 @@ protected:
 public:
 	AiSquad( CachedTravelTimesMatrix &travelTimesMatrix_ );
 	AiSquad( AiSquad &&that );
-	virtual ~AiSquad() override;
+	~AiSquad() override;
 
-	// If this is false, squad is not valid and should be
-	inline bool IsValid() const { return isValid; }
-	inline bool InUse() const { return inUse; }
-	inline const BotsList &Bots() const { return bots; };
+	bool IsValid() const { return isValid; }
+	bool InUse() const { return inUse; }
+	const BotsList &Bots() const { return bots; };
 
-	inline AiEnemiesTracker *EnemiesTracker() { return squadEnemiesTracker; }
-	inline const AiEnemiesTracker *EnemiesTracker() const { return squadEnemiesTracker; }
+	AiEnemiesTracker *EnemiesTracker() { return squadEnemiesTracker; }
+	const AiEnemiesTracker *EnemiesTracker() const { return squadEnemiesTracker; }
 
 	void ReleaseBotsTo( StaticVector<Bot *, MAX_CLIENTS> &orphans );
 
@@ -160,29 +155,32 @@ public:
 
 	void OnBotRemoved( Bot *bot );
 
-	inline void OnBotViewedEnemy( const edict_t *bot, const edict_t *enemy ) {
+	void OnBotViewedEnemy( const edict_t *bot, const edict_t *enemy ) {
 		squadEnemiesTracker->OnEnemyViewed( enemy );
 	}
-	inline void OnBotGuessedEnemyOrigin( const edict_t *bot, const edict_t *enemy,
-										 unsigned minMillisSinceLastSeen, const float *specifiedOrigin ) {
+
+	void OnBotGuessedEnemyOrigin( const edict_t *bot, const edict_t *enemy,
+								  unsigned minMillisSinceLastSeen,
+								  const float *specifiedOrigin ) {
 		squadEnemiesTracker->OnEnemyOriginGuessed( enemy, minMillisSinceLastSeen, specifiedOrigin );
 	}
-	inline void OnBotPain( const edict_t *bot, const edict_t *enemy, float kick, int damage ) {
+
+	void OnBotPain( const edict_t *bot, const edict_t *enemy, float kick, int damage ) {
 		squadEnemiesTracker->OnPain( bot, enemy, kick, damage );
 	}
-	inline void OnBotDamagedEnemy( const edict_t *bot, const edict_t *target, int damage ) {
+
+	void OnBotDamagedEnemy( const edict_t *bot, const edict_t *target, int damage ) {
 		squadEnemiesTracker->OnEnemyDamaged( bot, target, damage );
 	}
 
 	// Assumes the bot is a valid squad member
 	bool IsSupporter( const edict_t *bot ) const;
 
-	virtual void Frame() override;
-	virtual void Think() override;
+	void Frame() override;
+	void Think() override;
 };
 
-class AiSquadBasedTeam : public AiBaseTeam
-{
+class AiSquadBasedTeam : public AiBaseTeam {
 	friend class AiBaseTeam;
 	StaticVector<AiSquad, MAX_CLIENTS> squads;
 	StaticVector<Bot*, MAX_CLIENTS> orphanBots;
@@ -190,22 +188,23 @@ class AiSquadBasedTeam : public AiBaseTeam
 	CachedTravelTimesMatrix travelTimesMatrix;
 
 protected:
-	virtual void OnBotAdded( Bot *bot ) override;
-	virtual void OnBotRemoved( Bot *bot ) override;
+	void OnBotAdded( Bot *bot ) override;
+	void OnBotRemoved( Bot *bot ) override;
 
-	// Should be overridden completely if you want to modify squad clustering logic
-	// (this method should not be called in overridden one)
-	virtual void SetupSquads();
+	/**
+	 * Should be overridden completely if you want to modify squad clustering logic
+	 */
+	void SetupSquads();
+
 	unsigned GetFreeSquadSlot();
 
 	static AiSquadBasedTeam *InstantiateTeam( int team );
 	static AiSquadBasedTeam *InstantiateTeam( int teamNum, const std::type_info &desiredType );
 public:
-	AiSquadBasedTeam( int team_ ) : AiBaseTeam( team_ ) {}
-	virtual ~AiSquadBasedTeam() override {};
+	explicit AiSquadBasedTeam( int team_ ) : AiBaseTeam( team_ ) {}
 
-	virtual void Frame() override;
-	virtual void Think() override;
+	void Frame() override;
+	void Think() override;
 };
 
 #endif

@@ -5,8 +5,7 @@
 
 #include <typeinfo>
 
-class AiBaseTeam : public AiFrameAwareUpdatable
-{
+class AiBaseTeam : public AiFrameAwareUpdatable {
 	friend class Bot;  // Bots should be able to notify its team in destructor when they get dropped immediately
 	friend class AiManager;
 
@@ -40,8 +39,7 @@ class AiBaseTeam : public AiFrameAwareUpdatable
 
 	static AiBaseTeam *teamsForNums[GS_MAX_TEAMS - 1];
 protected:
-	AiBaseTeam( int teamNum_ );
-	virtual ~AiBaseTeam() override {}
+	explicit AiBaseTeam( int teamNum_ );
 
 	const int teamNum;
 
@@ -76,10 +74,13 @@ protected:
 	static void Shutdown();
 public:
 	static AiBaseTeam *GetTeamForNum( int teamNum );
-	// Allows to specify the expected team type (that defines the team feature set)
-	// and thus switch an AI team dynamically if advanced AI features are requested.
-	// The aim of this method is to simplify gametype scripting.
-	// (if some script syscalls that assume a feature-reach AI team are executed).
+
+	/**
+	 * Allows to specify the expected team type (that defines the team feature set)
+	 * and thus switch an AI team dynamically if advanced AI features are requested.
+	 * The purpose of this method is to simplify gametype scripting.
+	 * (if some script syscalls that assume a feature-reach AI team are executed).
+	 */
 	static AiBaseTeam *GetTeamForNum( int teamNum, const std::type_info &desiredType );
 };
 
