@@ -439,6 +439,7 @@ public:
 	inline const aas_areasettings_t *AreaSettings() const { return areasettings; }
 	//reachablity list
 	inline int NumReachabilities() const { return reachabilitysize; }
+	inline int NumReach() const { return reachabilitysize; }
 	inline const aas_reachability_t *Reachabilities() const { return reachability; }
 	//nodes of the bsp tree
 	inline int NumNodes() const { return numnodes; }
