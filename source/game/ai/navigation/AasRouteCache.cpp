@@ -3,6 +3,8 @@
 #include "../ai_local.h"
 #include "../bot.h"
 
+#include "../../../qalgo/Links.h"
+
 #undef min
 #undef max
 #include <stdlib.h>
@@ -732,16 +734,16 @@ void AreaAndPortalCacheAllocatorBin::Free( void *ptr ) {
 }
 
 void AiAasRouteCache::ResultCache::Clear() {
-	nodes[0].ListLinks().prev = NULL_LINK;
-	nodes[0].ListLinks().next = 1;
+	nodes[0].prev[Node::LIST_LINKS] = NULL_LINK;
+	nodes[0].next[Node::LIST_LINKS] = 1;
 
 	for( unsigned i = 1; i < MAX_CACHED_RESULTS - 1; ++i ) {
-		nodes[i].ListLinks().prev = (int16_t)( i - 1 );
-		nodes[i].ListLinks().next = (int16_t)( i + 1 );
+		nodes[i].prev[Node::LIST_LINKS] = (int16_t)( i - 1 );
+		nodes[i].next[Node::LIST_LINKS] = (int16_t)( i + 1 );
 	}
 
-	nodes[MAX_CACHED_RESULTS - 1].ListLinks().prev = MAX_CACHED_RESULTS - 2;
-	nodes[MAX_CACHED_RESULTS - 1].ListLinks().next = NULL_LINK;
+	nodes[MAX_CACHED_RESULTS - 1].prev[Node::LIST_LINKS] = MAX_CACHED_RESULTS - 2;
+	nodes[MAX_CACHED_RESULTS - 1].next[Node::LIST_LINKS] = NULL_LINK;
 
 	freeNode = 0;
 	newestUsedNode = NULL_LINK;
@@ -752,35 +754,11 @@ void AiAasRouteCache::ResultCache::Clear() {
 
 inline void AiAasRouteCache::ResultCache::LinkToHashBin( uint16_t binIndex, Node *node ) {
 	node->binIndex = binIndex;
-	// Link the result node to its hash bin
-	if( IsValidLink( bins[binIndex] ) ) {
-		node->BinLinks().next = bins[binIndex];
-		Node *oldBinHead = nodes + bins[binIndex];
-		oldBinHead->BinLinks().prev = LinkOf( node );
-	}
-	node->BinLinks().next = NULL_LINK;
-	bins[binIndex] = LinkOf( node );
+	Link( node, &bins[binIndex], Node::BIN_LINKS, nodes );
 }
 
 inline void AiAasRouteCache::ResultCache::LinkToUsedList( Node *node ) {
-	// Newest used nodes are always linked to the `next` link.
-	// Thus, newest used node must always have a negative `next` link
-	if( IsValidLink( newestUsedNode ) ) {
-		Node *oldUsedHead = nodes + newestUsedNode;
-#ifndef _DEBUG
-		if( oldUsedHead->ListLinks().HasNext() ) {
-			AI_FailWith( "AiAasRouteCache::ResultCache::LinkToUsedList()", "newest used node has a next link" );
-		}
-#endif
-
-		oldUsedHead->ListLinks().next = LinkOf( node );
-		node->ListLinks().prev = newestUsedNode;
-	} else {
-		node->ListLinks().prev = NULL_LINK;
-	}
-
-	newestUsedNode = LinkOf( node );
-	node->ListLinks().next = NULL_LINK;
+	Link( node, &newestUsedNode, Node::LIST_LINKS, nodes );
 
 	// If there is no oldestUsedNode, set the node as it.
 	if( oldestUsedNode < 0 ) {
@@ -788,49 +766,12 @@ inline void AiAasRouteCache::ResultCache::LinkToUsedList( Node *node ) {
 	}
 }
 
-inline void AiAasRouteCache::ResultCache::UnlinkOldestUsedNodeFromBin() {
-	// Unlink last used node from bin
-	Node *oldestNode = nodes + oldestUsedNode;
-	if( oldestNode->BinLinks().HasNext() ) {
-		Node *nextNode = nodes + oldestNode->BinLinks().next;
-		nextNode->ListLinks().prev = oldestNode->BinLinks().prev;
-	}
-
-	if( oldestNode->BinLinks().HasPrev() ) {
-		Node *prevNode = nodes + oldestNode->BinLinks().prev;
-		prevNode->BinLinks().next = oldestNode->BinLinks().next;
-		return;
-	}
-
-#ifndef _DEBUG
-	// If node.prevInBin is null, the node must be a bin head
-	if( bins[oldestNode->binIndex] != oldestUsedNode ) {
-		AI_FailWith( "AiAasRouteCache::ResultCache::UnlinkOldestUsedNodeFromBin()", "The node is not a bin head" );
-	}
-#endif
-	bins[oldestNode->binIndex] = oldestNode->BinLinks().next;
-}
-
-inline void AiAasRouteCache::ResultCache::UnlinkOldestUsedNodeFromList() {
-#ifndef _DEBUG
-	// Oldest used node must always have a negative `prev` link
-	if( nodes[oldestUsedNode].ListLinks().HasPrev() ) {
-		AI_FailWith( "AiAasRouteCache::ResultCache::UnlinkOldestUsedNodeFromBin()", "Oldest used node has a prev link" );
-	}
-#endif
-
-	if( nodes[oldestUsedNode].ListLinks().HasNext() ) {
-		oldestUsedNode = nodes[oldestUsedNode].ListLinks().next;
-		nodes[oldestUsedNode].ListLinks().prev = NULL_LINK;
-	} else {
-		oldestUsedNode = NULL_LINK;
-	}
-}
-
 inline AiAasRouteCache::ResultCache::Node *AiAasRouteCache::ResultCache::UnlinkOldestUsedNode() {
 	Node *result = nodes + oldestUsedNode;
-	UnlinkOldestUsedNodeFromBin();
-	UnlinkOldestUsedNodeFromList();
+	// Unlink the node from its bin
+	Unlink( result, &bins[result->binIndex], Node::BIN_LINKS, nodes );
+	// Unlink the node from nodes list
+	Unlink( result, &oldestUsedNode, Node::LIST_LINKS, nodes );
 	return result;
 }
 
@@ -842,7 +783,7 @@ AiAasRouteCache::ResultCache::GetCachedResultForKey( uint16_t binIndex, uint64_t
 		if( node->key == key ) {
 			return node;
 		}
-		nodeIndex = node->BinLinks().next;
+		nodeIndex = node->next[Node::BIN_LINKS];
 	}
 
 	return nullptr;
@@ -854,14 +795,13 @@ AiAasRouteCache::ResultCache::AllocAndRegisterForKey( uint16_t binIndex, uint64_
 	if( freeNode >= 0 ) {
 		// Unlink the node from free list
 		result = nodes + freeNode;
-		freeNode = result->ListLinks().next;
-		LinkToHashBin( binIndex, result );
-		LinkToUsedList( result );
+		Unlink( result, &freeNode, Node::LIST_LINKS, nodes );
 	} else {
 		result = UnlinkOldestUsedNode();
-		LinkToHashBin( binIndex, result );
-		LinkToUsedList( result );
 	}
+
+	LinkToHashBin( binIndex, result );
+	LinkToUsedList( result );
 
 	result->key = key;
 	return result;

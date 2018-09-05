@@ -193,34 +193,22 @@ public:
 		static constexpr unsigned NUM_HASH_BINS = 1181;
 
 		struct alignas( 8 )Node {
-			uint64_t key;
-
-			// A compact representation of linked list links.
-			// A negative index corresponds to a null pointer.
-			// Otherwise, an index points to a corresponding element in ResultCache::nodes array
-			struct alignas( 2 )Links {
-				int16_t prev;
-				int16_t next;
-
-				bool HasPrev() { return prev >= 0; }
-				bool HasNext() { return next >= 0; }
-			};
+			// Indices for ::Link() and ::Unlink().
+			// Now they are put first so if links are touched the key is more likely to be on the same cache line.
+			int16_t prev[2];
+			int16_t next[2];
 
 			enum { BIN_LINKS, LIST_LINKS };
 
-			Links links[2];
+			// Links consume 8 bytes, so there should not be an alignment gap for the key
+			uint64_t key;
 
 			uint16_t reachability;
 			uint16_t travelTime;
 			uint16_t binIndex;
-
-			// Totally 22 bytes, so only 2 bytes are wasted for 8-byte alignment
-
-			Links &ListLinks() { return links[LIST_LINKS]; }
-			const Links &ListLinks() const { return links[LIST_LINKS]; }
-			Links &BinLinks() { return links[BIN_LINKS]; }
-			const Links &BinLinks() const  { return links[BIN_LINKS]; }
 		};
+
+		static_assert( sizeof( Node ) <= 24, "The struct size assumptions are broken" );
 
 		// Assuming that area nums are limited by 16 bits, all parameters can be composed in a single integer
 		static inline uint64_t Key( int fromAreaNum, int toAreaNum, int travelFlags ) {
@@ -259,9 +247,6 @@ private:
 		inline void LinkToUsedList( Node *node );
 
 		inline Node *UnlinkOldestUsedNode();
-		inline void UnlinkOldestUsedNodeFromBin();
-		inline void UnlinkOldestUsedNodeFromList();
-
 public:
 		inline ResultCache() { Clear(); }
 
