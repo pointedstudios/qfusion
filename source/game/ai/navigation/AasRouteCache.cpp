@@ -94,7 +94,12 @@ AiAasRouteCache::AiAasRouteCache( AiAasRouteCache *parent, const int *newTravelF
 
 	InitPathFindingNodes();
 
+	// A ref counter is shared for aasRevReach and aasRevLinks
+	// as they are allocated within a single memory chunk
+	// and aasRevReach is at the beginning of that chunk.
 	aasRevReach = AddRef( parent->aasRevReach );
+	// Just copy the address.
+	aasRevLinks = parent->aasRevLinks;
 
 	InitClusterAreaCache();
 	InitPortalCache();
@@ -334,6 +339,7 @@ void AiAasRouteCache::CreateReversedReach() {
 
 	this->aasRevReach = CastCheckingAlignment<RevReach>( ptr );
 	ptr += revReachSize;
+	this->aasRevLinks = CastCheckingAlignment<RevLink>( ptr );
 
 	const auto *const aasReach = aasWorld.Reachabilities();
 	const auto *const aasAreaSettings = aasWorld.AreaSettings();
@@ -352,10 +358,10 @@ void AiAasRouteCache::CreateReversedReach() {
 
 			auto *revLink = CastCheckingAlignment<RevLink>( ptr );
 
-			revLink->areaNum = i;
-			revLink->linkNum = areaSettings.firstreachablearea + n;
-			revLink->next = aasRevReach[reach->areanum].first;
-			aasRevReach[reach->areanum].first = revLink;
+			revLink->areaNum = ToUint16CheckingRange( i );
+			revLink->linkNum = ToUint16CheckingRange( areaSettings.firstreachablearea + n );
+			revLink->nextLink = aasRevReach[reach->areanum].firstRevLink;
+			aasRevReach[reach->areanum].firstRevLink = ToUint16CheckingRange( (int)( revLink - aasRevLinks ) );
 			aasRevReach[reach->areanum].numLinks++;
 
 			ptr += sizeof( RevLink );
@@ -402,8 +408,10 @@ void AiAasRouteCache::CalculateAreaTravelTimes() {
 			ptr += PAD( revReach.numLinks, sizeof( void * ) ) * sizeof( uint16_t );
 
 			const auto &reach = aasReach[areaSettings.firstreachablearea + l];
-			const auto *revLink = revReach.first;
-			for( int n = 0; revLink; revLink = revLink->next, n++ ) {
+			int revLinkNum = revReach.firstRevLink;
+			const RevLink *revLink;
+			for( int n = 0; n < revReach.numLinks; revLinkNum = revLink->nextLink, n++ ) {
+				revLink = aasRevLinks + revLinkNum;
 				// This is an inlined and modified body of old AreaTravelTime() call
 				// The old comment says:
 				// "travel time in hundredths of a second = distance * 100 / speed"
@@ -450,8 +458,10 @@ void AiAasRouteCache::InitPortalMaxTravelTimes() {
 
 		int maxTime = 0;
 		for( int l = 0; l < numReachAreas; l++ ) {
-			auto *revLink = revReach->first;
-			for( int n = 0; revLink; revLink = revLink->next, n++ ) {
+			const RevLink *revLink;
+			int revLinkNum = revReach->firstRevLink;
+			for( int n = 0; n < revReach->numLinks; revLinkNum = revLink->nextLink, n++ ) {
+				revLink = aasRevLinks + revLinkNum;
 				int t = areaTravelTimes[portalAreaNum][l][n];
 				if( t > maxTime ) {
 					maxTime = t;
@@ -1085,6 +1095,7 @@ void AiAasRouteCache::UpdateAreaRoutingCache( const aas_areasettings_t *aasAreaS
 	// Precache all references to avoid pointer chasing in loop
 	const auto *const aasReach = aasWorld.Reachabilities();
 	const auto *const aasRevReach = this->aasRevReach;
+	const auto *const aasRevLinks = this->aasRevLinks;
 	auto *const pathFindingNodes = this->areaPathFindingNodes;
 	const auto *const areaContentsTravelFlags = this->aasAreaContentsTravelFlags;
 	const auto *const areaDisabledStatus = this->areasDisabledStatus;
@@ -1114,8 +1125,11 @@ void AiAasRouteCache::UpdateAreaRoutingCache( const aas_areasettings_t *aasAreaS
 
 		// Check all reversed reachability links
 		const auto &revReach = aasRevReach[currNode->areaNum];
-		const auto *revLink = revReach.first;
-		for( int revLinkAreaIndex = 0; revLink; revLink = revLink->next, revLinkAreaIndex++ ) {
+		const int numLinks = revReach.numLinks;
+		int revLinkNum = revReach.firstRevLink;
+		const RevLink *revLink;
+		for( int revLinkAreaIndex = 0; revLinkAreaIndex < numLinks; revLinkNum = revLink->nextLink, revLinkAreaIndex++ ) {
+			revLink = aasRevLinks + revLinkNum;
 			const auto reachNum = revLink->linkNum;
 			const auto &reach = aasReach[reachNum];
 			// If the reachability has an undesired travel type

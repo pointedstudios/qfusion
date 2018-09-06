@@ -76,16 +76,39 @@ class AiAasRouteCache {
 		int8_t dijkstraLabel;
 	};
 
-	struct RevLink {
-		RevLink *next;                              //next link
-		int linkNum;                                //the aas_areareachability_t
-		int areaNum;                                //reachable from this area
+	struct alignas( 2 )RevLink {
+		/**
+		 * An index of the next rev. link in its storage ({@code aasRevLinks}).
+		 */
+		uint16_t nextLink;
+		/**
+		 * An index of the corresponding reachability in its storage {@code AiAasWorld::Reachabilities()}
+		 */
+		uint16_t linkNum;
+		/**
+		 * An index of area reachable from the area this rev. link is associated with.
+		 */
+		uint16_t areaNum;
 	};
 
-	struct RevReach {
-		RevLink *first;
-		int numLinks;
+	static_assert( alignof( RevLink ) == 2, "Alignment assumptions are broken" );
+	static_assert( sizeof( RevLink ) == 6, "Size assumptions are broken" );
+
+	struct alignas( 2 )RevReach {
+		/**
+		 * An index of the first RevLink in its storage ({@code aasRevLinks}).
+		 * @note {@code aasRevLinks} have size equal to number of all reachabilities,
+		 * and that number is not going to exceed 2^16 in supported AAS versions).
+		 */
+		uint16_t firstRevLink;
+		/**
+		 * A total number of rev. links in the rev. links chain
+		 */
+		uint16_t numLinks;
 	};
+
+	static_assert( alignof( RevReach ) == 2, "Alignment assumptions are broken" );
+	static_assert( sizeof( RevReach ) == 4, "Size assumptions are broken" );
 
 	const AiAasWorld &aasWorld;
 
@@ -143,6 +166,8 @@ class AiAasRouteCache {
 	PathFinderNode *portalPathFindingNodes;
 
 	RevReach *aasRevReach;
+	// Allocated within aasRevReach, no need to free this
+	RevLink *aasRevLinks;
 	int maxReachAreas;
 
 	uint16_t ***areaTravelTimes;
