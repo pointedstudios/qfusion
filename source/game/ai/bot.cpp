@@ -266,6 +266,9 @@ void Bot::CallGhostingClientThink( const BotInput &input ) {
 }
 
 void Bot::OnRespawn() {
+	VectorClear( self->r.client->ps.pmove.delta_angles );
+	self->r.client->level.last_activity = level.time;
+
 	ResetNavigation();
 }
 

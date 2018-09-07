@@ -143,14 +143,15 @@ bool GT_asFireScriptWeapon( gclient_t *client, int scriptWeaponNum );
 #include "vec3.h"
 
 typedef struct ai_handle_s {
-	ai_type type;
+	// Links for generic Link()/Unlink() utilities
+	ai_handle_t *prev[1], *next[1];
 
-	int asFactored, asRefCount;
-
-	ai_handle_t *prev, *next;
+	ai_handle_t *Next() { return next[0]; }
 
 	class Ai * aiRef;
 	class Bot * botRef;
+
+	ai_type type;
 } ai_handle_t;
 
 #ifndef _MSC_VER

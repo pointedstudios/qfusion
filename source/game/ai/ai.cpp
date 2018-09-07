@@ -383,33 +383,6 @@ void G_FreeAI( edict_t *ent ) {
 	ent->ai = nullptr;
 }
 
-void G_SpawnAI( edict_t *ent, float skillLevel ) {
-	if( ent->ai ) {
-		AI_FailWith( "G_SpawnAI()", "Entity AI has been already initialized\n" );
-	}
-
-	if( !( ent->r.svflags & SVF_FAKECLIENT ) ) {
-		AI_FailWith( "G_SpawnAI()", "Only fake clients are supported\n" );
-	}
-
-	size_t memSize = sizeof( ai_handle_t ) + sizeof( Bot );
-	size_t alignmentBytes = 0;
-	if( sizeof( ai_handle_t ) % 16 ) {
-		alignmentBytes = 16 - sizeof( ai_handle_t ) % 16;
-	}
-	memSize += alignmentBytes;
-
-	char *mem = (char *)G_Malloc( memSize );
-	ent->ai = (ai_handle_t *)mem;
-	ent->ai->type = AI_ISBOT;
-
-	char *botMem = mem + sizeof( ai_handle_t ) + alignmentBytes;
-	ent->ai->botRef = new(botMem) Bot( ent, skillLevel );
-	ent->ai->aiRef = ent->ai->botRef;
-
-	AiManager::Instance()->LinkAi( ent->ai );
-}
-
 //==========================================
 // AI_GetType
 //==========================================
