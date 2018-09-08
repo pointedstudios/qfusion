@@ -2,6 +2,7 @@
 #define QFUSION_AI_ROUTE_CACHE_H
 
 #include "AasWorld.h"
+#include "../ai_local.h"
 
 //travel flags
 #define TFL_INVALID             0x00000001  //traveling temporary not possible
@@ -115,20 +116,6 @@ class AiAasRouteCache {
 	bool loaded { false };
 
 	/**
-	 * These three following buffers are allocated at once, and only the first one should be released.
-	 * A total size of compound allocated buffer is {@code AiAasWorld::NumAreas() * (2 * sizeof(int) + 2 * sizeof(bool))}
-	 */
-
-	/**
-	 * A scratchpad for {@code SetDisabledRegions()} that is capable to store {@code AiAasWorld::NumAreas()} values
-	 */
-	int *currDisabledAreaNums;
-	/**
-	 * A scratchpad for {@code SetDisabledRegions()} that is capable to store {@code AiAasWorld::NumAreas()} values
-	 */
-	int *cleanCacheAreaNums;
-
-	/**
 	 * It is sufficient to fit all required info in 2 bits, but we should avoid using bitsets
 	 * since variable shifts are required for access patterns used by implemented algorithms
 	 * and variable shift instructions are usually microcoded.
@@ -158,9 +145,86 @@ class AiAasRouteCache {
 		}
 	};
 
-	AreaDisabledStatus *areasDisabledStatus;
+	/**
+	 * A compact representation of all AAS area related fields needed for a routing algorithm.
+	 * This allows to keep and address all area related data together during the routing algorithm execution.
+	 */
+	struct alignas( 4 )AreaPathFindingData {
+		/**
+		 * An old "areacontentstravelflags" value for an area
+		 */
+		int contentsTravelFlags;
+		/**
+		 * A copy of area flags from {@code areasettings_t} for an area
+		 */
+		int settingsAreaFlags;
+		/**
+		 * A computed result of ClusterAreaNum() call
+		 */
+		uint16_t clusterAreaNum;
+		/**
+		 * A copy of {@code firstreachablearea} from {@code areasettings_t} for an area
+		 */
+		uint16_t firstReachNum;
+		/**
+		 * 	Usually there is something like 5-6 clusters/portals in AAS world.
+		 * 	The sign of the value determines whether it refers to a cluster or a portal.
+		 */
+		int8_t clusterOrPortalNum;
+		/**
+		 * Indicates whether this area should be temporarily excluded from routing.
+		 * @note inlining this field here is not that efficient for {@code SetDisabledZones()}
+		 * but routing algorithm is much more stressful so it has a priority.
+		 */
+		AreaDisabledStatus disabledStatus;
+	};
 
-	int *aasAreaContentsTravelFlags;
+	// Note: Using Int32Align2 won't give a substantial win (only 2 bytes that are wasted for alignment)
+	static_assert( sizeof( AreaPathFindingData ) == 16, "The struct size assumptions are broken" );
+
+	/**
+	 * As the areas exclusion status is individual for a bot and it must be preserved between frames,
+	 * every bot must have its own copy of this data.
+	 */
+	AreaPathFindingData *areaPathFindingData;
+
+	/**
+	 * A compact representation of all AAS reachability related fields needed for routing algorithm.
+	 * This allows to keep and address all reachability related data together during the routing algorithm execution.
+	 */
+	struct alignas( 2 )ReachPathFindingData {
+		/**
+		 * Travel flags corresponding to a travel type of this reachability.
+		 * Precomputation of these travel flags allows to eliminate necessity in
+		 * accessing old "travel flag for type" lookup table during the routing algorithm execution
+		 */
+		Int32Align2 travelFlags;
+		/**
+		 * A copy of the travel time of this reachability.
+		 */
+		uint16_t travelTime;
+	};
+
+	// By using Int32Align2 we win 1/4 of the storage size, and it is fairly good reason to do that
+	static_assert( sizeof( ReachPathFindingData ) == 6, "The struct size assumptions are broken" );
+
+	/**
+	 * See {@code ReachPathFindindData}
+	 * This is a beginning of the buffer shared among bots.
+	 * The data is either immutable or used for temporaries unused between frames.
+	 */
+	ReachPathFindingData *reachPathFindingData;
+
+	/**
+	 * A scratchpad for {@code SetDisabledRegions()} that is capable to store {@code AiAasWorld::NumAreas()} values.
+	 * It is allocated within the shared {code reachPathFindingData} buffer.
+	 */
+	int *currDisabledAreaNums;
+	/**
+	 * A scratchpad for {@code SetDisabledRegions()} that is capable to store {@code AiAasWorld::NumAreas()} values.
+	 * It is allocated withing the shared {@code reachPathFindingData} buffer.
+	 */
+	int *cleanCacheAreaNums;
 
 	PathFinderNode *areaPathFindingNodes;
 	PathFinderNode *portalPathFindingNodes;
@@ -290,10 +354,6 @@ public:
 
 	void FreeRoutingCache( AreaOrPortalCacheTable *cache );
 
-	void RemoveRoutingCacheInClusterForArea( int areaNum );
-	void RemoveRoutingCacheInCluster( int clusterNum );
-	void RemoveAllPortalsCache();
-
 	void *GetClearedMemory( size_t size );
 	void FreeMemory( void *ptr );
 
@@ -305,16 +365,6 @@ public:
 	bool FreeOldestCache();
 
 	AreaOrPortalCacheTable *AllocRoutingCache( int numTravelTimes );
-
-	void UnlinkAndFreeRoutingCache( const aas_areasettings_t *aasAreaSettings,
-									const aas_portal_t *aasPortals,
-									AreaOrPortalCacheTable *cache );
-
-	void UnlinkAreaRoutingCache( const aas_areasettings_t *aasAreaSettings,
-								 const aas_portal_t *aasPortals,
-								 AreaOrPortalCacheTable *cache );
-
-	void UnlinkPortalRoutingCache( AreaOrPortalCacheTable *cache );
 
 	void UpdateAreaRoutingCache( const aas_areasettings_t *aasAreaSettings,
 								 const aas_portal_t *aasPortals,
@@ -351,14 +401,18 @@ public:
 	bool RouteToGoalArea( const RoutingRequest &request, RoutingResult *result );
 	bool RouteToGoalPortal( const RoutingRequest &request, AreaOrPortalCacheTable *portalCache, RoutingResult *result );
 
-	void InitDisabledAreasStatusAndHelpers();
-	void InitAreaContentsTravelFlags();
+	void InitCompactReachDataAreaDataAndHelpers();
+	AreaPathFindingData *CloneAreaPathFindingData();
+
 	void InitPathFindingNodes();
 	void CreateReversedReach();
 	void InitClusterAreaCache();
 	void InitPortalCache();
 	void CalculateAreaTravelTimes();
 	void InitPortalMaxTravelTimes();
+
+	void ResetAllClusterAreaCache();
+	void ResetAllPortalCache();
 
 	void FreeAllClusterAreaCache();
 	void FreeAllPortalCache();
@@ -441,15 +495,37 @@ public:
 	}
 
 	inline bool AreaDisabled( int areaNum ) const {
-		return areasDisabledStatus[areaNum].CurrStatus() || ( aasWorld.AreaSettings()[areaNum].areaflags & AREA_DISABLED );
+		const auto &areaData = areaPathFindingData[areaNum];
+		return areaData.disabledStatus.CurrStatus() || ( areaData.settingsAreaFlags & AREA_DISABLED );
 	}
 
 	inline bool AreaTemporarilyDisabled( int areaNum ) const {
-		return areasDisabledStatus[areaNum].CurrStatus();
+		return areaPathFindingData[areaNum].disabledStatus.CurrStatus();
 	}
 
 	struct DisableZoneRequest {
-		virtual int FillRequestedAreasBuffer( int *areasBuffer, int bufferCapacity ) = 0;
+		virtual ~DisableZoneRequest() = default;
+		/**
+		 * This method is called first and provides optimization opportunities
+		 * if there is already an own list (buffer) of areas to disable for routing.
+		 * @note this call is expected to be cheap and produce idempotent results
+		 * on repeated invocations during the same update of blocked areas status.
+		 * @param bufferSize an actual size of the own-managed buffer.
+		 * @return a non-null buffer that has {@code *bufferSize} accessible int elements
+		 * if there is an own-managed buffer or null otherwise.
+		 */
+		virtual const int *GetSelfManagedAreasBuffer( int *bufferSize ) {
+			return nullptr;
+		}
+
+		/**
+		 * This method is called second if {@code GetOwnManagedAreasBuffer()} returned null
+		 * @param areasBuffer a buffer for areas that is expected to be filled by
+		 * requested areas numbers that should be disabled for routing
+		 * @param bufferCapacity a capacity of the provided buffer
+		 * @return a number of areas that are actually requested.
+		 */
+		virtual int FillProvidedAreasBuffer( int *areasBuffer, int bufferCapacity ) = 0;
 	};
 
 	inline void ClearDisabledZones() {

@@ -76,6 +76,7 @@ class Bot: public Ai {
 	friend class BotPlanner;
 	friend class AiSquad;
 	friend class AiEnemiesTracker;
+	friend class PathBlockingTracker;
 	friend class BotAwarenessModule;
 	friend class BotFireTargetCache;
 	friend class BotItemsSelector;

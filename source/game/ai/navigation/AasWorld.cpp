@@ -480,6 +480,8 @@ void AiAasWorld::ComputeExtraAreaData() {
 	for( int areaNum = 1; areaNum < numareas; ++areaNum ) {
 		TrySetAreaNoFallFlags( areaNum );
 	}
+
+	BuildSpecificAreaTypesLists();
 }
 
 void AiAasWorld::TrySetAreaLedgeFlags( int areaNum ) {
@@ -1097,6 +1099,22 @@ AiAasWorld::~AiAasWorld() {
 	}
 	if( areaMapLeafsData ) {
 		G_LevelFree( areaMapLeafsData );
+	}
+
+	if( groundedAreas ) {
+		G_LevelFree( groundedAreas );
+	}
+	if( jumppadReachPassThroughAreas ) {
+		G_LevelFree( jumppadReachPassThroughAreas );
+	}
+	if( ladderReachPassThroughAreas ) {
+		G_LevelFree( ladderReachPassThroughAreas );
+	}
+	if( elevatorReachPassThroughAreas ) {
+		G_LevelFree( elevatorReachPassThroughAreas );
+	}
+	if( walkOffLedgePassThroughAirAreas ) {
+		G_LevelFree( walkOffLedgePassThroughAirAreas );
 	}
 }
 
@@ -1755,4 +1773,114 @@ void AiAasWorld::ComputeAreasLeafsLists() {
 	// Clear early to free some allocation space for flattening of the next result
 	listOffsets.Clear();
 	this->areaMapLeafsData = leafListsData.FlattenResult();
+}
+
+template <typename AcceptAreaFunc>
+class ReachPassThroughAreasListBuilder {
+	AiAasWorld *aasWorld;
+	bool *isFloodedBuffer;
+
+	// TODO: Even if this does not really depend of the template parameter
+	// it probably gets generated for every different template parameter
+	void AddTracedAreas( const aas_reachability_t &reach, BufferBuilder<uint16_t> &builder );
+public:
+	ReachPassThroughAreasListBuilder( AiAasWorld *aasWorld_, bool *isFloodedBuffer_ )
+		: aasWorld( aasWorld_ ), isFloodedBuffer( isFloodedBuffer_ ) {}
+
+	uint16_t *Exec( int travelType );
+};
+
+template <typename AcceptAreaFunc>
+uint16_t *ReachPassThroughAreasListBuilder<AcceptAreaFunc>::Exec( int travelType ) {
+	BufferBuilder<uint16_t> listBuilder( 128 );
+
+	memset( isFloodedBuffer, 0, sizeof( bool ) * aasWorld->NumAreas() );
+
+	// Reserve a space for an actual list size
+	listBuilder.Add( 0 );
+
+	AcceptAreaFunc acceptAreaFunc;
+
+	const auto *const aasReach = aasWorld->Reachabilities();
+	const auto *const aasAreaSettings = aasWorld->AreaSettings();
+
+	for( int i = 1, end = aasWorld->NumReachabilities(); i < end; ++i ) {
+		const auto &reach = aasReach[i];
+		if( ( reach.traveltype & TRAVELTYPE_MASK ) != travelType ) {
+			continue;
+		}
+
+		if( !acceptAreaFunc( aasAreaSettings[i] ) ) {
+			continue;
+		}
+
+		AddTracedAreas( reach, listBuilder );
+	}
+
+	uint16_t *result = listBuilder.FlattenResult();
+	// There was a placeholder for the size added, so the actual list size is lesser by one
+	result[0] = (uint16_t)( listBuilder.Size() - 1 );
+	return result;
+}
+
+template <typename AcceptAreaFunc>
+void ReachPassThroughAreasListBuilder<AcceptAreaFunc>::AddTracedAreas( const aas_reachability_t &reach,
+																	   BufferBuilder<uint16_t> &listBuilder ) {
+	int tmpAreaNums[64];
+	int numReachAreas = aasWorld->TraceAreas( reach.start, reach.end, tmpAreaNums, 64 );
+	for( int j = 0; j < numReachAreas; ++j ) {
+		int areaNum = tmpAreaNums[j];
+		if( isFloodedBuffer[areaNum] ) {
+			continue;
+		}
+		isFloodedBuffer[areaNum] = true;
+		listBuilder.Add( (uint16_t)areaNum );
+	}
+}
+
+struct AcceptAnyArea {
+	bool operator()( const aas_areasettings_t & ) const { return true; }
+};
+
+struct AcceptInAirArea {
+	bool operator()( const aas_areasettings_t &areaSettings ) const {
+		return !( areaSettings.areaflags & AREA_GROUNDED );
+	}
+};
+
+void AiAasWorld::BuildSpecificAreaTypesLists() {
+	BufferBuilder<uint16_t> groundedAreasBuilder( 1024 );
+
+	// Add a placeholder for actual size
+	groundedAreasBuilder.Add( 0 );
+	for( int i = 1, end = this->NumAreas(); i < end; ++i ) {
+		if( areasettings[i].areaflags & AREA_GROUNDED ) {
+			groundedAreasBuilder.Add( (uint16_t)i );
+		}
+	}
+
+	this->groundedAreas = groundedAreasBuilder.FlattenResult();
+	// There was a placeholder for the size added, so the actual list size is lesser by one
+	this->groundedAreas[0] = (uint16_t)( groundedAreasBuilder.Size() - 1 );
+	groundedAreasBuilder.Clear();
+
+	// TODO: This is not only a duplicated allocation, but a global shared buffer should be used instead
+	auto *const isFloodedBuffer = (bool *)G_LevelMalloc( sizeof( bool ) * NumAreas() );
+
+	ReachPassThroughAreasListBuilder<AcceptAnyArea> acceptAnyAreaBuilder( this, isFloodedBuffer );
+
+	// We can collect all these areas in a single pass.
+	// However the code would be less clean and would require
+	// allocation of multiple flood buffers for different reach types.
+	// (An area is allowed to be present in multiple lists at the same time).
+	// We plan using a shared flood buffer across the entire AI codebase.
+	// This does not get called during a match time anyway.
+	this->jumppadReachPassThroughAreas = acceptAnyAreaBuilder.Exec( TRAVEL_JUMPPAD );
+	this->ladderReachPassThroughAreas = acceptAnyAreaBuilder.Exec( TRAVEL_LADDER );
+	this->elevatorReachPassThroughAreas = acceptAnyAreaBuilder.Exec( TRAVEL_ELEVATOR );
+
+	ReachPassThroughAreasListBuilder<AcceptInAirArea> acceptInAirAreaBuilder( this, isFloodedBuffer );
+	this->walkOffLedgePassThroughAirAreas = acceptInAirAreaBuilder.Exec( TRAVEL_WALKOFFLEDGE );
+
+	G_LevelFree( isFloodedBuffer );
 }

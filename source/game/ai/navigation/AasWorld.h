@@ -273,6 +273,12 @@ class AiAasWorld
 	int *areaMapLeafListOffsets;    // An element #i contains an offset of leafs list data in the joint data
 	int *areaMapLeafsData;          // Contains area map (collision/vis) leafs lists, each one is prepended by the length
 
+	uint16_t *groundedAreas { nullptr };
+	uint16_t *jumppadReachPassThroughAreas { nullptr };
+	uint16_t *ladderReachPassThroughAreas { nullptr };
+	uint16_t *elevatorReachPassThroughAreas { nullptr };
+	uint16_t *walkOffLedgePassThroughAirAreas { nullptr };
+
 	static AiAasWorld *instance;
 
 	AiAasWorld() {
@@ -299,6 +305,8 @@ class AiAasWorld
 	void ComputeFace2DProjVertices();
 	// Computes map (collision/vis) leafs for areas
 	void ComputeAreasLeafsLists();
+	// Builds lists of specific area types
+	void BuildSpecificAreaTypesLists();
 
 	void TrySetAreaLedgeFlags( int areaNum );
 	void TrySetAreaWallFlags( int areaNum );
@@ -489,6 +497,12 @@ public:
 		assert( areaNum >= 0 && areaNum < numareas );
 		return areaMapLeafsData + areaMapLeafListOffsets[areaNum];
 	}
+
+	const uint16_t *GroundedAreas() const { return groundedAreas; }
+	const uint16_t *JumppadReachPassThroughAreas() const { return jumppadReachPassThroughAreas; }
+	const uint16_t *LadderReachPassThroughAreas() const { return ladderReachPassThroughAreas; }
+	const uint16_t *ElevatorReachPassThroughAreas() const { return elevatorReachPassThroughAreas; }
+	const uint16_t *WalkOffLedgePassThroughAirAreas() const { return walkOffLedgePassThroughAirAreas; }
 };
 
 #endif

@@ -7,6 +7,7 @@
 #include "HazardsSelector.h"
 #include "EventsTracker.h"
 #include "KeptInFovPointTracker.h"
+#include "PathBlockingTracker.h"
 
 class AiSquad;
 
@@ -28,6 +29,7 @@ class BotAwarenessModule: public AiFrameAwareUpdatable {
 	HazardsSelector hazardsSelector;
 	EventsTracker eventsTracker;
 	KeptInFovPointTracker keptInFovPointTracker;
+	PathBlockingTracker pathBlockingTracker;
 public:
 	struct HurtEvent: public Selection {
 		// Initialize the inflictor by the world entity (it is never valid as one).

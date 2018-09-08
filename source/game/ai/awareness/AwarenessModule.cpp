@@ -13,6 +13,7 @@ BotAwarenessModule::BotAwarenessModule( edict_t *self_, Bot *bot_, float skill_ 
 	, hazardsSelector( self_ )
 	, eventsTracker( self_ )
 	, keptInFovPointTracker( bot_, this )
+	, pathBlockingTracker( bot_ )
 	, ownEnemiesTracker( self_, this, skill_ ) {}
 
 void BotAwarenessModule::OnAttachedToSquad( AiSquad *squad_ ) {
@@ -230,8 +231,11 @@ void BotAwarenessModule::OnEnemyRemoved( const TrackedEnemy *enemy ) {
 }
 
 void BotAwarenessModule::UpdateBlockedAreasStatus() {
-	// Disabled at this moment as the "old"-style blocking that does a raycast for every area in path is used.
-	// Refer to the git history of "bot_brain.cpp" for the removed code.
+	// The "old-new" blocking style is enabled again.
+	// The algorithm borrows ideas both from "old"
+	// (check whether an individual area can be really hit by enemy)
+	// and "new" (handle blocking at router level by setting area flags) ways of blocking paths.
+	pathBlockingTracker.Update();
 }
 
 static bool IsEnemyVisible( const edict_t *self, const edict_t *enemyEnt ) {

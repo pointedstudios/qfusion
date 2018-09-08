@@ -318,6 +318,31 @@ public:
 	}
 };
 
+class alignas( 2 )Int32Align2 {
+	uint16_t parts[2];
+
+	inline void SetParts( int32_t value ) {
+		uint32_t u = (uint32_t)value;
+		parts[0] = (uint16_t)( ( u >> 16u ) & 0xFFFFu );
+		parts[1] = (uint16_t)( u & 0xFFFFu );
+	}
+public:
+	operator int32_t() const {
+		return (int32_t)( ( (uint32_t)parts[0] ) << 16u | parts[1] );
+	}
+
+	Int32Align2 operator=( int32_t value ) {
+		SetParts( value );
+		return *this;
+	}
+
+	Int32Align2() {}
+
+	Int32Align2( int32_t value ) {
+		SetParts( value );
+	}
+};
+
 class alignas( 2 )FloatAlign2 {
 	uint16_t parts[2];
 
