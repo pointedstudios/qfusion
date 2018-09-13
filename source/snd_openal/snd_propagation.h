@@ -74,6 +74,8 @@ class PropagationTable: public CachedComputation {
 	bool TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) override;
 	void ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) override;
 	bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) override;
+
+	static PropagationTable *instance;
 public:
 	PropagationTable(): CachedComputation( "PropagationTable" ) {}
 
@@ -121,6 +123,11 @@ public:
 		*distance = props.GetDistance();
 		return true;
 	}
+
+	static PropagationTable *Instance() { return instance; }
+
+	static void Init();
+	static void Shutdown();
 };
 
 #endif

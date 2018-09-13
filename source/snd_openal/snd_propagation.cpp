@@ -619,6 +619,21 @@ public:
 	bool WriteTable( const PropagationTable::PropagationProps *table, int numLeafs );
 };
 
+static ATTRIBUTE_ALIGNED( 16 ) uint8_t instanceStorage[sizeof( PropagationTable )];
+PropagationTable *PropagationTable::instance = nullptr;
+
+void PropagationTable::Init() {
+	assert( !instance );
+	instance = new( instanceStorage )PropagationTable;
+}
+
+void PropagationTable::Shutdown() {
+	if( instance ) {
+		instance->~PropagationTable();
+		instance = nullptr;
+	}
+}
+
 void PropagationTable::ResetExistingState( const char *, int actualNumLeafs ) {
 	if( table ) {
 		S_Free( table );

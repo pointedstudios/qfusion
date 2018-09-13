@@ -4,6 +4,7 @@
 #include "snd_env_sampler.h"
 #include "snd_effect_sampler.h"
 #include "snd_effects_allocator.h"
+#include "snd_propagation.h"
 
 #include "../gameshared/q_comref.h"
 
@@ -22,9 +23,11 @@ void ENV_Init() {
 	listenerProps.InvalidateCachedUpdateState();
 
 	LeafPropsCache::Init();
+	PropagationTable::Init();
 	EffectsAllocator::Init();
 
 	LeafPropsCache::Instance()->EnsureValid();
+	PropagationTable::Instance()->EnsureValid();
 }
 
 void ENV_Shutdown() {
@@ -33,15 +36,19 @@ void ENV_Shutdown() {
 	}
 
 	EffectsAllocator::Shutdown();
+	PropagationTable::Shutdown();
 	LeafPropsCache::Shutdown();
 
 	listenerProps.InvalidateCachedUpdateState();
 }
 
 void ENV_EndRegistration() {
-	if( s_environment_effects->integer ) {
-		LeafPropsCache::Instance()->EnsureValid();
+	if( !s_environment_effects->integer ) {
+		return;
 	}
+
+	LeafPropsCache::Instance()->EnsureValid();
+	PropagationTable::Instance()->EnsureValid();
 }
 
 void ENV_RegisterSource( src_t *src ) {
