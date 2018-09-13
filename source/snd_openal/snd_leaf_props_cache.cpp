@@ -10,10 +10,12 @@ public:
 	virtual ~LeafPropsIOHelper() = default;
 };
 
+static constexpr const char *PROPS_CACHE_EXTENSION = ".leafprops";
+
 class LeafPropsReader final: public CachedComputationReader, public LeafPropsIOHelper {
 public:
 	LeafPropsReader( const char *map_, const char *checksum_, int fileFlags )
-		: CachedComputationReader( map_, checksum_, fileFlags, true ) {}
+		: CachedComputationReader( map_, checksum_, PROPS_CACHE_EXTENSION, fileFlags, true ) {}
 
 	enum Status {
 		OK,
@@ -27,7 +29,7 @@ public:
 class LeafPropsWriter final: public CachedComputationWriter, public LeafPropsIOHelper {
 public:
 	LeafPropsWriter( const char *map_, const char *checksum_ )
-		: CachedComputationWriter( map_, checksum_ ) {}
+		: CachedComputationWriter( map_, checksum_, PROPS_CACHE_EXTENSION ) {}
 
 	bool WriteProps( const LeafProps &props );
 };

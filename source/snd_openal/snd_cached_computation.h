@@ -16,6 +16,12 @@ protected:
 	virtual bool TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) = 0;
 	virtual void ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) = 0;
 	virtual bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) = 0;
+
+	virtual void NotifyOfBeingAboutToCompute();
+	virtual void NotifyOfComputationSuccess();
+	virtual void NotifyOfComputationFailure();
+
+	int NumLeafs() const { return numLeafs; };
 public:
 	explicit CachedComputation( const char *logTag_): logTag( logTag_) {
 		mapName[0] = '\0';
@@ -35,11 +41,12 @@ protected:
 	int fd;
 	int fsResult;
 public:
-	CachedComputationIOHelper( const char *map_, const char *checksum_, int fileFlags )
+	CachedComputationIOHelper( const char *map_, const char *checksum_, const char *extension_, int fileFlags )
 		: map( map_ ), checksum( checksum_ ) {
 		Q_snprintfz( fileName, sizeof( fileName ), "sounds/%s", map );
 		COM_StripExtension( fileName );
-		Q_strncatz( fileName, ".envcache", sizeof( fileName ) );
+		assert( *extension_ == '.' );
+		Q_strncatz( fileName, extension_, sizeof( fileName ) );
 		fsResult = trap_FS_FOpenFile( fileName, &fd, fileFlags );
 	}
 
@@ -54,6 +61,7 @@ class CachedComputationReader: public CachedComputationIOHelper {
 protected:
 	char *fileData { nullptr };
 	char *dataPtr { nullptr };
+	int fileSize { -1 };
 
 	void SkipWhiteSpace() {
 		size_t skippedLen = strspn( dataPtr, "\t \r\n");
@@ -62,7 +70,11 @@ protected:
 
 	bool ExpectString( const char *string );
 public:
-	CachedComputationReader( const char *map_, const char *checksum_, int fileFlags, bool textMode = false );
+	CachedComputationReader( const char *map_,
+							 const char *checksum_,
+							 const char *extension_,
+							 int fileFlags,
+							 bool textMode = false );
 
 	~CachedComputationReader() override {
 		if( fileData ) {
@@ -75,7 +87,7 @@ class CachedComputationWriter: public CachedComputationIOHelper {
 protected:
 	bool WriteString( const char *string );
 public:
-	CachedComputationWriter( const char *map_, const char *checksum_ );
+	CachedComputationWriter( const char *map_, const char *checksum_, const char *extension_ );
 };
 
 #endif

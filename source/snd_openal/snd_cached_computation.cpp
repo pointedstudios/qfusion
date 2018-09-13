@@ -35,19 +35,31 @@ void CachedComputation::EnsureValid() {
 		}
 	}
 
-	Com_Printf( S_COLOR_YELLOW "Can't load a %s. Computing a new one (this may take a while)\n", logTag );
+	NotifyOfBeingAboutToCompute();
 
 	const bool fastAndCoarse = !trap_Cvar_Value( "developer" );
 	ComputeNewState( actualMap, actualNumLeafs, fastAndCoarse );
 
 	// Always saves to cache (and not to basewsw)
 	if( SaveToCache( actualMap, actualChecksum, actualNumLeafs ) ) {
-		Com_Printf( S_COLOR_GREY "Computation results for %s have been saved to a file cache succesfully\n", logTag );
+		NotifyOfComputationSuccess();
 	} else {
-		Com_Printf( S_COLOR_YELLOW "Can't save %s computation results to a file cache\n", logTag );
+		NotifyOfComputationFailure();
 	}
 
 	CommitUpdate( actualMap, actualChecksum, actualNumLeafs );
+}
+
+void CachedComputation::NotifyOfBeingAboutToCompute() {
+	Com_Printf( S_COLOR_YELLOW "Can't load a %s. Computing a new one (this may take a while)\n", logTag );
+}
+
+void CachedComputation::NotifyOfComputationSuccess() {
+	Com_Printf( S_COLOR_GREY "Computation results for %s have been saved to a file cache succesfully\n", logTag );
+}
+
+void CachedComputation::NotifyOfComputationFailure() {
+	Com_Printf( S_COLOR_YELLOW "Can't save %s computation results to a file cache\n", logTag );
 }
 
 bool CachedComputationReader::ExpectString( const char *string ) {
@@ -71,13 +83,17 @@ bool CachedComputationReader::ExpectString( const char *string ) {
 	return true;
 }
 
-CachedComputationReader::CachedComputationReader( const char *map_, const char *checksum_, int fileFlags, bool textMode )
-	: CachedComputationIOHelper( map_, checksum_, fileFlags ) {
+CachedComputationReader::CachedComputationReader( const char *map_,
+												  const char *checksum_,
+												  const char *extension_,
+												  int fileFlags,
+												  bool textMode )
+	: CachedComputationIOHelper( map_, checksum_, extension_, fileFlags ) {
 	if( fsResult < 0 ) {
 		return;
 	}
 
-	const int fileSize = fsResult;
+	fileSize = fsResult;
 
 	fileData = (char *)::S_Malloc( (size_t)( fileSize + 1u ) );
 	if( !fileData ) {
@@ -117,8 +133,8 @@ CachedComputationReader::CachedComputationReader( const char *map_, const char *
 	}
 }
 
-CachedComputationWriter::CachedComputationWriter( const char *map_, const char *checksum_ )
-	: CachedComputationIOHelper( map_, checksum_, ( FS_WRITE | FS_CACHE ) ) {
+CachedComputationWriter::CachedComputationWriter( const char *map_, const char *checksum_, const char *extension_ )
+	: CachedComputationIOHelper( map_, checksum_, extension_, ( FS_WRITE | FS_CACHE ) ) {
 	if( fsResult < 0 ) {
 		return;
 	}

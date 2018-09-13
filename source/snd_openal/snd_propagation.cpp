@@ -20,6 +20,7 @@ class PropagationGraph {
 	double *distanceTableBackup { nullptr };
 	int **leafAdjacencyLists { nullptr };
 	int dummyAdjacencyList[1] = { 0 };
+	const bool fastAndCoarse;
 
 	void GetLeafCenters();
 	void BuildDistanceTable();
@@ -27,7 +28,8 @@ class PropagationGraph {
 
 	double ComputeEdgeDistance( int leaf1, int leaf2 );
 public:
-	PropagationGraph(): numLeafs( trap_NumLeafs() ) {}
+	PropagationGraph( int actualNumLeafs, bool fastAndCoarse_ )
+		: numLeafs( actualNumLeafs ), fastAndCoarse( fastAndCoarse_ ) {}
 
 	int NumLeafs() const { return numLeafs; }
 
@@ -309,12 +311,14 @@ class PropagationTableBuilder {
 
 	PropagationProps *table { nullptr };
 	int *tmpLeafNums { nullptr };
+	const bool fastAndCoarse;
 
 	void BuildInfluxDirForLeaf( float *allocatedDir, const int *leafsChain, int numLeafsInChain );
 
 	bool BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, double *distance );
 public:
-	PropagationTableBuilder(): pathFinder( graph ) {}
+	PropagationTableBuilder( int actualNumLeafs, bool fastAndCoarse_ )
+		: graph( actualNumLeafs, fastAndCoarse_ ), pathFinder( graph ), fastAndCoarse( fastAndCoarse_ ) {}
 
 	~PropagationTableBuilder() {
 		if( table ) {
@@ -445,7 +449,12 @@ bool PropagationTableBuilder::BuildPropagationPath( int leaf1, int leaf2, vec3_t
 	double prevPathDistance = 0.0;
 	int numAttempts = 0;
 	// Increase quality in developer mode, so we can ship high-quality tables withing the game assets
-	const int maxAttempts = trap_Cvar_Value( "developer" ) ? 5 : 2;
+	// Doing only a single attempt is chosen based on real tests
+	// that show that these computations are extremely expensive
+	// and could hang up a client computer for a hour (!).
+	// Doing a single attempt also helps to avoid saving/restoring weights at all that is not cheap too.
+	static_assert( WeightedDirBuilder::MAX_DIRS > 1, "Assumptions that doing only 1 attempt is faster are broken" );
+	const int maxAttempts = fastAndCoarse ? 1 : WeightedDirBuilder::MAX_DIRS;
 	// Do at most maxAttempts to find an alternative path
 	for( ; numAttempts != maxAttempts; ++numAttempts ) {
 		auto reverseIterator = pathFinder.FindPath( leaf1, leaf2 );
@@ -580,4 +589,129 @@ void PropagationTableBuilder::BuildInfluxDirForLeaf( float *allocatedDir,
 
 	// Build a result based on all accumulated dirs
 	builder.BuildDir( allocatedDir );
+}
+
+static constexpr const char *PROPAGATION_CACHE_EXTENSION = ".propagation";
+
+class PropagationIOHelper {
+protected:
+	using PropagationProps = PropagationTable::PropagationProps;
+
+	// Try to ensure we can write table elements it as-is regardless of byte order.
+	// If there are fields in the bitfield that are greater than a byte and thus
+	// require being aware of byte order, the enclosing type cannot (?) be aligned just on byte boundaries.
+	static_assert( alignof( PropagationProps ) <= 1, "" );
+};
+
+class PropagationTableReader: public CachedComputationReader, protected PropagationIOHelper {
+public:
+	PropagationTableReader( const char *actualMap, const char *actualChecksum, int fsFlags )
+		: CachedComputationReader( actualMap, actualChecksum, PROPAGATION_CACHE_EXTENSION, fsFlags ) {}
+
+	PropagationProps *ReadPropsTable( int actualNumLeafs );
+};
+
+class PropagationTableWriter: public CachedComputationWriter, protected PropagationIOHelper {
+public:
+	PropagationTableWriter( const char *actualMap, const char *actualChecksum )
+		: CachedComputationWriter( actualMap, actualChecksum, PROPAGATION_CACHE_EXTENSION ) {}
+
+	bool WriteTable( const PropagationTable::PropagationProps *table, int numLeafs );
+};
+
+void PropagationTable::ResetExistingState( const char *, int actualNumLeafs ) {
+	if( table ) {
+		S_Free( table );
+		table = nullptr;
+	}
+
+	isUsingValidTable = false;
+}
+
+bool PropagationTable::TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) {
+	PropagationTableReader reader( actualMap, actualChecksum, fsFlags );
+	return ( this->table = reader.ReadPropsTable( actualNumLeafs ) ) != nullptr;
+}
+
+void PropagationTable::ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) {
+	if( !actualNumLeafs ) {
+		return;
+	}
+
+	PropagationTableBuilder builder( actualNumLeafs, fastAndCoarse );
+	if( builder.Build() ) {
+		table = builder.ReleaseOwnership();
+		isUsingValidTable = true;
+		return;
+	}
+
+	// Try providing a dummy data for this case (is it really going to happen at all?)
+	size_t memSize = sizeof( PropagationProps ) * actualNumLeafs * actualNumLeafs;
+	table = (PropagationProps *)S_Malloc( memSize );
+	memset( table, 0, memSize );
+}
+
+bool PropagationTable::SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) {
+	if( !actualNumLeafs ) {
+		return true;
+	}
+
+	if( !isUsingValidTable ) {
+		return false;
+	}
+
+	PropagationTableWriter writer( actualMap, actualChecksum );
+	return writer.WriteTable( this->table, actualNumLeafs );
+}
+
+PropagationTableReader::PropagationProps *PropagationTableReader::ReadPropsTable( int actualNumLeafs ) {
+	if( fsResult < 0 ) {
+		return nullptr;
+	}
+
+	if( ( fileData + fileSize ) - dataPtr < 4 ) {
+		return nullptr;
+	}
+
+	int32_t numLeafsBuffer;
+	memcpy( &numLeafsBuffer, dataPtr, 4 );
+	dataPtr += 4;
+	numLeafsBuffer = LittleLong( numLeafsBuffer );
+	// Check whether it actually matches
+	if( numLeafsBuffer != actualNumLeafs ) {
+		return nullptr;
+	}
+
+	size_t expectedSize = actualNumLeafs * actualNumLeafs * sizeof( PropagationProps )  ;
+	if( ( ( fileData + fileSize ) - dataPtr ) != (ptrdiff_t)expectedSize ) {
+		return nullptr;
+	}
+
+	// Never returns on failure?
+	auto *const result = (PropagationProps *)S_Malloc( expectedSize );
+	// TODO:... this is pretty bad..
+	// Just return a view of the file data that is read and is kept in-memory.
+	// An overhead of storing few extra strings at the beginning is insignificant.
+	memcpy( result, dataPtr, expectedSize );
+	return result;
+}
+
+bool PropagationTableWriter::WriteTable( const PropagationTable::PropagationProps *table, int numLeafs ) {
+	if( fsResult < 0 ) {
+		return false;
+	}
+
+	int32_t numLeafsBuffer = LittleLong( numLeafs );
+	if( trap_FS_Write( &numLeafsBuffer, 4, fd ) != 4 ) {
+		fsResult = -1;
+		return false;
+	}
+
+	size_t expectedSize = sizeof( *table ) * numLeafs * numLeafs;
+	if( trap_FS_Write( table, expectedSize, fd ) != (int)expectedSize ) {
+		fsResult = -1;
+		return false;
+	}
+
+	return true;
 }

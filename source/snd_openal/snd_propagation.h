@@ -2,9 +2,12 @@
 #define QFUSION_SND_PROPAGATION_H
 
 #include "snd_local.h"
+#include "snd_cached_computation.h"
 
-class PropagationTable {
-	friend class PropagationTableLoader;
+class PropagationTable: public CachedComputation {
+	friend class PropagationIOHelper;
+	friend class PropagationTableReader;
+	friend class PropagationTableWriter;
 	friend class PropagationTableBuilder;
 
 	struct alignas( 1 )PropagationProps {
@@ -55,18 +58,26 @@ class PropagationTable {
 
 	static_assert( alignof( PropagationProps ) == 1, "" );
 
-	const int numLeafs;
 	PropagationProps *table { nullptr };
+	bool isUsingValidTable { false };
 
 	const PropagationProps &GetProps( int fromLeafNum, int toLeafNum ) const {
 		assert( table );
+		const auto numLeafs = NumLeafs();
 		assert( numLeafs );
 		assert( fromLeafNum > 0 && fromLeafNum < numLeafs );
 		assert( toLeafNum > 0 && toLeafNum < numLeafs );
 		return table[numLeafs * fromLeafNum + toLeafNum];
 	}
+
+	void ResetExistingState( const char *actualMap, int actualNumLeafs ) override;
+	bool TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) override;
+	void ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) override;
+	bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) override;
 public:
-	~PropagationTable() {
+	PropagationTable(): CachedComputation( "PropagationTable" ) {}
+
+	~PropagationTable() override {
 		if( table ) {
 			S_Free( table );
 		}
