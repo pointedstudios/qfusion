@@ -18,8 +18,8 @@ class PropagationGraph {
 	vec3_t *leafCenters { nullptr };
 	double *distanceTable { nullptr };
 	double *distanceTableBackup { nullptr };
-	int **leafAdjacencyLists { nullptr };
-	int dummyAdjacencyList[1] = { 0 };
+	int *adjacencyListsData { nullptr };
+	int *adjacencyListOffsets { nullptr };
 	const bool fastAndCoarse;
 
 	void GetLeafCenters();
@@ -51,9 +51,9 @@ public:
 	}
 
 	const int *AdjacencyList( int leafNum ) const {
-		assert( leafAdjacencyLists );
+		assert( adjacencyListsData && adjacencyListOffsets );
 		assert( leafNum > 0 && leafNum < numLeafs );
-		return leafAdjacencyLists[leafNum];
+		return adjacencyListsData + adjacencyListOffsets[leafNum];
 	}
 
 	const float *LeafCenter( int leafNum ) const {
@@ -79,19 +79,9 @@ public:
 		if( distanceTable ) {
 			S_Free( distanceTable );
 		}
-
-		if( !leafAdjacencyLists ) {
-			return;
+		if( adjacencyListsData ) {
+			S_Free( adjacencyListsData );
 		}
-
-		for( int i = 0; i < numLeafs; ++i ) {
-			if( auto *p = leafAdjacencyLists[i] ) {
-				if( p != dummyAdjacencyList ) {
-					S_Free( p );
-				}
-			}
-		}
-		S_Free( leafAdjacencyLists );
 	}
 };
 
@@ -105,7 +95,6 @@ bool PropagationGraph::Build() {
 	leafCenters = (vec3_t *)::S_Malloc( numLeafs * sizeof( vec3_t ) );
 	distanceTable = (double *)::S_Malloc( 2 * numTableCells * sizeof( double ) );
 	distanceTableBackup = distanceTable + numTableCells;
-	leafAdjacencyLists = (int **)S_Malloc( numLeafs * sizeof( int * ) );
 
 	GetLeafCenters();
 	BuildDistanceTable();
@@ -154,37 +143,45 @@ void PropagationGraph::BuildDistanceTable() {
 }
 
 void PropagationGraph::BuildAdjacencyLists() {
-	memset( leafAdjacencyLists, 0, numLeafs * sizeof( int * ) );
+	size_t totalNumCells = 0;
+	for( int i = 1; i < numLeafs; ++i ) {
+		int rowOffset = i * numLeafs;
+		for( int j = 1; j < numLeafs; ++j ) {
+			if( i == j ) {
+				continue;
+			}
+			if( distanceTable[rowOffset + j] != std::numeric_limits<double>::infinity() ) {
+				totalNumCells++;
+			}
+		}
+	}
+
+	// A first additional cell for a leaf is for a size "prefix" of adjacency list
+	// A second additional cell is for offset of the adjacency list in the compactified data
+	totalNumCells += 2 * numLeafs;
+	auto *mem = (int *)S_Malloc( totalNumCells * sizeof( int ) );
+	adjacencyListsData = mem;
+	adjacencyListOffsets = mem + ( totalNumCells - numLeafs );
+
+	int *dataPtr = adjacencyListsData;
+	// Write a zero-length list for the zero leaf
+	*dataPtr++ = 0;
+	adjacencyListOffsets[0] = 0;
 
 	for( int i = 1; i < numLeafs; ++i ) {
 		int rowOffset = i * numLeafs;
-		int listSize = 0;
+		// Save a position of the list length
+		int *const listLengthRef = dataPtr++;
 		for( int j = 1; j < numLeafs; ++j ) {
 			if( i == j ) {
 				continue;
 			}
 			if( distanceTable[rowOffset + j] != std::numeric_limits<double>::infinity() ) {
-				listSize++;
+				*dataPtr++ = j;
 			}
 		}
-		if( !listSize ) {
-			leafAdjacencyLists[i] = dummyAdjacencyList;
-			continue;
-		}
-
-		auto *const list = (int *)::S_Malloc( sizeof( int ) * ( listSize + 1 ) );
-		int *listPtr = list;
-		*listPtr++ = listSize;
-		for( int j = 1; j < numLeafs; ++j ) {
-			if( i == j ) {
-				continue;
-			}
-			if( distanceTable[rowOffset + j] != std::numeric_limits<double>::infinity() ) {
-				*listPtr++ = j;
-			}
-		}
-
-		leafAdjacencyLists[i] = list;
+		adjacencyListOffsets[i] = (int)( listLengthRef - adjacencyListsData );
+		*listLengthRef = (int)( dataPtr - listLengthRef - 1 );
 	}
 }
 
