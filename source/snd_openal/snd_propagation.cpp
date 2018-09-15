@@ -13,48 +13,67 @@
 #include <algorithm>
 #include <limits>
 
-class PropagationGraph {
-	const int numLeafs;
-	vec3_t *leafCenters { nullptr };
-	double *distanceTable { nullptr };
-	double *distanceTableBackup { nullptr };
-	int *adjacencyListsData { nullptr };
-	int *adjacencyListOffsets { nullptr };
-	const bool fastAndCoarse;
+template <typename AdjacencyListType, typename DistanceType>
+class MutableGraph: public GraphLike<AdjacencyListType, DistanceType> {
+protected:
+	explicit MutableGraph( int numLeafs_ )
+		: GraphLike<AdjacencyListType, DistanceType>( numLeafs_ ) {}
 
-	void GetLeafCenters();
-	void BuildDistanceTable();
-	void BuildAdjacencyLists();
-
-	double ComputeEdgeDistance( int leaf1, int leaf2 );
+	DistanceType *distanceTableBackup { nullptr };
 public:
-	PropagationGraph( int actualNumLeafs, bool fastAndCoarse_ )
-		: numLeafs( actualNumLeafs ), fastAndCoarse( fastAndCoarse_ ) {}
-
-	int NumLeafs() const { return numLeafs; }
-
-	bool Build();
-
-	double EdgeDistance( int leaf1, int leaf2 ) const {
-		assert( distanceTable );
-		assert( leaf1 > 0 && leaf1 < numLeafs );
-		assert( leaf2 > 0 && leaf2 < numLeafs );
-		return distanceTable[leaf1 * numLeafs + leaf2];
-	}
-
-	void SetEdgeDistance( int leaf1, int leaf2, double newDistance ) {
-		assert( distanceTable );
+	void SetEdgeDistance( int leaf1, int leaf2, DistanceType newDistance ) {
+		// Template quirks: a member of a template base cannot be resolved in scope otherwise
+		auto *const distanceTable = this->distanceTable;
+		const int numLeafs = this->numLeafs;
+		assert( this->distanceTable );
 		assert( leaf1 > 0 && leaf1 < numLeafs );
 		assert( leaf2 > 0 && leaf2 < numLeafs );
 		distanceTable[leaf1 * numLeafs + leaf2] = newDistance;
 		distanceTable[leaf2 * numLeafs + leaf1] = newDistance;
 	}
 
-	const int *AdjacencyList( int leafNum ) const {
-		assert( adjacencyListsData && adjacencyListOffsets );
-		assert( leafNum > 0 && leafNum < numLeafs );
-		return adjacencyListsData + adjacencyListOffsets[leafNum];
+	virtual void SaveDistanceTable() {
+		const auto *distanceTable = this->distanceTable;
+		assert( distanceTable );
+		const int numLeafs = this->numLeafs;
+		memcpy( this->distanceTableBackup, distanceTable, numLeafs * numLeafs * sizeof( *distanceTable ) );
 	}
+
+	virtual void RestoreDistanceTable() {
+		auto *const distanceTable = this->distanceTable;
+		assert( distanceTable );
+		const int numLeafs = this->numLeafs;
+		memcpy( distanceTable, this->distanceTableBackup, numLeafs * numLeafs * sizeof( *distanceTable ) );
+	}
+};
+
+template <typename AdjacencyListType, typename DistanceType>
+class GraphBuilder: public MutableGraph<AdjacencyListType, DistanceType> {
+protected:
+	explicit GraphBuilder( int numLeafs )
+		: MutableGraph<AdjacencyListType, DistanceType>( numLeafs ) {}
+
+	virtual DistanceType ComputeEdgeDistance( int leaf1, int leaf2 ) = 0;
+
+	virtual void PrepareToBuild();
+	virtual void BuildDistanceTable();
+	virtual void BuildAdjacencyLists();
+
+	void CheckMutualReachability( int leaf1, int leaf2 );
+public:
+	bool Build();
+};
+
+class PropagationGraphBuilder: public GraphBuilder<int, double> {
+	vec3_t *leafCenters { nullptr };
+	const bool fastAndCoarse;
+
+	void PrepareToBuild() override;
+
+	double ComputeEdgeDistance( int leaf1, int leaf2 ) override;
+public:
+	PropagationGraphBuilder( int actualNumLeafs, bool fastAndCoarse_ )
+		: GraphBuilder( actualNumLeafs ), fastAndCoarse( fastAndCoarse_ ) {}
 
 	const float *LeafCenter( int leafNum ) const {
 		assert( leafCenters );
@@ -62,47 +81,27 @@ public:
 		return leafCenters[leafNum];
 	}
 
-	void SaveDistanceTable() {
-		assert( distanceTable );
-		memcpy( distanceTableBackup, distanceTable, numLeafs * numLeafs * sizeof( *distanceTable ) );
-	}
-
-	void RestoreDistanceTable() {
-		assert( distanceTable );
-		memcpy( distanceTable, distanceTableBackup, numLeafs * numLeafs * sizeof( *distanceTable ) );
-	}
-
-	~PropagationGraph() {
+	~PropagationGraphBuilder() override {
 		if( leafCenters ) {
 			S_Free( leafCenters );
-		}
-		if( distanceTable ) {
-			S_Free( distanceTable );
-		}
-		if( adjacencyListsData ) {
-			S_Free( adjacencyListsData );
 		}
 	}
 };
 
-bool PropagationGraph::Build() {
-	if( !numLeafs ) {
-		Com_Printf( S_COLOR_RED "PropagationGraph::Build(): The map has zero leafs\n" );
+template <typename AdjacencyListType, typename DistanceType>
+bool GraphBuilder<AdjacencyListType, DistanceType>::Build() {
+	if( !this->numLeafs ) {
+		Com_Printf( S_COLOR_RED "GraphBuilder<?,?>::Build(): The map has zero leafs\n" );
 		return false;
 	}
 
-	int numTableCells = numLeafs * numLeafs;
-	leafCenters = (vec3_t *)::S_Malloc( numLeafs * sizeof( vec3_t ) );
-	distanceTable = (double *)::S_Malloc( 2 * numTableCells * sizeof( double ) );
-	distanceTableBackup = distanceTable + numTableCells;
-
-	GetLeafCenters();
+	PrepareToBuild();
 	BuildDistanceTable();
 	BuildAdjacencyLists();
 	return true;
 }
 
-double PropagationGraph::ComputeEdgeDistance( int leaf1, int leaf2 ) {
+double PropagationGraphBuilder::ComputeEdgeDistance( int leaf1, int leaf2 ) {
 	// The method must not be called in this case
 	assert( leaf1 != leaf2 );
 
@@ -119,7 +118,10 @@ double PropagationGraph::ComputeEdgeDistance( int leaf1, int leaf2 ) {
 	return sqrt( (double)DistanceSquared( leafCenters[leaf1], leafCenters[leaf2] ) );
 }
 
-void PropagationGraph::GetLeafCenters() {
+void PropagationGraphBuilder::PrepareToBuild() {
+	GraphBuilder::PrepareToBuild();
+
+	leafCenters = (vec3_t *)::S_Malloc( numLeafs * sizeof( vec3_t ) );
 	for( int i = 1; i < numLeafs; ++i ) {
 		float *center = leafCenters[i];
 		const auto *bounds = trap_GetLeafBounds( i );
@@ -128,29 +130,50 @@ void PropagationGraph::GetLeafCenters() {
 	}
 }
 
-void PropagationGraph::BuildDistanceTable() {
-	for( int i = 1; i < numLeafs; ++i ) {
-		for( int j = i + 1; j < numLeafs; ++j ) {
-			SetEdgeDistance( i, j, ComputeEdgeDistance( i, j ) );
+template <typename AdjacencyListType, typename DistanceType>
+void GraphBuilder<AdjacencyListType, DistanceType>::PrepareToBuild() {
+	int numTableCells = this->numLeafs * this->numLeafs;
+	this->distanceTable = (double *)::S_Malloc( 2 * numTableCells * sizeof( double ) );
+	this->distanceTableBackup = this->distanceTable + numTableCells;
+}
+
+template <typename AdjacencyListType, typename DistanceType>
+void GraphBuilder<AdjacencyListType, DistanceType>::CheckMutualReachability( int leaf1, int leaf2 ) {
+	assert( leaf1 != leaf2 );
+	DistanceType direct = this->EdgeDistance( leaf1, leaf2 );
+	// Must be either a valid positive distance or an infinity
+	assert( direct > 0 );
+	DistanceType reverse = this->EdgeDistance( leaf2, leaf1 );
+	// Takes infinity into account as well
+	assert( direct == reverse );
+}
+
+template <typename AdjacencyListType, typename DistanceType>
+void GraphBuilder<AdjacencyListType, DistanceType>::BuildDistanceTable() {
+	for( int i = 1; i < this->numLeafs; ++i ) {
+		for( int j = i + 1; j < this->numLeafs; ++j ) {
+			this->SetEdgeDistance( i, j, this->ComputeEdgeDistance( i, j ) );
 #ifndef PUBLIC_BUILD
-			// Sanity check
-			double iToJ = EdgeDistance( i, j );
-			assert( iToJ > 0 );
-			assert( iToJ == EdgeDistance( j, i ) );
+			this->CheckMutualReachability( i, j );
 #endif
 		}
 	}
 }
 
-void PropagationGraph::BuildAdjacencyLists() {
+template <typename AdjacencyListType, typename DistanceType>
+void GraphBuilder<AdjacencyListType, DistanceType>::BuildAdjacencyLists() {
+	const int numLeafs = this->numLeafs;
+	const auto *distanceTable = this->distanceTable;
 	size_t totalNumCells = 0;
 	for( int i = 1; i < numLeafs; ++i ) {
 		int rowOffset = i * numLeafs;
-		for( int j = 1; j < numLeafs; ++j ) {
-			if( i == j ) {
-				continue;
+		for( int j = 1; j < i; ++j ) {
+			if( std::isfinite( distanceTable[rowOffset + j] ) ) {
+				totalNumCells++;
 			}
-			if( distanceTable[rowOffset + j] != std::numeric_limits<double>::infinity() ) {
+		}
+		for( int j = i + 1; j < numLeafs; ++j ) {
+			if( std::isfinite( distanceTable[rowOffset + j] ) ) {
 				totalNumCells++;
 			}
 		}
@@ -159,29 +182,31 @@ void PropagationGraph::BuildAdjacencyLists() {
 	// A first additional cell for a leaf is for a size "prefix" of adjacency list
 	// A second additional cell is for offset of the adjacency list in the compactified data
 	totalNumCells += 2 * numLeafs;
-	auto *mem = (int *)S_Malloc( totalNumCells * sizeof( int ) );
-	adjacencyListsData = mem;
-	adjacencyListOffsets = mem + ( totalNumCells - numLeafs );
+	auto *mem = (AdjacencyListType *)S_Malloc( totalNumCells * sizeof( AdjacencyListType ) );
+	auto *const adjacencyListsData = this->adjacencyListsData = mem;
+	auto *const adjacencyListsOffsets = this->adjacencyListsOffsets = mem + ( totalNumCells - numLeafs );
 
-	int *dataPtr = adjacencyListsData;
+	AdjacencyListType *dataPtr = adjacencyListsData;
 	// Write a zero-length list for the zero leaf
 	*dataPtr++ = 0;
-	adjacencyListOffsets[0] = 0;
+	adjacencyListsOffsets[0] = 0;
 
 	for( int i = 1; i < numLeafs; ++i ) {
 		int rowOffset = i * numLeafs;
 		// Save a position of the list length
-		int *const listLengthRef = dataPtr++;
-		for( int j = 1; j < numLeafs; ++j ) {
-			if( i == j ) {
-				continue;
-			}
-			if( distanceTable[rowOffset + j] != std::numeric_limits<double>::infinity() ) {
+		AdjacencyListType *const listLengthRef = dataPtr++;
+		for( int j = 1; j < i; ++j ) {
+			if( std::isfinite( distanceTable[rowOffset + j] ) ) {
 				*dataPtr++ = j;
 			}
 		}
-		adjacencyListOffsets[i] = (int)( listLengthRef - adjacencyListsData );
-		*listLengthRef = (int)( dataPtr - listLengthRef - 1 );
+		for( int j = i + 1; j < numLeafs; ++j ) {
+			if( std::isfinite( distanceTable[rowOffset + j] ) ) {
+				*dataPtr++ = j;
+			}
+		}
+		adjacencyListsOffsets[i] = (AdjacencyListType)( listLengthRef - adjacencyListsData );
+		*listLengthRef = (AdjacencyListType)( dataPtr - listLengthRef - 1 );
 	}
 }
 
@@ -199,7 +224,7 @@ struct HeapEntry {
 };
 
 class PathFinder {
-	PropagationGraph &graph;
+	PropagationGraphBuilder &graphBuilder;
 
 	struct VertexUpdateStatus {
 		double distance;
@@ -237,8 +262,8 @@ public:
 		}
 	};
 
-	explicit PathFinder( PropagationGraph &graph_ )
-		: graph( graph_ ), heapBufferLength( (unsigned)graph.NumLeafs() ) {
+	explicit PathFinder( PropagationGraphBuilder &graph_ )
+		: graphBuilder( graph_ ), heapBufferLength( (unsigned)graphBuilder.NumLeafs() ) {
 		updateStatus = (VertexUpdateStatus *)::S_Malloc( graph_.NumLeafs() * sizeof( VertexUpdateStatus ) );
 	}
 
@@ -252,7 +277,7 @@ public:
 };
 
 PathFinder::PathReverseIterator PathFinder::FindPath( int fromLeaf, int toLeaf ) {
-	for( int i = 0, end = graph.NumLeafs(); i < end; ++i ) {
+	for( int i = 0, end = graphBuilder.NumLeafs(); i < end; ++i ) {
 		auto *status = updateStatus + i;
 		status->distance = std::numeric_limits<double>::infinity();
 		status->parentLeaf = -1;
@@ -276,14 +301,14 @@ PathFinder::PathReverseIterator PathFinder::FindPath( int fromLeaf, int toLeaf )
 		}
 
 		// Now scan all adjacent vertices
-		const auto *const adjacencyList = graph.AdjacencyList( entry.leafNum ) + 1;
+		const auto *const adjacencyList = graphBuilder.AdjacencyList( entry.leafNum ) + 1;
 		for( int i = 0, end = adjacencyList[-1]; i < end; ++i ) {
 			const auto leafNum = adjacencyList[i];
 			auto *const status = &updateStatus[leafNum];
 			if( status->isVisited ) {
 				continue;
 			}
-			double edgeDistance = graph.EdgeDistance( entry.leafNum, leafNum );
+			double edgeDistance = graphBuilder.EdgeDistance( entry.leafNum, leafNum );
 			double relaxedDistance = edgeDistance + entry.distance;
 			if( status->distance <= relaxedDistance ) {
 				continue;
@@ -301,7 +326,7 @@ PathFinder::PathReverseIterator PathFinder::FindPath( int fromLeaf, int toLeaf )
 }
 
 class PropagationTableBuilder {
-	PropagationGraph graph;
+	PropagationGraphBuilder graphBuilder;
 	PathFinder pathFinder;
 
 	using PropagationProps = PropagationTable::PropagationProps;
@@ -315,7 +340,7 @@ class PropagationTableBuilder {
 	bool BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, double *distance );
 public:
 	PropagationTableBuilder( int actualNumLeafs, bool fastAndCoarse_ )
-		: graph( actualNumLeafs, fastAndCoarse_ ), pathFinder( graph ), fastAndCoarse( fastAndCoarse_ ) {}
+		: graphBuilder( actualNumLeafs, fastAndCoarse_ ), pathFinder( graphBuilder ), fastAndCoarse( fastAndCoarse_ ) {}
 
 	~PropagationTableBuilder() {
 		if( table ) {
@@ -337,11 +362,11 @@ public:
 };
 
 bool PropagationTableBuilder::Build() {
-	if( !graph.Build() ) {
+	if( !graphBuilder.Build() ) {
 		return false;
 	}
 
-	const int numLeafs = graph.NumLeafs();
+	const int numLeafs = graphBuilder.NumLeafs();
 	const size_t tableSizeInBytes = numLeafs * numLeafs * sizeof( PropagationProps );
 	// Use S_Malloc() for that as the table is transferred to PropagationTable itself
 	table = (PropagationProps *)S_Malloc( tableSizeInBytes );
@@ -369,7 +394,7 @@ bool PropagationTableBuilder::Build() {
 
 			PropagationProps &iProps = table[i * numLeafs + j];
 			PropagationProps &jProps = table[j * numLeafs + i];
-			if( graph.EdgeDistance( i, j ) != std::numeric_limits<double>::infinity() ) {
+			if( graphBuilder.EdgeDistance( i, j ) != std::numeric_limits<double>::infinity() ) {
 				iProps.hasDirectPath = jProps.hasDirectPath = 1;
 				continue;
 			}
@@ -476,7 +501,7 @@ bool PropagationTableBuilder::BuildPropagationPath( int leaf1, int leaf2, vec3_t
 		int prevLeaf = leaf2;
 
 		// tmpLeafNums are capacious enough to store slightly more than NumLeafs() * 2 elements
-		int *const directLeafNumsEnd = this->tmpLeafNums + graph.NumLeafs() + 1;
+		int *const directLeafNumsEnd = this->tmpLeafNums + graphBuilder.NumLeafs() + 1;
 		// Values will be written at this decreasing pointer
 		// <- [directLeafNumsBegin.... directLeafNumsEnd)
 		int *directLeafNumsBegin = directLeafNumsEnd;
@@ -507,16 +532,16 @@ bool PropagationTableBuilder::BuildPropagationPath( int leaf1, int leaf2, vec3_t
 
 			// Save the real distance table on demand
 			if( !hasModifiedDistanceTable ) {
-				graph.SaveDistanceTable();
+				graphBuilder.SaveDistanceTable();
 			}
 			hasModifiedDistanceTable = true;
 
 			// Scale the weight of the edges in the current path,
 			// so weights will be modified for finding N-th best path
-			double oldEdgeDistance = graph.EdgeDistance( prevLeaf, nextLeaf );
+			double oldEdgeDistance = graphBuilder.EdgeDistance( prevLeaf, nextLeaf );
 			// Check whether it was a valid edge
 			assert( oldEdgeDistance > 0 && oldEdgeDistance != std::numeric_limits<double>::infinity() );
-			graph.SetEdgeDistance( prevLeaf, nextLeaf, 3.0f * oldEdgeDistance );
+			graphBuilder.SetEdgeDistance( prevLeaf, nextLeaf, 3.0f * oldEdgeDistance );
 		} while( prevLeaf != leaf1 );
 
 		// Write leaf1 as well
@@ -537,7 +562,7 @@ bool PropagationTableBuilder::BuildPropagationPath( int leaf1, int leaf2, vec3_t
 	}
 
 	if( hasModifiedDistanceTable ) {
-		graph.RestoreDistanceTable();
+		graphBuilder.RestoreDistanceTable();
 	}
 
 	if( !numAttempts ) {
@@ -546,7 +571,7 @@ bool PropagationTableBuilder::BuildPropagationPath( int leaf1, int leaf2, vec3_t
 
 	_1to2Builder.BuildDir( _1to2 );
 	_2to1Builder.BuildDir( _2to1 );
-	*distance = graph.EdgeDistance( leaf1, leaf2 );
+	*distance = graphBuilder.EdgeDistance( leaf1, leaf2 );
 	assert( *distance > 0 && std::isfinite( *distance ) );
 	return true;
 }
@@ -555,13 +580,13 @@ void PropagationTableBuilder::BuildInfluxDirForLeaf( float *allocatedDir,
 													 const int *leafsChain,
 													 int numLeafsInChain ) {
 	assert( numLeafsInChain > 1 );
-	const float *firstLeafCenter = graph.LeafCenter( leafsChain[0] );
+	const float *firstLeafCenter = graphBuilder.LeafCenter( leafsChain[0] );
 	const int maxTestedLeafs = std::min( numLeafsInChain, (int)WeightedDirBuilder::MAX_DIRS );
 	constexpr float distanceThreshold = 768.0f;
 
 	WeightedDirBuilder builder;
 	for( int i = 1, end = maxTestedLeafs; i < end; ++i ) {
-		const float *leafCenter = graph.LeafCenter( leafsChain[i] );
+		const float *leafCenter = graphBuilder.LeafCenter( leafsChain[i] );
 		const float squareDistance = DistanceSquared( firstLeafCenter, leafCenter );
 		// If the current leaf is far from the first one
 		if( squareDistance >= distanceThreshold * distanceThreshold ) {

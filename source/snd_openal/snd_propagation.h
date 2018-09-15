@@ -4,6 +4,40 @@
 #include "snd_local.h"
 #include "snd_cached_computation.h"
 
+template <typename AdjacencyListType, typename DistanceType>
+class GraphLike {
+protected:
+	DistanceType *distanceTable { nullptr };
+	AdjacencyListType *adjacencyListsData { nullptr };
+	AdjacencyListType *adjacencyListsOffsets { nullptr };
+	int numLeafs;
+	explicit GraphLike( int numLeafs_ ): numLeafs( numLeafs_ ) {}
+public:
+	virtual ~GraphLike() {
+		if( distanceTable ) {
+			S_Free( distanceTable );
+		}
+		if( adjacencyListsData ) {
+			S_Free( adjacencyListsData );
+		}
+	}
+
+	int NumLeafs() const { return numLeafs; }
+
+	DistanceType EdgeDistance( int leaf1, int leaf2 ) const {
+		assert( distanceTable );
+		assert( leaf1 > 0 && leaf1 < numLeafs );
+		assert( leaf2 > 0 && leaf2 < numLeafs );
+		return distanceTable[leaf1 * numLeafs + leaf2];
+	}
+
+	const AdjacencyListType *AdjacencyList( int leafNum ) const {
+		assert( adjacencyListsData && adjacencyListsOffsets );
+		assert( leafNum > 0 && leafNum < numLeafs );
+		return adjacencyListsData + adjacencyListsOffsets[leafNum];
+	}
+};
+
 class PropagationTable: public CachedComputation {
 	friend class PropagationIOHelper;
 	friend class PropagationTableReader;
