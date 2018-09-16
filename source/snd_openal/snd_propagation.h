@@ -6,6 +6,7 @@
 
 template <typename AdjacencyListType, typename DistanceType>
 class GraphLike {
+	friend class CachedLeafsGraph;
 protected:
 	DistanceType *distanceTable { nullptr };
 	AdjacencyListType *adjacencyListsData { nullptr };
@@ -38,11 +39,54 @@ public:
 	}
 };
 
+class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
+	typedef GraphLike<int, float> ParentGraphType;
+
+	friend class PropagationTable;
+
+	int leafListsDataSize { -1 };
+	bool isUsingValidData { false };
+
+	void ResetExistingState( const char *actualMap, int actualNumLeafs ) override;
+	bool TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) override;
+	void ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) override;
+	bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) override;
+
+	CachedLeafsGraph(): CachedComputation( "CachedLeafsGraph" ), GraphLike<int, float>( -1 ) {}
+
+	static CachedLeafsGraph *instance;
+public:
+	static CachedLeafsGraph *Instance() { return instance; }
+
+	/**
+	 * Exposed for {@code GraphBuilder<?,?>::TryUsingGlobalGraph()} (a template can't be a friend).
+	 * @todo rename the corresponding member?
+	 */
+	bool IsUsingDummyData() const { return !isUsingValidData; }
+	/**
+	 * Exposed for {@code GraphBuilder<?,?>::TryUsingGlobalGraph()} (a template can't be a friend).
+	 * @note the size is specified in integer elements and not in bytes.
+	 */
+	int LeafListsDataSize() const { return leafListsDataSize; }
+	/**
+	 * Exposed for {@code GraphBuilder<?,?>::TryUsingGlobalGraph()} (a template can't be a friend).
+	 */
+	const float *DistanceTable() const { return distanceTable; }
+	/**
+	 * A helper that resolves ambiguous calls of {@code NumLeafs()} of both base classes.
+	 */
+	int NumLeafs() const { return ( (ParentGraphType *)this)->NumLeafs(); }
+
+	static void Init();
+	static void Shutdown();
+};
+
 class PropagationTable: public CachedComputation {
 	friend class PropagationIOHelper;
 	friend class PropagationTableReader;
 	friend class PropagationTableWriter;
 	friend class PropagationTableBuilder;
+	friend class CachedLeafsGraph;
 
 	struct alignas( 1 )PropagationProps {
 		int8_t dirX: 6;
@@ -104,7 +148,15 @@ class PropagationTable: public CachedComputation {
 		return table[numLeafs * fromLeafNum + toLeafNum];
 	}
 
-	void ResetExistingState( const char *actualMap, int actualNumLeafs ) override;
+	void Clear() {
+		FreeIfNeeded( &table );
+		isUsingValidTable = false;
+	}
+
+	void ResetExistingState( const char *, int ) override {
+		Clear();
+	}
+
 	bool TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) override;
 	void ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) override;
 	bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) override;
@@ -114,9 +166,7 @@ public:
 	PropagationTable(): CachedComputation( "PropagationTable" ) {}
 
 	~PropagationTable() override {
-		if( table ) {
-			S_Free( table );
-		}
+		Clear();
 	}
 
 	bool IsValid() const { return table != nullptr; }

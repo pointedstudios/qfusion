@@ -15,6 +15,26 @@ static ListenerProps listenerProps;
 
 static_assert( PanningUpdateState::MAX_POINTS == MAX_REVERB_PRIMARY_RAY_SAMPLES, "" );
 
+static void ENV_ShutdownGlobalInstances() {
+	LeafPropsCache::Init();
+	CachedLeafsGraph::Shutdown();
+	PropagationTable::Shutdown();
+}
+
+static void ENV_DispatchEnsureValidCall() {
+	LeafPropsCache::Instance()->EnsureValid();
+	CachedLeafsGraph::Instance()->EnsureValid();
+	PropagationTable::Instance()->EnsureValid();
+}
+
+static void ENV_InitGlobalInstances() {
+	LeafPropsCache::Init();
+	CachedLeafsGraph::Init();
+	PropagationTable::Init();
+
+	ENV_DispatchEnsureValidCall();
+}
+
 void ENV_Init() {
 	if( !s_environment_effects->integer ) {
 		return;
@@ -22,12 +42,7 @@ void ENV_Init() {
 
 	listenerProps.InvalidateCachedUpdateState();
 
-	LeafPropsCache::Init();
-	PropagationTable::Init();
-	EffectsAllocator::Init();
-
-	LeafPropsCache::Instance()->EnsureValid();
-	PropagationTable::Instance()->EnsureValid();
+	ENV_InitGlobalInstances();
 }
 
 void ENV_Shutdown() {
@@ -35,9 +50,7 @@ void ENV_Shutdown() {
 		return;
 	}
 
-	EffectsAllocator::Shutdown();
-	PropagationTable::Shutdown();
-	LeafPropsCache::Shutdown();
+	ENV_ShutdownGlobalInstances();
 
 	listenerProps.InvalidateCachedUpdateState();
 }
@@ -47,8 +60,7 @@ void ENV_EndRegistration() {
 		return;
 	}
 
-	LeafPropsCache::Instance()->EnsureValid();
-	PropagationTable::Instance()->EnsureValid();
+	ENV_ShutdownGlobalInstances();
 }
 
 void ENV_RegisterSource( src_t *src ) {

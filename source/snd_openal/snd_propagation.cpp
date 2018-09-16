@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 
 template <typename AdjacencyListType, typename DistanceType>
 class MutableGraph: public GraphLike<AdjacencyListType, DistanceType> {
@@ -60,24 +61,46 @@ protected:
 	virtual void BuildAdjacencyLists();
 
 	void CheckMutualReachability( int leaf1, int leaf2 );
+
+	template <typename T> T *TransferCheckingNullity( T **member ) {
+		assert( *member );
+		T *result = *member;
+		*member = nullptr;
+		return result;
+	}
+
+	bool TryUsingGlobalGraph( const CachedLeafsGraph *globalGraph );
 public:
-	bool Build();
+	/**
+	 * Tries to build the graph data (or reuse data from the global graph).
+	 * @param tryUsingGlobalGraph whether an attempt to reuse data of the global leafs graph should be made.
+	 * Keep using the default true value of this parameter except the case when the global graph is built itself.
+	 * @return true if the graph data has been built (or reused) successfully.
+	 */
+	bool Build( bool tryUsingGlobalGraph = true );
+
+	void TransferOwnership( DistanceType **table, AdjacencyListType **lists, AdjacencyListType **listsOffsets ) {
+		*table = TransferCheckingNullity( &this->distanceTable );
+		*lists = TransferCheckingNullity( &this->adjacencyListsData );
+		*listsOffsets = TransferCheckingNullity( &this->adjacencyListsOffsets );
+	}
 };
 
-class PropagationGraphBuilder: public GraphBuilder<int, double> {
+template <typename DistanceType>
+class PropagationGraphBuilder: public GraphBuilder<int, DistanceType> {
 	vec3_t *leafCenters { nullptr };
 	const bool fastAndCoarse;
 
 	void PrepareToBuild() override;
 
-	double ComputeEdgeDistance( int leaf1, int leaf2 ) override;
+	DistanceType ComputeEdgeDistance( int leaf1, int leaf2 ) override;
 public:
 	PropagationGraphBuilder( int actualNumLeafs, bool fastAndCoarse_ )
-		: GraphBuilder( actualNumLeafs ), fastAndCoarse( fastAndCoarse_ ) {}
+		: GraphBuilder<int, DistanceType>( actualNumLeafs ), fastAndCoarse( fastAndCoarse_ ) {}
 
 	const float *LeafCenter( int leafNum ) const {
 		assert( leafCenters );
-		assert( leafNum > 0 && leafNum < numLeafs );
+		assert( leafNum > 0 && leafNum < this->NumLeafs() );
 		return leafCenters[leafNum];
 	}
 
@@ -89,40 +112,51 @@ public:
 };
 
 template <typename AdjacencyListType, typename DistanceType>
-bool GraphBuilder<AdjacencyListType, DistanceType>::Build() {
-	if( !this->numLeafs ) {
-		Com_Printf( S_COLOR_RED "GraphBuilder<?,?>::Build(): The map has zero leafs\n" );
-		return false;
-	}
+bool GraphBuilder<AdjacencyListType, DistanceType>::Build( bool tryUsingGlobalGraph ) {
+	// Should not be called for empty graphs
+	assert( this->numLeafs > 0 );
 
 	PrepareToBuild();
+
+	// Must be false for the global graph itself
+	if( tryUsingGlobalGraph ) {
+		auto *globalGraph = CachedLeafsGraph::Instance();
+		globalGraph->EnsureValid();
+		if( TryUsingGlobalGraph( globalGraph ) ) {
+			return true;
+		}
+	}
+
 	BuildDistanceTable();
 	BuildAdjacencyLists();
 	return true;
 }
 
-double PropagationGraphBuilder::ComputeEdgeDistance( int leaf1, int leaf2 ) {
+template <typename DistanceType>
+DistanceType PropagationGraphBuilder<DistanceType>::ComputeEdgeDistance( int leaf1, int leaf2 ) {
 	// The method must not be called in this case
 	assert( leaf1 != leaf2 );
 
 	if( !trap_LeafsInPVS( leaf1, leaf2 ) ) {
-		return std::numeric_limits<double>::infinity();
+		return std::numeric_limits<DistanceType>::infinity();
 	}
 
 	trace_t trace;
 	trap_Trace( &trace, leafCenters[leaf1], leafCenters[leaf2], vec3_origin, vec3_origin, MASK_SOLID );
 	if( trace.fraction != 1.0f ) {
-		return std::numeric_limits<double>::infinity();
+		return std::numeric_limits<DistanceType>::infinity();
 	}
 
-	return sqrt( (double)DistanceSquared( leafCenters[leaf1], leafCenters[leaf2] ) );
+	// std::sqrt provides a right overload for the actual type.
+	return std::sqrt( (DistanceType)DistanceSquared( leafCenters[leaf1], leafCenters[leaf2] ) );
 }
 
-void PropagationGraphBuilder::PrepareToBuild() {
-	GraphBuilder::PrepareToBuild();
+template <typename DistanceType>
+void PropagationGraphBuilder<DistanceType>::PrepareToBuild() {
+	GraphBuilder<int, DistanceType>::PrepareToBuild();
 
-	leafCenters = (vec3_t *)::S_Malloc( numLeafs * sizeof( vec3_t ) );
-	for( int i = 1; i < numLeafs; ++i ) {
+	leafCenters = (vec3_t *)::S_Malloc( this->numLeafs * sizeof( vec3_t ) );
+	for( int i = 1; i < this->numLeafs; ++i ) {
 		float *center = leafCenters[i];
 		const auto *bounds = trap_GetLeafBounds( i );
 		VectorAdd( bounds[0], bounds[1], center );
@@ -133,7 +167,8 @@ void PropagationGraphBuilder::PrepareToBuild() {
 template <typename AdjacencyListType, typename DistanceType>
 void GraphBuilder<AdjacencyListType, DistanceType>::PrepareToBuild() {
 	int numTableCells = this->numLeafs * this->numLeafs;
-	this->distanceTable = (double *)::S_Malloc( 2 * numTableCells * sizeof( double ) );
+	size_t numTableBytes = 2 * numTableCells * sizeof( DistanceType );
+	this->distanceTable = (DistanceType *)::S_Malloc( numTableBytes );
 	this->distanceTableBackup = this->distanceTable + numTableCells;
 }
 
@@ -224,7 +259,7 @@ struct HeapEntry {
 };
 
 class PathFinder {
-	PropagationGraphBuilder &graphBuilder;
+	PropagationGraphBuilder<double> &graphBuilder;
 
 	struct VertexUpdateStatus {
 		double distance;
@@ -262,7 +297,7 @@ public:
 		}
 	};
 
-	explicit PathFinder( PropagationGraphBuilder &graph_ )
+	explicit PathFinder( PropagationGraphBuilder<double> &graph_ )
 		: graphBuilder( graph_ ), heapBufferLength( (unsigned)graphBuilder.NumLeafs() ) {
 		updateStatus = (VertexUpdateStatus *)::S_Malloc( graph_.NumLeafs() * sizeof( VertexUpdateStatus ) );
 	}
@@ -326,7 +361,7 @@ PathFinder::PathReverseIterator PathFinder::FindPath( int fromLeaf, int toLeaf )
 }
 
 class PropagationTableBuilder {
-	PropagationGraphBuilder graphBuilder;
+	PropagationGraphBuilder<double> graphBuilder;
 	PathFinder pathFinder;
 
 	using PropagationProps = PropagationTable::PropagationProps;
@@ -656,15 +691,6 @@ void PropagationTable::Shutdown() {
 	}
 }
 
-void PropagationTable::ResetExistingState( const char *, int actualNumLeafs ) {
-	if( table ) {
-		S_Free( table );
-		table = nullptr;
-	}
-
-	isUsingValidTable = false;
-}
-
 bool PropagationTable::TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) {
 	PropagationTableReader reader( actualMap, actualChecksum, fsFlags );
 	return ( this->table = reader.ReadPropsTable( actualNumLeafs ) ) != nullptr;
@@ -702,52 +728,356 @@ bool PropagationTable::SaveToCache( const char *actualMap, const char *actualChe
 }
 
 PropagationTableReader::PropagationProps *PropagationTableReader::ReadPropsTable( int actualNumLeafs ) {
+	// Sanity check
+	assert( actualNumLeafs > 0 && actualNumLeafs < ( 1 << 20 ) );
+
 	if( fsResult < 0 ) {
 		return nullptr;
 	}
 
-	if( ( fileData + fileSize ) - dataPtr < 4 ) {
+	int32_t savedNumLeafs;
+	if( !ReadInt32( &savedNumLeafs ) ) {
+		fsResult = -1;
 		return nullptr;
 	}
 
-	int32_t numLeafsBuffer;
-	memcpy( &numLeafsBuffer, dataPtr, 4 );
-	dataPtr += 4;
-	numLeafsBuffer = LittleLong( numLeafsBuffer );
-	// Check whether it actually matches
-	if( numLeafsBuffer != actualNumLeafs ) {
+	if( savedNumLeafs != actualNumLeafs ) {
+		fsResult = -1;
 		return nullptr;
 	}
 
-	size_t expectedSize = actualNumLeafs * actualNumLeafs * sizeof( PropagationProps )  ;
-	if( ( ( fileData + fileSize ) - dataPtr ) != (ptrdiff_t)expectedSize ) {
-		return nullptr;
-	}
-
-	// Never returns on failure?
-	auto *const result = (PropagationProps *)S_Malloc( expectedSize );
+	size_t expectedSize = actualNumLeafs * actualNumLeafs * sizeof( PropagationProps );
 	// TODO:... this is pretty bad..
 	// Just return a view of the file data that is read and is kept in-memory.
 	// An overhead of storing few extra strings at the beginning is insignificant.
-	memcpy( result, dataPtr, expectedSize );
-	return result;
+	// Never returns on failure?
+	auto *const result = (PropagationProps *)S_Malloc( expectedSize );
+	if( Read( result, expectedSize ) ) {
+		return result;
+	}
+
+	S_Free( result );
+	fsResult = -1;
+	return nullptr;
 }
 
 bool PropagationTableWriter::WriteTable( const PropagationTable::PropagationProps *table, int numLeafs ) {
+	// Sanity check
+	assert( numLeafs > 0 && numLeafs < ( 1 << 20 ) );
+
 	if( fsResult < 0 ) {
 		return false;
 	}
 
-	int32_t numLeafsBuffer = LittleLong( numLeafs );
-	if( trap_FS_Write( &numLeafsBuffer, 4, fd ) != 4 ) {
-		fsResult = -1;
+	if( !WriteInt32( numLeafs ) ) {
 		return false;
 	}
 
-	size_t expectedSize = sizeof( *table ) * numLeafs * numLeafs;
-	if( trap_FS_Write( table, expectedSize, fd ) != (int)expectedSize ) {
-		fsResult = -1;
+	return Write( table, numLeafs * numLeafs * sizeof( PropagationProps ) );
+}
+
+static constexpr auto GRAPH_EXTENSION = ".graph";
+
+class CachedGraphReader: public CachedComputationReader {
+public:
+	CachedGraphReader( const char *map_, const char *checksum_, int numLeafs, int fsFlags )
+		: CachedComputationReader( map_, checksum_, GRAPH_EXTENSION, fsFlags ) {}
+
+	bool Read( float**distanceTable, int *numLeafs_, int **adjacencyListsData, int **adjacencyListsOffsets );
+};
+
+class CachedGraphWriter: public CachedComputationWriter {
+public:
+	CachedGraphWriter( const char *map_, const char *checksum_ )
+		: CachedComputationWriter( map_, checksum_, GRAPH_EXTENSION ) {}
+
+	bool Write( int numLeafs, int listsDataSize, const float *distanceTable, const int *adjacencyListsData );
+};
+
+static ATTRIBUTE_ALIGNED( 16 ) uint8_t graphInstanceHolder[sizeof( CachedLeafsGraph )];
+CachedLeafsGraph *CachedLeafsGraph::instance = nullptr;
+
+void CachedLeafsGraph::Init() {
+	assert( !instance );
+	instance = new( graphInstanceHolder )CachedLeafsGraph();
+}
+
+void CachedLeafsGraph::Shutdown() {
+	if( instance ) {
+		instance->~CachedLeafsGraph();
+		instance = nullptr;
+	}
+}
+
+void CachedLeafsGraph::ResetExistingState( const char *, int ) {
+	FreeIfNeeded( &distanceTable );
+	FreeIfNeeded( &adjacencyListsData );
+	// Just nullify the pointer. A corresponding chunk belongs to the lists data.
+	adjacencyListsOffsets = nullptr;
+	isUsingValidData = false;
+}
+
+bool CachedLeafsGraph::TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) {
+	CachedGraphReader reader( actualMap, actualChecksum, actualNumLeafs, fsFlags );
+	if( reader.Read( &this->distanceTable,
+					 &( (ParentGraphType *)this )->numLeafs,
+					 &this->adjacencyListsData,
+					 &this->adjacencyListsOffsets ) ) {
+		// Derive the total size from the relative offset
+		// TODO: These implications on the data layout look bad...
+		leafListsDataSize = (int)( this->adjacencyListsOffsets - this->adjacencyListsData ) + actualNumLeafs;
+		return true;
+	}
+	return false;
+}
+
+void CachedLeafsGraph::ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse_ ) {
+	// Always set the number of leafs for the graph even if we have not managed to build the graph.
+	// The number of leafs in the CachedComputation will be always set by its EnsureValid() logic.
+	// Hack... we have to resolve multiple inheritance ambiguity.
+	( ( ParentGraphType *)this)->numLeafs = actualNumLeafs;
+
+	PropagationGraphBuilder<float> builder( actualNumLeafs, fastAndCoarse_ );
+	// Override the default "tryUsingGlobalGraph" parameter value to prevent infinite recursion.
+	if( builder.Build( false ) ) {
+		// The builder should no longer own the distance table and the leafs lists data.
+		// They should be freed using S_Free() on our own.
+		builder.TransferOwnership( &this->distanceTable, &this->adjacencyListsData, &this->adjacencyListsOffsets );
+		// Set this so the data will be saved to file
+		isUsingValidData = true;
+		// TODO: Transfer the data size explicitly instead of relying on implied data offset
+		this->leafListsDataSize = (int)( this->adjacencyListsOffsets - this->adjacencyListsData );
+		this->leafListsDataSize += actualNumLeafs;
+		return;
+	}
+
+	// Allocate a small chunk for the table... it is not going to be accessed
+	this->distanceTable = (float *)S_Malloc( 0 );
+	// Allocate a dummy cell for a dummy list and a full row for offsets
+	auto *leafsData = (int *)S_Malloc( sizeof( int ) * ( actualNumLeafs + 1 ) );
+	// Put the dummy list at the beginning
+	leafsData[0] = 0;
+	// Make all offsets refer to the dummy list
+	memset( leafsData + 1, 0, sizeof( int ) * actualNumLeafs );
+	this->adjacencyListsData = leafsData;
+	this->adjacencyListsOffsets = leafsData + 1;
+}
+
+bool CachedLeafsGraph::SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) {
+	if( !isUsingValidData ) {
 		return false;
+	}
+
+	CachedGraphWriter writer( actualMap, actualChecksum );
+	auto listsDataSize = (int)( this->adjacencyListsOffsets - this->adjacencyListsData );
+	assert( listsDataSize > 0 );
+	// Add offsets data size (which is equal to number of lists) to the total lists data size.
+	// Note: the data size is assumed to be in integer elements and not in bytes.
+	// The reader expects the total data size and expects offsets at the end of this data minus the number of lists.
+	listsDataSize += actualNumLeafs;
+	return writer.Write( actualNumLeafs, listsDataSize, this->distanceTable, this->adjacencyListsData );
+}
+
+struct SoundMemDeleter {
+	void operator()( void *p ) {
+		if( p ) {
+			S_Free( p );
+		}
+	}
+};
+
+bool CachedGraphReader::Read( float **distanceTable, int *numLeafs_, int **adjacencyListsData, int **adjacencyListsOffsets ) {
+	if( fsResult < 0 ) {
+		return false;
+	}
+
+	int32_t numLeafs;
+	if( !ReadInt32( &numLeafs ) ) {
+		return false;
+	}
+
+	// Sanity check
+	if( numLeafs < 1 || numLeafs > ( 1 << 24 ) ) {
+		return false;
+	}
+
+	// Read the lists data size. Note that it is specified in int elements and not in bytes.
+	int32_t listsDataSize;
+	if( !ReadInt32( &listsDataSize ) ) {
+		return false;
+	}
+
+	// Sanity check
+	if( listsDataSize < numLeafs ) {
+		return false;
+	}
+
+	const size_t numBytesForTable = numLeafs * numLeafs * sizeof( float );
+	const size_t numBytesForLists = listsDataSize * sizeof( int );
+	if( BytesLeft() != numBytesForTable + numBytesForLists ) {
+		return false;
+	}
+
+	std::unique_ptr<float, SoundMemDeleter> tableHolder( (float *)S_Malloc( numBytesForTable ) );
+	if( !CachedComputationReader::Read( tableHolder.get(), numBytesForTable ) ) {
+		return false;
+	}
+
+	std::unique_ptr<int, SoundMemDeleter> listsDataHolder( (int *)S_Malloc( numBytesForLists ) );
+	if( !CachedComputationReader::Read( listsDataHolder.get(), numBytesForLists ) ) {
+		return false;
+	}
+
+	// Swap bytes in lists and validate lists first
+	// There is some chance of a failure.
+	const int *const listsDataBegin = listsDataHolder.get();
+	int *const offsets = listsDataHolder.get() + listsDataSize - numLeafs;
+	const int *const listsDataEnd = listsDataHolder.get() + listsDataSize - numLeafs;
+	if( offsets <= listsDataBegin ) {
+		return false;
+	}
+
+	// Byte-swap and validate offsets
+	int prevOffset = 0;
+	for( int i = 1; i < numLeafs; ++i ) {
+		offsets[i] = LittleLong( offsets[i] );
+		if( offsets[i] < 0 ) {
+			return false;
+		}
+		if( offsets[i] >= listsDataSize - numLeafs ) {
+			return false;
+		}
+		if( offsets[i] <= prevOffset ) {
+			return false;
+		}
+		prevOffset = offsets[i];
+	}
+
+	// Byte-swap and validate lists
+	int tableRowOffset = 0;
+
+	// Start from the list for element #1
+	// Retrieval data for a zero leaf is illegal anyway.
+	const int *expectedNextListAddress = listsDataHolder.get() + 1;
+	for( int i = 1; i < numLeafs; ++i ) {
+		tableRowOffset += i * numLeafs;
+		// We have ensured this offset is valid
+		int *list = listsDataHolder.get() + offsets[i];
+		// Check whether the list follows the previous list
+		if( list != expectedNextListAddress ) {
+			return false;
+		}
+		// Swap bytes in the memory, copy to a local variable only after that!
+		*list = LittleLong( *list );
+		// The first element of the list is it's size. Check it for sanity first.
+		const int listSize = *list++;
+		if( listSize < 0 || listSize > ( 1 << 24 ) ) {
+			return false;
+		}
+		// Check whether accessing elements in range defined by this size is allowed.
+		if( list + listSize > listsDataEnd ) {
+			return false;
+		}
+		for( int j = 0; j < listSize; ++j ) {
+			list[j] = LittleLong( list[j] );
+			// Check whether its a valid non-zero leaf
+			if( list[j] < 1 || list[j] >= numLeafs ) {
+				return false;
+			}
+		}
+		expectedNextListAddress = list + listSize;
+	}
+
+	for( int i = 0, end = numLeafs * numLeafs; i < end; ++i ) {
+		tableHolder.get()[i] = LittleLong( tableHolder.get()[i] );
+	}
+
+	*distanceTable = tableHolder.release();
+	*adjacencyListsData = listsDataHolder.release();
+	*adjacencyListsOffsets = *adjacencyListsData + listsDataSize - numLeafs;
+	// Its really better to operate on this local variable.
+	// Actually this parameter was introduced later and its usage is inconvenient anyway.
+	*numLeafs_ = numLeafs;
+	return true;
+}
+
+bool CachedGraphWriter::Write( int numLeafs, int listsDataSize, const float *distanceTable, const int *listsData ) {
+	static_assert( sizeof( int32_t ) == sizeof( int ), "" );
+
+	if( !WriteInt32( numLeafs ) ) {
+		return false;
+	}
+	if( !WriteInt32( listsDataSize ) ) {
+		return false;
+	}
+	if( !CachedComputationWriter::Write( distanceTable, numLeafs * numLeafs * sizeof( float ) ) ) {
+		return false;
+	}
+	if( !CachedComputationWriter::Write( listsData, listsDataSize * sizeof( int ) ) ) {
+		return false;
+	}
+
+	return true;
+}
+
+template <typename AdjacencyListType, typename DistanceType>
+bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( const CachedLeafsGraph *globalGraph ) {
+	if( globalGraph->IsUsingDummyData() ) {
+		return false;
+	}
+
+	const int numLeafs = globalGraph->NumLeafs();
+	const int listsDataSize = globalGraph->LeafListsDataSize();
+
+	this->adjacencyListsData = (AdjacencyListType *)S_Malloc( listsDataSize * sizeof( AdjacencyListType ) );
+	this->adjacencyListsOffsets = this->adjacencyListsData + listsDataSize - numLeafs;
+
+	// If the global graph has been built/loaded successfully
+	// its lists must be valid, so assertions are put.
+	// However, data loss due to using lesser types is treated as inability to reuse the global graph.
+	// TODO: Does it mean the graph cannot be built for the types pair of this builder?
+
+	// The first element of the global graph is a dummy value for zero list
+	// (so we do not have to correct a list index every time we perform an access)
+	// However thats where lists data actually begin.
+	const int *const thatListsDataBegin = globalGraph->AdjacencyList( 1 ) - 1;
+	AdjacencyListType *thisData = this->adjacencyListsData;
+	// Put a dummy value for the zero leaf
+	*thisData++ = 0;
+	for( int i = 1; i < numLeafs; ++i ) {
+		const int *thatList = globalGraph->AdjacencyList( i );
+		const ptrdiff_t actualOffset = thatList - thatListsDataBegin;
+		// Must be valid
+		assert( actualOffset >= 0 );
+		// Check for overflow if casting to a lesser type
+		if( actualOffset > std::numeric_limits<DistanceType>::max() ) {
+			return false;
+		}
+		this->adjacencyListsOffsets[i] = (AdjacencyListType)( actualOffset );
+		const int listSize = *thatList++;
+		// Check the length for sanity
+		assert( listSize >= 0 );
+		// Add the list length to the lists data of this builder
+		*thisData++ = (AdjacencyListType)listSize;
+		for( int j = 0; j < listSize; ++j ) {
+			const int leafNum = thatList[j];
+			// Check whether the leaf num is valid
+			assert( leafNum > 0 && leafNum < numLeafs );
+			// Check for overflow if casting to a lesser type
+			if( leafNum > std::numeric_limits<DistanceType>::max() ) {
+				return false;
+			}
+			// Add the list element to the lists data of this builder
+			*thisData++ = (AdjacencyListType)leafNum;
+		}
+	}
+
+	// Must match the beginning of the offsets after lists data has been written
+	assert( thisData == this->adjacencyListsOffsets );
+
+	const float *thatDistanceTable = globalGraph->DistanceTable();
+	for( int i = 0, end = numLeafs * numLeafs; i < end; ++i ) {
+		this->distanceTable[i] = (DistanceType)thatDistanceTable[i];
 	}
 
 	return true;

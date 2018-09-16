@@ -80,6 +80,28 @@ bool CachedComputationReader::ExpectString( const char *string ) {
 		dataPtr++;
 	}
 
+	if( BytesLeft() >= 2 ) {
+		// Hack! CachedComputationWriter::WriteString() puts \r\n for every file be it textual or binary.
+		// Skip \r\n sequence if it present.
+		// This should not lead to a malformed input as binary cache files
+		// are not intended to be edited via external tools.
+		// TODO: Put integer magics before actual binary data to ensure the data is read correct?
+		// Note that every binary file performs data validation
+		// to avoid runtime crashes (e.g. due to illegal array offsets).
+		if( dataPtr[0] == '\r' && dataPtr[1] == '\n' ) {
+			dataPtr += 2;
+		}
+	}
+
+	return true;
+}
+
+bool CachedComputationReader::Read( void *data, size_t size ) {
+	if( BytesLeft() < size ) {
+		return false;
+	}
+	memcpy( data, dataPtr, size );
+	dataPtr += size;
 	return true;
 }
 
@@ -146,5 +168,21 @@ CachedComputationWriter::CachedComputationWriter( const char *map_, const char *
 bool CachedComputationWriter::WriteString( const char *string ) {
 	char buffer[MAX_STRING_CHARS];
 	auto charsPrinted = (unsigned)Q_snprintfz( buffer, sizeof( buffer ), "%s\r\n", string );
-	return charsPrinted == trap_FS_Write( buffer, charsPrinted, fd );
+	if( charsPrinted == trap_FS_Write( buffer, charsPrinted, fd ) ) {
+		bytesWritten += charsPrinted;
+		return true;
+	}
+	return false;
+}
+
+bool CachedComputationWriter::Write( const void *data, size_t size ) {
+	if( fsResult < 0 ) {
+		return false;
+	}
+	if( trap_FS_Write( data, size, fd ) != (int)size ) {
+		fsResult = -1;
+		return false;
+	}
+	bytesWritten += size;
+	return true;
 }

@@ -22,6 +22,15 @@ protected:
 	virtual void NotifyOfComputationFailure();
 
 	int NumLeafs() const { return numLeafs; };
+
+	template <typename T>
+	void FreeIfNeeded( T **p ) {
+		if( *p ) {
+			S_Free( *p );
+			*p = nullptr;
+		}
+	}
+
 public:
 	explicit CachedComputation( const char *logTag_): logTag( logTag_) {
 		mapName[0] = '\0';
@@ -69,6 +78,23 @@ protected:
 	}
 
 	bool ExpectString( const char *string );
+
+	bool ReadInt32( int32_t *result ) {
+		if( Read( result, 4 ) ) {
+			*result = LittleLong( *result );
+			return true;
+		}
+		return false;
+	}
+
+	bool Read( void *data, size_t size );
+
+	size_t BytesLeft() {
+		if( dataPtr <= fileData + fileSize ) {
+			return (size_t)( ( fileData + fileSize ) - dataPtr );
+		}
+		return 0;
+	}
 public:
 	CachedComputationReader( const char *map_,
 							 const char *checksum_,
@@ -85,7 +111,19 @@ public:
 
 class CachedComputationWriter: public CachedComputationIOHelper {
 protected:
+	// Useful for debugging
+	size_t bytesWritten { 0 };
+
 	bool WriteString( const char *string );
+
+	bool WriteInt32( int32_t value ) {
+#if !defined( ENDIAN_LITTLE ) || defined( ENDIAN_BIG )
+#error The data is assumed to be write as-is and is expected to be in little-endian byte order
+#endif
+		return Write( &value, 4 );
+	}
+
+	bool Write( const void *data, size_t size );
 public:
 	CachedComputationWriter( const char *map_, const char *checksum_, const char *extension_ );
 };
