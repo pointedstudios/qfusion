@@ -1,5 +1,6 @@
 #include "snd_leaf_props_cache.h"
 #include "snd_effect_sampler.h"
+#include "../qalgo/SingletonHolder.h"
 
 #include <new>
 
@@ -105,19 +106,18 @@ bool LeafPropsWriter::WriteProps( const LeafProps &props ) {
 	return true;
 }
 
-static ATTRIBUTE_ALIGNED( 16 )uint8_t leafPropsInstanceStorage[sizeof( LeafPropsCache )];
-LeafPropsCache *LeafPropsCache::instance = nullptr;
+static SingletonHolder<LeafPropsCache> instanceHolder;
+
+LeafPropsCache *LeafPropsCache::Instance() {
+	return instanceHolder.Instance();
+}
 
 void LeafPropsCache::Init() {
-	assert( !instance );
-	instance = new( leafPropsInstanceStorage )LeafPropsCache();
+	instanceHolder.Init();
 }
 
 void LeafPropsCache::Shutdown() {
-	if( instance ) {
-		instance->~LeafPropsCache();
-		instance = nullptr;
-	}
+	instanceHolder.Shutdown();
 }
 
 void LeafPropsCache::ResetExistingState( const char *, int actualNumLeafs ) {

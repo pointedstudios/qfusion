@@ -1,18 +1,18 @@
 #include "snd_effects_allocator.h"
+#include "../qalgo/SingletonHolder.h"
 
-EffectsAllocator *EffectsAllocator::instance = nullptr;
-static ATTRIBUTE_ALIGNED( 16 ) uint8_t effectsAllocatorStorage[sizeof( EffectsAllocator )];
+static SingletonHolder<EffectsAllocator> instanceHolder;
+
+EffectsAllocator *EffectsAllocator::Instance() {
+	return instanceHolder.Instance();
+}
 
 void EffectsAllocator::Init() {
-	assert( !instance );
-	instance = new( effectsAllocatorStorage )EffectsAllocator;
+	instanceHolder.Init();
 }
 
 void EffectsAllocator::Shutdown() {
-	if( instance ) {
-		instance->~EffectsAllocator();
-		instance = nullptr;
-	}
+	instanceHolder.Shutdown();
 }
 
 void *EffectsAllocator::AllocEntry( const src_t *src, ALint forType ) {

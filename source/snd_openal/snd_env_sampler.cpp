@@ -16,9 +16,11 @@ static ListenerProps listenerProps;
 static_assert( PanningUpdateState::MAX_POINTS == MAX_REVERB_PRIMARY_RAY_SAMPLES, "" );
 
 static void ENV_ShutdownGlobalInstances() {
-	LeafPropsCache::Init();
+	LeafPropsCache::Shutdown();
 	CachedLeafsGraph::Shutdown();
 	PropagationTable::Shutdown();
+
+	EffectsAllocator::Shutdown();
 }
 
 static void ENV_DispatchEnsureValidCall() {
@@ -33,6 +35,8 @@ static void ENV_InitGlobalInstances() {
 	PropagationTable::Init();
 
 	ENV_DispatchEnsureValidCall();
+
+	EffectsAllocator::Init();
 }
 
 void ENV_Init() {
@@ -60,7 +64,7 @@ void ENV_EndRegistration() {
 		return;
 	}
 
-	ENV_ShutdownGlobalInstances();
+	ENV_DispatchEnsureValidCall();
 }
 
 void ENV_RegisterSource( src_t *src ) {
@@ -81,11 +85,13 @@ void ENV_UnregisterSource( src_t *src ) {
 	// Prevent later occasional updates
 	src->envUpdateState.nextEnvUpdateAt = std::numeric_limits<int64_t>::max();
 
-	auto *const effectsAllocator = EffectsAllocator::Instance();
-	effectsAllocator->DeleteEffect( src->envUpdateState.oldEffect );
-	src->envUpdateState.oldEffect = nullptr;
-	effectsAllocator->DeleteEffect( src->envUpdateState.effect );
-	src->envUpdateState.effect = nullptr;
+	if( src->envUpdateState.effect || src->envUpdateState.oldEffect ) {
+		auto *const effectsAllocator = EffectsAllocator::Instance();
+		effectsAllocator->DeleteEffect( src->envUpdateState.oldEffect );
+		src->envUpdateState.oldEffect = nullptr;
+		effectsAllocator->DeleteEffect( src->envUpdateState.effect );
+		src->envUpdateState.effect = nullptr;
+	}
 
 	// Detach the slot from the source
 	qalSource3i( src->source, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, 0, AL_FILTER_NULL );

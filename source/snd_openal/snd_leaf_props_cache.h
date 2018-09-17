@@ -28,6 +28,8 @@ struct alignas( 4 )LeafProps {
 };
 
 class LeafPropsCache: public CachedComputation {
+	template <typename> friend class SingletonHolder;
+
 	LeafProps *leafProps { nullptr };
 
 	LeafProps ComputeLeafProps( int leafNum, LeafPropsSampler *sampler, bool fastAndCoarse );
@@ -40,11 +42,8 @@ class LeafPropsCache: public CachedComputation {
 	bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) override;
 
 	LeafPropsCache(): CachedComputation( "LeafPropsCache" ) {}
-
-	static LeafPropsCache *instance;
 public:
-	static LeafPropsCache *Instance() { return instance; }
-
+	static LeafPropsCache *Instance();
 	static void Init();
 	static void Shutdown();
 

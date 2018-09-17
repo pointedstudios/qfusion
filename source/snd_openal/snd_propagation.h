@@ -43,6 +43,7 @@ class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
 	typedef GraphLike<int, float> ParentGraphType;
 
 	friend class PropagationTable;
+	template <typename> friend class SingletonHolder;
 
 	int leafListsDataSize { -1 };
 	bool isUsingValidData { false };
@@ -53,11 +54,7 @@ class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
 	bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) override;
 
 	CachedLeafsGraph(): CachedComputation( "CachedLeafsGraph" ), GraphLike<int, float>( -1 ) {}
-
-	static CachedLeafsGraph *instance;
 public:
-	static CachedLeafsGraph *Instance() { return instance; }
-
 	/**
 	 * Exposed for {@code GraphBuilder<?,?>::TryUsingGlobalGraph()} (a template can't be a friend).
 	 * @todo rename the corresponding member?
@@ -77,6 +74,7 @@ public:
 	 */
 	int NumLeafs() const { return ( (ParentGraphType *)this)->NumLeafs(); }
 
+	static CachedLeafsGraph *Instance();
 	static void Init();
 	static void Shutdown();
 };
@@ -87,6 +85,7 @@ class PropagationTable: public CachedComputation {
 	friend class PropagationTableWriter;
 	friend class PropagationTableBuilder;
 	friend class CachedLeafsGraph;
+	template <typename> friend class SingletonHolder;
 
 	struct alignas( 1 )PropagationProps {
 		int8_t dirX: 6;
@@ -160,8 +159,6 @@ class PropagationTable: public CachedComputation {
 	bool TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) override;
 	void ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) override;
 	bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) override;
-
-	static PropagationTable *instance;
 public:
 	PropagationTable(): CachedComputation( "PropagationTable" ) {}
 
@@ -208,8 +205,7 @@ public:
 		return true;
 	}
 
-	static PropagationTable *Instance() { return instance; }
-
+	static PropagationTable *Instance();
 	static void Init();
 	static void Shutdown();
 };

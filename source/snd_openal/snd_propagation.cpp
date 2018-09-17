@@ -9,6 +9,7 @@
 #endif
 
 #include "../qalgo/Links.h"
+#include "../qalgo/SingletonHolder.h"
 
 #include <algorithm>
 #include <limits>
@@ -676,19 +677,18 @@ public:
 	bool WriteTable( const PropagationTable::PropagationProps *table, int numLeafs );
 };
 
-static ATTRIBUTE_ALIGNED( 16 ) uint8_t instanceStorage[sizeof( PropagationTable )];
-PropagationTable *PropagationTable::instance = nullptr;
+static SingletonHolder<PropagationTable> propagationTableHolder;
+
+PropagationTable *PropagationTable::Instance() {
+	return propagationTableHolder.Instance();
+}
 
 void PropagationTable::Init() {
-	assert( !instance );
-	instance = new( instanceStorage )PropagationTable;
+	propagationTableHolder.Init();
 }
 
 void PropagationTable::Shutdown() {
-	if( instance ) {
-		instance->~PropagationTable();
-		instance = nullptr;
-	}
+	propagationTableHolder.Shutdown();
 }
 
 bool PropagationTable::TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) {
@@ -794,19 +794,18 @@ public:
 	bool Write( int numLeafs, int listsDataSize, const float *distanceTable, const int *adjacencyListsData );
 };
 
-static ATTRIBUTE_ALIGNED( 16 ) uint8_t graphInstanceHolder[sizeof( CachedLeafsGraph )];
-CachedLeafsGraph *CachedLeafsGraph::instance = nullptr;
+static SingletonHolder<CachedLeafsGraph> leafsGraphHolder;
+
+CachedLeafsGraph *CachedLeafsGraph::Instance() {
+	return leafsGraphHolder.Instance();
+}
 
 void CachedLeafsGraph::Init() {
-	assert( !instance );
-	instance = new( graphInstanceHolder )CachedLeafsGraph();
+	leafsGraphHolder.Init();
 }
 
 void CachedLeafsGraph::Shutdown() {
-	if( instance ) {
-		instance->~CachedLeafsGraph();
-		instance = nullptr;
-	}
+	leafsGraphHolder.Shutdown();
 }
 
 void CachedLeafsGraph::ResetExistingState( const char *, int ) {

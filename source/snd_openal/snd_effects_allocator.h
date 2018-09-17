@@ -7,6 +7,8 @@
 
 // TODO: Rewrite effects to be descendants of AllocatorChild from CEF branch and just add/use Effect::DeleteSelf()
 class alignas( 8 )EffectsAllocator {
+	template<typename> friend class SingletonHolder;
+
 	static_assert( sizeof( EaxReverbEffect ) >= sizeof( StandardReverbEffect ), "" );
 	static_assert( sizeof( EaxReverbEffect ) >= sizeof( UnderwaterFlangerEffect ), "" );
 	static_assert( sizeof( EaxReverbEffect ) >= sizeof( ChorusEffect ), "" );
@@ -44,9 +46,8 @@ class alignas( 8 )EffectsAllocator {
 		memset( effectTypes, 0, sizeof( effectTypes ) );
 	}
 
-	static EffectsAllocator *instance;
 public:
-	static EffectsAllocator *Instance() { return instance; }
+	static EffectsAllocator *Instance();
 	static void Init();
 	static void Shutdown();
 
