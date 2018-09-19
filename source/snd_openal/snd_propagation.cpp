@@ -21,13 +21,27 @@ protected:
 	explicit MutableGraph( int numLeafs_ )
 		: GraphLike<AdjacencyListType, DistanceType>( numLeafs_ ) {}
 
+	/**
+	 * An address of the buffer that is allowed to be modified.
+	 * The {@code distanceTable} must point to it after {@code SaveDistanceTable()} call.
+	 * @note It is intended to be different for different instances of a mutable graph if there are multiple ones.
+	 */
+	DistanceType *distanceTableScratchpad { nullptr };
+	/**
+	 * An address of the original buffer that must be kept unmodified.
+	 * The {@code distanceTable} must point to it initially and after {@code RestoreDistanceTable} call.
+	 * @note It is intended to be shared between instances of a mutable graph if there are multiple ones.
+	 */
 	DistanceType *distanceTableBackup { nullptr };
 public:
 	void SetEdgeDistance( int leaf1, int leaf2, DistanceType newDistance ) {
 		// Template quirks: a member of a template base cannot be resolved in scope otherwise
 		auto *const distanceTable = this->distanceTable;
+		// Ensure the scratchpad is set
+		assert( this->distanceTableScratchpad );
+		// The distance table must point at the scratchpad
+		assert( distanceTable == this->distanceTableScratchpad );
 		const int numLeafs = this->numLeafs;
-		assert( this->distanceTable );
 		assert( leaf1 > 0 && leaf1 < numLeafs );
 		assert( leaf2 > 0 && leaf2 < numLeafs );
 		distanceTable[leaf1 * numLeafs + leaf2] = newDistance;
@@ -35,17 +49,28 @@ public:
 	}
 
 	virtual void SaveDistanceTable() {
-		const auto *distanceTable = this->distanceTable;
-		assert( distanceTable );
-		const int numLeafs = this->numLeafs;
-		memcpy( this->distanceTableBackup, distanceTable, numLeafs * numLeafs * sizeof( *distanceTable ) );
+		// Check whether the distance table is set at all
+		assert( this->distanceTable );
+		// Check whether it points to the original address
+		assert( this->distanceTable == this->distanceTableBackup );
+		// Check whether the scratchpad is set
+		assert( this->distanceTableScratchpad );
+		// Make it pointing to the scratchpad
+		this->distanceTable = this->distanceTableScratchpad;
+		// Fill the scratchpad by the original data
+		size_t memSize = this->numLeafs * this->numLeafs * sizeof( *this->distanceTable );
+		memcpy( this->distanceTable, this->distanceTableBackup, memSize );
 	}
 
 	virtual void RestoreDistanceTable() {
-		auto *const distanceTable = this->distanceTable;
-		assert( distanceTable );
-		const int numLeafs = this->numLeafs;
-		memcpy( distanceTable, this->distanceTableBackup, numLeafs * numLeafs * sizeof( *distanceTable ) );
+		// Check whether the distance table is set at all
+		assert( this->distanceTable );
+		// Check whether it points to the scratchpad
+		assert( this->distanceTable == this->distanceTableScratchpad );
+		// Check whether the original address is present
+		assert( this->distanceTableBackup );
+		// Make the data point to the original address
+		this->distanceTable = this->distanceTableBackup;
 	}
 };
 
@@ -170,7 +195,8 @@ void GraphBuilder<AdjacencyListType, DistanceType>::PrepareToBuild() {
 	int numTableCells = this->numLeafs * this->numLeafs;
 	size_t numTableBytes = 2 * numTableCells * sizeof( DistanceType );
 	this->distanceTable = (DistanceType *)::S_Malloc( numTableBytes );
-	this->distanceTableBackup = this->distanceTable + numTableCells;
+	this->distanceTableBackup = this->distanceTable;
+	this->distanceTableScratchpad = this->distanceTable + numTableCells;
 }
 
 template <typename AdjacencyListType, typename DistanceType>
