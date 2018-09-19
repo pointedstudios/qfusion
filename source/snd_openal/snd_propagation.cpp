@@ -15,6 +15,80 @@
 #include <limits>
 #include <memory>
 
+/**
+ * @todo Generalize/use the {@code RawAllocator} from the CEF branch
+ */
+template <typename T>
+class TaggedAllocator {
+protected:
+	static void PutSelfToMetadata( void *self, void *userAccessible ) {
+		// Check alignment
+		assert( !( ( (uintptr_t)userAccessible ) % 8 ) );
+		// Create an uint64_t view on the allocated chunk
+		auto *const u = (uint64_t *)userAccessible;
+		// Clear all 64 bits
+		u[-1] = 0;
+		// Set either 32 or 64 bits
+		u[-1] = (uintptr_t)self;
+	}
+
+	static void *GetSelfFromMetadata( void *userAccessible ) {
+		// Check alignment
+		assert( !( ( (uintptr_t)userAccessible ) % 8 ) );
+		// Create an uint64_t view on the allocated chunk
+		auto *const u = (uint64_t *)userAccessible;
+		// The allocator address is expected to be put 8 bytes before the user-accessible data
+		return (void *)( (uintptr_t)u[-1] );
+	}
+public:
+	virtual ~TaggedAllocator() = default;
+
+	virtual T *Alloc( int numElems ) {
+		// Allocate 8 more bytes for the metadata.
+		// We always have to use 8 bytes
+		// 4 bytes will be lost for alignment anyway on 32-bit systems
+		// (everything that resembles malloc() is assumed to return at least 8-byte aligned addresses)
+		size_t memSize = numElems * sizeof( T ) + 8;
+		auto *const rawData = (uint8_t *)S_Malloc( memSize ) + 8;
+		PutSelfToMetadata( this, rawData );
+		// Return data cast to the desired type
+		return ( T *)( rawData );
+	}
+
+	virtual void Free( T *p ) {
+		if( !p ) {
+			return;
+		}
+		// Check whether this chunk really was allocated by this allocator
+		assert( (void *)this == GetSelfFromMetadata( p ) );
+		// Provide the actual address for S_Free()
+		S_Free( ( (uint8_t *)p ) - 8 );
+	}
+
+	static void FreeUsingMetadata( void *p ) {
+		if( !p ) {
+			return;
+		}
+		void *const allocatorAddress = GetSelfFromMetadata( p );
+		// Check whether it's really an allocator.
+		// We have to use a "dumb" "raw" cast first to an object type compile that.
+		assert( dynamic_cast<TaggedAllocator<T> *>( (TaggedAllocator<T> *)allocatorAddress ) );
+		// Call TaggedAllocator::Free()
+		( (TaggedAllocator<T> *)allocatorAddress )->Free( ( T *)p );
+	}
+};
+
+static TaggedAllocator<float> defaultFloatAllocator;
+static TaggedAllocator<double> defaultDoubleAllocator;
+static TaggedAllocator<int> defaultIntAllocator;
+static TaggedAllocator<vec3_t> defaultVec3Allocator;
+
+template <typename AdjacencyListType, typename DistanceType>
+GraphLike<AdjacencyListType, DistanceType>::~GraphLike() {
+	TaggedAllocator<DistanceType>::FreeUsingMetadata( distanceTable );
+	TaggedAllocator<AdjacencyListType>::FreeUsingMetadata( adjacencyListsData );
+}
+
 template <typename AdjacencyListType, typename DistanceType>
 class MutableGraph: public GraphLike<AdjacencyListType, DistanceType> {
 protected:
@@ -34,13 +108,20 @@ protected:
 	 */
 	DistanceType *distanceTableBackup { nullptr };
 public:
+	~MutableGraph() override {
+		TaggedAllocator<DistanceType>::FreeUsingMetadata( distanceTableBackup );
+		TaggedAllocator<DistanceType>::FreeUsingMetadata( distanceTableScratchpad );
+		// Prevent double-free in the parent constructor
+		this->distanceTable = nullptr;
+	}
+
 	void SetEdgeDistance( int leaf1, int leaf2, DistanceType newDistance ) {
 		// Template quirks: a member of a template base cannot be resolved in scope otherwise
 		auto *const distanceTable = this->distanceTable;
-		// Ensure the scratchpad is set
-		assert( this->distanceTableScratchpad );
+		// Just check whether the distance table is set.
+		// Unfortunately this method can be used outside SaveDistanceTable()/RestoreDistanceTable() context
+		assert( distanceTable );
 		// The distance table must point at the scratchpad
-		assert( distanceTable == this->distanceTableScratchpad );
 		const int numLeafs = this->numLeafs;
 		assert( leaf1 > 0 && leaf1 < numLeafs );
 		assert( leaf2 > 0 && leaf2 < numLeafs );
@@ -74,6 +155,21 @@ public:
 	}
 };
 
+template <typename T> TaggedAllocator<T> &DefaultAllocatorForType();
+
+template <> TaggedAllocator<int> &DefaultAllocatorForType<int>() {
+	return ::defaultIntAllocator;
+}
+
+template <> TaggedAllocator<double> &DefaultAllocatorForType<double>() {
+	return ::defaultDoubleAllocator;
+}
+
+template <> TaggedAllocator<float> &DefaultAllocatorForType<float>() {
+	return ::defaultFloatAllocator;
+}
+
+
 template <typename AdjacencyListType, typename DistanceType>
 class GraphBuilder: public MutableGraph<AdjacencyListType, DistanceType> {
 protected:
@@ -82,6 +178,18 @@ protected:
 
 	virtual DistanceType ComputeEdgeDistance( int leaf1, int leaf2 ) = 0;
 
+	virtual TaggedAllocator<DistanceType> &TableBackupAllocator() {
+		return DefaultAllocatorForType<DistanceType>();
+	}
+	virtual TaggedAllocator<DistanceType> &TableScratchpadAllocator() {
+		return DefaultAllocatorForType<DistanceType>();
+	}
+	virtual TaggedAllocator<AdjacencyListType> &AdjacencyListsAllocator() {
+		return DefaultAllocatorForType<AdjacencyListType>();
+	}
+public:
+	using TargetType = GraphLike<AdjacencyListType, DistanceType>;
+protected:
 	virtual void PrepareToBuild();
 	virtual void BuildDistanceTable();
 	virtual void BuildAdjacencyLists();
@@ -95,15 +203,12 @@ protected:
 		return result;
 	}
 
-	bool TryUsingGlobalGraph( const CachedLeafsGraph *globalGraph );
+	bool TryUsingGlobalGraph( TargetType *target );
 public:
 	/**
 	 * Tries to build the graph data (or reuse data from the global graph).
-	 * @param tryUsingGlobalGraph whether an attempt to reuse data of the global leafs graph should be made.
-	 * Keep using the default true value of this parameter except the case when the global graph is built itself.
-	 * @return true if the graph data has been built (or reused) successfully.
 	 */
-	bool Build( bool tryUsingGlobalGraph = true );
+	bool Build( TargetType *target = nullptr );
 
 	void TransferOwnership( DistanceType **table, AdjacencyListType **lists, AdjacencyListType **listsOffsets ) {
 		*table = TransferCheckingNullity( &this->distanceTable );
@@ -114,11 +219,14 @@ public:
 
 template <typename DistanceType>
 class PropagationGraphBuilder: public GraphBuilder<int, DistanceType> {
+protected:
 	vec3_t *leafCenters { nullptr };
 	const bool fastAndCoarse;
 
 	void PrepareToBuild() override;
 
+	virtual TaggedAllocator<vec3_t> &LeafsCentersAllocator() { return ::defaultVec3Allocator; }
+protected:
 	DistanceType ComputeEdgeDistance( int leaf1, int leaf2 ) override;
 public:
 	PropagationGraphBuilder( int actualNumLeafs, bool fastAndCoarse_ )
@@ -131,26 +239,85 @@ public:
 	}
 
 	~PropagationGraphBuilder() override {
-		if( leafCenters ) {
-			S_Free( leafCenters );
-		}
+		TaggedAllocator<vec3_t>::FreeUsingMetadata( leafCenters );
 	}
 };
 
+/**
+ * @warning this is a very quick and dirty implementation that assumes that
+ * all operations happen in the single thread as {@code ParallelComputationHost} currently does
+ * (all allocations/de-allocations are performed in a thread that calls {@code TryAddTask()} and {@code Exec()}.
+ */
+template <typename T>
+class RefCountingAllocator: public TaggedAllocator<T> {
+private:
+	uint64_t &RefCountOf( void *userAccessible ) {
+		// Check whether it has been really allocated by this object
+		assert( TaggedAllocator<T>::GetSelfFromMetadata( userAccessible ) == (void *)this );
+		// Create an uint64_t view on the allocated chunk
+		auto *const u = (uint64_t *)userAccessible;
+		// The ref count is put 16 bytes before the user-accessible data.
+		// This is to maintain compatibility with FreeUsingMetadata()
+		return u[-2];
+	}
+public:
+	T *Alloc( int numElems ) override {
+		auto *rawData = (uint8_t *)S_Malloc( numElems * sizeof( T ) + 16 ) + 16;
+		TaggedAllocator<T>::PutSelfToMetadata( this, rawData );
+		RefCountOf( rawData ) = 1;
+		return (T *)rawData;
+	}
+
+	void Free( T *p ) override {
+		RemoveRef( p );
+	}
+
+	void RemoveRef( T *p ) {
+		auto &refCount = RefCountOf( p );
+		--refCount;
+		if( !refCount ) {
+			S_Free( ( (uint8_t *)p ) - 16 );
+		}
+	}
+
+	T *AddRef( T *existing ) {
+		RefCountOf( existing )++;
+		return existing;
+	}
+};
+
+class CloneableGraphBuilder: public PropagationGraphBuilder<double> {
+	RefCountingAllocator<double> tableBackupAllocator;
+	RefCountingAllocator<int> adjacencyListsAllocator;
+	RefCountingAllocator<vec3_t> leafsCentersAllocator;
+
+	TaggedAllocator<double> &TableBackupAllocator() override { return tableBackupAllocator; }
+	TaggedAllocator<int> &AdjacencyListsAllocator() override { return adjacencyListsAllocator; }
+	TaggedAllocator<vec3_t> &LeafsCentersAllocator() override { return leafsCentersAllocator; }
+public:
+	CloneableGraphBuilder( int actualNumLeafs, bool fastAndCoarse_ )
+		: PropagationGraphBuilder<double>( actualNumLeafs, fastAndCoarse_ ) {}
+
+	/**
+	 * Tries to clone the instance sharing immutable fields if it's possible.
+	 * @return a non-null cloned instance on success, null on failure.
+	 */
+	CloneableGraphBuilder *Clone();
+};
+
 template <typename AdjacencyListType, typename DistanceType>
-bool GraphBuilder<AdjacencyListType, DistanceType>::Build( bool tryUsingGlobalGraph ) {
+bool GraphBuilder<AdjacencyListType, DistanceType>::Build( TargetType *target ) {
 	// Should not be called for empty graphs
 	assert( this->numLeafs > 0 );
 
+	if( !target ) {
+		target = this;
+	}
+
 	PrepareToBuild();
 
-	// Must be false for the global graph itself
-	if( tryUsingGlobalGraph ) {
-		auto *globalGraph = CachedLeafsGraph::Instance();
-		globalGraph->EnsureValid();
-		if( TryUsingGlobalGraph( globalGraph ) ) {
-			return true;
-		}
+	if( TryUsingGlobalGraph( target ) ) {
+		return true;
 	}
 
 	BuildDistanceTable();
@@ -181,7 +348,7 @@ template <typename DistanceType>
 void PropagationGraphBuilder<DistanceType>::PrepareToBuild() {
 	GraphBuilder<int, DistanceType>::PrepareToBuild();
 
-	leafCenters = (vec3_t *)::S_Malloc( this->numLeafs * sizeof( vec3_t ) );
+	leafCenters = LeafsCentersAllocator().Alloc( this->numLeafs );
 	for( int i = 1; i < this->numLeafs; ++i ) {
 		float *center = leafCenters[i];
 		const auto *bounds = trap_GetLeafBounds( i );
@@ -192,11 +359,14 @@ void PropagationGraphBuilder<DistanceType>::PrepareToBuild() {
 
 template <typename AdjacencyListType, typename DistanceType>
 void GraphBuilder<AdjacencyListType, DistanceType>::PrepareToBuild() {
-	int numTableCells = this->numLeafs * this->numLeafs;
-	size_t numTableBytes = 2 * numTableCells * sizeof( DistanceType );
-	this->distanceTable = (DistanceType *)::S_Malloc( numTableBytes );
-	this->distanceTableBackup = this->distanceTable;
-	this->distanceTableScratchpad = this->distanceTable + numTableCells;
+	int numTableCells = this->NumLeafs() * this->NumLeafs();
+	// We can't allocate "backup" and "scratchpad" in the same chunk
+	// as we want to be able to share the immutable table data ("backup")
+	// Its still doable by providing a custom allocator.
+	this->distanceTableBackup = TableBackupAllocator().Alloc( numTableCells );
+	this->distanceTableScratchpad = TableScratchpadAllocator().Alloc( numTableCells );
+	// Set the distance table as it is expected for the first SaveDistanceTable() call
+	this->distanceTable = this->distanceTableBackup;
 }
 
 template <typename AdjacencyListType, typename DistanceType>
@@ -244,7 +414,7 @@ void GraphBuilder<AdjacencyListType, DistanceType>::BuildAdjacencyLists() {
 	// A first additional cell for a leaf is for a size "prefix" of adjacency list
 	// A second additional cell is for offset of the adjacency list in the compactified data
 	totalNumCells += 2 * numLeafs;
-	auto *mem = (AdjacencyListType *)S_Malloc( totalNumCells * sizeof( AdjacencyListType ) );
+	AdjacencyListType *mem = AdjacencyListsAllocator().Alloc( (int)totalNumCells );
 	auto *const adjacencyListsData = this->adjacencyListsData = mem;
 	auto *const adjacencyListsOffsets = this->adjacencyListsOffsets = mem + ( totalNumCells - numLeafs );
 
@@ -809,7 +979,7 @@ public:
 	CachedGraphReader( const char *map_, const char *checksum_, int numLeafs, int fsFlags )
 		: CachedComputationReader( map_, checksum_, GRAPH_EXTENSION, fsFlags ) {}
 
-	bool Read( float**distanceTable, int *numLeafs_, int **adjacencyListsData, int **adjacencyListsOffsets );
+	bool Read( CachedLeafsGraph *readObject );
 };
 
 class CachedGraphWriter: public CachedComputationWriter {
@@ -817,7 +987,7 @@ public:
 	CachedGraphWriter( const char *map_, const char *checksum_ )
 		: CachedComputationWriter( map_, checksum_, GRAPH_EXTENSION ) {}
 
-	bool Write( int numLeafs, int listsDataSize, const float *distanceTable, const int *adjacencyListsData );
+	bool Write( const CachedLeafsGraph *writtenObject );
 };
 
 static SingletonHolder<CachedLeafsGraph> leafsGraphHolder;
@@ -835,8 +1005,8 @@ void CachedLeafsGraph::Shutdown() {
 }
 
 void CachedLeafsGraph::ResetExistingState( const char *, int ) {
-	FreeIfNeeded( &distanceTable );
-	FreeIfNeeded( &adjacencyListsData );
+	TaggedAllocator<float>::FreeUsingMetadata( &distanceTable );
+	TaggedAllocator<int>::FreeUsingMetadata( &adjacencyListsData );
 	// Just nullify the pointer. A corresponding chunk belongs to the lists data.
 	adjacencyListsOffsets = nullptr;
 	isUsingValidData = false;
@@ -844,16 +1014,7 @@ void CachedLeafsGraph::ResetExistingState( const char *, int ) {
 
 bool CachedLeafsGraph::TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) {
 	CachedGraphReader reader( actualMap, actualChecksum, actualNumLeafs, fsFlags );
-	if( reader.Read( &this->distanceTable,
-					 &( (ParentGraphType *)this )->numLeafs,
-					 &this->adjacencyListsData,
-					 &this->adjacencyListsOffsets ) ) {
-		// Derive the total size from the relative offset
-		// TODO: These implications on the data layout look bad...
-		leafListsDataSize = (int)( this->adjacencyListsOffsets - this->adjacencyListsData ) + actualNumLeafs;
-		return true;
-	}
-	return false;
+	return reader.Read( this );
 }
 
 void CachedLeafsGraph::ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse_ ) {
@@ -863,10 +1024,10 @@ void CachedLeafsGraph::ComputeNewState( const char *actualMap, int actualNumLeaf
 	( ( ParentGraphType *)this)->numLeafs = actualNumLeafs;
 
 	PropagationGraphBuilder<float> builder( actualNumLeafs, fastAndCoarse_ );
-	// Override the default "tryUsingGlobalGraph" parameter value to prevent infinite recursion.
-	if( builder.Build( false ) ) {
+	// Specify "this" as a target to suppress an infinite recursion while trying to reuse the global graph
+	if( builder.Build( this ) ) {
 		// The builder should no longer own the distance table and the leafs lists data.
-		// They should be freed using S_Free() on our own.
+		// They should be freed using TaggedAllocator::FreeUsingMetadata() on our own.
 		builder.TransferOwnership( &this->distanceTable, &this->adjacencyListsData, &this->adjacencyListsOffsets );
 		// Set this so the data will be saved to file
 		isUsingValidData = true;
@@ -877,9 +1038,10 @@ void CachedLeafsGraph::ComputeNewState( const char *actualMap, int actualNumLeaf
 	}
 
 	// Allocate a small chunk for the table... it is not going to be accessed
-	this->distanceTable = (float *)S_Malloc( 0 );
+	// That's bad...
+	this->distanceTable = defaultFloatAllocator.Alloc( 1 );
 	// Allocate a dummy cell for a dummy list and a full row for offsets
-	auto *leafsData = (int *)S_Malloc( sizeof( int ) * ( actualNumLeafs + 1 ) );
+	auto *leafsData = defaultIntAllocator.Alloc( actualNumLeafs + 1 );
 	// Put the dummy list at the beginning
 	leafsData[0] = 0;
 	// Make all offsets refer to the dummy list
@@ -894,13 +1056,7 @@ bool CachedLeafsGraph::SaveToCache( const char *actualMap, const char *actualChe
 	}
 
 	CachedGraphWriter writer( actualMap, actualChecksum );
-	auto listsDataSize = (int)( this->adjacencyListsOffsets - this->adjacencyListsData );
-	assert( listsDataSize > 0 );
-	// Add offsets data size (which is equal to number of lists) to the total lists data size.
-	// Note: the data size is assumed to be in integer elements and not in bytes.
-	// The reader expects the total data size and expects offsets at the end of this data minus the number of lists.
-	listsDataSize += actualNumLeafs;
-	return writer.Write( actualNumLeafs, listsDataSize, this->distanceTable, this->adjacencyListsData );
+	return writer.Write( this );
 }
 
 struct SoundMemDeleter {
@@ -911,7 +1067,15 @@ struct SoundMemDeleter {
 	}
 };
 
-bool CachedGraphReader::Read( float **distanceTable, int *numLeafs_, int **adjacencyListsData, int **adjacencyListsOffsets ) {
+template <typename T>
+struct TaggedAllocatorCaller {
+	void operator()( T *p ) {
+		TaggedAllocator<T>::FreeUsingMetadata( p );
+	}
+};
+
+
+bool CachedGraphReader::Read( CachedLeafsGraph *readObject ) {
 	if( fsResult < 0 ) {
 		return false;
 	}
@@ -943,12 +1107,14 @@ bool CachedGraphReader::Read( float **distanceTable, int *numLeafs_, int **adjac
 		return false;
 	}
 
-	std::unique_ptr<float, SoundMemDeleter> tableHolder( (float *)S_Malloc( numBytesForTable ) );
+	typedef std::unique_ptr<float, TaggedAllocatorCaller<float>> TableHolder;
+	TableHolder tableHolder( ::defaultFloatAllocator.Alloc( numLeafs * numLeafs ) );
 	if( !CachedComputationReader::Read( tableHolder.get(), numBytesForTable ) ) {
 		return false;
 	}
 
-	std::unique_ptr<int, SoundMemDeleter> listsDataHolder( (int *)S_Malloc( numBytesForLists ) );
+	typedef std::unique_ptr<int, TaggedAllocatorCaller<int>> ListsDataHolder;
+	ListsDataHolder listsDataHolder( ::defaultIntAllocator.Alloc( listsDataSize ) );
 	if( !CachedComputationReader::Read( listsDataHolder.get(), numBytesForLists ) ) {
 		return false;
 	}
@@ -1017,36 +1183,50 @@ bool CachedGraphReader::Read( float **distanceTable, int *numLeafs_, int **adjac
 		tableHolder.get()[i] = LittleLong( tableHolder.get()[i] );
 	}
 
-	*distanceTable = tableHolder.release();
-	*adjacencyListsData = listsDataHolder.release();
-	*adjacencyListsOffsets = *adjacencyListsData + listsDataSize - numLeafs;
-	// Its really better to operate on this local variable.
-	// Actually this parameter was introduced later and its usage is inconvenient anyway.
-	*numLeafs_ = numLeafs;
+	readObject->distanceTable = tableHolder.release();
+	readObject->adjacencyListsData = listsDataHolder.release();
+	readObject->adjacencyListsOffsets = readObject->adjacencyListsData + listsDataSize - numLeafs;
+	readObject->leafListsDataSize = listsDataSize;
+	( (CachedLeafsGraph::ParentGraphType *)readObject )->numLeafs = numLeafs;
 	return true;
 }
 
-bool CachedGraphWriter::Write( int numLeafs, int listsDataSize, const float *distanceTable, const int *listsData ) {
+bool CachedGraphWriter::Write( const CachedLeafsGraph *writtenObject ) {
 	static_assert( sizeof( int32_t ) == sizeof( int ), "" );
 
+	const int numLeafs = writtenObject->NumLeafs();
 	if( !WriteInt32( numLeafs ) ) {
 		return false;
 	}
+
+	auto listsDataSize = (int)( writtenObject->adjacencyListsOffsets - writtenObject->adjacencyListsData );
+	assert( listsDataSize > 0 );
+	// Add offsets data size (which is equal to number of lists) to the total lists data size.
+	// Note: the data size is assumed to be in integer elements and not in bytes.
+	// The reader expects the total data size and expects offsets at the end of this data minus the number of lists.
+	listsDataSize += numLeafs;
+
 	if( !WriteInt32( listsDataSize ) ) {
 		return false;
 	}
-	if( !CachedComputationWriter::Write( distanceTable, numLeafs * numLeafs * sizeof( float ) ) ) {
-		return false;
-	}
-	if( !CachedComputationWriter::Write( listsData, listsDataSize * sizeof( int ) ) ) {
+	if( !CachedComputationWriter::Write( writtenObject->distanceTable, numLeafs * numLeafs * sizeof( float ) ) ) {
 		return false;
 	}
 
-	return true;
+	return CachedComputationWriter::Write( writtenObject->adjacencyListsData, listsDataSize * sizeof( int ) );
 }
 
 template <typename AdjacencyListType, typename DistanceType>
-bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( const CachedLeafsGraph *globalGraph ) {
+bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( TargetType *target ) {
+	const auto globalGraph = CachedLeafsGraph::Instance();
+	// Can't be used for the global graph itself (falls into an infinite recursion)
+	// WARNING! We have to force the desired type of the object first to avoid comparison of different pointers,
+	// then erase the type to make it compiling. `this` differs in context of different base classes of an object.
+	if( ( void *)static_cast<GraphLike<int, float> *>( globalGraph ) == (void *)target ) {
+		return false;
+	}
+
+	globalGraph->EnsureValid();
 	if( globalGraph->IsUsingDummyData() ) {
 		return false;
 	}
@@ -1054,7 +1234,15 @@ bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( const C
 	const int numLeafs = globalGraph->NumLeafs();
 	const int listsDataSize = globalGraph->LeafListsDataSize();
 
-	this->adjacencyListsData = (AdjacencyListType *)S_Malloc( listsDataSize * sizeof( AdjacencyListType ) );
+	TaggedAllocator<AdjacencyListType> *listsDataAllocator;
+	TaggedAllocator<AdjacencyListType> defaultOne;
+	if( auto *thatBuilderLike = dynamic_cast<GraphBuilder<AdjacencyListType, DistanceType> *>( target ) ) {
+		listsDataAllocator = &thatBuilderLike->AdjacencyListsAllocator();
+	} else {
+		listsDataAllocator = &defaultOne;
+	}
+
+	this->adjacencyListsData = listsDataAllocator->Alloc( listsDataSize );
 	this->adjacencyListsOffsets = this->adjacencyListsData + listsDataSize - numLeafs;
 
 	// If the global graph has been built/loaded successfully
@@ -1106,4 +1294,29 @@ bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( const C
 	}
 
 	return true;
+}
+
+CloneableGraphBuilder *CloneableGraphBuilder::Clone() {
+	// TODO: Use just malloc() and check results? A caller code must be aware of possible failure
+	void *objectMem = S_Malloc( sizeof( CloneableGraphBuilder ) );
+	if( !objectMem ) {
+		return nullptr;
+	}
+
+	auto *clone = new( objectMem )CloneableGraphBuilder( this->NumLeafs(), this->fastAndCoarse );
+	std::unique_ptr<CloneableGraphBuilder, SoundMemDeleter> cloneHolder( clone );
+
+	clone->distanceTable = clone->distanceTableBackup = this->tableBackupAllocator.AddRef( this->distanceTableBackup );
+	clone->distanceTableScratchpad = clone->TableScratchpadAllocator().Alloc( this->NumLeafs() * this->NumLeafs() );
+	if( !clone->distanceTableScratchpad ) {
+		return nullptr;
+	}
+
+	clone->adjacencyListsData = this->adjacencyListsAllocator.AddRef( this->adjacencyListsData );
+	// Just copy the address... offsets are allocated within the lists data memory chunk
+	clone->adjacencyListsOffsets = this->adjacencyListsOffsets;
+
+	clone->leafCenters = this->leafsCentersAllocator.AddRef( this->leafCenters );
+
+	return cloneHolder.release();
 }

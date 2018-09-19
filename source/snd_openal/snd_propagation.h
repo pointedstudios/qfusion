@@ -7,21 +7,32 @@
 template <typename AdjacencyListType, typename DistanceType>
 class GraphLike {
 	friend class CachedLeafsGraph;
+	friend class CachedGraphReader;
+	friend class CachedGraphWriter;
 protected:
+	/**
+	 * Should be released using TaggedAllocator::FreeUsingMetadata()
+	 * (descendants can use custom allocators that are put in metadata).
+	 */
 	DistanceType *distanceTable { nullptr };
+	/**
+	 * Should be released using TaggedAllocator::FreeUsingMetadata()
+	 * (descendants can use custom allocators that are put in metadata).
+	 */
 	AdjacencyListType *adjacencyListsData { nullptr };
+	/**
+	 * Assumed to be allocated within {@code adjacencyListsData} at its end.
+	 */
 	AdjacencyListType *adjacencyListsOffsets { nullptr };
+
 	int numLeafs;
 	explicit GraphLike( int numLeafs_ ): numLeafs( numLeafs_ ) {}
 public:
-	virtual ~GraphLike() {
-		if( distanceTable ) {
-			S_Free( distanceTable );
-		}
-		if( adjacencyListsData ) {
-			S_Free( adjacencyListsData );
-		}
-	}
+	/**
+	 * @note is put in the corresponding source to avoid exposing {@code TaggedAllocator}.
+	 * Gets called in only in the source anyway.
+	 */
+	virtual ~GraphLike();
 
 	int NumLeafs() const { return numLeafs; }
 
@@ -43,6 +54,8 @@ class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
 	typedef GraphLike<int, float> ParentGraphType;
 
 	friend class PropagationTable;
+	friend class CachedGraphReader;
+	friend class CachedGraphWriter;
 	template <typename> friend class SingletonHolder;
 
 	int leafListsDataSize { -1 };
