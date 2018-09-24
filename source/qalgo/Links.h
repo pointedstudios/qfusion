@@ -19,7 +19,7 @@
  * @return the newly linked item (same as the argument) conforming to fluent API style.
  */
 template<typename Item>
-static inline Item *Link( Item *item, Item **listHeadRef, int linksIndex ) {
+inline Item *Link( Item *item, Item **listHeadRef, int linksIndex ) {
 	if( *listHeadRef ) {
 		( *listHeadRef )->prev[linksIndex] = item;
 	}
@@ -44,7 +44,7 @@ static inline Item *Link( Item *item, Item **listHeadRef, int linksIndex ) {
  * @return the newly unlinked item (same as the argument) conforming to fluent API style.
  */
 template<typename Item>
-static inline Item *Unlink( Item *item, Item **listHeadRef, int listIndex ) {
+inline Item *Unlink( Item *item, Item **listHeadRef, int listIndex ) {
 	if( auto *next = item->next[listIndex] ) {
 		next->prev[listIndex] = item->prev[listIndex];
 	}
@@ -78,7 +78,7 @@ static inline Item *Unlink( Item *item, Item **listHeadRef, int listIndex ) {
  * @return the newly linked item (same as the argument) conforming to fluent API style.
  */
 template<typename Item>
-static inline Item *Link( Item *item, int16_t *listHeadRef, int listIndex, Item *basePtr ) {
+inline Item *Link( Item *item, int16_t *listHeadRef, int listIndex, Item *basePtr ) {
 	const intptr_t offset = item - basePtr;
 	assert( offset >= 0 );
 	assert( offset <= ( 1 << 15u ) );
@@ -116,7 +116,7 @@ static inline Item *Link( Item *item, int16_t *listHeadRef, int listIndex, Item 
  * @return the newly unlinked item (same as the argument) conforming to fluent API style.
  */
 template <typename Item>
-static inline Item *Unlink( Item *item, int16_t *listHeadRef, int listIndex, Item *basePtr ) {
+inline Item *Unlink( Item *item, int16_t *listHeadRef, int listIndex, Item *basePtr ) {
 	const int16_t nextItemIndex = item->next[listIndex];
 	// If the next item for the item is defined
 	if( nextItemIndex >= 0 ) {
