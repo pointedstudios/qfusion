@@ -1,4 +1,5 @@
 #include "snd_propagation.h"
+#include "snd_computation_host.h"
 
 #include "../gameshared/q_collision.h"
 #ifdef min
@@ -557,43 +558,150 @@ PathFinder::PathReverseIterator PathFinder::FindPath( int fromLeaf, int toLeaf )
 	return PathReverseIterator( this, std::numeric_limits<int>::min() );
 }
 
+class PropagationTableBuilder;
+
+class PropagationBuilderTask: public ParallelComputationHost::PartialTask {
+	friend class PropagationTableBuilder;
+
+	typedef PropagationTable::PropagationProps PropagationProps;
+
+	PropagationTableBuilder *const parent;
+	PropagationProps *const table;
+
+	CloneableGraphBuilder *graphInstance { nullptr };
+	PathFinder *pathFinderInstance { nullptr };
+	int *tmpLeafNums { nullptr };
+	const int numLeafs;
+	int leafsRangeBegin { -1 };
+	int leafsRangeEnd { -1 };
+	int total { -1 };
+	int executed { 0 };
+	int lastReportedProgress { 0 };
+	int executedAtLastReport { 0 };
+	const bool fastAndCoarse;
+
+	PropagationBuilderTask( PropagationTableBuilder *parent_, int numLeafs_ );
+
+	~PropagationBuilderTask() override;
+
+	void Exec() override;
+
+	void ComputePropsForPair( int leaf1, int leaf2 );
+
+	void BuildInfluxDirForLeaf( float *allocatedDir, const int *leafsChain, int numLeafsInChain );
+	bool BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, double *distance );
+};
+
 class PropagationTableBuilder {
-	PropagationGraphBuilder<double> graphBuilder;
+	friend class PropagationBuilderTask;
+
+	CloneableGraphBuilder graphBuilder;
 	PathFinder pathFinder;
 
 	using PropagationProps = PropagationTable::PropagationProps;
 
 	PropagationProps *table { nullptr };
-	int *tmpLeafNums { nullptr };
+	struct qmutex_s *progressLock { nullptr };
+	std::atomic_int executedWorkload { 0 };
+	std::atomic_int lastShownProgress { 0 };
+	int totalWorkload { -1 };
+
 	const bool fastAndCoarse;
 
-	void BuildInfluxDirForLeaf( float *allocatedDir, const int *leafsChain, int numLeafsInChain );
+	/**
+	 * Adds a task progress to an overall progress.
+	 * @param taskWorkloadDelta a number of workload units since last task progress report.
+	 * A workload unit is a computation of {@code PropagationProps} for a pair of leafs.
+	 * @note use this sparingly, only if "shown" progress of a task (progress percents) is changed.
+	 * This is not that cheap to call.
+	 */
+	void AddTaskProgress( int taskWorkloadDelta );
 
-	bool BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, double *distance );
+	void ValidateJointResults();
+
+#ifndef _MSC_VER
+	void ValidationError( const char *format, ... )
+		__attribute__( ( format( printf, 2, 3 ) ) ) __attribute__( ( noreturn ) );
+#else
+	__declspec( noreturn ) void ValidationError( _Printf_format_string_ const char *format, ... );
+#endif
 public:
 	PropagationTableBuilder( int actualNumLeafs, bool fastAndCoarse_ )
-		: graphBuilder( actualNumLeafs, fastAndCoarse_ ), pathFinder( graphBuilder ), fastAndCoarse( fastAndCoarse_ ) {}
-
-	~PropagationTableBuilder() {
-		if( table ) {
-			S_Free( table );
-		}
-		if( tmpLeafNums ) {
-			S_Free( tmpLeafNums );
-		}
+		: graphBuilder( actualNumLeafs, fastAndCoarse_ )
+		, pathFinder( graphBuilder )
+		, fastAndCoarse( fastAndCoarse_ ) {
+		assert( executedWorkload.is_lock_free() );
 	}
+
+	~PropagationTableBuilder();
 
 	bool Build();
 
-	PropagationProps *ReleaseOwnership() {
-		assert( table );
-		auto *result = table;
-		table = nullptr;
-		return result;
+	inline PropagationProps *ReleaseOwnership();
+};
+
+struct ComputationHostLifecycleHolder {
+	ComputationHostLifecycleHolder() {
+		ParallelComputationHost::Init();
+	}
+	~ComputationHostLifecycleHolder() {
+		ParallelComputationHost::Shutdown();
+	}
+	ParallelComputationHost *Instance() {
+		return ParallelComputationHost::Instance();
 	}
 };
 
+PropagationTableBuilder::PropagationProps *PropagationTableBuilder::ReleaseOwnership() {
+	assert( table );
+	auto *result = table;
+	table = nullptr;
+	return result;
+}
+
+PropagationTableBuilder::~PropagationTableBuilder() {
+	if( table ) {
+		S_Free( table );
+	}
+	if( progressLock ) {
+		trap_Mutex_Destroy( &progressLock );
+	}
+}
+
+class QMutexLock {
+	struct qmutex_s *mutex;
+public:
+	explicit QMutexLock( struct qmutex_s *mutex_ ): mutex( mutex_ ) {
+		assert( mutex );
+		trap_Mutex_Lock( mutex );
+	}
+	~QMutexLock() {
+		trap_Mutex_Unlock( mutex );
+	}
+};
+
+void PropagationTableBuilder::AddTaskProgress( int taskWorkloadDelta ) {
+	assert( taskWorkloadDelta > 0 );
+	assert( totalWorkload > 0 && "The total workload value has not been set" );
+
+	QMutexLock lock( progressLock );
+
+	int newWorkload = executedWorkload.fetch_add( taskWorkloadDelta, std::memory_order_seq_cst );
+	const auto newProgress = (int)( ( 100.0f / (float)totalWorkload ) * newWorkload );
+	if( newProgress == lastShownProgress.load( std::memory_order_acquire ) ) {
+		return;
+	}
+
+	lastShownProgress.store( newProgress, std::memory_order_release );
+	Com_Printf( "Computing a sound propagation table... %2d%%\n", newProgress );
+}
+
 bool PropagationTableBuilder::Build() {
+	progressLock = trap_Mutex_Create();
+	if( !progressLock ) {
+		return false;
+	}
+
 	if( !graphBuilder.Build() ) {
 		return false;
 	}
@@ -608,44 +716,277 @@ bool PropagationTableBuilder::Build() {
 
 	memset( table, 0, tableSizeInBytes );
 
-	// The "+1" part is not mandatory but we want a range "end"
-	// to always have a valid address in address space
-	tmpLeafNums = (int *)S_Malloc( 2 * ( numLeafs + 1 ) * sizeof( int ) );
+	// Right now the computation host lifecycle should be limited only to scope where actual computations occur.
+	ComputationHostLifecycleHolder computationHostLifecycleHolder;
 
-	int lastShownProgress = -1;
-	int completed = 0;
-	const float total = 0.5f * ( numLeafs - 1 ) * ( numLeafs - 1 );
+	auto *const computationHost = computationHostLifecycleHolder.Instance();
+	const int numTasks = computationHost->SuggestNumberOfTasks();
+
+	// First try creating tasks
+	int actualNumTasks = 0;
+	// Up to 32 parallel tasks are supported...
+	// We are probably going to exceed memory capacity trying to create more tasks...
+	PropagationBuilderTask *submittedTasks[32];
+	for( int i = 0; i < std::min( 32, numTasks ); ++i ) {
+		// TODO: Use just malloc()
+		void *const objectMem = S_Malloc( sizeof( PropagationBuilderTask ) );
+		if( !objectMem ) {
+			break;
+		}
+
+		auto *const task = new( objectMem )PropagationBuilderTask( this, numLeafs );
+		// A task gets an ownership over the clone
+		task->graphInstance = graphBuilder.Clone();
+		if( !task->graphInstance ) {
+			break;
+		}
+
+		// TODO: Use just malloc()
+		void *const pathFinderMem = S_Malloc( sizeof( PathFinder ) );
+		if( !pathFinderMem ) {
+			break;
+		}
+
+		// A task gets an ownership over the instance
+		task->pathFinderInstance = new( pathFinderMem )PathFinder( *task->graphInstance );
+
+		// The "+1" part is not mandatory but we want a range "end"
+		// to always have a valid address in address space.
+		// The task gets an ownership over this chunk of memory
+		task->tmpLeafNums = (int *)S_Malloc( 2 * ( numLeafs + 1 ) * sizeof( int ) );
+
+		// Transfer ownership over the task to the host.
+		// It will be released, sooner or later, regardless of TryAddTask() return value.
+		if( !computationHost->TryAddTask( task ) ) {
+			break;
+		}
+
+		submittedTasks[actualNumTasks++] = task;
+	}
+
+	if( !actualNumTasks ) {
+		Com_Printf( S_COLOR_RED "Unable to create/enqueue at least a single PropagationBuilderTask\n" );
+		return false;
+	}
+
+	// Set the total number of workload units
+	// (a computation of props for a pair of leafs is a workload unit)
+	this->totalWorkload = ( numLeafs - 1 ) * ( numLeafs - 2 ) / 2;
+
+	// We cannot assign workload ranges until we know the actual number of tasks we have created
+
+	// This is a workload for every task that is assumed to be same.
+	// We use a variable assigned range (that affects the processed matrix "field" area)
+	// so the "area" is (almost) the the same for every task.
+	// Note that a task execution time may still vary due to different topology of processed graph parts
+	// but this should give a close match to an ideal workload distribution anyway.
+	const int taskWorkload = this->totalWorkload / actualNumTasks;
+	int leafsRangeBegin = 1;
+	for( int i = 0; i < actualNumTasks; ++i ) {
+		auto *const task = submittedTasks[i];
+		task->leafsRangeBegin = leafsRangeBegin;
+		// We have to solve this equation for rangeLength considering leafsRangeBegin and taskWorkload to be known
+		// taskWorkload = ( leafsRangeBegin - 1 ) * rangeLength + ( rangeLength * ( rangeLength - 1 ) ) / 2;
+		// W = ( B - 1 ) * L + ( L * ( L - 1 ) ) / 2
+		// 2 * W = 2 * ( B - 1 ) * L + L * ( L - 1 )
+		// 2 * W = 2 * ( B - 1 ) * L + L ^ 2 - L
+		// 2 * ( B - 1 ) * L - L + L ^ 2 - 2 * W = 0
+		// L ^ 2 + ( 2 * ( B - 1 ) - 1 ) * L - 2 * W = 0
+		// assuming d > 0 where
+		// d = bCoeff ^ 2 + 4 * 2 * W
+		// bCoeff = 2 * ( B - 1 ) - 1
+		// roots are: 0.5 * ( -bCoeff +/- d ^ 0.5 )
+		const float bCoeff = 2.0f * ( leafsRangeBegin - 1.0f ) - 1.0f;
+		float d = bCoeff * bCoeff + 8.0f * taskWorkload;
+		assert( d > 0 );
+		auto rangeLength = (int)( 0.5f * ( -bCoeff + std::sqrt( d ) ) );
+		assert( rangeLength > 0 );
+		// See a detailed explanation in task::Exec().
+		task->total = ( leafsRangeBegin - 1 ) * rangeLength + ( rangeLength * ( rangeLength - 1 ) ) / 2;
+		if( i != actualNumTasks ) {
+			leafsRangeBegin += rangeLength;
+			assert( leafsRangeBegin < numLeafs );
+			task->leafsRangeEnd = leafsRangeBegin;
+			continue;
+		}
+		// We lose few units due to rounding, so specify the upper bound as it is intended to be.
+		task->leafsRangeEnd = numTasks;
+	}
+
+	computationHost->Exec();
+
+#ifndef PUBLIC_BUILD
+	ValidateJointResults();
+#endif
+
+	return true;
+}
+
+void PropagationTableBuilder::ValidateJointResults() {
+	const int numLeafs = graphBuilder.NumLeafs();
+	if( numLeafs <= 0 ) {
+		ValidationError( "Illegal graph NumLeafs() %d", numLeafs );
+	}
+	const int actualNumLeafs = trap_NumLeafs();
+	if( numLeafs != actualNumLeafs ) {
+		ValidationError( "graph NumLeafs() %d does not match actual map num leafs %d", numLeafs, actualNumLeafs );
+	}
+
 	for( int i = 1; i < numLeafs; ++i ) {
 		for( int j = i + 1; j < numLeafs; ++j ) {
-			completed++;
-			const auto progress = (int)( 1000.0f * completed / total );
-			if( progress != lastShownProgress ) {
-				Com_Printf( "Computing sound propagation table... %.1f%% done\n", 0.1f * progress );
-				lastShownProgress = progress;
-			}
+			const PropagationProps &iToJ = table[i * numLeafs + j];
+			const PropagationProps &jToI = table[j * numLeafs + i];
 
-			PropagationProps &iProps = table[i * numLeafs + j];
-			PropagationProps &jProps = table[j * numLeafs + i];
-			if( graphBuilder.EdgeDistance( i, j ) != std::numeric_limits<double>::infinity() ) {
-				iProps.hasDirectPath = jProps.hasDirectPath = 1;
+			if( iToJ.hasDirectPath ^ jToI.hasDirectPath ) {
+				ValidationError( "Direct path presence does not match for leaves %d, %d", i, j );
+			}
+			if( iToJ.hasDirectPath ) {
 				continue;
 			}
 
-			vec3_t dir1, dir2;
-			double distance;
-			if( !BuildPropagationPath( i, j, dir1, dir2, &distance ) ) {
+			if( iToJ.hasIndirectPath ^ jToI.hasIndirectPath ) {
+				ValidationError( "Indirect path presence does not match for leaves %d, %d", i, j );
+			}
+			if( !iToJ.hasIndirectPath ) {
 				continue;
 			}
 
-			iProps.hasIndirectPath = jProps.hasIndirectPath = 1;
-			iProps.SetDistance( (float)distance );
-			iProps.SetDir( dir1 );
-			jProps.SetDistance( (float)distance );
-			jProps.SetDir( dir2 );
+			const float pathDistance = iToJ.GetDistance();
+			if( !std::isfinite( pathDistance ) || pathDistance <= 0 ) {
+				ValidationError( "Illegal propagation distance %f for pair (%d, %d)", pathDistance, i, j );
+			}
+
+			const auto reversePathDistance = jToI.GetDistance();
+			if( reversePathDistance != pathDistance ) {
+				const char *format = "Reverse path distance %f does not match direct one %f for leaves %d, %d";
+				ValidationError( format, reversePathDistance, pathDistance, i, j );
+			}
+
+			// Just check whether these directories are normalized
+			// (they are not the same and are not an inversion of each other)
+			const char *dirTags[2] = { "direct", "reverse" };
+			const PropagationProps *propsRefs[2] = { &iToJ, &jToI };
+			for( int k = 0; k < 2; ++k ) {
+				vec3_t dir;
+				propsRefs[k]->GetDir( dir );
+				float length = std::sqrt( VectorLengthSquared( dir ) );
+				if( std::abs( length - 1.0f ) > 0.1f ) {
+					const char *format = "A dir %f %f %f for %s path between %d, %d is not normalized";
+					ValidationError( format, dir[0], dir[1], dir[2], dirTags[k], i, j );
+				}
+			}
+		}
+	}
+}
+
+void PropagationTableBuilder::ValidationError( const char *format, ... ) {
+	char buffer[1024];
+	constexpr const char tag[] = "PropagationTableBuilder::ValidateJointResults(): ";
+	// Make sure we use the proper size
+	static_assert( sizeof( tag ) > sizeof( char * ), "Do not use sizeof( char * ) instead of a real array size" );
+	// Copy including the last zero byte
+	memcpy( buffer, tag, sizeof( buffer ) );
+	// Start writing at the zero byte position
+	char *writablePtr = buffer + sizeof( tag ) - 1;
+
+	va_list va;
+	va_start( va, format );
+	Q_vsnprintfz( writablePtr, sizeof( buffer ) -  sizeof( tag ), format, va );
+	va_end( va );
+	trap_Error( buffer );
+}
+
+PropagationBuilderTask::PropagationBuilderTask( PropagationTableBuilder *parent_, int numLeafs_ )
+	: parent( parent_ ), table( parent->table ), numLeafs( numLeafs_ ), fastAndCoarse( parent->fastAndCoarse ) {
+	assert( table && "The table in the parent has not been set" );
+}
+
+PropagationBuilderTask::~PropagationBuilderTask() {
+	if( graphInstance ) {
+		graphInstance->~CloneableGraphBuilder();
+		S_Free( graphInstance );
+	}
+	if( pathFinderInstance ) {
+		pathFinderInstance->~PathFinder();
+		S_Free( pathFinderInstance );
+	}
+	if( tmpLeafNums ) {
+		S_Free( tmpLeafNums );
+	}
+}
+
+void PropagationBuilderTask::Exec() {
+	// Check whether the range has been set and is valid
+	assert( leafsRangeBegin > 0 );
+	assert( leafsRangeEnd > leafsRangeBegin );
+	assert( leafsRangeEnd <= numLeafs );
+
+	// The workload consists of a "rectangle" and a "triangle"
+	// The rectangle width (along J - axis) is the range length
+	// The rectangle height (along I - axis) is leafsRangeBegin - 1
+	// Note that the first row of the table corresponds to a zero leaf and is skipped for processing.
+	// Triangle legs have rangeLength size
+
+	// -  -  -  -  -  -  -  -
+	// -  *  o  o  o  X  X  X
+	// -  o  *  o  o  X  X  X
+	// -  o  o  *  o  X  X  X
+	// -  o  o  o  *  X  X  X
+	// -  o  o  o  o  *  X  X
+	// -  o  o  o  o  o  *  X
+	// -  o  o  o  o  o  o  *
+
+	assert( this->total > 0 );
+	this->executed = 0;
+	this->lastReportedProgress = 0;
+	this->executedAtLastReport = 0;
+
+	// Process "rectangular" part of the workload
+	for( int i = 1; i < leafsRangeBegin; ++i ) {
+		for ( int j = leafsRangeBegin; j < leafsRangeEnd; ++j ) {
+			ComputePropsForPair( i, j );
 		}
 	}
 
-	return true;
+	// Process "triangular" part of the workload
+	for( int i = leafsRangeBegin; i < leafsRangeEnd; ++i ) {
+		for( int j = i + 1; j < leafsRangeEnd; ++j ) {
+			ComputePropsForPair( i, j );
+		}
+	}
+}
+
+void PropagationBuilderTask::ComputePropsForPair( int leaf1, int leaf2 ) {
+	executed++;
+	const auto progress = (int)( 100 * ( executed / (float)total ) );
+	// We keep computing progress in percents to avoid confusion
+	// but report only even values to reduce threads contention on AddTaskProgress()
+	if( progress != lastReportedProgress && !( progress % 2 ) ) {
+		int taskWorkloadDelta = executed - executedAtLastReport;
+		assert( taskWorkloadDelta > 0 );
+		parent->AddTaskProgress( taskWorkloadDelta );
+		lastReportedProgress = progress;
+		executedAtLastReport = executed;
+	}
+
+	PropagationProps *const firstProps = &table[leaf1 * numLeafs + leaf2];
+	PropagationProps *const secondProps = &table[leaf2 * numLeafs + leaf1];
+	if( graphInstance->EdgeDistance( leaf1, leaf2 ) != std::numeric_limits<double>::infinity() ) {
+		firstProps->hasDirectPath = secondProps->hasDirectPath = 1;
+		return;
+	}
+
+	vec3_t dir1, dir2;
+	double distance;
+	if( !BuildPropagationPath( leaf1, leaf2, dir1, dir2, &distance ) ) {
+		return;
+	}
+
+	firstProps->hasIndirectPath = secondProps->hasIndirectPath = 1;
+	firstProps->SetDistance( (float)distance );
+	firstProps->SetDir( dir1 );
+	secondProps->SetDistance( (float)distance );
+	secondProps->SetDir( dir2 );
 }
 
 /**
@@ -690,7 +1031,7 @@ public:
 	}
 };
 
-bool PropagationTableBuilder::BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, double *distance ) {
+bool PropagationBuilderTask::BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, double *distance ) {
 	assert( leaf1 != leaf2 );
 
 	WeightedDirBuilder _1to2Builder;
@@ -711,7 +1052,7 @@ bool PropagationTableBuilder::BuildPropagationPath( int leaf1, int leaf2, vec3_t
 	const int maxAttempts = fastAndCoarse ? 1 : WeightedDirBuilder::MAX_DIRS;
 	// Do at most maxAttempts to find an alternative path
 	for( ; numAttempts != maxAttempts; ++numAttempts ) {
-		auto reverseIterator = pathFinder.FindPath( leaf1, leaf2 );
+		auto reverseIterator = pathFinderInstance->FindPath( leaf1, leaf2 );
 		// If the path is not valid, stop
 		if( !reverseIterator.HasNext() ) {
 			break;
@@ -733,7 +1074,7 @@ bool PropagationTableBuilder::BuildPropagationPath( int leaf1, int leaf2, vec3_t
 		int prevLeaf = leaf2;
 
 		// tmpLeafNums are capacious enough to store slightly more than NumLeafs() * 2 elements
-		int *const directLeafNumsEnd = this->tmpLeafNums + graphBuilder.NumLeafs() + 1;
+		int *const directLeafNumsEnd = this->tmpLeafNums + graphInstance->NumLeafs() + 1;
 		// Values will be written at this decreasing pointer
 		// <- [directLeafNumsBegin.... directLeafNumsEnd)
 		int *directLeafNumsBegin = directLeafNumsEnd;
@@ -764,16 +1105,16 @@ bool PropagationTableBuilder::BuildPropagationPath( int leaf1, int leaf2, vec3_t
 
 			// Save the real distance table on demand
 			if( !hasModifiedDistanceTable ) {
-				graphBuilder.SaveDistanceTable();
+				graphInstance->SaveDistanceTable();
 			}
 			hasModifiedDistanceTable = true;
 
 			// Scale the weight of the edges in the current path,
 			// so weights will be modified for finding N-th best path
-			double oldEdgeDistance = graphBuilder.EdgeDistance( prevLeaf, nextLeaf );
+			double oldEdgeDistance = graphInstance->EdgeDistance( prevLeaf, nextLeaf );
 			// Check whether it was a valid edge
 			assert( oldEdgeDistance > 0 && oldEdgeDistance != std::numeric_limits<double>::infinity() );
-			graphBuilder.SetEdgeDistance( prevLeaf, nextLeaf, 3.0f * oldEdgeDistance );
+			graphInstance->SetEdgeDistance( prevLeaf, nextLeaf, 3.0f * oldEdgeDistance );
 		} while( prevLeaf != leaf1 );
 
 		// Write leaf1 as well
@@ -794,7 +1135,7 @@ bool PropagationTableBuilder::BuildPropagationPath( int leaf1, int leaf2, vec3_t
 	}
 
 	if( hasModifiedDistanceTable ) {
-		graphBuilder.RestoreDistanceTable();
+		graphInstance->RestoreDistanceTable();
 	}
 
 	if( !numAttempts ) {
@@ -803,22 +1144,20 @@ bool PropagationTableBuilder::BuildPropagationPath( int leaf1, int leaf2, vec3_t
 
 	_1to2Builder.BuildDir( _1to2 );
 	_2to1Builder.BuildDir( _2to1 );
-	*distance = graphBuilder.EdgeDistance( leaf1, leaf2 );
+	*distance = graphInstance->EdgeDistance( leaf1, leaf2 );
 	assert( *distance > 0 && std::isfinite( *distance ) );
 	return true;
 }
 
-void PropagationTableBuilder::BuildInfluxDirForLeaf( float *allocatedDir,
-													 const int *leafsChain,
-													 int numLeafsInChain ) {
+void PropagationBuilderTask::BuildInfluxDirForLeaf( float *allocatedDir, const int *leafsChain, int numLeafsInChain ) {
 	assert( numLeafsInChain > 1 );
-	const float *firstLeafCenter = graphBuilder.LeafCenter( leafsChain[0] );
+	const float *firstLeafCenter = graphInstance->LeafCenter( leafsChain[0] );
 	const int maxTestedLeafs = std::min( numLeafsInChain, (int)WeightedDirBuilder::MAX_DIRS );
 	constexpr float distanceThreshold = 768.0f;
 
 	WeightedDirBuilder builder;
 	for( int i = 1, end = maxTestedLeafs; i < end; ++i ) {
-		const float *leafCenter = graphBuilder.LeafCenter( leafsChain[i] );
+		const float *leafCenter = graphInstance->LeafCenter( leafsChain[i] );
 		const float squareDistance = DistanceSquared( firstLeafCenter, leafCenter );
 		// If the current leaf is far from the first one
 		if( squareDistance >= distanceThreshold * distanceThreshold ) {
@@ -1107,13 +1446,13 @@ bool CachedGraphReader::Read( CachedLeafsGraph *readObject ) {
 		return false;
 	}
 
-	typedef std::unique_ptr<float, TaggedAllocatorCaller<float>> TableHolder;
+	using TableHolder = std::unique_ptr<float, TaggedAllocatorCaller<float>>;
 	TableHolder tableHolder( ::defaultFloatAllocator.Alloc( numLeafs * numLeafs ) );
 	if( !CachedComputationReader::Read( tableHolder.get(), numBytesForTable ) ) {
 		return false;
 	}
 
-	typedef std::unique_ptr<int, TaggedAllocatorCaller<int>> ListsDataHolder;
+	using ListsDataHolder = std::unique_ptr<int, TaggedAllocatorCaller<int>>;
 	ListsDataHolder listsDataHolder( ::defaultIntAllocator.Alloc( listsDataSize ) );
 	if( !CachedComputationReader::Read( listsDataHolder.get(), numBytesForLists ) ) {
 		return false;

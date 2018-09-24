@@ -97,6 +97,7 @@ class PropagationTable: public CachedComputation {
 	friend class PropagationTableReader;
 	friend class PropagationTableWriter;
 	friend class PropagationTableBuilder;
+	friend class PropagationBuilderTask;
 	friend class CachedLeafsGraph;
 	template <typename> friend class SingletonHolder;
 
