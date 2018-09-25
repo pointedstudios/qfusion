@@ -130,6 +130,18 @@ public:
 		distanceTable[leaf2 * numLeafs + leaf1] = newDistance;
 	}
 
+	void ScaleEdgeDistance( AdjacencyListType leaf1, AdjacencyListType leaf2, DistanceType scale ) {
+		auto *const distanceTable = this->distanceTable;
+		assert( this->distanceTableScratchpad );
+		// The distance table must point at the scratchpad
+		assert( distanceTable == this->distanceTableScratchpad );
+		const AdjacencyListType numLeafs = this->numLeafs;
+		assert( leaf1 > 0 && leaf1 < numLeafs );
+		assert( leaf2 > 0 && leaf2 < numLeafs );
+		distanceTable[leaf1 * numLeafs + leaf2] *= scale;
+		distanceTable[leaf2 * numLeafs + leaf1] *= scale;
+	}
+
 	virtual void SaveDistanceTable() {
 		// Check whether the distance table is set at all
 		assert( this->distanceTable );
@@ -456,47 +468,116 @@ struct HeapEntry {
 	}
 };
 
+/**
+ * A specialized updates heap optimized for path-finding usage patterns.
+ */
+class UpdatesHeap {
+	HeapEntry *buffer;
+	int size { 0 };
+	int capacity { 1024 + 512 };
+public:
+	UpdatesHeap() {
+		buffer = (HeapEntry *)S_Malloc( sizeof( HeapEntry ) * capacity );
+	}
+
+	~UpdatesHeap() {
+		S_Free( buffer );
+	}
+
+	void Clear() {
+		size = 0;
+	}
+
+	/**
+	 * Constructs a new {@code HeapEntry} in place and adds it to the heap.
+	 * @param leaf a forwarded parameter of {@code HeapEntry()} constructor.
+	 * @param distance a forwarded parameter of {@code HeapEntry()} constructor.
+	 */
+	void Push( int leaf, double distance ) {
+		new( buffer + size++ )HeapEntry( leaf, distance );
+		std::push_heap( buffer, buffer + size );
+	}
+
+	bool IsEmpty() const {
+		return !size;
+	}
+
+	double BestDistance() const {
+		return buffer[0].distance;
+	}
+
+	/**
+	 * Pops a best heap entry.
+	 * The returned value is valid until next {@code PrepareToAdd()} call.
+	 * @return a reference to the newly popped entry.
+	 */
+	const HeapEntry &PopInPlace() {
+		std::pop_heap( buffer, buffer + size );
+		return buffer[--size];
+	}
+
+	/**
+	 * Reserves buffer capacity for items that are about to be added.
+	 * @param atMost a maximum number of newly added items.
+	 */
+	void ReserveForAddition( int atMost ) {
+		if( size + atMost <= capacity ) {
+			return;
+		}
+		capacity = ( 4 * ( size + atMost ) ) / 3;
+		auto *const oldBuffer = buffer;
+		buffer = (HeapEntry *)S_Malloc( sizeof( HeapEntry ) * capacity );
+		memcpy( buffer, oldBuffer, sizeof( HeapEntry ) * size );
+		S_Free( oldBuffer );
+	}
+};
+
 class PathFinder {
 	PropagationGraphBuilder<double> &graphBuilder;
 
 	struct VertexUpdateStatus {
-		double distance;
-		int32_t parentLeaf;
-		bool isVisited;
+		double distance[2];
+		int32_t parentLeaf[2];
+		bool isVisited[2];
 	};
 
 	VertexUpdateStatus *updateStatus { nullptr };
 
-	std::vector<HeapEntry> heap;
-
-	const size_t heapBufferLength;
+	UpdatesHeap heaps[2];
 public:
 	class PathReverseIterator {
 		friend class PathFinder;
 		PathFinder *const parent;
-		int leafNum;
+		int leafNum { std::numeric_limits<int>::min() };
+		const int listIndex;
 
-		PathReverseIterator( PathFinder *parent_, int leafNum_ )
-			: parent( parent_ ), leafNum( leafNum_ ) {}
+		PathReverseIterator( PathFinder *parent_, int listIndex_ )
+			: parent( parent_ ), listIndex( listIndex_ ) {}
+
+		void ResetWithLeaf( int leafNum_ ) {
+			assert( leafNum_ > 0 );
+			this->leafNum = leafNum_;
+		}
 	public:
 		bool HasNext() const {
-			return leafNum > 0 && parent->updateStatus[leafNum].parentLeaf;
+			return leafNum > 0 && parent->updateStatus[leafNum].parentLeaf[listIndex] > 0;
 		}
 
 		int LeafNum() const { return leafNum; }
 
-		double DistanceSoFar() const {
-			return parent->updateStatus[leafNum].distance;
-		}
-
 		void Next() {
 			assert( HasNext() );
-			leafNum = parent->updateStatus[leafNum].parentLeaf;
+			leafNum = parent->updateStatus[leafNum].parentLeaf[listIndex];
 		}
 	};
-
+private:
+	PathReverseIterator tmpDirectIterator;
+	PathReverseIterator tmpReverseIterator;
+public:
 	explicit PathFinder( PropagationGraphBuilder<double> &graph_ )
-		: graphBuilder( graph_ ), heapBufferLength( (unsigned)graphBuilder.NumLeafs() ) {
+		: graphBuilder( graph_ )
+		, tmpDirectIterator( this, 0 )
+		, tmpReverseIterator( this, 1 ) {
 		updateStatus = (VertexUpdateStatus *)::S_Malloc( graph_.NumLeafs() * sizeof( VertexUpdateStatus ) );
 	}
 
@@ -506,56 +587,99 @@ public:
 		}
 	}
 
-	PathReverseIterator FindPath( int fromLeaf, int toLeaf );
+	/**
+	 * Finds a path from a leaf to a leaf.
+	 * The search algorithm is intended to be 2-directional
+	 * and uniformly interleaving from direct to reverse propagation.
+	 * Ordering of leaves does not really matter as the graph is undirected.
+	 * @param fromLeaf a first leaf.
+	 * @param toLeaf a second leaf.
+	 * @param direct set to an address of a direct algorithm turn iterator on success.
+	 * @param reverse set to an address of a reverse algorithm turn iterator on success.
+	 * @return a best distance on success, an infinity on failure.
+	 * @note returned iterators must be traversed backwards to get the algoritm turn start point (from- or to-leaf).
+	 * These iterators are not assumed to contain complete direct/reverse path.
+	 * They point to algorithm temporaries.
+	 * However their combination is intended to represent an entire path.
+	 * A last valid leaf during iteration matches {@code fromLeaf} and {@code toLeaf} accordingly.
+	 */
+	double FindPath( int fromLeaf, int toLeaf, PathReverseIterator **direct, PathReverseIterator **reverse );
 };
 
-PathFinder::PathReverseIterator PathFinder::FindPath( int fromLeaf, int toLeaf ) {
+double PathFinder::FindPath( int fromLeaf, int toLeaf, PathReverseIterator **direct, PathReverseIterator **reverse ) {
 	for( int i = 0, end = graphBuilder.NumLeafs(); i < end; ++i ) {
 		auto *status = updateStatus + i;
-		status->distance = std::numeric_limits<double>::infinity();
-		status->parentLeaf = -1;
-		status->isVisited = false;
-	}
-
-	heap.clear();
-
-	updateStatus[fromLeaf].distance = 0.0;
-	heap.emplace_back( HeapEntry( fromLeaf, 0.0 ) );
-
-	while( !heap.empty() ) {
-		std::pop_heap( heap.begin(), heap.end() );
-		HeapEntry entry( heap.back() );
-		heap.pop_back();
-
-		updateStatus[entry.leafNum].isVisited = true;
-
-		if( entry.leafNum == toLeaf ) {
-			return PathReverseIterator( this, toLeaf );
-		}
-
-		// Now scan all adjacent vertices
-		const auto *const adjacencyList = graphBuilder.AdjacencyList( entry.leafNum ) + 1;
-		for( int i = 0, end = adjacencyList[-1]; i < end; ++i ) {
-			const auto leafNum = adjacencyList[i];
-			auto *const status = &updateStatus[leafNum];
-			if( status->isVisited ) {
-				continue;
-			}
-			double edgeDistance = graphBuilder.EdgeDistance( entry.leafNum, leafNum );
-			double relaxedDistance = edgeDistance + entry.distance;
-			if( status->distance <= relaxedDistance ) {
-				continue;
-			}
-
-			status->distance = relaxedDistance;
-			status->parentLeaf = entry.leafNum;
-
-			heap.emplace_back( HeapEntry( leafNum, relaxedDistance ) );
-			std::push_heap( heap.begin(), heap.end() );
+		for( int j = 0; j < 2; ++j ) {
+			status->distance[j] = std::numeric_limits<double>::infinity();
+			status->parentLeaf[j] = -1;
+			status->isVisited[j] = false;
 		}
 	}
 
-	return PathReverseIterator( this, std::numeric_limits<int>::min() );
+	heaps[0].Clear();
+	heaps[1].Clear();
+
+	updateStatus[fromLeaf].distance[0] = 0.0;
+	heaps[0].Push( fromLeaf, 0.0 );
+	updateStatus[toLeaf].distance[1] = 0.0;
+	heaps[1].Push( toLeaf, 0.0 );
+
+	int bestLeaf = -1;
+	auto bestDistanceSoFar = std::numeric_limits<double>::infinity();
+	while( !heaps[0].IsEmpty() && !heaps[1].IsEmpty() ) {
+		for( int j = 0; j < 2; ++j ) {
+			if( heaps[0].BestDistance() + heaps[1].BestDistance() >= bestDistanceSoFar ) {
+				assert( bestLeaf > 0 );
+				// Check whether this leaf has been really touched by direct and reverse algorithm turns
+				assert( updateStatus[bestLeaf].parentLeaf >= 0 );
+				assert( updateStatus[bestLeaf].parentLeaf >= 0 );
+				tmpDirectIterator.ResetWithLeaf( bestLeaf );
+				*direct = &tmpDirectIterator;
+				tmpReverseIterator.ResetWithLeaf( bestLeaf );
+				*reverse = &tmpReverseIterator;
+				return bestDistanceSoFar;
+			}
+
+			auto *const activeHeap = &heaps[j];
+
+			const HeapEntry &entry = activeHeap->PopInPlace();
+			// Save these values immediately as ReserveForAddition() call might make accessing the entry illegal.
+			const int entryLeafNum = entry.leafNum;
+			const double entryDistance = entry.distance;
+
+			updateStatus[entryLeafNum].isVisited[j] = true;
+
+			// Now scan all adjacent vertices
+			const auto *const adjacencyList = graphBuilder.AdjacencyList( entryLeafNum ) + 1;
+			const auto listSize = adjacencyList[-1];
+			activeHeap->ReserveForAddition( listSize );
+			for( int i = 0; i < listSize; ++i ) {
+				const auto leafNum = adjacencyList[i];
+				auto *const status = &updateStatus[leafNum];
+				if( status->isVisited[j] ) {
+					continue;
+				}
+				double edgeDistance = graphBuilder.EdgeDistance( entryLeafNum, leafNum );
+				double relaxedDistance = edgeDistance + entryDistance;
+				if( status->distance[j] <= relaxedDistance ) {
+					continue;
+				}
+
+				double otherDistance = status->distance[( j + 1 ) & 1];
+				if( otherDistance + relaxedDistance < bestDistanceSoFar ) {
+					bestLeaf = leafNum;
+					bestDistanceSoFar = otherDistance + relaxedDistance;
+				}
+
+				status->distance[j] = relaxedDistance;
+				status->parentLeaf[j] = entryLeafNum;
+
+				activeHeap->Push( leafNum, relaxedDistance );
+			}
+		}
+	}
+
+	return std::numeric_limits<double>::infinity();
 }
 
 class PropagationTableBuilder;
@@ -589,7 +713,34 @@ class PropagationBuilderTask: public ParallelComputationHost::PartialTask {
 	void ComputePropsForPair( int leaf1, int leaf2 );
 
 	void BuildInfluxDirForLeaf( float *allocatedDir, const int *leafsChain, int numLeafsInChain );
-	bool BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, double *distance );
+
+	void BuildInfluxDirForLeaf( float *allocatedDir, const int *leafsChainBegin, const int *leafsChainEnd ) {
+		assert( leafsChainEnd > leafsChainBegin );
+		// Sanity check
+		assert( leafsChainEnd - leafsChainBegin < ( 1 << 20 ) );
+		BuildInfluxDirForLeaf( allocatedDir, leafsChainBegin, (int)( leafsChainEnd - leafsChainBegin ) );
+	}
+
+	/**
+	 * Unwinds a {@code PathFinder::ReverseIterator} writing leaf numbers to a linear buffer.
+	 * The buffer is assumed to be capable to store a leaves chain of maximum possible length for the current graph.
+	 * Scales graph edges defined by these leaf numbers at the same time.
+	 * @param iterator an iterator that represents intermediate results of path-finding.
+	 * @param arrayEnd an end of the buffer range. Leaf numbers will be written before this address.
+	 * @param scale a weight scale for path edges
+	 * @return a new range begin for the buffer (that is less than the {@code arrayEnd}
+	 */
+	int *UnwindScalingWeights( PathFinder::PathReverseIterator *iterator, int *arrayEnd, double scale );
+	/**
+	 * Unwinds a {@code PathFinder::ReverseIterator} writing leaf numbers to a linear buffer.
+	 * The buffer is assumed to be capable to store a leaves chain of maximum possible length for the current graph.
+	 * @param iterator an iterator that represents intermediate results of path-finding.
+	 * @param arrayEnd an end of the buffer range. Leaf numbers will be written before this address.
+	 * @return a new range begin for the buffer (that is less than the {@code arrayEnd}
+	 */
+	int *Unwind( PathFinder::PathReverseIterator *iterator, int *arrayEnd );
+
+	bool BuildPropagationPath( int leaf1, int leaf2, vec3_t dir1, vec3_t dir2, double *distance );
 };
 
 class PropagationTableBuilder {
@@ -1037,11 +1188,15 @@ bool PropagationBuilderTask::BuildPropagationPath( int leaf1, int leaf2, vec3_t 
 	WeightedDirBuilder _1to2Builder;
 	WeightedDirBuilder _2to1Builder;
 
+	PathFinder::PathReverseIterator *directIterator;
+	PathFinder::PathReverseIterator *reverseIterator;
+
 	// Save a copy of edge weights on demand.
 	// Doing that is expensive.
 	bool hasModifiedDistanceTable = false;
 
 	double prevPathDistance = 0.0;
+	double bestPathDistance = 0.0;
 	int numAttempts = 0;
 	// Increase quality in developer mode, so we can ship high-quality tables withing the game assets
 	// Doing only a single attempt is chosen based on real tests
@@ -1052,15 +1207,17 @@ bool PropagationBuilderTask::BuildPropagationPath( int leaf1, int leaf2, vec3_t 
 	const int maxAttempts = fastAndCoarse ? 1 : WeightedDirBuilder::MAX_DIRS;
 	// Do at most maxAttempts to find an alternative path
 	for( ; numAttempts != maxAttempts; ++numAttempts ) {
-		auto reverseIterator = pathFinderInstance->FindPath( leaf1, leaf2 );
-		// If the path is not valid, stop
-		if( !reverseIterator.HasNext() ) {
+		double newPathDistance = pathFinderInstance->FindPath( leaf1, leaf2, &directIterator, &reverseIterator );
+		// If the path cannot be (longer) found stop
+		if( std::isinf( newPathDistance ) ) {
 			break;
 		}
-		// If the path has been found, it must end in leaf2
-		assert( reverseIterator.LeafNum() == leaf2 );
-		// "distance so far" for the last path point is the entire path distance
-		auto newPathDistance = reverseIterator.DistanceSoFar();
+		if( !directIterator->HasNext() || !reverseIterator->HasNext() ) {
+			break;
+		}
+		if( !bestPathDistance ) {
+			bestPathDistance = newPathDistance;
+		}
 		// Stop trying to find an alternative path if the new distance is much longer than the previous one
 		if( prevPathDistance ) {
 			if( newPathDistance > 1.1 * prevPathDistance && newPathDistance - prevPathDistance > 128.0 ) {
@@ -1070,68 +1227,37 @@ bool PropagationBuilderTask::BuildPropagationPath( int leaf1, int leaf2, vec3_t 
 
 		prevPathDistance = newPathDistance;
 
-		int nextLeaf;
-		int prevLeaf = leaf2;
-
 		// tmpLeafNums are capacious enough to store slightly more than NumLeafs() * 2 elements
 		int *const directLeafNumsEnd = this->tmpLeafNums + graphInstance->NumLeafs() + 1;
-		// Values will be written at this decreasing pointer
-		// <- [directLeafNumsBegin.... directLeafNumsEnd)
-		int *directLeafNumsBegin = directLeafNumsEnd;
+		int *directLeafNumsBegin;
 
-		int *const reverseLeafNumsBegin = directLeafNumsEnd;
-		// Values will be written at this increasing pointer
-		// [reverseLeafNumsBegin... reverseLeafNumsEnd) ->
-		int *reverseLeafNumsEnd = reverseLeafNumsBegin;
+		int *const reverseLeafNumsEnd = directLeafNumsEnd + graphInstance->NumLeafs() + 1;
+		int *reverseLeafNumsBegin;
 
-		// Traverse the built path backwards
-		do {
-			*--directLeafNumsBegin = prevLeaf;
-			*reverseLeafNumsEnd++ = prevLeaf;
-
-			reverseIterator.Next();
-			// prevLeaf and nextLeaf are named according to their role in
-			// the direct path from leaf1 to leaf2 ("next" one is closer to leaf2).
-			// We do a backwards traversal.
-			// The next item in loop is assigned to prevLeaf
-			// and the previous item in loop becomes nextLeaf
-			nextLeaf = prevLeaf;
-			prevLeaf = reverseIterator.LeafNum();
-
-			// If there is not going to be a next path finding attempt
-			if( numAttempts + 1 >= maxAttempts ) {
-				continue;
-			}
-
-			// Save the real distance table on demand
+		if( numAttempts + 1 != maxAttempts ) {
 			if( !hasModifiedDistanceTable ) {
 				graphInstance->SaveDistanceTable();
+				hasModifiedDistanceTable = true;
 			}
-			hasModifiedDistanceTable = true;
-
-			// Scale the weight of the edges in the current path,
-			// so weights will be modified for finding N-th best path
-			double oldEdgeDistance = graphInstance->EdgeDistance( prevLeaf, nextLeaf );
-			// Check whether it was a valid edge
-			assert( oldEdgeDistance > 0 && oldEdgeDistance != std::numeric_limits<double>::infinity() );
-			graphInstance->SetEdgeDistance( prevLeaf, nextLeaf, 3.0f * oldEdgeDistance );
-		} while( prevLeaf != leaf1 );
-
-		// Write leaf1 as well
-		*--directLeafNumsBegin = leaf1;
-		*reverseLeafNumsEnd++ = leaf1;
-
-		const auto numLeafsInChain = (int)( directLeafNumsEnd - directLeafNumsBegin );
-		assert( numLeafsInChain > 1 );
-		assert( numLeafsInChain == (int)( reverseLeafNumsEnd - reverseLeafNumsBegin ) );
+			const auto lastDirectLeaf = directIterator->LeafNum();
+			const auto firstReverseLeaf = reverseIterator->LeafNum();
+			directLeafNumsBegin = UnwindScalingWeights( directIterator, directLeafNumsEnd, 3.0f );
+			reverseLeafNumsBegin = UnwindScalingWeights( reverseIterator, reverseLeafNumsEnd, 3.0f );
+			graphInstance->ScaleEdgeDistance( lastDirectLeaf, firstReverseLeaf, 3.0f );
+		} else {
+			directLeafNumsBegin = Unwind( directIterator, directLeafNumsEnd );
+			reverseLeafNumsBegin = Unwind( reverseIterator, reverseLeafNumsEnd );
+		}
 
 		const double attemptWeight = 1.0f / ( 1.0 + numAttempts );
 
 		assert( *directLeafNumsBegin == leaf1 );
-		BuildInfluxDirForLeaf( _2to1Builder.AllocDir( attemptWeight ), directLeafNumsBegin, numLeafsInChain );
+		// Direct leaf nums correspond to the head of the 1->2 path and yield 2->1 "propagation window"
+		BuildInfluxDirForLeaf( _2to1Builder.AllocDir( attemptWeight ), directLeafNumsBegin, directLeafNumsEnd );
 
 		assert( *reverseLeafNumsBegin == leaf2 );
-		BuildInfluxDirForLeaf( _1to2Builder.AllocDir( attemptWeight ), reverseLeafNumsBegin, numLeafsInChain );
+		// Reverse leaf nums correspond to the tail of the 1->2 path and yield 1->2 "propagation window"
+		BuildInfluxDirForLeaf( _1to2Builder.AllocDir( attemptWeight ), reverseLeafNumsBegin, reverseLeafNumsEnd );
 	}
 
 	if( hasModifiedDistanceTable ) {
@@ -1144,9 +1270,47 @@ bool PropagationBuilderTask::BuildPropagationPath( int leaf1, int leaf2, vec3_t 
 
 	_1to2Builder.BuildDir( _1to2 );
 	_2to1Builder.BuildDir( _2to1 );
-	*distance = graphInstance->EdgeDistance( leaf1, leaf2 );
+	*distance = bestPathDistance;
 	assert( *distance > 0 && std::isfinite( *distance ) );
 	return true;
+}
+
+int *PropagationBuilderTask::Unwind( PathFinder::PathReverseIterator *iterator, int *arrayEnd ) {
+	int *arrayBegin = arrayEnd;
+	// Traverse the direct iterator backwards
+	int prevLeafNum = iterator->LeafNum();
+	for(;; ) {
+		*( --arrayBegin ) = prevLeafNum;
+		iterator->Next();
+		int nextLeafNum = iterator->LeafNum();
+		prevLeafNum = nextLeafNum;
+		if( !iterator->HasNext() ) {
+			break;
+		}
+	}
+	*( --arrayBegin ) = prevLeafNum;
+	return arrayBegin;
+}
+
+int *PropagationBuilderTask::UnwindScalingWeights( PathFinder::PathReverseIterator *iterator,
+												   int *arrayEnd, double scale ) {
+	int *arrayBegin = arrayEnd;
+	// Traverse the direct iterator backwards
+	int prevLeafNum = iterator->LeafNum();
+	for(;; ) {
+		*( --arrayBegin ) = prevLeafNum;
+		iterator->Next();
+		int nextLeafNum = iterator->LeafNum();
+
+		graphInstance->ScaleEdgeDistance( prevLeafNum, nextLeafNum, scale );
+
+		prevLeafNum = nextLeafNum;
+		if( !iterator->HasNext() ) {
+			break;
+		}
+	}
+	*( --arrayBegin ) = prevLeafNum;
+	return arrayBegin;
 }
 
 void PropagationBuilderTask::BuildInfluxDirForLeaf( float *allocatedDir, const int *leafsChain, int numLeafsInChain ) {
