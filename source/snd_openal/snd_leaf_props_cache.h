@@ -32,8 +32,6 @@ class LeafPropsCache: public CachedComputation {
 
 	LeafProps *leafProps { nullptr };
 
-	LeafProps ComputeLeafProps( int leafNum, LeafPropsSampler *sampler, bool fastAndCoarse );
-
 	bool TryReadFromFile( LeafPropsReader *reader, int actualLeafsNum );
 
 	void ResetExistingState( const char *actualMap, int actualNumLeafs ) override;

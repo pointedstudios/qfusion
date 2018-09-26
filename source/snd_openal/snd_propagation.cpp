@@ -791,18 +791,6 @@ public:
 	inline PropagationProps *ReleaseOwnership();
 };
 
-struct ComputationHostLifecycleHolder {
-	ComputationHostLifecycleHolder() {
-		ParallelComputationHost::Init();
-	}
-	~ComputationHostLifecycleHolder() {
-		ParallelComputationHost::Shutdown();
-	}
-	ParallelComputationHost *Instance() {
-		return ParallelComputationHost::Instance();
-	}
-};
-
 PropagationTableBuilder::PropagationProps *PropagationTableBuilder::ReleaseOwnership() {
 	assert( table );
 	auto *result = table;

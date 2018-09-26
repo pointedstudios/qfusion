@@ -107,4 +107,23 @@ public:
 	static void Shutdown();
 };
 
+/**
+ * This is a helper for making the computation host lifecycle tied to a scope.
+ * The current computation host has an interface that corresponds
+ * to an application-global object initialized once, and that's right,
+ * but lifting it to the application scope is another problem
+ * so currently its has to be used as a local method variable.
+ */
+struct ComputationHostLifecycleHolder {
+	ComputationHostLifecycleHolder() {
+		ParallelComputationHost::Init();
+	}
+	~ComputationHostLifecycleHolder() {
+		ParallelComputationHost::Shutdown();
+	}
+	ParallelComputationHost *Instance() {
+		return ParallelComputationHost::Instance();
+	}
+};
+
 #endif

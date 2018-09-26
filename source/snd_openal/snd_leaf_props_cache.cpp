@@ -1,7 +1,9 @@
 #include "snd_leaf_props_cache.h"
 #include "snd_effect_sampler.h"
+#include "snd_computation_host.h"
 #include "../qalgo/SingletonHolder.h"
 
+#include <algorithm>
 #include <new>
 
 class LeafPropsIOHelper {
@@ -206,23 +208,87 @@ class LeafPropsSampler: public GenericRaycastSampler {
 	const unsigned maxRays;
 public:
 	explicit LeafPropsSampler( bool fastAndCoarse = false )
-		: maxRays( fastAndCoarse ? MAX_RAYS / 3 : MAX_RAYS ) {
+		: maxRays( fastAndCoarse ? MAX_RAYS / 2 : MAX_RAYS ) {
 		SetupSamplingRayDirs( dirs, maxRays );
 	}
 
 	bool ComputeLeafProps( const vec3_t origin, LeafProps *props );
 };
 
-void LeafPropsCache::ComputeNewState( const char *, int actualNumLeafs, bool fastAndCoarse ) {
-	auto *sampler = new( S_Malloc( sizeof( LeafPropsSampler ) ) )LeafPropsSampler( fastAndCoarse );
+class LeafPropsComputationTask: public ParallelComputationHost::PartialTask {
+	friend class LeafPropsCache;
 
+	LeafProps *const leafProps;
+	LeafPropsSampler sampler;
+	int leafsRangeBegin { -1 };
+	int leafsRangeEnd { -1 };
+	const bool fastAndCoarse;
+
+	LeafProps ComputeLeafProps( int leafNum );
+public:
+	explicit LeafPropsComputationTask( LeafProps *leafProps_, bool fastAndCoarse_ )
+		: leafProps( leafProps_ ), sampler( fastAndCoarse_ ), fastAndCoarse( fastAndCoarse_ ) {}
+
+	void Exec() override;
+};
+
+void LeafPropsCache::ComputeNewState( const char *, int actualNumLeafs, bool fastAndCoarse ) {
 	leafProps[0] = LeafProps();
-	for( int i = 1; i < actualNumLeafs; ++i ) {
-		leafProps[i] = ComputeLeafProps( i, sampler, fastAndCoarse );
+
+	ComputationHostLifecycleHolder computationHostLifecycleHolder;
+	auto *const computationHost = computationHostLifecycleHolder.Instance();
+
+	// Up to 64 parallel tasks are supported.
+	// Every task does not consume lots of memory compared to computation of the sound propagation table.
+	LeafPropsComputationTask *submittedTasks[64];
+	int actualNumTasks = 0;
+	// Do not spawn more tasks than the actual number of leaves. Otherwise it fails for very small maps
+	const int suggestedNumTasks = std::min( actualNumLeafs, std::min( computationHost->SuggestNumberOfTasks(), 64 ) );
+	for( int i = 0; i < suggestedNumTasks; ++i ) {
+		void *taskMem = S_Malloc( sizeof( LeafPropsComputationTask ) );
+		// Never really happens with S_Malloc()... Use just malloc() instead?
+		if( !taskMem ) {
+			break;
+		}
+		auto *const task = new( taskMem )LeafPropsComputationTask( leafProps, fastAndCoarse );
+		if( !computationHost->TryAddTask( task ) ) {
+			break;
+		}
+		submittedTasks[actualNumTasks++] = task;
 	}
 
-	sampler->~LeafPropsSampler();
-	S_Free( sampler );
+	if( !actualNumTasks ) {
+		// Just fill by dummy data...
+		// TODO: Avoid saving this to cache
+		std::fill_n( leafProps + 1, actualNumLeafs - 1, LeafProps() );
+		return;
+	}
+
+	const int step = actualNumLeafs / actualNumTasks;
+	assert( step > 0 );
+	int rangeBegin = 1;
+	for( int i = 0; i < actualNumTasks; ++i ) {
+		auto *const task = submittedTasks[i];
+		task->leafsRangeBegin = rangeBegin;
+		if( i + 1 != actualNumTasks ) {
+			rangeBegin += step;
+			task->leafsRangeEnd = rangeBegin;
+		} else {
+			task->leafsRangeEnd = actualNumLeafs;
+		}
+	}
+
+	computationHost->Exec();
+}
+
+void LeafPropsComputationTask::Exec() {
+	// Check whether the range has been assigned
+	assert( leafsRangeBegin > 0 );
+	assert( leafsRangeEnd > leafsRangeBegin );
+
+	for( int i = leafsRangeBegin; i < leafsRangeEnd; ++i ) {
+		leafProps[i] = ComputeLeafProps( i );
+	}
 }
 
 bool LeafPropsSampler::ComputeLeafProps( const vec3_t origin, LeafProps *props ) {
@@ -242,7 +308,7 @@ bool LeafPropsSampler::ComputeLeafProps( const vec3_t origin, LeafProps *props )
 	return true;
 }
 
-LeafProps LeafPropsCache::ComputeLeafProps( int leafNum, LeafPropsSampler *sampler, bool fastAndCoarse ) {
+LeafProps LeafPropsComputationTask::ComputeLeafProps( int leafNum ) {
 	const vec3_t *leafBounds = trap_GetLeafBounds( leafNum );
 	const float *leafMins = leafBounds[0];
 	const float *leafMaxs = leafBounds[1];
@@ -295,7 +361,7 @@ LeafProps LeafPropsCache::ComputeLeafProps( int leafNum, LeafPropsSampler *sampl
 		}
 
 		// Might fail if the rays outgoing from the point start in solid
-		if( sampler->ComputeLeafProps( point, &tmpProps ) ) {
+		if( sampler.ComputeLeafProps( point, &tmpProps ) ) {
 			propsBuilder += tmpProps;
 			numSamples++;
 			// Invalidate previous point used for sampling
