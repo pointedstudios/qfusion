@@ -1308,8 +1308,10 @@ void PropagationBuilderTask::BuildInfluxDirForLeaf( float *allocatedDir, const i
 	constexpr float distanceThreshold = 768.0f;
 
 	WeightedDirBuilder builder;
-	for( int i = 1, end = maxTestedLeafs; i < end; ++i ) {
+	for( int i = 1; i < maxTestedLeafs; ++i ) {
 		const float *leafCenter = graphInstance->LeafCenter( leafsChain[i] );
+		// The graph edge distance might be (temporarily) scaled.
+		// Moreover we check a raw distance between points in a 3D space first.
 		const float squareDistance = DistanceSquared( firstLeafCenter, leafCenter );
 		// If the current leaf is far from the first one
 		if( squareDistance >= distanceThreshold * distanceThreshold ) {
@@ -1318,7 +1320,21 @@ void PropagationBuilderTask::BuildInfluxDirForLeaf( float *allocatedDir, const i
 				break;
 			}
 
-			// Just return a dir from this leaf to the first leaf without involving the dir builder
+			// Just return a dir from the first leaf to the next leaf without involving the dir builder
+			// We do not even check visibility here as we have to provide some valid normalized dir
+			// This should not be confusing to a listener as its very likely that secondary emission rays
+			// can pass for the most part and can have much greater contribution to an actually used fake source dir.
+			VectorSubtract( firstLeafCenter, leafCenter, allocatedDir );
+			VectorNormalize( allocatedDir );
+			return;
+		}
+
+		// Check visibility (graph edges scaling preserves infinity)
+		if( std::isinf( graphInstance->EdgeDistance( leafsChain[0], leafsChain[i] ) ) ) {
+			if( i > 1 ) {
+				break;
+			}
+			// Same as above: just return a dir from the first leaf to the next leaf without involving the dir builder
 			VectorSubtract( firstLeafCenter, leafCenter, allocatedDir );
 			VectorNormalize( allocatedDir );
 			return;
