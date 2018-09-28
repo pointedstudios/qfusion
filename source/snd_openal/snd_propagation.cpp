@@ -299,17 +299,18 @@ public:
 	}
 };
 
-class CloneableGraphBuilder: public PropagationGraphBuilder<double> {
-	RefCountingAllocator<double> tableBackupAllocator;
+template <typename DistanceType>
+class CloneableGraphBuilder: public PropagationGraphBuilder<DistanceType> {
+	RefCountingAllocator<DistanceType> tableBackupAllocator;
 	RefCountingAllocator<int> adjacencyListsAllocator;
 	RefCountingAllocator<vec3_t> leafsCentersAllocator;
 
-	TaggedAllocator<double> &TableBackupAllocator() override { return tableBackupAllocator; }
+	TaggedAllocator<DistanceType> &TableBackupAllocator() override { return tableBackupAllocator; }
 	TaggedAllocator<int> &AdjacencyListsAllocator() override { return adjacencyListsAllocator; }
 	TaggedAllocator<vec3_t> &LeafsCentersAllocator() override { return leafsCentersAllocator; }
 public:
 	CloneableGraphBuilder( int actualNumLeafs, bool fastAndCoarse_ )
-		: PropagationGraphBuilder<double>( actualNumLeafs, fastAndCoarse_ ) {}
+		: PropagationGraphBuilder<DistanceType>( actualNumLeafs, fastAndCoarse_ ) {}
 
 	/**
 	 * Tries to clone the instance sharing immutable fields if it's possible.
@@ -455,11 +456,12 @@ void GraphBuilder<AdjacencyListType, DistanceType>::BuildAdjacencyLists() {
 	}
 }
 
+template <typename DistanceType>
 struct HeapEntry {
-	double distance;
+	DistanceType distance;
 	int leafNum;
 
-	HeapEntry( int leafNum_, double distance_ )
+	HeapEntry( int leafNum_, DistanceType distance_ )
 		: distance( distance_ ), leafNum( leafNum_ ) {}
 
 	bool operator<( const HeapEntry &that ) const {
@@ -471,13 +473,14 @@ struct HeapEntry {
 /**
  * A specialized updates heap optimized for path-finding usage patterns.
  */
+template <typename DistanceType>
 class UpdatesHeap {
-	HeapEntry *buffer;
+	HeapEntry<DistanceType> *buffer;
 	int size { 0 };
 	int capacity { 1024 + 512 };
 public:
 	UpdatesHeap() {
-		buffer = (HeapEntry *)S_Malloc( sizeof( HeapEntry ) * capacity );
+		buffer = (HeapEntry<DistanceType> *)S_Malloc( sizeof( HeapEntry<DistanceType> ) * capacity );
 	}
 
 	~UpdatesHeap() {
@@ -494,7 +497,7 @@ public:
 	 * @param distance a forwarded parameter of {@code HeapEntry()} constructor.
 	 */
 	void Push( int leaf, double distance ) {
-		new( buffer + size++ )HeapEntry( leaf, distance );
+		new( buffer + size++ )HeapEntry<DistanceType>( leaf, distance );
 		std::push_heap( buffer, buffer + size );
 	}
 
@@ -511,7 +514,7 @@ public:
 	 * The returned value is valid until next {@code PrepareToAdd()} call.
 	 * @return a reference to the newly popped entry.
 	 */
-	const HeapEntry &PopInPlace() {
+	const HeapEntry<DistanceType> &PopInPlace() {
 		std::pop_heap( buffer, buffer + size );
 		return buffer[--size];
 	}
@@ -526,59 +529,69 @@ public:
 		}
 		capacity = ( 4 * ( size + atMost ) ) / 3;
 		auto *const oldBuffer = buffer;
-		buffer = (HeapEntry *)S_Malloc( sizeof( HeapEntry ) * capacity );
-		memcpy( buffer, oldBuffer, sizeof( HeapEntry ) * size );
+		buffer = (HeapEntry<DistanceType> *)S_Malloc( sizeof( HeapEntry<DistanceType> ) * capacity );
+		memcpy( buffer, oldBuffer, sizeof( HeapEntry<DistanceType> ) * size );
 		S_Free( oldBuffer );
 	}
 };
 
+template <typename DistanceType>
+struct VertexUpdateStatus {
+	DistanceType distance[2];
+	int32_t parentLeaf[2];
+	bool isVisited[2];
+};
+
+template <typename> class PathFinder;
+
+template <typename DistanceType>
+class PathReverseIterator {
+	template <typename> friend class PathFinder;
+	PathFinder<DistanceType> *const parent;
+	int leafNum { std::numeric_limits<int>::min() };
+	const int listIndex;
+
+	PathReverseIterator( PathFinder<DistanceType> *parent_, int listIndex_ )
+		: parent( parent_ ), listIndex( listIndex_ ) {}
+
+	void ResetWithLeaf( int leafNum_ ) {
+		assert( leafNum_ > 0 );
+		this->leafNum = leafNum_;
+	}
+public:
+	bool HasNext() const {
+		return leafNum > 0 && parent->updateStatus[leafNum].parentLeaf[listIndex] > 0;
+	}
+
+	int LeafNum() const { return leafNum; }
+
+	void Next() {
+		assert( HasNext() );
+		leafNum = parent->updateStatus[leafNum].parentLeaf[listIndex];
+	}
+};
+
+template <typename DistanceType>
 class PathFinder {
-	PropagationGraphBuilder<double> &graphBuilder;
+	template <typename> friend class PathReverseIterator;
 
-	struct VertexUpdateStatus {
-		double distance[2];
-		int32_t parentLeaf[2];
-		bool isVisited[2];
-	};
+	PropagationGraphBuilder<DistanceType> &graphBuilder;
 
-	VertexUpdateStatus *updateStatus { nullptr };
+	VertexUpdateStatus<DistanceType> *updateStatus { nullptr };
 
-	UpdatesHeap heaps[2];
+	UpdatesHeap<DistanceType> heaps[2];
+
+	using IteratorType = PathReverseIterator<DistanceType>;
+
+	IteratorType tmpDirectIterator;
+	IteratorType tmpReverseIterator;
 public:
-	class PathReverseIterator {
-		friend class PathFinder;
-		PathFinder *const parent;
-		int leafNum { std::numeric_limits<int>::min() };
-		const int listIndex;
-
-		PathReverseIterator( PathFinder *parent_, int listIndex_ )
-			: parent( parent_ ), listIndex( listIndex_ ) {}
-
-		void ResetWithLeaf( int leafNum_ ) {
-			assert( leafNum_ > 0 );
-			this->leafNum = leafNum_;
-		}
-	public:
-		bool HasNext() const {
-			return leafNum > 0 && parent->updateStatus[leafNum].parentLeaf[listIndex] > 0;
-		}
-
-		int LeafNum() const { return leafNum; }
-
-		void Next() {
-			assert( HasNext() );
-			leafNum = parent->updateStatus[leafNum].parentLeaf[listIndex];
-		}
-	};
-private:
-	PathReverseIterator tmpDirectIterator;
-	PathReverseIterator tmpReverseIterator;
-public:
-	explicit PathFinder( PropagationGraphBuilder<double> &graph_ )
+	explicit PathFinder( PropagationGraphBuilder<DistanceType> &graph_ )
 		: graphBuilder( graph_ )
 		, tmpDirectIterator( this, 0 )
 		, tmpReverseIterator( this, 1 ) {
-		updateStatus = (VertexUpdateStatus *)::S_Malloc( graph_.NumLeafs() * sizeof( VertexUpdateStatus ) );
+		size_t memSize = graph_.NumLeafs() * sizeof( VertexUpdateStatus<DistanceType> );
+		updateStatus = (VertexUpdateStatus<DistanceType> *)::S_Malloc( memSize );
 	}
 
 	~PathFinder() {
@@ -603,14 +616,18 @@ public:
 	 * However their combination is intended to represent an entire path.
 	 * A last valid leaf during iteration matches {@code fromLeaf} and {@code toLeaf} accordingly.
 	 */
-	double FindPath( int fromLeaf, int toLeaf, PathReverseIterator **direct, PathReverseIterator **reverse );
+	DistanceType FindPath( int fromLeaf, int toLeaf, IteratorType **direct, IteratorType **reverse );
 };
 
-double PathFinder::FindPath( int fromLeaf, int toLeaf, PathReverseIterator **direct, PathReverseIterator **reverse ) {
+template <typename DistanceType>
+DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
+												 int toLeaf,
+												 IteratorType **direct,
+												 IteratorType **reverse ) {
 	for( int i = 0, end = graphBuilder.NumLeafs(); i < end; ++i ) {
 		auto *status = updateStatus + i;
 		for( int j = 0; j < 2; ++j ) {
-			status->distance[j] = std::numeric_limits<double>::infinity();
+			status->distance[j] = std::numeric_limits<DistanceType>::infinity();
 			status->parentLeaf[j] = -1;
 			status->isVisited[j] = false;
 		}
@@ -619,13 +636,13 @@ double PathFinder::FindPath( int fromLeaf, int toLeaf, PathReverseIterator **dir
 	heaps[0].Clear();
 	heaps[1].Clear();
 
-	updateStatus[fromLeaf].distance[0] = 0.0;
-	heaps[0].Push( fromLeaf, 0.0 );
-	updateStatus[toLeaf].distance[1] = 0.0;
-	heaps[1].Push( toLeaf, 0.0 );
+	updateStatus[fromLeaf].distance[0] = DistanceType( 0 );
+	heaps[0].Push( fromLeaf, DistanceType( 0 ) );
+	updateStatus[toLeaf].distance[1] = DistanceType( 0 );
+	heaps[1].Push( toLeaf, DistanceType( 0 ) );
 
 	int bestLeaf = -1;
-	auto bestDistanceSoFar = std::numeric_limits<double>::infinity();
+	auto bestDistanceSoFar = std::numeric_limits<DistanceType>::infinity();
 	while( !heaps[0].IsEmpty() && !heaps[1].IsEmpty() ) {
 		for( int j = 0; j < 2; ++j ) {
 			if( heaps[0].BestDistance() + heaps[1].BestDistance() >= bestDistanceSoFar ) {
@@ -642,7 +659,7 @@ double PathFinder::FindPath( int fromLeaf, int toLeaf, PathReverseIterator **dir
 
 			auto *const activeHeap = &heaps[j];
 
-			const HeapEntry &entry = activeHeap->PopInPlace();
+			const HeapEntry<DistanceType> &entry = activeHeap->PopInPlace();
 			// Save these values immediately as ReserveForAddition() call might make accessing the entry illegal.
 			const int entryLeafNum = entry.leafNum;
 			const double entryDistance = entry.distance;
@@ -659,13 +676,13 @@ double PathFinder::FindPath( int fromLeaf, int toLeaf, PathReverseIterator **dir
 				if( status->isVisited[j] ) {
 					continue;
 				}
-				double edgeDistance = graphBuilder.EdgeDistance( entryLeafNum, leafNum );
-				double relaxedDistance = edgeDistance + entryDistance;
+				DistanceType edgeDistance = graphBuilder.EdgeDistance( entryLeafNum, leafNum );
+				DistanceType relaxedDistance = edgeDistance + entryDistance;
 				if( status->distance[j] <= relaxedDistance ) {
 					continue;
 				}
 
-				double otherDistance = status->distance[( j + 1 ) & 1];
+				DistanceType otherDistance = status->distance[( j + 1 ) & 1];
 				if( otherDistance + relaxedDistance < bestDistanceSoFar ) {
 					bestLeaf = leafNum;
 					bestDistanceSoFar = otherDistance + relaxedDistance;
@@ -679,21 +696,27 @@ double PathFinder::FindPath( int fromLeaf, int toLeaf, PathReverseIterator **dir
 		}
 	}
 
-	return std::numeric_limits<double>::infinity();
+	return std::numeric_limits<DistanceType>::infinity();
 }
 
-class PropagationTableBuilder;
+template <typename> class PropagationTableBuilder;
 
+template <typename DistanceType>
 class PropagationBuilderTask: public ParallelComputationHost::PartialTask {
-	friend class PropagationTableBuilder;
+	template <typename> friend class PropagationTableBuilder;
+public:
+	using PropagationProps = PropagationTable::PropagationProps;
+	using IteratorType = PathReverseIterator<DistanceType>;
+	using ParentBuilderType = PropagationTableBuilder<DistanceType>;
+	using GraphType = CloneableGraphBuilder<DistanceType>;
+	using PathFinderType = PathFinder<DistanceType>;
+private:
 
-	typedef PropagationTable::PropagationProps PropagationProps;
-
-	PropagationTableBuilder *const parent;
+	ParentBuilderType *const parent;
 	PropagationProps *const table;
 
-	CloneableGraphBuilder *graphInstance { nullptr };
-	PathFinder *pathFinderInstance { nullptr };
+	GraphType *graphInstance { nullptr };
+	PathFinderType *pathFinderInstance { nullptr };
 	int *tmpLeafNums { nullptr };
 	const int numLeafs;
 	int leafsRangeBegin { -1 };
@@ -704,7 +727,7 @@ class PropagationBuilderTask: public ParallelComputationHost::PartialTask {
 	int executedAtLastReport { 0 };
 	const bool fastAndCoarse;
 
-	PropagationBuilderTask( PropagationTableBuilder *parent_, int numLeafs_ );
+	PropagationBuilderTask( ParentBuilderType *parent_, int numLeafs_ );
 
 	~PropagationBuilderTask() override;
 
@@ -722,7 +745,7 @@ class PropagationBuilderTask: public ParallelComputationHost::PartialTask {
 	}
 
 	/**
-	 * Unwinds a {@code PathFinder::ReverseIterator} writing leaf numbers to a linear buffer.
+	 * Unwinds a {@code PathReverseIterator} writing leaf numbers to a linear buffer.
 	 * The buffer is assumed to be capable to store a leaves chain of maximum possible length for the current graph.
 	 * Scales graph edges defined by these leaf numbers at the same time.
 	 * @param iterator an iterator that represents intermediate results of path-finding.
@@ -730,24 +753,40 @@ class PropagationBuilderTask: public ParallelComputationHost::PartialTask {
 	 * @param scale a weight scale for path edges
 	 * @return a new range begin for the buffer (that is less than the {@code arrayEnd}
 	 */
-	int *UnwindScalingWeights( PathFinder::PathReverseIterator *iterator, int *arrayEnd, double scale );
+	int *UnwindScalingWeights( IteratorType *iterator, int *arrayEnd, DistanceType scale );
 	/**
-	 * Unwinds a {@code PathFinder::ReverseIterator} writing leaf numbers to a linear buffer.
+	 * Unwinds a {PathReverseIterator} writing leaf numbers to a linear buffer.
 	 * The buffer is assumed to be capable to store a leaves chain of maximum possible length for the current graph.
 	 * @param iterator an iterator that represents intermediate results of path-finding.
 	 * @param arrayEnd an end of the buffer range. Leaf numbers will be written before this address.
 	 * @return a new range begin for the buffer (that is less than the {@code arrayEnd}
 	 */
-	int *Unwind( PathFinder::PathReverseIterator *iterator, int *arrayEnd );
+	int *Unwind( IteratorType *iterator, int *arrayEnd );
 
-	bool BuildPropagationPath( int leaf1, int leaf2, vec3_t dir1, vec3_t dir2, double *distance );
+	/**
+	 * Builds a propagation path between given leaves.
+	 * As the reachability presence and distance relations are symmetrical,
+	 * an output is produced for direct and reverse path simultaneously.
+	 * However influx dirs for first and second dir are not related at all
+	 * (an influx dir for the second leaf is not an inversion of an influx dir for the first one).
+	 * @param leaf1 a first leaf, must be distinct from the second one.
+	 * @param leaf2 a second leaf, must be distinct from the first one.
+	 * @param _1to2 a buffer for resulting propagation dir from first to second leaf.
+	 * The result contains an average dir of sound flowing into second leaf while a source is placed at the first one.
+	 * @param _2to1 a buffer for resulting propagation dir from second to first leaf.
+	 * The result contains an average dir of sound flowing into first leaf while a source is placed at the second one.
+	 * @param distance a distance of the best met temporary path returned as an out parameter.
+	 * @return true if a path has been managed to be built successfully.
+	 */
+	bool BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, DistanceType *distance );
 };
 
+template <typename DistanceType>
 class PropagationTableBuilder {
-	friend class PropagationBuilderTask;
+	template <typename> friend class PropagationBuilderTask;
 
-	CloneableGraphBuilder graphBuilder;
-	PathFinder pathFinder;
+	CloneableGraphBuilder<DistanceType> graphBuilder;
+	PathFinder<DistanceType> pathFinder;
 
 	using PropagationProps = PropagationTable::PropagationProps;
 
@@ -791,14 +830,16 @@ public:
 	inline PropagationProps *ReleaseOwnership();
 };
 
-PropagationTableBuilder::PropagationProps *PropagationTableBuilder::ReleaseOwnership() {
+template <typename DistanceType>
+typename PropagationTableBuilder<DistanceType>::PropagationProps *PropagationTableBuilder<DistanceType>::ReleaseOwnership() {
 	assert( table );
 	auto *result = table;
 	table = nullptr;
 	return result;
 }
 
-PropagationTableBuilder::~PropagationTableBuilder() {
+template <typename DistanceType>
+PropagationTableBuilder<DistanceType>::~PropagationTableBuilder() {
 	if( table ) {
 		S_Free( table );
 	}
@@ -819,7 +860,8 @@ public:
 	}
 };
 
-void PropagationTableBuilder::AddTaskProgress( int taskWorkloadDelta ) {
+template <typename DistanceType>
+void PropagationTableBuilder<DistanceType>::AddTaskProgress( int taskWorkloadDelta ) {
 	assert( taskWorkloadDelta > 0 );
 	assert( totalWorkload > 0 && "The total workload value has not been set" );
 
@@ -835,7 +877,8 @@ void PropagationTableBuilder::AddTaskProgress( int taskWorkloadDelta ) {
 	Com_Printf( "Computing a sound propagation table... %2d%%\n", newProgress );
 }
 
-bool PropagationTableBuilder::Build() {
+template <typename DistanceType>
+bool PropagationTableBuilder<DistanceType>::Build() {
 	progressLock = trap_Mutex_Create();
 	if( !progressLock ) {
 		return false;
@@ -865,15 +908,15 @@ bool PropagationTableBuilder::Build() {
 	int actualNumTasks = 0;
 	// Up to 32 parallel tasks are supported...
 	// We are probably going to exceed memory capacity trying to create more tasks...
-	PropagationBuilderTask *submittedTasks[32];
+	PropagationBuilderTask<DistanceType> *submittedTasks[32];
 	for( int i = 0; i < std::min( 32, numTasks ); ++i ) {
 		// TODO: Use just malloc()
-		void *const objectMem = S_Malloc( sizeof( PropagationBuilderTask ) );
+		void *const objectMem = S_Malloc( sizeof( PropagationBuilderTask<DistanceType> ) );
 		if( !objectMem ) {
 			break;
 		}
 
-		auto *const task = new( objectMem )PropagationBuilderTask( this, numLeafs );
+		auto *const task = new( objectMem )PropagationBuilderTask<DistanceType>( this, numLeafs );
 		// A task gets an ownership over the clone
 		task->graphInstance = graphBuilder.Clone();
 		if( !task->graphInstance ) {
@@ -881,13 +924,13 @@ bool PropagationTableBuilder::Build() {
 		}
 
 		// TODO: Use just malloc()
-		void *const pathFinderMem = S_Malloc( sizeof( PathFinder ) );
+		void *const pathFinderMem = S_Malloc( sizeof( PathFinder<DistanceType> ) );
 		if( !pathFinderMem ) {
 			break;
 		}
 
 		// A task gets an ownership over the instance
-		task->pathFinderInstance = new( pathFinderMem )PathFinder( *task->graphInstance );
+		task->pathFinderInstance = new( pathFinderMem )PathFinder<DistanceType>( *task->graphInstance );
 
 		// The "+1" part is not mandatory but we want a range "end"
 		// to always have a valid address in address space.
@@ -961,7 +1004,8 @@ bool PropagationTableBuilder::Build() {
 	return true;
 }
 
-void PropagationTableBuilder::ValidateJointResults() {
+template <typename DistanceType>
+void PropagationTableBuilder<DistanceType>::ValidateJointResults() {
 	const int numLeafs = graphBuilder.NumLeafs();
 	if( numLeafs <= 0 ) {
 		ValidationError( "Illegal graph NumLeafs() %d", numLeafs );
@@ -1018,7 +1062,8 @@ void PropagationTableBuilder::ValidateJointResults() {
 	}
 }
 
-void PropagationTableBuilder::ValidationError( const char *format, ... ) {
+template <typename DistanceType>
+void PropagationTableBuilder<DistanceType>::ValidationError( const char *format, ... ) {
 	char buffer[1024];
 	constexpr const char tag[] = "PropagationTableBuilder::ValidateJointResults(): ";
 	// Make sure we use the proper size
@@ -1035,18 +1080,20 @@ void PropagationTableBuilder::ValidationError( const char *format, ... ) {
 	trap_Error( buffer );
 }
 
-PropagationBuilderTask::PropagationBuilderTask( PropagationTableBuilder *parent_, int numLeafs_ )
+template <typename DistanceType>
+PropagationBuilderTask<DistanceType>::PropagationBuilderTask( ParentBuilderType *parent_, int numLeafs_ )
 	: parent( parent_ ), table( parent->table ), numLeafs( numLeafs_ ), fastAndCoarse( parent->fastAndCoarse ) {
 	assert( table && "The table in the parent has not been set" );
 }
 
-PropagationBuilderTask::~PropagationBuilderTask() {
+template <typename DistanceType>
+PropagationBuilderTask<DistanceType>::~PropagationBuilderTask() {
 	if( graphInstance ) {
-		graphInstance->~CloneableGraphBuilder();
+		graphInstance->~CloneableGraphBuilder<DistanceType>();
 		S_Free( graphInstance );
 	}
 	if( pathFinderInstance ) {
-		pathFinderInstance->~PathFinder();
+		pathFinderInstance->~PathFinder<DistanceType>();
 		S_Free( pathFinderInstance );
 	}
 	if( tmpLeafNums ) {
@@ -1054,7 +1101,8 @@ PropagationBuilderTask::~PropagationBuilderTask() {
 	}
 }
 
-void PropagationBuilderTask::Exec() {
+template <typename DistanceType>
+void PropagationBuilderTask<DistanceType>::Exec() {
 	// Check whether the range has been set and is valid
 	assert( leafsRangeBegin > 0 );
 	assert( leafsRangeEnd > leafsRangeBegin );
@@ -1095,7 +1143,8 @@ void PropagationBuilderTask::Exec() {
 	}
 }
 
-void PropagationBuilderTask::ComputePropsForPair( int leaf1, int leaf2 ) {
+template <typename DistanceType>
+void PropagationBuilderTask<DistanceType>::ComputePropsForPair( int leaf1, int leaf2 ) {
 	executed++;
 	const auto progress = (int)( 100 * ( executed / (float)total ) );
 	// We keep computing progress in percents to avoid confusion
@@ -1116,7 +1165,7 @@ void PropagationBuilderTask::ComputePropsForPair( int leaf1, int leaf2 ) {
 	}
 
 	vec3_t dir1, dir2;
-	double distance;
+	DistanceType distance;
 	if( !BuildPropagationPath( leaf1, leaf2, dir1, dir2, &distance ) ) {
 		return;
 	}
@@ -1170,14 +1219,17 @@ public:
 	}
 };
 
-bool PropagationBuilderTask::BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, double *distance ) {
+template <typename DistanceType>
+bool PropagationBuilderTask<DistanceType>::BuildPropagationPath( int leaf1, int leaf2,
+																 vec3_t _1to2, vec3_t _2to1,
+																 DistanceType *distance ) {
 	assert( leaf1 != leaf2 );
 
 	WeightedDirBuilder _1to2Builder;
 	WeightedDirBuilder _2to1Builder;
 
-	PathFinder::PathReverseIterator *directIterator;
-	PathFinder::PathReverseIterator *reverseIterator;
+	IteratorType *directIterator;
+	IteratorType *reverseIterator;
 
 	// Save a copy of edge weights on demand.
 	// Doing that is expensive.
@@ -1263,7 +1315,8 @@ bool PropagationBuilderTask::BuildPropagationPath( int leaf1, int leaf2, vec3_t 
 	return true;
 }
 
-int *PropagationBuilderTask::Unwind( PathFinder::PathReverseIterator *iterator, int *arrayEnd ) {
+template <typename DistanceType>
+int *PropagationBuilderTask<DistanceType>::Unwind( IteratorType *iterator, int *arrayEnd ) {
 	int *arrayBegin = arrayEnd;
 	// Traverse the direct iterator backwards
 	int prevLeafNum = iterator->LeafNum();
@@ -1280,8 +1333,10 @@ int *PropagationBuilderTask::Unwind( PathFinder::PathReverseIterator *iterator, 
 	return arrayBegin;
 }
 
-int *PropagationBuilderTask::UnwindScalingWeights( PathFinder::PathReverseIterator *iterator,
-												   int *arrayEnd, double scale ) {
+template <typename DistanceType>
+int *PropagationBuilderTask<DistanceType>::UnwindScalingWeights( IteratorType *iterator,
+																 int *arrayEnd,
+																 DistanceType scale ) {
 	int *arrayBegin = arrayEnd;
 	// Traverse the direct iterator backwards
 	int prevLeafNum = iterator->LeafNum();
@@ -1301,7 +1356,10 @@ int *PropagationBuilderTask::UnwindScalingWeights( PathFinder::PathReverseIterat
 	return arrayBegin;
 }
 
-void PropagationBuilderTask::BuildInfluxDirForLeaf( float *allocatedDir, const int *leafsChain, int numLeafsInChain ) {
+template <typename DistanceType>
+void PropagationBuilderTask<DistanceType>::BuildInfluxDirForLeaf( float *allocatedDir,
+																  const int *leafsChain,
+																  int numLeafsInChain ) {
 	assert( numLeafsInChain > 1 );
 	const float *firstLeafCenter = graphInstance->LeafCenter( leafsChain[0] );
 	const int maxTestedLeafs = std::min( numLeafsInChain, (int)WeightedDirBuilder::MAX_DIRS );
@@ -1404,11 +1462,20 @@ void PropagationTable::ComputeNewState( const char *actualMap, int actualNumLeaf
 		return;
 	}
 
-	PropagationTableBuilder builder( actualNumLeafs, fastAndCoarse );
-	if( builder.Build() ) {
-		table = builder.ReleaseOwnership();
-		isUsingValidTable = true;
-		return;
+	if( fastAndCoarse ) {
+		PropagationTableBuilder<float> builder( actualNumLeafs, fastAndCoarse );
+		if( builder.Build() ) {
+			table = builder.ReleaseOwnership();
+			isUsingValidTable = true;
+			return;
+		}
+	} else {
+		PropagationTableBuilder<double> builder( actualNumLeafs, fastAndCoarse );
+		if( builder.Build() ) {
+			table = builder.ReleaseOwnership();
+			isUsingValidTable = true;
+			return;
+		}
 	}
 
 	// Try providing a dummy data for this case (is it really going to happen at all?)
@@ -1803,15 +1870,16 @@ bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( TargetT
 	return true;
 }
 
-CloneableGraphBuilder *CloneableGraphBuilder::Clone() {
+template <typename DistanceType>
+CloneableGraphBuilder<DistanceType> *CloneableGraphBuilder<DistanceType>::Clone() {
 	// TODO: Use just malloc() and check results? A caller code must be aware of possible failure
-	void *objectMem = S_Malloc( sizeof( CloneableGraphBuilder ) );
+	void *objectMem = S_Malloc( sizeof( CloneableGraphBuilder<DistanceType> ) );
 	if( !objectMem ) {
 		return nullptr;
 	}
 
-	auto *clone = new( objectMem )CloneableGraphBuilder( this->NumLeafs(), this->fastAndCoarse );
-	std::unique_ptr<CloneableGraphBuilder, SoundMemDeleter> cloneHolder( clone );
+	auto *clone = new( objectMem )CloneableGraphBuilder<DistanceType>( this->NumLeafs(), this->fastAndCoarse );
+	std::unique_ptr<CloneableGraphBuilder<DistanceType>, SoundMemDeleter> cloneHolder( clone );
 
 	clone->distanceTable = clone->distanceTableBackup = this->tableBackupAllocator.AddRef( this->distanceTableBackup );
 	clone->distanceTableScratchpad = clone->TableScratchpadAllocator().Alloc( this->NumLeafs() * this->NumLeafs() );
