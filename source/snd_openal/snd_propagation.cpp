@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <random>
 
 /**
  * @todo Generalize/use the {@code RawAllocator} from the CEF branch
@@ -186,6 +187,8 @@ template <> TaggedAllocator<float> &DefaultAllocatorForType<float>() {
 template <typename AdjacencyListType, typename DistanceType>
 class GraphBuilder: public MutableGraph<AdjacencyListType, DistanceType> {
 protected:
+	bool canSkipBuildTableCall { false };
+
 	explicit GraphBuilder( int numLeafs )
 		: MutableGraph<AdjacencyListType, DistanceType>( numLeafs ) {}
 
@@ -216,7 +219,7 @@ protected:
 		return result;
 	}
 
-	bool TryUsingGlobalGraph( TargetType *target );
+	virtual bool TryUsingGlobalGraph( TargetType *target );
 public:
 	/**
 	 * Tries to build the graph data (or reuse data from the global graph).
@@ -232,27 +235,58 @@ public:
 
 template <typename DistanceType>
 class PropagationGraphBuilder: public GraphBuilder<int, DistanceType> {
+public:
+	using VectorType = DistanceType[3];
 protected:
-	vec3_t *leafCenters { nullptr };
+	using TargetType = GraphLike<int, DistanceType>;
+
+	VectorType *dirsTable { nullptr };
 	const bool fastAndCoarse;
 
 	void PrepareToBuild() override;
 
-	virtual TaggedAllocator<vec3_t> &LeafsCentersAllocator() { return ::defaultVec3Allocator; }
-protected:
-	DistanceType ComputeEdgeDistance( int leaf1, int leaf2 ) override;
+	// TODO: The implementation must be lifted here
+	TaggedAllocator<VectorType> &DirsAllocator();
+
+	bool TryUsingGlobalGraph( TargetType *target ) override;
+
+	DistanceType ComputeEdgeDistance( int leaf1, int leaf2 ) override {
+		trap_Error( "PropagationGraphBuilder<?, ?>::ComputeEdgeDistance() should not be called\n" );
+	}
+private:
+	using SuperType = GraphBuilder<int, DistanceType>;
+	TaggedAllocator<VectorType> defaultVectorAllocator;
 public:
 	PropagationGraphBuilder( int actualNumLeafs, bool fastAndCoarse_ )
 		: GraphBuilder<int, DistanceType>( actualNumLeafs ), fastAndCoarse( fastAndCoarse_ ) {}
 
-	const float *LeafCenter( int leafNum ) const {
-		assert( leafCenters );
-		assert( leafNum > 0 && leafNum < this->NumLeafs() );
-		return leafCenters[leafNum];
+	/**
+	 * Returns an average propagation direction from leaf1 to leaf2.
+	 * @param leaf1 a first leaf.
+	 * @param leaf2 a second leaf.
+	 * @return a valid address of a direction vector on success, a null on failure
+	 * @note a presence of a valid dir is symmetrical for any pair of leaves.
+	 * @note a valid dir magnitude is symmetrical for any pair of leaves such that a valid dir exists for the pair.
+	 */
+	const DistanceType *GetDirFromLeafToLeaf( int leaf1, int leaf2 ) const {
+		assert( dirsTable );
+		assert( leaf1 != leaf2 );
+		assert( leaf1 > 0 && leaf1 < this->NumLeafs() );
+		assert( leaf2 > 0 && leaf2 < this->NumLeafs() );
+		const DistanceType *v = &dirsTable[leaf1 * this->NumLeafs() + leaf2][0];
+		if( std::isfinite( v[0] ) ) {
+			return v;
+		}
+		return nullptr;
 	}
 
 	~PropagationGraphBuilder() override {
-		TaggedAllocator<vec3_t>::FreeUsingMetadata( leafCenters );
+		TaggedAllocator<vec3_t>::FreeUsingMetadata( dirsTable );
+	}
+
+	void TransferOwnership( DistanceType **distanceTable, VectorType **dirsTable, int **lists, int **listsOffsets ) {
+		SuperType::TransferOwnership( distanceTable, lists, listsOffsets );
+		*dirsTable = SuperType::TransferCheckingNullity( &this->dirsTable );
 	}
 };
 
@@ -299,15 +333,50 @@ public:
 	}
 };
 
+static RefCountingAllocator<int> defaultRefCountingIntAllocator;
+static RefCountingAllocator<float> defaultRefCountingFloatAllocator;
+static RefCountingAllocator<double> defaultRefCountingDoubleAllocator;
+static RefCountingAllocator<float[3]> defaultRefCountingFloat3Allocator;
+static RefCountingAllocator<double[3]> defaultRefCountingDouble3Allocator;
+
+template <typename T> RefCountingAllocator<T> &RefCountingAllocatorForType();
+
+template <> RefCountingAllocator<int> &RefCountingAllocatorForType<int>() {
+	return ::defaultRefCountingIntAllocator;
+}
+
+template <> RefCountingAllocator<float> &RefCountingAllocatorForType<float>() {
+	return ::defaultRefCountingFloatAllocator;
+}
+
+template <> RefCountingAllocator<double> &RefCountingAllocatorForType<double>() {
+	return ::defaultRefCountingDoubleAllocator;
+}
+
+template <> RefCountingAllocator<float[3]> &RefCountingAllocatorForType<float[3]>() {
+	return ::defaultRefCountingFloat3Allocator;
+}
+
+template <> RefCountingAllocator<double[3]> &RefCountingAllocatorForType<double[3]>() {
+	return ::defaultRefCountingDouble3Allocator;
+}
+
+// TODO: Lift back in the base class
+template <typename DistanceType>
+TaggedAllocator<DistanceType[3]> &PropagationGraphBuilder<DistanceType>::DirsAllocator() {
+	return RefCountingAllocatorForType<DistanceType[3]>();
+}
+
 template <typename DistanceType>
 class CloneableGraphBuilder: public PropagationGraphBuilder<DistanceType> {
-	RefCountingAllocator<DistanceType> tableBackupAllocator;
-	RefCountingAllocator<int> adjacencyListsAllocator;
-	RefCountingAllocator<vec3_t> leafsCentersAllocator;
+protected:
+	RefCountingAllocator<DistanceType> &TableBackupAllocator() override {
+		return RefCountingAllocatorForType<DistanceType>();
+	}
+	RefCountingAllocator<int> &AdjacencyListsAllocator() override {
+		return RefCountingAllocatorForType<int>();
+	}
 
-	TaggedAllocator<DistanceType> &TableBackupAllocator() override { return tableBackupAllocator; }
-	TaggedAllocator<int> &AdjacencyListsAllocator() override { return adjacencyListsAllocator; }
-	TaggedAllocator<vec3_t> &LeafsCentersAllocator() override { return leafsCentersAllocator; }
 public:
 	CloneableGraphBuilder( int actualNumLeafs, bool fastAndCoarse_ )
 		: PropagationGraphBuilder<DistanceType>( actualNumLeafs, fastAndCoarse_ ) {}
@@ -328,47 +397,237 @@ bool GraphBuilder<AdjacencyListType, DistanceType>::Build( TargetType *target ) 
 		target = this;
 	}
 
-	PrepareToBuild();
-
 	if( TryUsingGlobalGraph( target ) ) {
 		return true;
 	}
 
-	BuildDistanceTable();
+	PrepareToBuild();
+
+	// This flag is unset by default but some PrepareToBuild() implementations can set it
+	if( !this->canSkipBuildTableCall ) {
+		BuildDistanceTable();
+	}
+
 	BuildAdjacencyLists();
 	return true;
 }
 
-template <typename DistanceType>
-DistanceType PropagationGraphBuilder<DistanceType>::ComputeEdgeDistance( int leaf1, int leaf2 ) {
-	// The method must not be called in this case
-	assert( leaf1 != leaf2 );
-
-	if( !trap_LeafsInPVS( leaf1, leaf2 ) ) {
-		return std::numeric_limits<DistanceType>::infinity();
-	}
-
+/**
+ * This is a helper for {@PropagationGraphBuilder::PrepareToBuild()} algorithms.
+ * Putting these algorithms in a separate class serves two purposes:
+ */
+class LeafToLeafDirBuilder {
 	trace_t trace;
-	trap_Trace( &trace, leafCenters[leaf1], leafCenters[leaf2], vec3_origin, vec3_origin, MASK_SOLID );
-	if( trace.fraction != 1.0f ) {
-		return std::numeric_limits<DistanceType>::infinity();
+	std::minstd_rand randomnessEngine;
+	vec3_t leafCenters[2];
+	vec3_t leafDimensions[2];
+	vec3_t leafPoints[2];
+	const int maxAdditionalAttempts;
+
+	/**
+	 * This is a helper that tries to pick a random point within a leaf bounds.
+	 * A picking might fail for degenerate leaves of some kind.
+	 * @param leafNum an actual leaf num in the collision world.
+	 * @param storageIndex an index of internal storage for first or second leaf (0 or 1)
+	 * @return false if a point picking has failed. A dir building should be interrupted in this case.
+	 */
+	bool PrepareTestedPointForLeaf( int leafNum, int storageIndex );
+public:
+	explicit LeafToLeafDirBuilder( bool fastAndCoarse_, int numLeafs_ )
+		: maxAdditionalAttempts( fastAndCoarse_ ? ( numLeafs_ > 1000 ? 0 : 5 ) : 24 ) {
+		// Note: we actually are cutting off additional attempts for complex maps.
+		// This is a hack to prevent computational explosion until more efficient algorithms are introduced
+		// (switching from Dijkstra to bidirectional Dijkstra was good but not sufficient)
 	}
 
-	// std::sqrt provides a right overload for the actual type.
-	return std::sqrt( (DistanceType)DistanceSquared( leafCenters[leaf1], leafCenters[leaf2] ) );
+	/**
+	 * Tries to test propagation for a given leaves pair.
+	 * @param leaf1 a first leaf.
+	 * @param leaf2 a second leaf.
+	 * @param resultDir a buffer for a propagation dir.
+	 * @return an average distance for propagation between leaves on success, infinity on failure.
+	 */
+	float Build( int leaf1, int leaf2, vec3_t resultDir );
+};
+
+bool LeafToLeafDirBuilder::PrepareTestedPointForLeaf( int leafNum, int storageIndex ) {
+	float *const point = leafPoints[storageIndex];
+	const auto randomShift = (float)std::minstd_rand::min();
+	const auto randomScale = 1.0f / ( std::minstd_rand::max() - randomShift );
+	// Try 6 attempts to pick a random point within a leaf bounds
+	for( int attemptNum = 0; attemptNum < 6; ++attemptNum ) {
+		for( int i = 0; i < 3; ++i ) {
+			point[i] = leafCenters[storageIndex][i];
+			float random01 = randomScale * ( randomnessEngine() - randomShift );
+			point[i] += -0.5f + random01 * leafDimensions[storageIndex][i];
+		}
+		if( trap_PointLeafNum( point ) == leafNum ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+float LeafToLeafDirBuilder::Build( int leaf1, int leaf2, vec3_t resultDir ) {
+	if( !trap_LeafsInPVS( leaf1, leaf2 ) ) {
+		return std::numeric_limits<float>::infinity();
+	}
+
+	const vec3_t *const bounds[2] = { trap_GetLeafBounds( leaf1 ), trap_GetLeafBounds( leaf2 ) };
+
+	for( int i = 0; i < 2; ++i ) {
+		// Get dimensions
+		VectorSubtract( bounds[i][1], bounds[i][0], leafCenters[i] );
+		VectorCopy( leafCenters[i], leafDimensions[i] );
+		// Get half-dimensions
+		VectorScale( leafCenters[i], 0.5f, leafCenters[i] );
+		// Add mins
+		VectorAdd( leafCenters[i], bounds[i][0], leafCenters[i] );
+	}
+
+	// Prepare for adding dir contributions
+	VectorClear( resultDir );
+	bool hasContributingDirs = false;
+
+	// Cast a ray from a leaf center to another leaf center.
+	// Do not test whether these centers really belong to a leaf
+	// (we remember this happening a lot for (almost) degenerate leaves while computing LeafPropsCache).
+	trap_Trace( &trace, leafCenters[0], leafCenters[1], vec3_origin, vec3_origin, MASK_SOLID );
+	if( trace.fraction == 1.0f ) {
+		// Add center-to-center dir contribution.
+		VectorSubtract( leafCenters[1], leafCenters[0], resultDir );
+		float squareLength = VectorLengthSquared( resultDir );
+		if( squareLength > 1 ) {
+			// Give this dir a 3x greater weight
+			float scale = 3.0f / std::sqrt( squareLength );
+			VectorScale( resultDir, scale, resultDir );
+			hasContributingDirs = true;
+		}
+	}
+
+	for( int attemptNum = 0; attemptNum < this->maxAdditionalAttempts; ++attemptNum ) {
+		int leaves[2] = { leaf1, leaf2 };
+		for( int j = 0; j < 2; ++j ) {
+			// For every leaf try picking random points within leaf bounds.
+			// Stop doing attempts immediately on failure
+			// (we are very likely have met another kind of a degenerate leaf).
+			// TODO: We can try reusing picked leaf points from LeafPropsCache
+			if( !this->PrepareTestedPointForLeaf( leaves[j], j ) ) {
+				goto done;
+			}
+		}
+
+		trap_Trace( &trace, leafPoints[0], leafPoints[1], vec3_origin, vec3_origin, MASK_SOLID );
+		if( trace.fraction != 1.0f ) {
+			continue;
+		}
+
+		vec3_t tmp;
+		// Try adding contribution of dir from first to second leaf
+		VectorSubtract( leafPoints[1], leafPoints[0], tmp );
+		const float squareDistance = VectorLengthSquared( tmp );
+		if( squareDistance < 1 ) {
+			continue;
+		}
+
+		const float scale = 1.0f / std::sqrt( squareDistance );
+		VectorScale( tmp, scale, tmp );
+		VectorAdd( tmp, resultDir, resultDir );
+		hasContributingDirs = true;
+	}
+
+done:
+	if( !hasContributingDirs ) {
+		return std::numeric_limits<float>::infinity();
+	}
+
+	// Must always produce a valid normalized dir once we have reached here
+	VectorNormalize( resultDir );
+	// Check normalization
+	assert( std::abs( std::sqrt( VectorLengthSquared( resultDir ) ) - 1.0f ) < 0.2f );
+	// Always return a plain distance between leaf centers.
+	return std::sqrt( DistanceSquared( leafCenters[0], leafCenters[1] ) );
 }
 
 template <typename DistanceType>
 void PropagationGraphBuilder<DistanceType>::PrepareToBuild() {
-	GraphBuilder<int, DistanceType>::PrepareToBuild();
+	SuperType::PrepareToBuild();
 
-	leafCenters = LeafsCentersAllocator().Alloc( this->numLeafs );
-	for( int i = 1; i < this->numLeafs; ++i ) {
-		float *center = leafCenters[i];
-		const auto *bounds = trap_GetLeafBounds( i );
-		VectorAdd( bounds[0], bounds[1], center );
-		VectorScale( center, 0.5f, center );
+	assert( this->distanceTable );
+	const int numLeafs = this->numLeafs;
+
+	LeafToLeafDirBuilder dirBuilder( fastAndCoarse, numLeafs );
+
+	vec3_t dir;
+	dirsTable = DirsAllocator().Alloc( numLeafs * numLeafs );
+	for( int i = 1; i < numLeafs; ++i ) {
+		for( int j = i + 1; j < numLeafs; ++j ) {
+			const ptrdiff_t iOffset = i * numLeafs + j;
+			const ptrdiff_t jOffset = j * numLeafs + i;
+			auto *const iToJDir = this->dirsTable[iOffset];
+			auto *const jToIDir = this->dirsTable[jOffset];
+			// Don't be confused by "float" type as leaf-to-leaf computations are always performed in single precision
+			const float distance = dirBuilder.Build( i, j, dir );
+			this->distanceTable[iOffset] = this->distanceTable[jOffset] = distance;
+			if( !std::isfinite( distance ) ) {
+				// Set first components of leaf-to-leaf dirs to infinity as well.
+				// That's what GetDirFromLeafToLeaf() expects.
+				iToJDir[0] = jToIDir[0] = std::numeric_limits<DistanceType>::infinity();
+				continue;
+			}
+			// We can't just use iToJDir as a buffer for Build() call as it can be a "double[3]".
+			VectorCopy( dir, iToJDir );
+			// Copy a negated dir at the jToIDir address
+			VectorSubtract( vec3_origin, dir, jToIDir );
+		}
 	}
+
+	// We have already set distance table values
+	this->canSkipBuildTableCall = true;
+}
+
+vec3_t *CachedLeafsGraph::ShareLeafToLeafDirsTable() {
+	return RefCountingAllocatorForType<vec3_t>().AddRef( dirsTable );
+}
+
+/**
+ * Tries to share a leaf-to-leaf dirs table of the global graph or build a new table
+ * just by converting the global graph table to appropriate data format
+ * (do float to double conversion in this case).
+ * An appropriate specialization is selected by SFINAE rules.
+ * The returned result is assumed to be ref-counted and must be released
+ * via {@code TaggedAllocator<DistanceType>::FreeUsingMetadata()} call.
+ */
+template <typename VectorType> VectorType *ReuseGlobalLeafToLeafDirsTable( int numLeafs );
+
+template <> vec3_t *ReuseGlobalLeafToLeafDirsTable<vec3_t>( int ) {
+	return CachedLeafsGraph::Instance()->ShareLeafToLeafDirsTable();
+}
+
+typedef double double3_t[3];
+
+template <> double3_t *ReuseGlobalLeafToLeafDirsTable<double3_t>( int numLeafs ) {
+	const float *const __restrict existingTable = (float *)CachedLeafsGraph::Instance()->dirsTable;
+	assert( existingTable );
+
+	// Allocate the result table using a ref-counting allocator (that must be used for these dir tables)
+	auto *const __restrict resultTable = (double *)RefCountingAllocatorForType<double3_t>().Alloc( numLeafs * numLeafs );
+	for( int i = 0, end = 3 * numLeafs * numLeafs; i < end; ++i ) {
+		// Expand float to double...
+		resultTable[i] = existingTable[i];
+	}
+	return (double3_t *)resultTable;
+}
+
+template <typename DistanceType>
+bool PropagationGraphBuilder<DistanceType>::TryUsingGlobalGraph( TargetType *target ) {
+	if( !SuperType::TryUsingGlobalGraph( target ) ) {
+		return false;
+	}
+
+	// Utilize SFINAE to select a proper version of the method
+	this->dirsTable = ReuseGlobalLeafToLeafDirsTable<VectorType>( this->NumLeafs());
+	return true;
 }
 
 template <typename AdjacencyListType, typename DistanceType>
@@ -1361,18 +1620,13 @@ void PropagationBuilderTask<DistanceType>::BuildInfluxDirForLeaf( float *allocat
 																  const int *leafsChain,
 																  int numLeafsInChain ) {
 	assert( numLeafsInChain > 1 );
-	const float *firstLeafCenter = graphInstance->LeafCenter( leafsChain[0] );
 	const int maxTestedLeafs = std::min( numLeafsInChain, (int)WeightedDirBuilder::MAX_DIRS );
-	constexpr float distanceThreshold = 768.0f;
 
 	WeightedDirBuilder builder;
 	for( int i = 1; i < maxTestedLeafs; ++i ) {
-		const float *leafCenter = graphInstance->LeafCenter( leafsChain[i] );
 		// The graph edge distance might be (temporarily) scaled.
-		// Moreover we check a raw distance between points in a 3D space first.
-		const float squareDistance = DistanceSquared( firstLeafCenter, leafCenter );
-		// If the current leaf is far from the first one
-		if( squareDistance >= distanceThreshold * distanceThreshold ) {
+		// However infinity values are preserved.
+		if( std::isinf( graphInstance->EdgeDistance( leafsChain[0], leafsChain[i] ) ) ) {
 			// If there were added dirs, stop accumulating dirs
 			if( i > 1 ) {
 				break;
@@ -1382,28 +1636,34 @@ void PropagationBuilderTask<DistanceType>::BuildInfluxDirForLeaf( float *allocat
 			// We do not even check visibility here as we have to provide some valid normalized dir
 			// This should not be confusing to a listener as its very likely that secondary emission rays
 			// can pass for the most part and can have much greater contribution to an actually used fake source dir.
-			VectorSubtract( firstLeafCenter, leafCenter, allocatedDir );
-			VectorNormalize( allocatedDir );
-			return;
-		}
 
-		// Check visibility (graph edges scaling preserves infinity)
-		if( std::isinf( graphInstance->EdgeDistance( leafsChain[0], leafsChain[i] ) ) ) {
-			if( i > 1 ) {
-				break;
+			// Lets hope this happens rarely enough to avoid caching leaf centers
+			vec3_t centers[2];
+			for( int j = 0; j < 2; ++j ) {
+				const vec3_t *const bounds = trap_GetLeafBounds( leafsChain[i] );
+				VectorSubtract( bounds[1], bounds[0], centers[i] );
+				VectorScale( centers[i], 0.5f, centers[i] );
+				VectorAdd( centers[i], bounds[0], centers[i] );
 			}
-			// Same as above: just return a dir from the first leaf to the next leaf without involving the dir builder
-			VectorSubtract( firstLeafCenter, leafCenter, allocatedDir );
+
+			VectorSubtract( centers[1], centers[0], allocatedDir );
 			VectorNormalize( allocatedDir );
-			return;
 		}
 
 		// Continue accumulating dirs coming from other leafs to the first one.
-		float dirWeight = 1.0f - ( std::sqrt( squareDistance ) / distanceThreshold );
+		const DistanceType *const dir = graphInstance->GetDirFromLeafToLeaf( leafsChain[i], leafsChain[0] );
+		// The dir must be present as there is a finite edge distance between leaves
+		assert( dir );
+
+		// We dropped using a distance from leaf to the first leaf
+		// as a contribution weight as this distance may be scaled
+		// and we do not longer cache leaf centers to compute a raw 3D distance
+		float dirWeight = 1.0f - i / (float)maxTestedLeafs;
 		dirWeight *= dirWeight;
-		float *dirToAdd = builder.AllocDir( dirWeight );
-		VectorSubtract( firstLeafCenter, leafCenter, dirToAdd );
-		VectorNormalize( dirToAdd );
+		// Avoid zero/very small weights diminishing dir contribution
+		dirWeight += 0.25f;
+		float *const dirToAdd = builder.AllocDir( dirWeight );
+		VectorCopy( dir, dirToAdd );
 	}
 
 	// Build a result based on all accumulated dirs
@@ -1578,9 +1838,18 @@ void CachedLeafsGraph::Shutdown() {
 	leafsGraphHolder.Shutdown();
 }
 
+CachedLeafsGraph::~CachedLeafsGraph() {
+	// Can't be defined in header due to this call
+	TaggedAllocator<vec3_t>::FreeUsingMetadata( dirsTable );
+}
+
 void CachedLeafsGraph::ResetExistingState( const char *, int ) {
-	TaggedAllocator<float>::FreeUsingMetadata( &distanceTable );
-	TaggedAllocator<int>::FreeUsingMetadata( &adjacencyListsData );
+	TaggedAllocator<float>::FreeUsingMetadata( distanceTable );
+	distanceTable = nullptr;
+	TaggedAllocator<float>::FreeUsingMetadata( dirsTable );
+	dirsTable = nullptr;
+	TaggedAllocator<int>::FreeUsingMetadata( adjacencyListsData );
+	adjacencyListsData = nullptr;
 	// Just nullify the pointer. A corresponding chunk belongs to the lists data.
 	adjacencyListsOffsets = nullptr;
 	isUsingValidData = false;
@@ -1602,7 +1871,10 @@ void CachedLeafsGraph::ComputeNewState( const char *actualMap, int actualNumLeaf
 	if( builder.Build( this ) ) {
 		// The builder should no longer own the distance table and the leafs lists data.
 		// They should be freed using TaggedAllocator::FreeUsingMetadata() on our own.
-		builder.TransferOwnership( &this->distanceTable, &this->adjacencyListsData, &this->adjacencyListsOffsets );
+		builder.TransferOwnership( &this->distanceTable,
+								   &this->dirsTable,
+								   &this->adjacencyListsData,
+								   &this->adjacencyListsOffsets );
 		// Set this so the data will be saved to file
 		isUsingValidData = true;
 		// TODO: Transfer the data size explicitly instead of relying on implied data offset
@@ -1622,6 +1894,7 @@ void CachedLeafsGraph::ComputeNewState( const char *actualMap, int actualNumLeaf
 	memset( leafsData + 1, 0, sizeof( int ) * actualNumLeafs );
 	this->adjacencyListsData = leafsData;
 	this->adjacencyListsOffsets = leafsData + 1;
+	// Lets try avoiding allocating dirs table since its huge
 }
 
 bool CachedLeafsGraph::SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) {
@@ -1675,20 +1948,48 @@ bool CachedGraphReader::Read( CachedLeafsGraph *readObject ) {
 		return false;
 	}
 
-	const size_t numBytesForTable = numLeafs * numLeafs * sizeof( float );
+	const size_t numBytesForDistanceTable = numLeafs * numLeafs * sizeof( float );
+	// TODO: Use packed dirs?
+	const size_t numBytesForDirsTable = numLeafs * numLeafs * sizeof( vec3_t );
 	const size_t numBytesForLists = listsDataSize * sizeof( int );
-	if( BytesLeft() != numBytesForTable + numBytesForLists ) {
+	if( BytesLeft() != numBytesForDistanceTable + numBytesForDirsTable + numBytesForLists ) {
 		return false;
 	}
 
-	using TableHolder = std::unique_ptr<float, TaggedAllocatorCaller<float>>;
-	TableHolder tableHolder( ::defaultFloatAllocator.Alloc( numLeafs * numLeafs ) );
-	if( !CachedComputationReader::Read( tableHolder.get(), numBytesForTable ) ) {
+	using DistanceTableHolder = std::unique_ptr<float, TaggedAllocatorCaller<float>>;
+	DistanceTableHolder distanceTableHolder( ::DefaultAllocatorForType<float>().Alloc( numLeafs * numLeafs ) );
+	if( !CachedComputationReader::Read( distanceTableHolder.get(), numBytesForDistanceTable ) ) {
 		return false;
+	}
+
+	using DirsTableHolder = std::unique_ptr<vec3_t, TaggedAllocatorCaller<vec3_t>>;
+	// TODO: Should other holders use memory supplied by ref-counting allocators?
+	DirsTableHolder	dirsTableHolder( ::RefCountingAllocatorForType<vec3_t>().Alloc( numLeafs * numLeafs ) );
+	if( !CachedComputationReader::Read( dirsTableHolder.get(), numBytesForDirsTable ) ) {
+		return false;
+	}
+
+	// Validate dirs
+	const vec3_t *dirsData = dirsTableHolder.get();
+	for( int i = 1; i < numLeafs; ++i ) {
+		for( int j = i + 1; j < numLeafs; ++j ) {
+			const float *dirs[] = { dirsData[i * numLeafs + j], dirsData[j * numLeafs + i] };
+			for( const float *dir: dirs ) {
+				// If the first element indicates a non-feasible dir, don't care about contents of other
+				if( !std::isfinite( dir[0] ) ) {
+					continue;
+				}
+				float squareLength = VectorLengthSquared( dir );
+				// Check normalization
+				if( std::abs( squareLength - 1.0f ) > 0.1f * 0.1f ) {
+					return false;
+				}
+			}
+		}
 	}
 
 	using ListsDataHolder = std::unique_ptr<int, TaggedAllocatorCaller<int>>;
-	ListsDataHolder listsDataHolder( ::defaultIntAllocator.Alloc( listsDataSize ) );
+	ListsDataHolder listsDataHolder( ::DefaultAllocatorForType<int>().Alloc( listsDataSize ) );
 	if( !CachedComputationReader::Read( listsDataHolder.get(), numBytesForLists ) ) {
 		return false;
 	}
@@ -1754,10 +2055,11 @@ bool CachedGraphReader::Read( CachedLeafsGraph *readObject ) {
 	}
 
 	for( int i = 0, end = numLeafs * numLeafs; i < end; ++i ) {
-		tableHolder.get()[i] = LittleLong( tableHolder.get()[i] );
+		distanceTableHolder.get()[i] = LittleLong( distanceTableHolder.get()[i] );
 	}
 
-	readObject->distanceTable = tableHolder.release();
+	readObject->distanceTable = distanceTableHolder.release();
+	readObject->dirsTable = dirsTableHolder.release();
 	readObject->adjacencyListsData = listsDataHolder.release();
 	readObject->adjacencyListsOffsets = readObject->adjacencyListsData + listsDataSize - numLeafs;
 	readObject->leafListsDataSize = listsDataSize;
@@ -1786,6 +2088,9 @@ bool CachedGraphWriter::Write( const CachedLeafsGraph *writtenObject ) {
 	if( !CachedComputationWriter::Write( writtenObject->distanceTable, numLeafs * numLeafs * sizeof( float ) ) ) {
 		return false;
 	}
+	if( !CachedComputationWriter::Write( writtenObject->dirsTable, numLeafs * numLeafs * sizeof( vec3_t ) ) ) {
+		return false;
+	}
 
 	return CachedComputationWriter::Write( writtenObject->adjacencyListsData, listsDataSize * sizeof( int ) );
 }
@@ -1809,11 +2114,10 @@ bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( TargetT
 	const int listsDataSize = globalGraph->LeafListsDataSize();
 
 	TaggedAllocator<AdjacencyListType> *listsDataAllocator;
-	TaggedAllocator<AdjacencyListType> defaultOne;
 	if( auto *thatBuilderLike = dynamic_cast<GraphBuilder<AdjacencyListType, DistanceType> *>( target ) ) {
 		listsDataAllocator = &thatBuilderLike->AdjacencyListsAllocator();
 	} else {
-		listsDataAllocator = &defaultOne;
+		listsDataAllocator = &DefaultAllocatorForType<AdjacencyListType>();
 	}
 
 	this->adjacencyListsData = listsDataAllocator->Alloc( listsDataSize );
@@ -1878,20 +2182,20 @@ CloneableGraphBuilder<DistanceType> *CloneableGraphBuilder<DistanceType>::Clone(
 		return nullptr;
 	}
 
-	auto *clone = new( objectMem )CloneableGraphBuilder<DistanceType>( this->NumLeafs(), this->fastAndCoarse );
-	std::unique_ptr<CloneableGraphBuilder<DistanceType>, SoundMemDeleter> cloneHolder( clone );
+	using CloneHolder = std::unique_ptr<CloneableGraphBuilder<DistanceType>, SoundMemDeleter>;
+	CloneHolder clone( new( objectMem )CloneableGraphBuilder<DistanceType>( this->NumLeafs(), this->fastAndCoarse ) );
 
-	clone->distanceTable = clone->distanceTableBackup = this->tableBackupAllocator.AddRef( this->distanceTableBackup );
+	clone->distanceTable = clone->distanceTableBackup = this->TableBackupAllocator().AddRef( this->distanceTableBackup );
 	clone->distanceTableScratchpad = clone->TableScratchpadAllocator().Alloc( this->NumLeafs() * this->NumLeafs() );
 	if( !clone->distanceTableScratchpad ) {
 		return nullptr;
 	}
 
-	clone->adjacencyListsData = this->adjacencyListsAllocator.AddRef( this->adjacencyListsData );
+	clone->adjacencyListsData = this->AdjacencyListsAllocator().AddRef( this->adjacencyListsData );
 	// Just copy the address... offsets are allocated within the lists data memory chunk
 	clone->adjacencyListsOffsets = this->adjacencyListsOffsets;
 
-	clone->leafCenters = this->leafsCentersAllocator.AddRef( this->leafCenters );
+	clone->dirsTable = ( (RefCountingAllocator<VectorType> &)this->DirsAllocator() ).AddRef( this->dirsTable );
 
-	return cloneHolder.release();
+	return clone.release();
 }

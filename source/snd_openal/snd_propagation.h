@@ -57,6 +57,18 @@ class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
 	friend class CachedGraphReader;
 	friend class CachedGraphWriter;
 	template <typename> friend class SingletonHolder;
+	template <typename> friend class PropagationGraphBuilder;
+	template <typename DistanceType> friend DistanceType *ReuseGlobalLeafToLeafDirsTable( int numLeafs );
+
+	/**
+	 * This is a temporary data useful for {@code PropagationGraphBuilder<?,?>}
+	 * While it currently serves no purpose for the {@code CachedLeafsGraph} itself,
+	 * having/saving it is mandatory to be able to use {@code GraphBuilder::TryUsingGlobalGraph()}.
+	 * Should be released by calling {@code TaggedAllocator::FreeUsingMetadata()}
+	 * (an ownership over this chunk of memory can be transferred via builder).
+	 * @note an actual allocator of this memory chunk must use reference counting as we must support sharing.
+	 */
+	vec3_t *dirsTable { nullptr };
 
 	int leafListsDataSize { -1 };
 	bool isUsingValidData { false };
@@ -67,6 +79,10 @@ class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
 	bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) override;
 
 	CachedLeafsGraph(): CachedComputation( "CachedLeafsGraph" ), GraphLike<int, float>( -1 ) {}
+
+	~CachedLeafsGraph() override;
+
+	vec3_t *ShareLeafToLeafDirsTable();
 public:
 	/**
 	 * Exposed for {@code GraphBuilder<?,?>::TryUsingGlobalGraph()} (a template can't be a friend).
