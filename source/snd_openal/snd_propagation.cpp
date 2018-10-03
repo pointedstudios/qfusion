@@ -1,5 +1,6 @@
 #include "snd_propagation.h"
 #include "snd_computation_host.h"
+#include "snd_allocators.h"
 
 #include "../gameshared/q_collision.h"
 #ifdef min
@@ -16,245 +17,6 @@
 #include <limits>
 #include <memory>
 #include <random>
-
-// TODO: Should be lifted to the project top-level
-#ifndef _MSC_VER
-#include <sanitizer/asan_interface.h>
-#define DISABLE_ACCESS( addr, size ) ASAN_POISON_MEMORY_REGION( addr, size )
-#define ENABLE_ACCESS( addr, size ) ASAN_UNPOISON_MEMORY_REGION( addr, size )
-#else
-#define DISABLE_ACCESS( addr, size )
-#define ENABLE_ACCESS( addr, size )
-#endif
-
-/**
- * Defines an interface for anything that resembles default {@code malloc()/realloc()/free()} routines.
- */
-class MallocLike {
-public:
-	virtual ~MallocLike() = default;
-
-	virtual void *Alloc( size_t size ) = 0;
-	virtual void *Realloc( void *p, size_t size ) = 0;
-	virtual void Free( void *p ) = 0;
-};
-
-class SoundMalloc: public MallocLike {
-public:
-	void *Alloc( size_t size ) override { return S_Malloc( size ); }
-	void *Realloc( void *, size_t ) override { abort(); }
-	void Free( void *p ) override { return S_Free( p ); }
-};
-
-static SoundMalloc soundMalloc;
-
-/**
- * A common supertype for all instances of {@code TaggedAllocator<?>}.
- * We have to provide a non-generic ancestor to be able to call
- * (an overridden) virtual method in a type-erased context.
- */
-class UntypedTaggedAllocator {
-	friend class TaggedAllocators;
-
-	MallocLike *const underlying;
-protected:
-	virtual void *AllocUntyped( size_t size );
-
-	virtual void FreeUntyped( void *p );
-public:
-	explicit UntypedTaggedAllocator( MallocLike *underlying_ = &::soundMalloc )
-		: underlying( underlying_ ) {}
-};
-
-/**
- * This is a helper for basic operations on memory chunks that are related to {@code TaggedAllocator<?>}.
- * Using it helps to avoid specifying an exact type of a static method of {@code TaggedAllocator<?>}.
- * Unfortunately a type of a static template member that are not really parametrized is not erased in C++.
- */
-class TaggedAllocators {
-	friend class UntypedTaggedAllocator;
-	template <typename> friend class RefCountingAllocator;
-
-	template <typename T>
-	static void Put( T value, int offsetInBytes, void *userAccessible ) {
-		// Check user-accessible data alignment anyway
-		assert( !( ( (uintptr_t)userAccessible ) % 8 ) );
-		// A metadata must be put before a user-accessible data
-		assert( offsetInBytes < 0 );
-		auto *destBytes = ( (uint8_t *)userAccessible ) + offsetInBytes;
-		// Check the metadata space alignment for the type
-		assert( !( (uintptr_t)destBytes % alignof( T ) ) );
-		*( ( T *)( destBytes ) ) = value;
-	}
-
-	template <typename T>
-	static T &Get( void *userAccessible, int offsetInBytes ) {
-		// Check user-accessible data alignment anyway
-		assert( !( ( (uintptr_t)userAccessible ) % 8 ) );
-		// A metadata must be put before a user-accessible data
-		assert( offsetInBytes < 0 );
-		auto *srcBytes = (uint8_t *)userAccessible + offsetInBytes;
-		// Check the metadata space alignment for the type
-		assert( !( (uintptr_t)srcBytes % alignof( T ) ) );
-		return *( ( T *)srcBytes );
-	}
-public:
-	/**
-	 * A helper for nullification of passed pointers in fluent style
-	 * <pre>{@code
-	 *     ptr = FreeUsingMetadata( ptr );
-	 * }</pre>
-	 * (passing a pointer as a reference is too confusing and probably ambiguous)
-	 */
-	template <typename T> static T *FreeUsingMetadata( T *p ) {
-		FreeUsingMetadata( (void *)p );
-		return nullptr;
-	}
-
-	static void FreeUsingMetadata( void *p ) {
-		if( !p ) {
-			return;
-		}
-		// Allow metadata access/modification
-		ENABLE_ACCESS( (uint8_t *)p - 16, 16 );
-		// Get the underlying tagged allocator
-		auto *allocator = Get<UntypedTaggedAllocator *>( p, -16 );
-		// Check whether it's really a tagged allocator
-		assert( dynamic_cast<UntypedTaggedAllocator *>( allocator ) );
-		// Delegate the deletion to it (this call is virtual and can use different implementations)
-		allocator->FreeUntyped( p );
-	}
-};
-
-void *UntypedTaggedAllocator::AllocUntyped( size_t size ) {
-	// MallocLike follows malloc() contract and returns at least 8-byte aligned chunks.
-	// The allocator pointer must be aligned on alignof( void *): 4 or 8 bytes
-	// The size must be aligned on 2 bytes
-	// TODO: We can save few bytes for 32-bit systems
-	auto *const allocated = underlying->Alloc( size + 16 );
-	auto *const userAccessible = (uint8_t *)allocated + 16;
-	// Put self at the offset expected by TaggedAllocators::FreeUsingMetadata()
-	TaggedAllocators::Put<UntypedTaggedAllocator *>( this, -16, userAccessible );
-	// Put the metadata size at the offset expected by TaggedAllocators::FreeUsingMetadata()
-	TaggedAllocators::Put<uint16_t>( 16, -2, userAccessible );
-	// Prevent metadata modification by rogue memory access
-	DISABLE_ACCESS( allocated, 16 );
-	return userAccessible;
-}
-
-void UntypedTaggedAllocator::FreeUntyped( void *p ) {
-	auto metadataSize = TaggedAllocators::Get<uint16_t>( p, -2 );
-	// Get an address of an actually allocated by MallocLike::Alloc() chunk
-	auto *underlyingChunk = ( (uint8_t *)p ) - metadataSize;
-	// Call MallocLike::Free() on an actual chunk
-	underlying->Free( underlyingChunk );
-}
-
-/**
- * A typed wrapper over {@code UntypedTaggedAllocator} that simplifies its usage at actual call sites.
- * @tparam T a type of an array element. Currently must be a POD type.
- */
-template <typename T>
-class TaggedAllocator: public UntypedTaggedAllocator {
-public:
-	virtual ~TaggedAllocator() = default;
-
-	virtual T *Alloc( int numElems ) {
-		return (T *)AllocUntyped( numElems * sizeof( T ) );
-	}
-
-	virtual void Free( T *p ) {
-		FreeUntyped( p );
-	}
-};
-
-static TaggedAllocator<float> defaultFloatAllocator;
-static TaggedAllocator<double> defaultDoubleAllocator;
-static TaggedAllocator<int> defaultIntAllocator;
-
-/**
- * @warning this is a very quick and dirty implementation that assumes that
- * all operations happen in the single thread as {@code ParallelComputationHost} currently does
- * (all allocations/de-allocations are performed in a thread that calls {@code TryAddTask()} and {@code Exec()}.
- */
-template <typename T>
-class RefCountingAllocator: public TaggedAllocator<T> {
-	uint32_t &RefCountOf( void *p ) {
-		// The allocator must be already put to a moment of any ref-count operation
-		assert( this == TaggedAllocators::Get<UntypedTaggedAllocator *>( p, -16 ) );
-		return TaggedAllocators::Get<uint32_t>( p, -8 );
-	}
-
-	void RemoveRef( void *p ) {
-		auto &refCount = RefCountOf( p );
-		--refCount;
-		if( !refCount ) {
-			// Call the parent method explicitly to actually free the pointer
-			UntypedTaggedAllocator::FreeUntyped( p );
-		}
-	}
-
-	void *AllocUntyped( size_t size ) override {
-		void *result = UntypedTaggedAllocator::AllocUntyped( size );
-		auto *underlying = (uint8_t *)result - 16;
-		// Allow metadata modification
-		ENABLE_ACCESS( underlying, 16 );
-		RefCountOf( result ) = 1;
-		// Prevent metadata modification
-		DISABLE_ACCESS( underlying, 16 );
-		return result;
-	}
-
-	void FreeUntyped( void *p ) override {
-		RemoveRef( p );
-	}
-public:
-	T *Alloc( int numElems ) override {
-		return ( T *)AllocUntyped( numElems * sizeof( T ) );
-	}
-
-	void Free( T *p ) override {
-		FreeUntyped( p );
-	}
-
-	T *AddRef( T *p ) {
-		auto *underlying = (uint8_t *)p - 16;
-		// Allow metadata modification
-		ENABLE_ACCESS( underlying, 16 );
-		RefCountOf( p )++;
-		// Prevent metadata modification
-		DISABLE_ACCESS( underlying, 16 );
-		return p;
-	}
-};
-
-static RefCountingAllocator<int> defaultRefCountingIntAllocator;
-static RefCountingAllocator<float> defaultRefCountingFloatAllocator;
-static RefCountingAllocator<double> defaultRefCountingDoubleAllocator;
-static RefCountingAllocator<float[3]> defaultRefCountingFloat3Allocator;
-static RefCountingAllocator<double[3]> defaultRefCountingDouble3Allocator;
-
-template <typename T> RefCountingAllocator<T> &RefCountingAllocatorForType();
-
-template <> RefCountingAllocator<int> &RefCountingAllocatorForType<int>() {
-	return ::defaultRefCountingIntAllocator;
-}
-
-template <> RefCountingAllocator<float> &RefCountingAllocatorForType<float>() {
-	return ::defaultRefCountingFloatAllocator;
-}
-
-template <> RefCountingAllocator<double> &RefCountingAllocatorForType<double>() {
-	return ::defaultRefCountingDoubleAllocator;
-}
-
-template <> RefCountingAllocator<float[3]> &RefCountingAllocatorForType<float[3]>() {
-	return ::defaultRefCountingFloat3Allocator;
-}
-
-template <> RefCountingAllocator<double[3]> &RefCountingAllocatorForType<double[3]>() {
-	return ::defaultRefCountingDouble3Allocator;
-}
 
 template <typename AdjacencyListType, typename DistanceType>
 GraphLike<AdjacencyListType, DistanceType>::~GraphLike() {
@@ -340,21 +102,6 @@ public:
 	}
 };
 
-template <typename T> TaggedAllocator<T> &DefaultAllocatorForType();
-
-template <> TaggedAllocator<int> &DefaultAllocatorForType<int>() {
-	return ::defaultIntAllocator;
-}
-
-template <> TaggedAllocator<double> &DefaultAllocatorForType<double>() {
-	return ::defaultDoubleAllocator;
-}
-
-template <> TaggedAllocator<float> &DefaultAllocatorForType<float>() {
-	return ::defaultFloatAllocator;
-}
-
-
 template <typename AdjacencyListType, typename DistanceType>
 class GraphBuilder: public MutableGraph<AdjacencyListType, DistanceType> {
 protected:
@@ -366,13 +113,13 @@ protected:
 	virtual DistanceType ComputeEdgeDistance( int leaf1, int leaf2 ) = 0;
 
 	virtual TaggedAllocator<DistanceType> &TableBackupAllocator() {
-		return DefaultAllocatorForType<DistanceType>();
+		return TaggedAllocatorForType<DistanceType>();
 	}
 	virtual TaggedAllocator<DistanceType> &TableScratchpadAllocator() {
-		return DefaultAllocatorForType<DistanceType>();
+		return TaggedAllocatorForType<DistanceType>();
 	}
 	virtual TaggedAllocator<AdjacencyListType> &AdjacencyListsAllocator() {
-		return DefaultAllocatorForType<AdjacencyListType>();
+		return TaggedAllocatorForType<AdjacencyListType>();
 	}
 public:
 	using TargetType = GraphLike<AdjacencyListType, DistanceType>;
@@ -1982,9 +1729,9 @@ void CachedLeafsGraph::ComputeNewState( const char *actualMap, int actualNumLeaf
 
 	// Allocate a small chunk for the table... it is not going to be accessed
 	// That's bad...
-	this->distanceTable = defaultFloatAllocator.Alloc( 1 );
+	this->distanceTable = TaggedAllocatorForType<float>().Alloc( 1 );
 	// Allocate a dummy cell for a dummy list and a full row for offsets
-	auto *leafsData = defaultIntAllocator.Alloc( actualNumLeafs + 1 );
+	auto *leafsData = TaggedAllocatorForType<int>().Alloc( actualNumLeafs + 1 );
 	// Put the dummy list at the beginning
 	leafsData[0] = 0;
 	// Make all offsets refer to the dummy list
@@ -2054,7 +1801,7 @@ bool CachedGraphReader::Read( CachedLeafsGraph *readObject ) {
 	}
 
 	using DistanceTableHolder = std::unique_ptr<float, TaggedAllocatorCaller<float>>;
-	DistanceTableHolder distanceTableHolder( ::DefaultAllocatorForType<float>().Alloc( numLeafs * numLeafs ) );
+	DistanceTableHolder distanceTableHolder( ::TaggedAllocatorForType<float>().Alloc( numLeafs * numLeafs ) );
 	if( !CachedComputationReader::Read( distanceTableHolder.get(), numBytesForDistanceTable ) ) {
 		return false;
 	}
@@ -2086,7 +1833,7 @@ bool CachedGraphReader::Read( CachedLeafsGraph *readObject ) {
 	}
 
 	using ListsDataHolder = std::unique_ptr<int, TaggedAllocatorCaller<int>>;
-	ListsDataHolder listsDataHolder( ::DefaultAllocatorForType<int>().Alloc( listsDataSize ) );
+	ListsDataHolder listsDataHolder( ::TaggedAllocatorForType<int>().Alloc( listsDataSize ) );
 	if( !CachedComputationReader::Read( listsDataHolder.get(), numBytesForLists ) ) {
 		return false;
 	}
@@ -2214,7 +1961,7 @@ bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( TargetT
 	if( auto *thatBuilderLike = dynamic_cast<GraphBuilder<AdjacencyListType, DistanceType> *>( target ) ) {
 		listsDataAllocator = &thatBuilderLike->AdjacencyListsAllocator();
 	} else {
-		listsDataAllocator = &DefaultAllocatorForType<AdjacencyListType>();
+		listsDataAllocator = &TaggedAllocatorForType<AdjacencyListType>();
 	}
 
 	this->adjacencyListsData = listsDataAllocator->Alloc( listsDataSize );
