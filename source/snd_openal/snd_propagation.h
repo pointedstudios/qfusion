@@ -58,7 +58,11 @@ class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
 	friend class CachedGraphWriter;
 	template <typename> friend class SingletonHolder;
 	template <typename> friend class PropagationGraphBuilder;
-	template <typename DistanceType> friend DistanceType *ReuseGlobalLeafToLeafDirsTable( int numLeafs );
+
+	template <typename DistanceType>
+	friend DistanceType *ReuseGlobalDistanceTable( int numLeafs );
+
+	using CompactDirType = int8_t[3];
 
 	/**
 	 * This is a temporary data useful for {@code PropagationGraphBuilder<?,?>}
@@ -68,7 +72,7 @@ class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
 	 * (an ownership over this chunk of memory can be transferred via builder).
 	 * @note an actual allocator of this memory chunk must use reference counting as we must support sharing.
 	 */
-	vec3_t *dirsTable { nullptr };
+	CompactDirType *dirsTable { nullptr };
 
 	int leafListsDataSize { -1 };
 	bool isUsingValidData { false };
@@ -81,8 +85,6 @@ class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
 	CachedLeafsGraph(): CachedComputation( "CachedLeafsGraph" ), GraphLike<int, float>( -1 ) {}
 
 	~CachedLeafsGraph() override;
-
-	vec3_t *ShareLeafToLeafDirsTable();
 public:
 	/**
 	 * Exposed for {@code GraphBuilder<?,?>::TryUsingGlobalGraph()} (a template can't be a friend).

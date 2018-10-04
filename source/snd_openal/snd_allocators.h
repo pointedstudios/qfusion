@@ -212,6 +212,7 @@ public:
 	static RefCountingAllocator<int> &Int();
 	static RefCountingAllocator<float> &Float();
 	static RefCountingAllocator<double> &Double();
+	static RefCountingAllocator<int8_t[3]> &SignedByte3();
 	static RefCountingAllocator<float[3]> &Float3();
 	static RefCountingAllocator<double[3]> &Double3();
 };
@@ -227,6 +228,7 @@ template <> inline RefCountingAllocator<type> &RefCountingAllocatorForType<type>
 DECLARE_DEFAULT_REF_COUNTING_ALLOCATOR( int, Int );
 DECLARE_DEFAULT_REF_COUNTING_ALLOCATOR( float, Float );
 DECLARE_DEFAULT_REF_COUNTING_ALLOCATOR( double, Double );
+DECLARE_DEFAULT_REF_COUNTING_ALLOCATOR( int8_t[3], SignedByte3 );
 DECLARE_DEFAULT_REF_COUNTING_ALLOCATOR( float[3], Float3 );
 DECLARE_DEFAULT_REF_COUNTING_ALLOCATOR( double[3], Double3 );
 
