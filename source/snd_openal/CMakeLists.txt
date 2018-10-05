@@ -23,6 +23,13 @@ else ()
         set(SND_OPENAL_PLATFORM_LIBRARIES "")
 endif()
 
+# Force -O3 for GCC or Clang release builds
+if (${CMAKE_SYSTEM_NAME} MATCHES "Linux" OR "Darwin")
+    if(${CMAKE_BUILD_TYPE} MATCHES "Release")
+        set_source_files_properties("snd_propagation.cpp" PROPERTIES COMPILE_FLAGS "-O3")
+    endif ()
+endif ()
+
 add_library(snd_openal_system SHARED ${SND_OPENAL_HEADERS} ${SND_OPENAL_SOURCES})
 target_include_directories(snd_openal_system BEFORE PRIVATE ${OPENAL_INCLUDE_DIR})
 target_link_libraries(snd_openal_system PRIVATE ${OGG_LIBRARY} ${VORBIS_LIBRARIES} ${SND_OPENAL_PLATFORM_LIBRARIES})
