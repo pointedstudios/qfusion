@@ -4,6 +4,8 @@
 #include "snd_local.h"
 #include "snd_cached_computation.h"
 
+#include <limits>
+
 template <typename AdjacencyListType, typename DistanceType>
 class GraphLike {
 	friend class CachedLeafsGraph;
@@ -62,8 +64,6 @@ class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
 	template <typename DistanceType>
 	friend DistanceType *ReuseGlobalDistanceTable( int numLeafs );
 
-	using CompactDirType = int8_t[3];
-
 	/**
 	 * This is a temporary data useful for {@code PropagationGraphBuilder<?,?>}
 	 * While it currently serves no purpose for the {@code CachedLeafsGraph} itself,
@@ -72,7 +72,7 @@ class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
 	 * (an ownership over this chunk of memory can be transferred via builder).
 	 * @note an actual allocator of this memory chunk must use reference counting as we must support sharing.
 	 */
-	CompactDirType *dirsTable { nullptr };
+	uint8_t *dirsTable { nullptr };
 
 	int leafListsDataSize { -1 };
 	bool isUsingValidData { false };
@@ -120,52 +120,59 @@ class PropagationTable: public CachedComputation {
 	template <typename> friend class SingletonHolder;
 
 	struct alignas( 1 )PropagationProps {
-		int8_t dirX: 6;
-		int8_t dirY: 6;
-		int8_t dirZ: 6;
-		uint8_t hasIndirectPath: 1;
-		uint8_t hasDirectPath: 1;
-		// 12 bits are left for the distance
-		// These bits are split in 2 parts to fit uint8_t field type and thus do not enforce non-1 alignment.
-		uint8_t distancePart1: 6;
-		uint8_t distancePart2: 6;
+		/**
+		 * An index for {@code ByteToDir()} if is within {@code [0, MAXVERTEXNORMALS)} range.
+		 */
+		uint8_t maybeDirByte;
+		/**
+		 * An rough exponential encoding of an indirect path
+		 */
+		uint8_t distanceByte;
 
-		void SetDir( const vec3_t dir ) {
-			// We have 5 bits for value and 6th for sign.
-			// We do not want using DirToByte as it uses a sequential search.
-			dirX = (int8_t)( dir[0] * 31.9f );
-			dirY = (int8_t)( dir[1] * 31.9f );
-			dirZ = (int8_t)( dir[2] * 31.9f );
+		bool HasDirectPath() const {
+			return maybeDirByte == std::numeric_limits<uint8_t>::max();
 		}
 
+		bool HasIndirectPath() const {
+			return maybeDirByte < std::numeric_limits<uint8_t>::max() - 1;
+		}
+
+		void SetHasDirectPath() {
+			maybeDirByte = std::numeric_limits<uint8_t>::max();
+		}
+
+		void SetHasIndirectPath() {
+			maybeDirByte = std::numeric_limits<uint8_t>::max() - 1;
+		}
+
+		/**
+		 * Implemented in the source as some things related to implementation should not be exposed right now
+		 */
+		inline void SetDir( const vec3_t dir );
+
 		void GetDir( vec3_t dir ) const {
-			dir[0] = dirX / 32.0f;
-			dir[1] = dirY / 32.0f;
-			dir[2] = dirZ / 32.0f;
-			VectorNormalize( dir );
+			assert( HasIndirectPath() );
+			ByteToDir( maybeDirByte, dir );
 		}
 
 		void SetDistance( float distance ) {
-			assert( distance >= 0 );
-			// We have 12 bits for the distance.
-			// Using rounding up to 16 units, we could store paths of length up to 2^16
-			constexpr auto maxDistance = (float)( ( 1u << 16u ) - 1 );
-			clamp_high( distance, maxDistance );
-			const auto u = (unsigned)( distance / 16.0f );
-			// Check whether the rounded distance really fits these 12 bits
-			assert( u < ( 1u << 12u ) );
-			// A mask for 6 bits
-			constexpr unsigned mask = 077u;
-			distancePart1 = (uint8_t)( ( u >> 6u ) & mask );
-			distancePart2 = (uint8_t)( u & mask );
+			assert( distance > 0 );
+			auto u = (unsigned)distance;
+			// Limit the stored distance to 2^16 - 1
+			clamp_high( u, ( 1u << 16u ) - 1 );
+			// Store the distance using 256 units granularity
+			u >>= 8;
+			assert( u >= 0 && u < 256 );
+			distanceByte = (uint8_t)u;
 		}
 
 		float GetDistance() const {
-			return 16.0f * ( ( (uint32_t)distancePart1 << 6u ) | distancePart2 );
+			return distanceByte * 256.0f;
 		}
 	};
 
 	static_assert( alignof( PropagationProps ) == 1, "" );
+	static_assert( sizeof( PropagationProps ) == 2, "" );
 
 	PropagationProps *table { nullptr };
 	bool isUsingValidTable { false };
@@ -205,7 +212,7 @@ public:
 	 * @note true results of {@code HasDirectPath()} and {@code HasIndirectPath} are mutually exclusive.
 	 */
 	bool HasDirectPath( int fromLeafNum, int toLeafNum ) const {
-		return fromLeafNum == toLeafNum || GetProps( fromLeafNum, toLeafNum ).hasDirectPath;
+		return fromLeafNum == toLeafNum || GetProps( fromLeafNum, toLeafNum ).HasDirectPath();
 	}
 
 	/**
@@ -213,15 +220,15 @@ public:
 	 * @note true results of {@code HasDirectPath()} and {@code HasIndirectPath} are mutually exclusive.
 	 */
 	bool HasIndirectPath( int fromLeafNum, int toLeafNum ) const {
-		return fromLeafNum != toLeafNum && GetProps( fromLeafNum, toLeafNum ).hasIndirectPath;
+		return fromLeafNum != toLeafNum && GetProps( fromLeafNum, toLeafNum ).HasIndirectPath();
 	}
 
 	/**
 	 * Returns propagation properties of an indirect (maze) path between these leaves.
 	 * @param fromLeafNum a number of leaf where a real sound emitter origin is assumed to be located.
 	 * @param toLeafNum a number of leaf where a listener origin is assumed to be located.
-	 * @param dir An average direction of sound waves emitted by the source and ingoing to the listener leaf.
-	 * @param distance An estimation of distance that is covered by sound waves during propagation.
+	 * @param dir an average direction of sound waves emitted by the source and ingoing to the listener leaf.
+	 * @param distance a coarse estimation of distance that is covered by sound waves during propagation.
 	 * @return true if an indirect path between given leaves exists (and there were propagation properties).
 	 */
 	bool GetIndirectPathProps( int fromLeafNum, int toLeafNum, vec3_t dir, float *distance ) const {
@@ -229,7 +236,7 @@ public:
 			return false;
 		}
 		const auto &props = GetProps( fromLeafNum, toLeafNum );
-		if( !props.hasIndirectPath ) {
+		if( !props.HasIndirectPath() ) {
 			return false;
 		}
 		props.GetDir( dir );

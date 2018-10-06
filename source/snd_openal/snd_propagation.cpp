@@ -161,18 +161,16 @@ public:
 
 template <typename DistanceType>
 class PropagationGraphBuilder: public GraphBuilder<int, DistanceType> {
-public:
-	typedef int8_t CompactDirType[3];
 protected:
 	using TargetType = GraphLike<int, DistanceType>;
 
-	CompactDirType *dirsTable { nullptr };
+	uint8_t *dirsTable { nullptr };
 	const bool fastAndCoarse;
 
 	void PrepareToBuild() override;
 
-	RefCountingAllocator<CompactDirType> &DirsAllocator() {
-		return RefCountingAllocatorForType<CompactDirType>();
+	RefCountingAllocator<uint8_t> &DirsAllocator() {
+		return RefCountingAllocatorForType<uint8_t>();
 	}
 
 	bool TryUsingGlobalGraph( TargetType *target ) override;
@@ -237,12 +235,10 @@ public:
 		// We iterate over cells in the upper triangle starting from i + 1 for i-th row.
 		// Remember that leaf1 corresponds to row index and leaf2 corresponds to column index.
 		const int indexInRow = leaf2 - leaf1 - 1;
-		const auto *v = &dirsTable[rowOffset + indexInRow][0];
-		// If there is at least a single non-zero component, a dir is valid
-		if( ( v[0] | v[1] | v[2] ) ) {
-			reuse[0] = sign * v[0] / 128.0f;
-			reuse[1] = sign * v[1] / 128.0f;
-			reuse[2] = sign * v[2] / 128.0f;
+		const uint8_t dirByte = dirsTable[rowOffset + indexInRow];
+		if( dirByte != std::numeric_limits<uint8_t>::max() ) {
+			::ByteToDir( dirByte, reuse );
+			VectorScale( reuse, sign, reuse );
 			return reuse;
 		}
 		return nullptr;
@@ -252,7 +248,7 @@ public:
 		TaggedAllocators::FreeUsingMetadata( dirsTable );
 	}
 
-	void TransferOwnership( DistanceType **distanceTable, CompactDirType **dirsTable, int **lists, int **listsOffsets ) {
+	void TransferOwnership( DistanceType **distanceTable, uint8_t **dirsTable, int **lists, int **listsOffsets ) {
 		SuperType::TransferOwnership( distanceTable, lists, listsOffsets );
 		*dirsTable = SuperType::TransferCheckingNullity( &this->dirsTable );
 	}
@@ -432,6 +428,98 @@ done:
 	return std::sqrt( DistanceSquared( leafCenters[0], leafCenters[1] ) );
 }
 
+// TODO: Lift ByteToDirTable to outer scope
+
+static const vec3_t byteToDirNormals[] = {
+#include "../gameshared/anorms.h"
+};
+
+class DirToByteTable {
+	enum: uint8_t { SIZE = sizeof( byteToDirNormals ) / sizeof( *byteToDirNormals ) };
+
+	// Works quite good.
+	// Choosing a proper hash function that groups together similar directories is what that matter.
+	enum { NUM_BINS = SIZE };
+	uint8_t bins[NUM_BINS];
+	uint8_t next[SIZE];
+
+	enum: uint8_t {  NULL_LINK = std::numeric_limits<uint8_t>::max() };
+	// Ensure we can use 255 and 254 to indicate something else
+	static_assert( SIZE < std::numeric_limits<uint8_t>::max(), "" );
+
+	// The hit ratio (a success rate of GetFirstHashedFit()) is very good, something about 90 % or even more
+	static inline uint32_t Hash( const vec3_t v ) {
+		auto u0 = (uint32_t)( fabsf( v[0] ) * 3 );
+		auto u1 = (uint32_t)( fabsf( v[1] ) * 3 );
+		auto u2 = (uint32_t)( fabsf( v[2] ) * 3 );
+		return u0 * 64 + u1 * 8 + u2;
+	}
+
+	DirToByteTable() {
+		// MSVC has troubles compiling std::fill_n() for NULL_LINK (?) type and using memset() is error-prone
+		for( int i = 0; i < NUM_BINS; ++i ) {
+			bins[i] = NULL_LINK;
+		}
+
+		for( unsigned i = 0; i < SIZE; ++i ) {
+			int binIndex = Hash( ::byteToDirNormals[i] ) % NUM_BINS;
+			int oldHead = bins[binIndex];
+			// Link old bin head (or "null") as next for the newly added entry
+			next[i] = (uint8_t)oldHead;
+			// Link i-th entry to bin at bin index
+			bins[binIndex] = (uint8_t)i;
+		}
+	}
+
+	int GetFirstHashedFit( const vec3_t v ) const {
+		int binIndex = Hash( v ) % NUM_BINS;
+		const auto *normals = ::byteToDirNormals;
+		for( int num = bins[binIndex]; num != NULL_LINK; ) {
+			const auto *n = normals[num];
+			if( DotProduct( v, n ) > 0.95f ) {
+				return num;
+			}
+			num = next[num];
+		}
+		return -1;
+	}
+
+	int ScanForFirstFit( const vec3_t v ) const {
+		const auto *normals = ::byteToDirNormals;
+		for( int i = 0; i < SIZE; ++i ) {
+			const auto *n = normals[i];
+			if( DotProduct( v, n ) > 0.95f ) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	static const DirToByteTable instance;
+public:
+	static int DirToByte( const vec3_t dir ) {
+		// Try getting a value in the same hash bin that is good enough
+		int byte = instance.GetFirstHashedFit( dir );
+		if( byte >= 0 ) {
+			return byte;
+		}
+
+		byte = instance.ScanForFirstFit( dir );
+		if( byte >= 0 ) {
+			return byte;
+		}
+
+		// Fallback to the default implementation. Should happen extremely rarely.
+		return ::DirToByte( const_cast<float *>( dir ) );
+	}
+
+	static bool IsValidDirByte( int byte ) {
+		return (unsigned)byte < SIZE;
+	}
+};
+
+const DirToByteTable DirToByteTable::instance;
+
 template <typename DistanceType>
 void PropagationGraphBuilder<DistanceType>::PrepareToBuild() {
 	SuperType::PrepareToBuild();
@@ -444,25 +532,19 @@ void PropagationGraphBuilder<DistanceType>::PrepareToBuild() {
 	vec3_t dir;
 	const int dirsTableSide = numLeafs - 1;
 	dirsTable = DirsAllocator().Alloc( dirsTableSide * dirsTableSide - dirsTableSide );
-	int8_t *dirsDataPtr = &dirsTable[0][0];
+	uint8_t *dirsDataPtr = &dirsTable[0];
 	for( int i = 1; i < numLeafs; ++i ) {
 		for( int j = i + 1; j < numLeafs; ++j ) {
 			// Don't be confused by "float" type as leaf-to-leaf computations are always performed in single precision
 			const float distance = dirBuilder.Build( i, j, dir );
 			this->distanceTable[i * numLeafs + j] = this->distanceTable[j * numLeafs + i] = distance;
 			if( !std::isfinite( distance ) ) {
-				// Set all components of the corresponding dir to zero.
-				// That's what GetDirFromLeafToLeaf() expects
-				*dirsDataPtr++ = 0;
-				*dirsDataPtr++ = 0;
-				*dirsDataPtr++ = 0;
+				*dirsDataPtr++ = std::numeric_limits<uint8_t>::max();
 				// Check immediately
 				assert( !GetDirFromLeafToLeaf( i, j, dir ) );
 				continue;
 			}
-			*dirsDataPtr++ = (int8_t)( dir[0] * 127.9f );
-			*dirsDataPtr++ = (int8_t)( dir[1] * 127.9f );
-			*dirsDataPtr++ = (int8_t)( dir[2] * 127.9f );
+			*dirsDataPtr++ = (uint8_t)DirToByteTable::DirToByte( dir );
 			// Check immediately
 			assert( GetDirFromLeafToLeaf( i, j, dir ) );
 		}
@@ -524,7 +606,7 @@ bool PropagationGraphBuilder<DistanceType>::TryUsingGlobalGraph( TargetType *tar
 		return false;
 	}
 
-	this->dirsTable = RefCountingAllocatorForType<int8_t[3]>().AddRef( CachedLeafsGraph::Instance()->dirsTable );
+	this->dirsTable = RefCountingAllocatorForType<uint8_t>().AddRef( CachedLeafsGraph::Instance()->dirsTable );
 	return true;
 }
 
@@ -1177,17 +1259,17 @@ void PropagationTableBuilder<DistanceType>::ValidateJointResults() {
 			const PropagationProps &iToJ = table[i * numLeafs + j];
 			const PropagationProps &jToI = table[j * numLeafs + i];
 
-			if( iToJ.hasDirectPath ^ jToI.hasDirectPath ) {
+			if( iToJ.HasDirectPath() ^ jToI.HasDirectPath() ) {
 				ValidationError( "Direct path presence does not match for leaves %d, %d", i, j );
 			}
-			if( iToJ.hasDirectPath ) {
+			if( iToJ.HasDirectPath() ) {
 				continue;
 			}
 
-			if( iToJ.hasIndirectPath ^ jToI.hasIndirectPath ) {
+			if( iToJ.HasIndirectPath() ^ jToI.HasIndirectPath() ) {
 				ValidationError( "Indirect path presence does not match for leaves %d, %d", i, j );
 			}
-			if( !iToJ.hasIndirectPath ) {
+			if( !iToJ.HasIndirectPath() ) {
 				continue;
 			}
 
@@ -1317,7 +1399,8 @@ void PropagationBuilderTask<DistanceType>::ComputePropsForPair( int leaf1, int l
 	PropagationProps *const firstProps = &table[leaf1 * numLeafs + leaf2];
 	PropagationProps *const secondProps = &table[leaf2 * numLeafs + leaf1];
 	if( graphInstance->EdgeDistance( leaf1, leaf2 ) != std::numeric_limits<double>::infinity() ) {
-		firstProps->hasDirectPath = secondProps->hasDirectPath = 1;
+		firstProps->SetHasDirectPath();
+		secondProps->SetHasDirectPath();
 		return;
 	}
 
@@ -1327,9 +1410,11 @@ void PropagationBuilderTask<DistanceType>::ComputePropsForPair( int leaf1, int l
 		return;
 	}
 
-	firstProps->hasIndirectPath = secondProps->hasIndirectPath = 1;
+	firstProps->SetHasIndirectPath();
 	firstProps->SetDistance( (float)distance );
 	firstProps->SetDir( dir1 );
+
+	secondProps->SetHasIndirectPath();
 	secondProps->SetDistance( (float)distance );
 	secondProps->SetDir( dir2 );
 }
@@ -1581,6 +1666,7 @@ protected:
 };
 
 class PropagationTableReader: public CachedComputationReader, protected PropagationIOHelper {
+	bool ValidateTable( PropagationProps *propsData, int actualNumLeafs );
 public:
 	PropagationTableReader( const char *actualMap, const char *actualChecksum, int fsFlags )
 		: CachedComputationReader( actualMap, actualChecksum, PROPAGATION_CACHE_EXTENSION, fsFlags ) {}
@@ -1608,6 +1694,12 @@ void PropagationTable::Init() {
 
 void PropagationTable::Shutdown() {
 	propagationTableHolder.Shutdown();
+}
+
+inline void PropagationTable::PropagationProps::SetDir( const vec3_t dir ) {
+	int byte = DirToByteTable::DirToByte( dir );
+	assert( (unsigned)byte < std::numeric_limits<uint8_t>::max() - 1 );
+	maybeDirByte = (uint8_t)byte;
 }
 
 bool PropagationTable::TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) {
@@ -1655,6 +1747,19 @@ bool PropagationTable::SaveToCache( const char *actualMap, const char *actualChe
 	return writer.WriteTable( this->table, actualNumLeafs );
 }
 
+bool PropagationTableReader::ValidateTable( PropagationIOHelper::PropagationProps *propsData, int actualNumLeafs ) {
+	const int maxByteValue = std::numeric_limits<uint8_t>::max();
+	for( int i = 0, end = actualNumLeafs * actualNumLeafs; i < end; ++i ) {
+		int dirByte = propsData[i].maybeDirByte;
+		if( !DirToByteTable::IsValidDirByte( dirByte ) ) {
+			if( dirByte != maxByteValue && dirByte != maxByteValue - 1 ) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 PropagationTableReader::PropagationProps *PropagationTableReader::ReadPropsTable( int actualNumLeafs ) {
 	// Sanity check
 	assert( actualNumLeafs > 0 && actualNumLeafs < ( 1 << 20 ) );
@@ -1681,7 +1786,9 @@ PropagationTableReader::PropagationProps *PropagationTableReader::ReadPropsTable
 	// Never returns on failure?
 	auto *const result = (PropagationProps *)S_Malloc( expectedSize );
 	if( Read( result, expectedSize ) ) {
-		return result;
+		if( ValidateTable( result, actualNumLeafs ) ) {
+			return result;
+		}
 	}
 
 	S_Free( result );
@@ -1848,7 +1955,7 @@ bool CachedGraphReader::Read( CachedLeafsGraph *readObject ) {
 	// Dummy rows/columns for zero leaf are not stored.
 	// Only the upper triangle above the table diagonal is stored.
 	const int numStoredDirs = ( ( numLeafs - 1 ) * ( numLeafs - 1 ) ) - ( numLeafs - 1 );
-	const size_t numBytesForDirsTable = 3 * sizeof( int8_t ) * numStoredDirs;
+	const size_t numBytesForDirsTable = sizeof( uint8_t ) * numStoredDirs;
 	const size_t numBytesForLists = listsDataSize * sizeof( int );
 	if( BytesLeft() != numBytesForDistanceTable + numBytesForDirsTable + numBytesForLists ) {
 		return false;
@@ -1860,26 +1967,20 @@ bool CachedGraphReader::Read( CachedLeafsGraph *readObject ) {
 		return false;
 	}
 
-	using DirType = int8_t[3];
-	using DirsTableHolder = std::unique_ptr<DirType, TaggedAllocatorCaller<DirType>>;
+	using DirsTableHolder = std::unique_ptr<uint8_t, TaggedAllocatorCaller<uint8_t>>;
 	// TODO: Should other holders use memory supplied by ref-counting allocators?
-	DirsTableHolder	dirsTableHolder( ::RefCountingAllocatorForType<DirType>().Alloc( numLeafs * numLeafs ) );
+	DirsTableHolder	dirsTableHolder( ::RefCountingAllocatorForType<uint8_t>().Alloc( numLeafs * numLeafs ) );
 	if( !CachedComputationReader::Read( dirsTableHolder.get(), numBytesForDirsTable ) ) {
 		return false;
 	}
 
 	// Validate dirs
-	const DirType *const dirsData = dirsTableHolder.get();
+	const uint8_t *const dirsData = dirsTableHolder.get();
 	for( int i = 0; i < numStoredDirs; ++i ) {
-		const auto *d = &dirsData[i][0];
-		// Skip if all components are zero
-		if( !( d[0] | d[1] | d[2] ) ) {
-			continue;
-		}
-		vec3_t v = { d[0] / 128.0f, d[1] / 128.0f, d[2] / 128.0f };
-		float length = std::sqrt( VectorLengthSquared( v ) );
-		if( std::abs( length - 1.0f ) > 0.1f ) {
-			return false;
+		if( !DirToByteTable::IsValidDirByte( dirsData[i] ) ) {
+			if( dirsData[i] != std::numeric_limits<uint8_t>::max() ) {
+				return false;
+			}
 		}
 	}
 
@@ -1985,7 +2086,7 @@ bool CachedGraphWriter::Write( const CachedLeafsGraph *writtenObject ) {
 	}
 
 	const int numStoredDirs = ( ( numLeafs - 1 ) * ( numLeafs - 1 ) ) - ( numLeafs - 1 );
-	const size_t dirsDataSize = 3 * sizeof( int8_t ) * numStoredDirs;
+	const size_t dirsDataSize = sizeof( uint8_t ) * numStoredDirs;
 	if( !CachedComputationWriter::Write( writtenObject->dirsTable, dirsDataSize ) ) {
 		return false;
 	}

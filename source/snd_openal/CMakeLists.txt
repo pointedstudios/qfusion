@@ -4,6 +4,7 @@ include_directories(${VORBIS_INCLUDE_DIR} ${OGG_INCLUDE_DIR} "../snd_common" "."
 
 file(GLOB SND_OPENAL_HEADERS
     "*.h"
+    "../gameshared/anorms.h"
 	"../gameshared/q_*.h"
     "../gameshared/gs_qrespath.h"
 	"../client/snd_public.h"
