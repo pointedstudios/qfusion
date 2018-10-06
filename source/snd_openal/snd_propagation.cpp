@@ -865,10 +865,10 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 												 IteratorType **reverse ) {
 	for( int i = 0, end = graphBuilder.NumLeafs(); i < end; ++i ) {
 		auto *status = updateStatus + i;
-		for( int j = 0; j < 2; ++j ) {
-			status->distance[j] = std::numeric_limits<DistanceType>::infinity();
-			status->parentLeaf[j] = -1;
-			status->isVisited[j] = false;
+		for( int turn = 0; turn < 2; ++turn ) {
+			status->distance[turn] = std::numeric_limits<DistanceType>::infinity();
+			status->parentLeaf[turn] = -1;
+			status->isVisited[turn] = false;
 		}
 	}
 
@@ -883,7 +883,7 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 	int bestLeaf = -1;
 	auto bestDistanceSoFar = std::numeric_limits<DistanceType>::infinity();
 	while( !heaps[0].IsEmpty() && !heaps[1].IsEmpty() ) {
-		for( int j = 0; j < 2; ++j ) {
+		for( int turn = 0; turn < 2; ++turn ) {
 			if( heaps[0].BestDistance() + heaps[1].BestDistance() >= bestDistanceSoFar ) {
 				assert( bestLeaf > 0 );
 				// Check whether this leaf has been really touched by direct and reverse algorithm turns
@@ -896,14 +896,14 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 				return bestDistanceSoFar;
 			}
 
-			auto *const activeHeap = &heaps[j];
+			auto *const activeHeap = &heaps[turn];
 
 			const HeapEntry<DistanceType> &entry = activeHeap->PopInPlace();
 			// Save these values immediately as ReserveForAddition() call might make accessing the entry illegal.
 			const int entryLeafNum = entry.leafNum;
 			const double entryDistance = entry.distance;
 
-			updateStatus[entryLeafNum].isVisited[j] = true;
+			updateStatus[entryLeafNum].isVisited[turn] = true;
 
 			// Now scan all adjacent vertices
 			const auto *const adjacencyList = graphBuilder.AdjacencyList( entryLeafNum ) + 1;
@@ -912,23 +912,23 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 			for( int i = 0; i < listSize; ++i ) {
 				const auto leafNum = adjacencyList[i];
 				auto *const status = &updateStatus[leafNum];
-				if( status->isVisited[j] ) {
+				if( status->isVisited[turn] ) {
 					continue;
 				}
 				DistanceType edgeDistance = graphBuilder.EdgeDistance( entryLeafNum, leafNum );
 				DistanceType relaxedDistance = edgeDistance + entryDistance;
-				if( status->distance[j] <= relaxedDistance ) {
+				if( status->distance[turn] <= relaxedDistance ) {
 					continue;
 				}
 
-				DistanceType otherDistance = status->distance[( j + 1 ) & 1];
+				DistanceType otherDistance = status->distance[( turn + 1 ) & 1];
 				if( otherDistance + relaxedDistance < bestDistanceSoFar ) {
 					bestLeaf = leafNum;
 					bestDistanceSoFar = otherDistance + relaxedDistance;
 				}
 
-				status->distance[j] = relaxedDistance;
-				status->parentLeaf[j] = entryLeafNum;
+				status->distance[turn] = relaxedDistance;
+				status->parentLeaf[turn] = entryLeafNum;
 
 				activeHeap->Push( leafNum, relaxedDistance );
 			}
