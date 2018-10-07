@@ -92,6 +92,8 @@ public:
 	}
 };
 
+struct EfxPresetEntry;
+
 class ReverbEffect: public Effect {
 	float GetMasterGain( struct src_s *src ) const final;
 public:
@@ -117,6 +119,8 @@ public:
 	// An intermediate of the reverb sampling algorithm, useful for gain adjustment
 	float secondaryRaysObstruction;
 
+	virtual void ReusePreset( const EfxPresetEntry *presetHandle );
+
 	virtual void CopyReverbProps( const ReverbEffect *that );
 
 	unsigned GetLingeringTimeout() const override {
@@ -136,6 +140,7 @@ public:
 };
 
 class EaxReverbEffect final: public ReverbEffect {
+	friend class EfxPresetsHolder;
 	friend class ReverbEffectSampler;
 
 	const float *MakeFakeSourceOrigin( struct src_s *src,
@@ -155,10 +160,13 @@ public:
 	float echoTime;   // [0.075 ... 0.25]  default 0.25
 	float echoDepth;  // [0.0   ... 1.0]   default 0.0
 
+	void ReusePreset( const EfxPresetEntry *presetHandle ) override;
+
 	void BindOrUpdate( struct src_s *src ) override;
 	void InterpolateProps( const Effect *oldOne, int timeDelta ) override;
 
 	void CopyReverbProps( const ReverbEffect *that ) override;
+
 
 	void UpdatePanning( src_s *src, const vec3_t listenerOrigin, const mat3_t listenerAxes ) override;
 };

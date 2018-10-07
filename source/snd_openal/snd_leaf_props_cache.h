@@ -27,10 +27,17 @@ struct alignas( 4 )LeafProps {
 #undef MK_ACCESSORS
 };
 
+struct EfxPresetEntry;
+
 class LeafPropsCache: public CachedComputation {
 	template <typename> friend class SingletonHolder;
 
 	LeafProps *leafProps { nullptr };
+
+public:
+	using PresetHandle = const EfxPresetEntry *;
+private:
+	PresetHandle *leafPresets { nullptr };
 
 	bool TryReadFromFile( LeafPropsReader *reader, int actualLeafsNum );
 
@@ -49,10 +56,19 @@ public:
 		if( leafProps ) {
 			S_Free( leafProps );
 		}
+		if( leafPresets ) {
+			S_Free( leafPresets );
+		}
 	}
 
+	// TODO: Merge with GetPresetForLeaf() and use Either as a return type
 	const LeafProps &GetPropsForLeaf( int leafNum ) const {
 		return leafProps[leafNum];
+	}
+
+	// TODO: Merge with GetPropsForLeaf() and use Either as a return type
+	const PresetHandle GetPresetForLeaf( int leafNum ) const {
+		return leafPresets[leafNum];
 	}
 };
 

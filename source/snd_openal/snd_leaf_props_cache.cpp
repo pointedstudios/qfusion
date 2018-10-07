@@ -1,10 +1,13 @@
 #include "snd_leaf_props_cache.h"
 #include "snd_effect_sampler.h"
 #include "snd_computation_host.h"
+#include "snd_presets_registry.h"
 #include "../qalgo/SingletonHolder.h"
 
 #include <algorithm>
 #include <new>
+#include <limits>
+#include <cstdlib>
 
 class LeafPropsIOHelper {
 protected:
@@ -15,7 +18,13 @@ public:
 
 static constexpr const char *PROPS_CACHE_EXTENSION = ".leafprops";
 
+struct EfxPresetEntry;
+
 class LeafPropsReader final: public CachedComputationReader, public LeafPropsIOHelper {
+public:
+	using PresetHandle = const EfxPresetEntry *;
+private:
+	bool ParseLine( char *line, unsigned lineLength, LeafProps *props, PresetHandle *presetHandle );
 public:
 	LeafPropsReader( const char *map_, const char *checksum_, int fileFlags )
 		: CachedComputationReader( map_, checksum_, PROPS_CACHE_EXTENSION, fileFlags, true ) {}
@@ -26,7 +35,7 @@ public:
 		ERROR
 	};
 
-	Status ReadNextProps( LeafProps *props );
+	Status ReadNextProps( LeafProps *props, PresetHandle *presetRef );
 };
 
 class LeafPropsWriter final: public CachedComputationWriter, public LeafPropsIOHelper {
@@ -37,7 +46,7 @@ public:
 	bool WriteProps( const LeafProps &props );
 };
 
-LeafPropsReader::Status LeafPropsReader::ReadNextProps( LeafProps *props ) {
+LeafPropsReader::Status LeafPropsReader::ReadNextProps( LeafProps *props, PresetHandle *presetHandle ) {
 	if( fsResult < 0 ) {
 		return ERROR;
 	}
@@ -52,24 +61,15 @@ LeafPropsReader::Status LeafPropsReader::ReadNextProps( LeafProps *props ) {
 		*nextLine = '\0';
 	}
 
-	int num;
-	float values[4];
-	if ( sscanf( dataPtr, "%d %f %f %f %f", &num, values, values + 1, values + 2, values + 3 ) != 5 ) {
-		// Prevent further calls
+	size_t lineLength = nextLine - dataPtr;
+	if( lineLength > std::numeric_limits<uint32_t>::max() ) {
 		dataPtr = nullptr;
 		return ERROR;
 	}
 
-	if( num != leafCounter ) {
+	if( !ParseLine( dataPtr, (uint32_t)lineLength, props, presetHandle ) ) {
 		dataPtr = nullptr;
 		return ERROR;
-	}
-
-	for( int i = 0; i < 4; ++i ) {
-		if( values[i] < 0.0f || values[i] > 1.0f ) {
-			dataPtr = nullptr;
-			return ERROR;
-		}
 	}
 
 	if( nextLine ) {
@@ -80,11 +80,87 @@ LeafPropsReader::Status LeafPropsReader::ReadNextProps( LeafProps *props ) {
 	}
 
 	leafCounter++;
-	props->SetRoomSizeFactor( values[0] );
-	props->SetSkyFactor( values[1] );
-	props->SetWaterFactor( values[2] );
-	props->SetMetalFactor( values[3] );
+
 	return OK;
+}
+
+bool LeafPropsReader::ParseLine( char *line, unsigned lineLength, LeafProps *props, PresetHandle *presetHandle ) {
+	char *linePtr = line;
+	char *endPtr = nullptr;
+
+	// Parsing errors are caught implicitly by the counter comparison below
+	const auto num = (int)std::strtol( linePtr, &endPtr, 10 );
+	if( !*endPtr || !isspace( *endPtr ) ) {
+		return false;
+	}
+
+	if( num != leafCounter ) {
+		return false;
+	}
+
+	// Trim whitespace at start and end. This is mandatory for FindPresetByName() call.
+
+	linePtr = endPtr;
+	while( ( linePtr - line < lineLength ) && ::isspace( *linePtr ) ) {
+		linePtr++;
+	}
+
+	endPtr = line + lineLength;
+	while( endPtr > linePtr && ( !*endPtr || ::isspace( *endPtr ) ) ) {
+		endPtr--;
+	}
+
+	if( endPtr <= linePtr ) {
+		return false;
+	}
+
+	// Terminate after the character we have stopped at
+	*++endPtr = '\0';
+
+	// Save for recovery in case of leaf props scanning failure
+	const char *maybePresetName = linePtr;
+	int lastPartNum = 0;
+	float parts[4];
+	for(; lastPartNum < 4; ++lastPartNum ) {
+		double v = ::strtod( linePtr, &endPtr );
+		if( endPtr == linePtr ) {
+			break;
+		}
+		// The value is numeric but is out of range.
+		// It is not a preset for sure, return with failure immediately
+		if( v < 0.0 || v > 1.0 ) {
+			return false;
+		}
+		if( lastPartNum != 3 ) {
+			if( !isspace( *endPtr ) ) {
+				return false;
+			}
+		} else if( *endPtr ) {
+			return false;
+		}
+		parts[lastPartNum] = (float)v;
+		linePtr = endPtr + 1;
+	}
+
+	if( !lastPartNum ) {
+		if( ( *presetHandle = EfxPresetsRegistry::Instance()->FindByName( maybePresetName ) ) ) {
+			return true;
+		}
+		// A verbose reporting of an illegal preset name is important as it is typed by a designer manually
+		Com_Printf( S_COLOR_YELLOW "The token `%s` for leaf %d is not a valid preset name\n", maybePresetName, num );
+		return false;
+	}
+
+	// There were 1..3 parts
+	if( lastPartNum != 4 ) {
+		return false;
+	}
+
+	props->SetRoomSizeFactor( parts[0] );
+	props->SetSkyFactor( parts[1] );
+	props->SetWaterFactor( parts[2] );
+	props->SetMetalFactor( parts[3] );
+	return true;
 }
 
 bool LeafPropsWriter::WriteProps( const LeafProps &props ) {
@@ -94,7 +170,7 @@ bool LeafPropsWriter::WriteProps( const LeafProps &props ) {
 
 	char buffer[MAX_STRING_CHARS];
 	int charsPrinted = Q_snprintfz( buffer, sizeof( buffer ),
-									"%d %.2f %.2f %.2f %2.f\r\n", leafCounter,
+									"%d %.2f %.2f %.2f %.2f\r\n", leafCounter,
 									props.RoomSizeFactor(), props.SkyFactor(),
 									props.WaterFactor(), props.MetalFactor() );
 
@@ -126,8 +202,12 @@ void LeafPropsCache::ResetExistingState( const char *, int actualNumLeafs ) {
 	if( leafProps ) {
 		S_Free( leafProps );
 	}
+	if( leafPresets ) {
+		S_Free( leafPresets );
+	}
 
 	leafProps = (LeafProps *)S_Malloc( sizeof( LeafProps ) * actualNumLeafs );
+	leafPresets = (PresetHandle *)S_Malloc( sizeof( PresetHandle ) * actualNumLeafs );
 }
 
 bool LeafPropsCache::TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) {
@@ -139,12 +219,14 @@ bool LeafPropsCache::TryReadFromFile( LeafPropsReader *reader, int actualLeafsNu
 	int numReadProps = 0;
 	for(;; ) {
 		LeafProps props;
-		switch( reader->ReadNextProps( &props ) ) {
+		PresetHandle presetHandle = nullptr;
+		switch( reader->ReadNextProps( &props, &presetHandle ) ) {
 			case LeafPropsReader::OK:
 				if( numReadProps + 1 > actualLeafsNum ) {
 					return false;
 				}
 				this->leafProps[numReadProps] = props;
+				this->leafPresets[numReadProps] = presetHandle;
 				numReadProps++;
 				break;
 			case LeafPropsReader::DONE:
