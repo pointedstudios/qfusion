@@ -5,21 +5,75 @@
 #include "snd_local.h"
 
 class CachedComputation {
-	const char *logTag;
-	char mapName[MAX_CONFIGSTRING_CHARS];
-	char mapChecksum[MAX_CONFIGSTRING_CHARS];
-	mutable int numLeafs { -1 };
+	friend class CachedComputationIOHelper;
 
-	void CommitUpdate( const char *actualMap, const char *actualChecksum, int actualNumLeafs );
+	const char *const logTag;
+	const char *const fileExtension;
+	const char *const fileVersion;
+	char mapName[MAX_CONFIGSTRING_CHARS];
+	char mapHash[MAX_CONFIGSTRING_CHARS];
+	mutable int numLeafs { -1 };
+	/**
+	 * If a computation failure is not acceptable but manages to happen from time to time,
+	 * we have to provide some dummy data for accessors.
+	 */
+	bool isUsingValidData { false };
 protected:
-	virtual void ResetExistingState( const char *actualMap, int actualNumLeafs ) = 0;
-	virtual bool TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) = 0;
-	virtual void ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) = 0;
-	virtual bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) = 0;
+	/**
+	 * Any resources that belong to another map should be released in this call.
+	 * @note map properties (name, hash, number of leaves) are already set to actual ones to the moment of this call.
+	 */
+	virtual void ResetExistingState() = 0;
+	/**
+	 * This call should make an attempt to read a serialized computation data from the filesystem.
+	 * Two attempts are made:
+	 * <ul>
+	 * <li> the first attempt is intended to look for a data in the game filesystem
+	 * (the data that is is intended to be supplied along with default maps)
+	 * <li> the second attempt is intended to look for a data in the local cache
+	 * (the data that is computed on a consumer machine for custom maps)
+	 * </ul>
+	 * @param fsFlags flags that are passed to {@code trap_FS_Open()} call and define a search location for an attempt.
+	 * @return true if the data has been found and loaded from the specified search location.
+	 * @note map properties (name, hash, number of leaves) are already set to actual ones to the moment of this call.
+	 */
+	virtual bool TryReadFromFile( int fsFlags ) = 0;
+	/**
+	 * This call should compute an actual data for the map.
+	 * @param fastAndCoarse should be true for computations on a consumer machine.
+	 * Actual implementation algorithms should take this flag into account
+	 * and use faster/coarse methods of computation to prevent blocking of user application.
+	 * The true value of this flag is for fine precomputation of data for supplying withing default game distribution.
+	 * @return true if the data has been computed successfully.
+	 * @note map properties (name, hash, number of leaves) are already set to actual ones to the moment of this call.
+	 */
+	virtual bool ComputeNewState( bool fastAndCoarse ) = 0;
+	/**
+	 * This call should try saving the computation data.
+	 * It is intended to perform saving to the filesystem cache (using {@code FS_CACHE} flag).
+	 * @return true if the results have been saved to the filesystem cache successfully.
+	 * @note map properties (name, hash, number of leaves) are already set to actual ones to the moment of this call.
+	 */
+	virtual bool SaveToCache() = 0;
+	/**
+	 * This is a hook that is called when {@code EnsureValid()} has already reset existing state
+	 * and is about to return regardless of actual computation status.
+	 */
+	virtual void CommitUpdate() {}
+
+	/**
+	 * It is intended to be overridden in descendants.
+	 * The default implementation just triggers a fatal error if a real data computation has failed.
+	 */
+	virtual void ProvideDummyData() {
+		trap_Error( "Providing a dummy data is unsupported for this descendant of CachedComputation" );
+	}
 
 	virtual void NotifyOfBeingAboutToCompute();
 	virtual void NotifyOfComputationSuccess();
 	virtual void NotifyOfComputationFailure();
+	virtual void NotifyOfSerializationSuccess();
+	virtual void NotifyOfSerializationFailure();
 
 	int NumLeafs() const { return numLeafs; };
 
@@ -32,30 +86,41 @@ protected:
 	}
 
 public:
-	explicit CachedComputation( const char *logTag_): logTag( logTag_) {
+	explicit CachedComputation( const char *logTag_, const char *fileExtension_, const char *fileVersion_ )
+		: logTag( logTag_), fileExtension( fileExtension_ ), fileVersion( fileVersion_ ) {
+		assert( *fileExtension_ == '.' );
 		mapName[0] = '\0';
-		mapChecksum[0] = '\0';
+		mapHash[0] = '\0';
 	}
 
 	virtual ~CachedComputation() = default;
 
 	void EnsureValid();
+
+	/**
+	 * Allows checking whether a dummy data is provided for accessors.
+	 */
+	bool IsUsingValidData() const { return isUsingValidData; }
 };
 
 class CachedComputationIOHelper {
 protected:
+	const CachedComputation *const parent_;
 	char fileName[MAX_STRING_CHARS];
-	const char *const map;
-	const char *const checksum;
-	int fd;
+	int fd { -1 };
 	int fsResult;
+
+	const char *MapName() const { return parent_->mapName; }
+	const char *MapHash() const { return parent_->mapHash; }
+	const char *Extension() const { return parent_->fileExtension; }
+	const char *Version() const { return parent_->fileVersion; }
 public:
-	CachedComputationIOHelper( const char *map_, const char *checksum_, const char *extension_, int fileFlags )
-		: map( map_ ), checksum( checksum_ ) {
-		Q_snprintfz( fileName, sizeof( fileName ), "sounds/%s", map );
+	CachedComputationIOHelper( const CachedComputation *parent_, int fileFlags )
+		: parent_( parent_ ) {
+		Q_snprintfz( fileName, sizeof( fileName ), "sounds/%s", MapName() );
 		COM_StripExtension( fileName );
-		assert( *extension_ == '.' );
-		Q_strncatz( fileName, extension_, sizeof( fileName ) );
+		assert( *Extension() == '.' );
+		Q_strncatz( fileName, Extension(), sizeof( fileName ) );
 		fsResult = trap_FS_FOpenFile( fileName, &fd, fileFlags );
 	}
 
@@ -96,11 +161,7 @@ protected:
 		return 0;
 	}
 public:
-	CachedComputationReader( const char *map_,
-							 const char *checksum_,
-							 const char *extension_,
-							 int fileFlags,
-							 bool textMode = false );
+	CachedComputationReader( const CachedComputation *parent_, int fileFlags, bool textMode = false );
 
 	~CachedComputationReader() override {
 		if( fileData ) {
@@ -125,7 +186,7 @@ protected:
 
 	bool Write( const void *data, size_t size );
 public:
-	CachedComputationWriter( const char *map_, const char *checksum_, const char *extension_ );
+	explicit CachedComputationWriter( const CachedComputation *parent_ );
 };
 
 #endif

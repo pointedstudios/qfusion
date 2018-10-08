@@ -16,8 +16,6 @@ public:
 	virtual ~LeafPropsIOHelper() = default;
 };
 
-static constexpr const char *PROPS_CACHE_EXTENSION = ".leafprops";
-
 struct EfxPresetEntry;
 
 class LeafPropsReader final: public CachedComputationReader, public LeafPropsIOHelper {
@@ -26,8 +24,8 @@ public:
 private:
 	bool ParseLine( char *line, unsigned lineLength, LeafProps *props, PresetHandle *presetHandle );
 public:
-	LeafPropsReader( const char *map_, const char *checksum_, int fileFlags )
-		: CachedComputationReader( map_, checksum_, PROPS_CACHE_EXTENSION, fileFlags, true ) {}
+	explicit LeafPropsReader( const LeafPropsCache *parent_, int fileFlags )
+		: CachedComputationReader( parent_, fileFlags, true ) {}
 
 	enum Status {
 		OK,
@@ -40,8 +38,8 @@ public:
 
 class LeafPropsWriter final: public CachedComputationWriter, public LeafPropsIOHelper {
 public:
-	LeafPropsWriter( const char *map_, const char *checksum_ )
-		: CachedComputationWriter( map_, checksum_, PROPS_CACHE_EXTENSION ) {}
+	explicit LeafPropsWriter( const LeafPropsCache *parent_ )
+		: CachedComputationWriter( parent_ ) {}
 
 	bool WriteProps( const LeafProps &props );
 };
@@ -198,7 +196,7 @@ void LeafPropsCache::Shutdown() {
 	instanceHolder.Shutdown();
 }
 
-void LeafPropsCache::ResetExistingState( const char *, int actualNumLeafs ) {
+void LeafPropsCache::ResetExistingState() {
 	if( leafProps ) {
 		S_Free( leafProps );
 	}
@@ -206,23 +204,23 @@ void LeafPropsCache::ResetExistingState( const char *, int actualNumLeafs ) {
 		S_Free( leafPresets );
 	}
 
-	leafProps = (LeafProps *)S_Malloc( sizeof( LeafProps ) * actualNumLeafs );
-	leafPresets = (PresetHandle *)S_Malloc( sizeof( PresetHandle ) * actualNumLeafs );
+	leafProps = (LeafProps *)S_Malloc( sizeof( LeafProps ) * NumLeafs() );
+	leafPresets = (PresetHandle *)S_Malloc( sizeof( PresetHandle ) * NumLeafs() );
 }
 
-bool LeafPropsCache::TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) {
-	LeafPropsReader reader( actualMap, actualChecksum, fsFlags );
-	return TryReadFromFile( &reader, actualNumLeafs );
+bool LeafPropsCache::TryReadFromFile( int fsFlags ) {
+	LeafPropsReader reader( this, fsFlags );
+	return TryReadFromFile( &reader );
 }
 
-bool LeafPropsCache::TryReadFromFile( LeafPropsReader *reader, int actualLeafsNum ) {
+bool LeafPropsCache::TryReadFromFile( LeafPropsReader *reader ) {
 	int numReadProps = 0;
 	for(;; ) {
 		LeafProps props;
 		PresetHandle presetHandle = nullptr;
 		switch( reader->ReadNextProps( &props, &presetHandle ) ) {
 			case LeafPropsReader::OK:
-				if( numReadProps + 1 > actualLeafsNum ) {
+				if( numReadProps + 1 > NumLeafs() ) {
 					return false;
 				}
 				this->leafProps[numReadProps] = props;
@@ -230,16 +228,16 @@ bool LeafPropsCache::TryReadFromFile( LeafPropsReader *reader, int actualLeafsNu
 				numReadProps++;
 				break;
 			case LeafPropsReader::DONE:
-				return numReadProps == actualLeafsNum;
+				return numReadProps == NumLeafs();
 			default:
 				return false;
 		}
 	}
 }
 
-bool LeafPropsCache::SaveToCache( const char *actualMap, const char *actualChecksum, int actualLeafsNum ) {
-	LeafPropsWriter writer( actualMap, actualChecksum );
-	for( int i = 0; i < actualLeafsNum; ++i ) {
+bool LeafPropsCache::SaveToCache() {
+	LeafPropsWriter writer( this );
+	for( int i = 0, end = NumLeafs(); i < end; ++i ) {
 		if( !writer.WriteProps( this->leafProps[i] ) ) {
 			return false;
 		}
@@ -314,8 +312,10 @@ public:
 	void Exec() override;
 };
 
-void LeafPropsCache::ComputeNewState( const char *, int actualNumLeafs, bool fastAndCoarse ) {
+bool LeafPropsCache::ComputeNewState( bool fastAndCoarse ) {
 	leafProps[0] = LeafProps();
+
+	const int actualNumLeafs = NumLeafs();
 
 	ComputationHostLifecycleHolder computationHostLifecycleHolder;
 	auto *const computationHost = computationHostLifecycleHolder.Instance();
@@ -340,10 +340,7 @@ void LeafPropsCache::ComputeNewState( const char *, int actualNumLeafs, bool fas
 	}
 
 	if( !actualNumTasks ) {
-		// Just fill by dummy data...
-		// TODO: Avoid saving this to cache
-		std::fill_n( leafProps + 1, actualNumLeafs - 1, LeafProps() );
-		return;
+		return false;
 	}
 
 	const int step = actualNumLeafs / actualNumTasks;
@@ -361,6 +358,7 @@ void LeafPropsCache::ComputeNewState( const char *, int actualNumLeafs, bool fas
 	}
 
 	computationHost->Exec();
+	return true;
 }
 
 void LeafPropsComputationTask::Exec() {

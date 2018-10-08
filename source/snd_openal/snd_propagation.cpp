@@ -1653,8 +1653,6 @@ void PropagationBuilderTask<DistanceType>::BuildInfluxDirForLeaf( float *allocat
 	builder.BuildDir( allocatedDir );
 }
 
-static constexpr const char *PROPAGATION_CACHE_EXTENSION = ".propagation";
-
 class PropagationIOHelper {
 protected:
 	using PropagationProps = PropagationTable::PropagationProps;
@@ -1668,16 +1666,16 @@ protected:
 class PropagationTableReader: public CachedComputationReader, protected PropagationIOHelper {
 	bool ValidateTable( PropagationProps *propsData, int actualNumLeafs );
 public:
-	PropagationTableReader( const char *actualMap, const char *actualChecksum, int fsFlags )
-		: CachedComputationReader( actualMap, actualChecksum, PROPAGATION_CACHE_EXTENSION, fsFlags ) {}
+	PropagationTableReader( const PropagationTable *parent_, int fsFlags )
+		: CachedComputationReader( parent_, fsFlags ) {}
 
 	PropagationProps *ReadPropsTable( int actualNumLeafs );
 };
 
 class PropagationTableWriter: public CachedComputationWriter, protected PropagationIOHelper {
 public:
-	PropagationTableWriter( const char *actualMap, const char *actualChecksum )
-		: CachedComputationWriter( actualMap, actualChecksum, PROPAGATION_CACHE_EXTENSION ) {}
+	explicit PropagationTableWriter( const PropagationTable *parent_ )
+		: CachedComputationWriter( parent_ ) {}
 
 	bool WriteTable( const PropagationTable::PropagationProps *table, int numLeafs );
 };
@@ -1702,49 +1700,43 @@ inline void PropagationTable::PropagationProps::SetDir( const vec3_t dir ) {
 	maybeDirByte = (uint8_t)byte;
 }
 
-bool PropagationTable::TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) {
-	PropagationTableReader reader( actualMap, actualChecksum, fsFlags );
-	return ( this->table = reader.ReadPropsTable( actualNumLeafs ) ) != nullptr;
+bool PropagationTable::TryReadFromFile( int fsFlags ) {
+	PropagationTableReader reader( this, fsFlags );
+	return ( this->table = reader.ReadPropsTable( NumLeafs() ) ) != nullptr;
 }
 
-void PropagationTable::ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) {
-	if( !actualNumLeafs ) {
-		return;
-	}
-
+bool PropagationTable::ComputeNewState( bool fastAndCoarse ) {
 	if( fastAndCoarse ) {
-		PropagationTableBuilder<float> builder( actualNumLeafs, fastAndCoarse );
-		if( builder.Build() ) {
+		PropagationTableBuilder<float> builder( NumLeafs(), fastAndCoarse );
+		if( builder.Build()) {
 			table = builder.ReleaseOwnership();
-			isUsingValidTable = true;
-			return;
+			return true;
 		}
-	} else {
-		PropagationTableBuilder<double> builder( actualNumLeafs, fastAndCoarse );
-		if( builder.Build() ) {
-			table = builder.ReleaseOwnership();
-			isUsingValidTable = true;
-			return;
-		}
+		return false;
 	}
 
-	// Try providing a dummy data for this case (is it really going to happen at all?)
-	size_t memSize = sizeof( PropagationProps ) * actualNumLeafs * actualNumLeafs;
+	PropagationTableBuilder<double> builder( NumLeafs(), fastAndCoarse );
+	if( builder.Build()) {
+		table = builder.ReleaseOwnership();
+		return true;
+	}
+
+	return false;
+}
+
+void PropagationTable::ProvideDummyData() {
+	size_t memSize = sizeof( PropagationProps ) * NumLeafs() * NumLeafs();
 	table = (PropagationProps *)S_Malloc( memSize );
 	memset( table, 0, memSize );
 }
 
-bool PropagationTable::SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) {
-	if( !actualNumLeafs ) {
+bool PropagationTable::SaveToCache() {
+	if( !NumLeafs() ) {
 		return true;
 	}
 
-	if( !isUsingValidTable ) {
-		return false;
-	}
-
-	PropagationTableWriter writer( actualMap, actualChecksum );
-	return writer.WriteTable( this->table, actualNumLeafs );
+	PropagationTableWriter writer( this );
+	return writer.WriteTable( this->table, NumLeafs() );
 }
 
 bool PropagationTableReader::ValidateTable( PropagationIOHelper::PropagationProps *propsData, int actualNumLeafs ) {
@@ -1811,20 +1803,18 @@ bool PropagationTableWriter::WriteTable( const PropagationTable::PropagationProp
 	return Write( table, numLeafs * numLeafs * sizeof( PropagationProps ) );
 }
 
-static constexpr auto GRAPH_EXTENSION = ".graph";
-
 class CachedGraphReader: public CachedComputationReader {
 public:
-	CachedGraphReader( const char *map_, const char *checksum_, int numLeafs, int fsFlags )
-		: CachedComputationReader( map_, checksum_, GRAPH_EXTENSION, fsFlags ) {}
+	CachedGraphReader( const CachedLeafsGraph *parent_, int fsFlags )
+		: CachedComputationReader( parent_, fsFlags ) {}
 
 	bool Read( CachedLeafsGraph *readObject );
 };
 
 class CachedGraphWriter: public CachedComputationWriter {
 public:
-	CachedGraphWriter( const char *map_, const char *checksum_ )
-		: CachedComputationWriter( map_, checksum_, GRAPH_EXTENSION ) {}
+	explicit CachedGraphWriter( const CachedLeafsGraph *parent_ )
+		: CachedComputationWriter( parent_ ) {}
 
 	bool Write( const CachedLeafsGraph *writtenObject );
 };
@@ -1848,22 +1838,22 @@ CachedLeafsGraph::~CachedLeafsGraph() {
 	TaggedAllocators::FreeUsingMetadata( dirsTable );
 }
 
-void CachedLeafsGraph::ResetExistingState( const char *, int ) {
+void CachedLeafsGraph::ResetExistingState() {
 	distanceTable = TaggedAllocators::FreeUsingMetadata( distanceTable );
 	dirsTable = TaggedAllocators::FreeUsingMetadata( dirsTable );
 	adjacencyListsData = TaggedAllocators::FreeUsingMetadata( adjacencyListsData );
 	adjacencyListsData = nullptr;
 	// Just nullify the pointer. A corresponding chunk belongs to the lists data.
 	adjacencyListsOffsets = nullptr;
-	isUsingValidData = false;
 }
 
-bool CachedLeafsGraph::TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) {
-	CachedGraphReader reader( actualMap, actualChecksum, actualNumLeafs, fsFlags );
+bool CachedLeafsGraph::TryReadFromFile( int fsFlags ) {
+	CachedGraphReader reader( this, fsFlags );
 	return reader.Read( this );
 }
 
-void CachedLeafsGraph::ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse_ ) {
+bool CachedLeafsGraph::ComputeNewState( bool fastAndCoarse_ ) {
+	const int actualNumLeafs = CachedComputation::NumLeafs();
 	// Always set the number of leafs for the graph even if we have not managed to build the graph.
 	// The number of leafs in the CachedComputation will be always set by its EnsureValid() logic.
 	// Hack... we have to resolve multiple inheritance ambiguity.
@@ -1871,41 +1861,41 @@ void CachedLeafsGraph::ComputeNewState( const char *actualMap, int actualNumLeaf
 
 	PropagationGraphBuilder<float> builder( actualNumLeafs, fastAndCoarse_ );
 	// Specify "this" as a target to suppress an infinite recursion while trying to reuse the global graph
-	if( builder.Build( this ) ) {
-		// The builder should no longer own the distance table and the leafs lists data.
-		// They should be freed using TaggedAllocator::FreeUsingMetadata() on our own.
-		builder.TransferOwnership( &this->distanceTable,
-								   &this->dirsTable,
-								   &this->adjacencyListsData,
-								   &this->adjacencyListsOffsets );
-		// Set this so the data will be saved to file
-		isUsingValidData = true;
-		// TODO: Transfer the data size explicitly instead of relying on implied data offset
-		this->leafListsDataSize = (int)( this->adjacencyListsOffsets - this->adjacencyListsData );
-		this->leafListsDataSize += actualNumLeafs;
-		return;
+	if( !builder.Build( this ) ) {
+		return false;
 	}
 
+	// The builder should no longer own the distance table and the leafs lists data.
+	// They should be freed using TaggedAllocator::FreeUsingMetadata() on our own.
+	builder.TransferOwnership( &this->distanceTable,
+							   &this->dirsTable,
+							   &this->adjacencyListsData,
+							   &this->adjacencyListsOffsets );
+
+	// TODO: Transfer the data size explicitly instead of relying on implied data offset
+	this->leafListsDataSize = (int)( this->adjacencyListsOffsets - this->adjacencyListsData );
+	this->leafListsDataSize += actualNumLeafs;
+
+	return true;
+}
+
+void CachedLeafsGraph::ProvideDummyData() {
 	// Allocate a small chunk for the table... it is not going to be accessed
 	// That's bad...
 	this->distanceTable = TaggedAllocatorForType<float>().Alloc( 1 );
 	// Allocate a dummy cell for a dummy list and a full row for offsets
-	auto *leafsData = TaggedAllocatorForType<int>().Alloc( actualNumLeafs + 1 );
+	auto *leafsData = TaggedAllocatorForType<int>().Alloc( NumLeafs() + 1 );
 	// Put the dummy list at the beginning
 	leafsData[0] = 0;
 	// Make all offsets refer to the dummy list
-	memset( leafsData + 1, 0, sizeof( int ) * actualNumLeafs );
+	memset( leafsData + 1, 0, sizeof( int ) * NumLeafs() );
 	this->adjacencyListsData = leafsData;
 	this->adjacencyListsOffsets = leafsData + 1;
 	// Lets try avoiding allocating dirs table since its huge
 }
 
-bool CachedLeafsGraph::SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) {
-	if( !isUsingValidData ) {
-		return false;
-	}
-
-	CachedGraphWriter writer( actualMap, actualChecksum );
+bool CachedLeafsGraph::SaveToCache() {
+	CachedGraphWriter writer( this );
 	return writer.Write( this );
 }
 
@@ -2105,7 +2095,7 @@ bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( TargetT
 	}
 
 	globalGraph->EnsureValid();
-	if( globalGraph->IsUsingDummyData() ) {
+	if( globalGraph->IsUsingValidData() ) {
 		return false;
 	}
 

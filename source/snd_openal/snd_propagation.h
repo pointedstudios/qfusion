@@ -75,22 +75,19 @@ class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
 	uint8_t *dirsTable { nullptr };
 
 	int leafListsDataSize { -1 };
-	bool isUsingValidData { false };
 
-	void ResetExistingState( const char *actualMap, int actualNumLeafs ) override;
-	bool TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) override;
-	void ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) override;
-	bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) override;
+	void ResetExistingState() override;
+	bool TryReadFromFile( int fsFlags ) override;
+	bool ComputeNewState( bool fastAndCoarse ) override;
+	void ProvideDummyData() override;
+	bool SaveToCache() override;
 
-	CachedLeafsGraph(): CachedComputation( "CachedLeafsGraph" ), GraphLike<int, float>( -1 ) {}
+	CachedLeafsGraph()
+		: CachedComputation( "CachedLeafsGraph", ".graph", "CachedLeafsGraph@v1337" )
+		, GraphLike<int, float>( -1 ) {}
 
 	~CachedLeafsGraph() override;
 public:
-	/**
-	 * Exposed for {@code GraphBuilder<?,?>::TryUsingGlobalGraph()} (a template can't be a friend).
-	 * @todo rename the corresponding member?
-	 */
-	bool IsUsingDummyData() const { return !isUsingValidData; }
 	/**
 	 * Exposed for {@code GraphBuilder<?,?>::TryUsingGlobalGraph()} (a template can't be a friend).
 	 * @note the size is specified in integer elements and not in bytes.
@@ -175,7 +172,6 @@ class PropagationTable: public CachedComputation {
 	static_assert( sizeof( PropagationProps ) == 2, "" );
 
 	PropagationProps *table { nullptr };
-	bool isUsingValidTable { false };
 
 	const PropagationProps &GetProps( int fromLeafNum, int toLeafNum ) const {
 		assert( table );
@@ -188,18 +184,18 @@ class PropagationTable: public CachedComputation {
 
 	void Clear() {
 		FreeIfNeeded( &table );
-		isUsingValidTable = false;
 	}
 
-	void ResetExistingState( const char *, int ) override {
+	void ResetExistingState() override {
 		Clear();
 	}
 
-	bool TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) override;
-	void ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) override;
-	bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) override;
+	bool TryReadFromFile( int fsFlags ) override;
+	bool ComputeNewState( bool fastAndCoarse ) override;
+	void ProvideDummyData() override;
+	bool SaveToCache() override;
 public:
-	PropagationTable(): CachedComputation( "PropagationTable" ) {}
+	PropagationTable(): CachedComputation( "PropagationTable", ".table", "PropagationTable@v1337" ) {}
 
 	~PropagationTable() override {
 		Clear();

@@ -4,12 +4,6 @@
 
 #include <initializer_list>
 
-void CachedComputation::CommitUpdate( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) {
-	this->numLeafs = actualNumLeafs;
-	Q_strncpyz( this->mapName, actualMap, MAX_CONFIGSTRING_CHARS );
-	Q_strncpyz( this->mapChecksum, actualChecksum, MAX_CONFIGSTRING_CHARS );
-}
-
 void CachedComputation::EnsureValid() {
 	const char *actualMap = trap_GetConfigString( CS_WORLDMODEL );
 	const int actualNumLeafs = trap_NumLeafs();
@@ -19,18 +13,24 @@ void CachedComputation::EnsureValid() {
 	}
 
 	const char *actualChecksum = trap_GetConfigString( CS_MAPCHECKSUM );
-	if( actualNumLeafs == numLeafs && !strcmp( actualMap, mapName ) && !strcmp( actualChecksum, mapChecksum ) ) {
+	if( actualNumLeafs == numLeafs && !strcmp( actualMap, mapName ) && !strcmp( actualChecksum, mapHash ) ) {
 		return;
 	}
 
-	ResetExistingState( actualMap, actualNumLeafs );
+	// These values are now expected to be actual at the moment of ResetExistingState() call
+	this->numLeafs = actualNumLeafs;
+	Q_strncpyz( this->mapName, actualMap, MAX_CONFIGSTRING_CHARS );
+	Q_strncpyz( this->mapHash, actualChecksum, MAX_CONFIGSTRING_CHARS );
+
+	isUsingValidData = false;
+	ResetExistingState();
 
 	// Try reading from basewsw first.
 	// High-quality precomputed data is expected to be shipped within the game distribution.
 	// If it was a custom map a user has loaded once, results are expected to be under the cache directory.
 	for( int fsFlags : { FS_READ, ( FS_READ | FS_CACHE ) } ) {
-		if( TryReadFromFile( actualMap, actualChecksum, actualNumLeafs, fsFlags ) ) {
-			CommitUpdate( actualMap, actualChecksum, actualNumLeafs );
+		if( TryReadFromFile( fsFlags ) ) {
+			CommitUpdate();
 			return;
 		}
 	}
@@ -38,16 +38,24 @@ void CachedComputation::EnsureValid() {
 	NotifyOfBeingAboutToCompute();
 
 	const bool fastAndCoarse = !trap_Cvar_Value( "developer" );
-	ComputeNewState( actualMap, actualNumLeafs, fastAndCoarse );
-
-	// Always saves to cache (and not to basewsw)
-	if( SaveToCache( actualMap, actualChecksum, actualNumLeafs ) ) {
-		NotifyOfComputationSuccess();
-	} else {
+	if( !ComputeNewState( fastAndCoarse ) ) {
 		NotifyOfComputationFailure();
+		ProvideDummyData();
+		CommitUpdate();
+		return;
 	}
 
-	CommitUpdate( actualMap, actualChecksum, actualNumLeafs );
+	isUsingValidData = true;
+	NotifyOfComputationSuccess();
+
+	// Always saves to cache (and not to basewsw)
+	if( SaveToCache() ) {
+		NotifyOfSerializationSuccess();
+	} else {
+		NotifyOfSerializationFailure();
+	}
+
+	CommitUpdate();
 }
 
 void CachedComputation::NotifyOfBeingAboutToCompute() {
@@ -55,10 +63,22 @@ void CachedComputation::NotifyOfBeingAboutToCompute() {
 }
 
 void CachedComputation::NotifyOfComputationSuccess() {
-	Com_Printf( S_COLOR_GREY "Computation results for %s have been saved to a file cache succesfully\n", logTag );
+	if( trap_Cvar_Value( "developer" ) ) {
+		Com_Printf( S_COLOR_GREY "Computations of new %s have been completed successfully\n", logTag );
+	}
 }
 
 void CachedComputation::NotifyOfComputationFailure() {
+	Com_Printf( S_COLOR_YELLOW "Can't compute a new %s data\n", logTag );
+}
+
+void CachedComputation::NotifyOfSerializationSuccess() {
+	if( trap_Cvar_Value( "developer" ) ) {
+		Com_Printf( S_COLOR_GREY "Computation results for %s have been saved to a file cache successfully\n", logTag );
+	}
+}
+
+void CachedComputation::NotifyOfSerializationFailure() {
 	Com_Printf( S_COLOR_YELLOW "Can't save %s computation results to a file cache\n", logTag );
 }
 
@@ -105,12 +125,8 @@ bool CachedComputationReader::Read( void *data, size_t size ) {
 	return true;
 }
 
-CachedComputationReader::CachedComputationReader( const char *map_,
-												  const char *checksum_,
-												  const char *extension_,
-												  int fileFlags,
-												  bool textMode )
-	: CachedComputationIOHelper( map_, checksum_, extension_, fileFlags ) {
+CachedComputationReader::CachedComputationReader( const CachedComputation *parent_, int fileFlags, bool textMode )
+	: CachedComputationIOHelper( parent_, fileFlags ) {
 	if( fsResult < 0 ) {
 		return;
 	}
@@ -138,7 +154,7 @@ CachedComputationReader::CachedComputationReader( const char *map_,
 	fileData[fileSize] = '\0';
 	dataPtr = fileData;
 
-	if( !ExpectString( map_ ) || !ExpectString( checksum_ ) ) {
+	if( !ExpectString( Version() ) || !ExpectString( MapName() ) || !ExpectString( MapHash() ) ) {
 		fsResult = -1;
 		return;
 	}
@@ -155,12 +171,12 @@ CachedComputationReader::CachedComputationReader( const char *map_,
 	}
 }
 
-CachedComputationWriter::CachedComputationWriter( const char *map_, const char *checksum_, const char *extension_ )
-	: CachedComputationIOHelper( map_, checksum_, extension_, ( FS_WRITE | FS_CACHE ) ) {
+CachedComputationWriter::CachedComputationWriter( const CachedComputation *parent_ )
+	: CachedComputationIOHelper( parent_, ( FS_WRITE | FS_CACHE ) ) {
 	if( fsResult < 0 ) {
 		return;
 	}
-	if( !WriteString( map_ ) || !WriteString( checksum_ ) ) {
+	if( !WriteString( Version() ) || !WriteString( MapName() ) || !WriteString( MapHash() ) ) {
 		fsResult = -1;
 	}
 }

@@ -39,14 +39,14 @@ public:
 private:
 	PresetHandle *leafPresets { nullptr };
 
-	bool TryReadFromFile( LeafPropsReader *reader, int actualLeafsNum );
+	bool TryReadFromFile( LeafPropsReader *reader );
 
-	void ResetExistingState( const char *actualMap, int actualNumLeafs ) override;
-	bool TryReadFromFile( const char *actualMap, const char *actualChecksum, int actualNumLeafs, int fsFlags ) override;
-	void ComputeNewState( const char *actualMap, int actualNumLeafs, bool fastAndCoarse ) override;
-	bool SaveToCache( const char *actualMap, const char *actualChecksum, int actualNumLeafs ) override;
+	void ResetExistingState() override;
+	bool TryReadFromFile( int fsFlags ) override;
+	bool ComputeNewState( bool fastAndCoarse ) override;
+	bool SaveToCache() override;
 
-	LeafPropsCache(): CachedComputation( "LeafPropsCache" ) {}
+	LeafPropsCache(): CachedComputation( "LeafPropsCache", ".leafprops", "LeafProps@v1337" ) {}
 public:
 	static LeafPropsCache *Instance();
 	static void Init();
