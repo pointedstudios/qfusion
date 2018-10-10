@@ -339,6 +339,21 @@ void ReverbEffectSampler::ProcessPrimaryEmissionResults() {
 	effect->lateReverbDelay = 0.011f + 0.088f * roomSizeFactor;
 
 	if( auto *eaxEffect = Effect::Cast<EaxReverbEffect *>( effect ) ) {
+		// We have added support for altering HF-reference frequency which has been overlooked
+		// and has a great impact on a "clarity" of reverberation shifting a dominant HF frequency in an effect output.
+		// It should really be controlled by surface properties.
+		// However currently there are no surface hint flags for it.
+		// SURF_DUST might seem suitable for it but currently an overwhelming majority of surfaces has it for no reasons.
+		// This heuristic works satisfiable:
+		// 1) Open spaces should have lesser HF-reference frequency to simulate HF absorption
+		// 2) Huge closed spaces should have greater HF-reference as the sound output
+		// starts resembling what is expected from a huge cave or a huge hangar for a raised HF-reference.
+
+		// The HF reference must be within [1000, 20000] range
+		const float minHfRef = 3500.0f - 1000.0f * skyFactor;
+		const float maxHfRef = 7500.0f - 3000.0f * skyFactor;
+		eaxEffect->hfReference = minHfRef + ( maxHfRef - minHfRef ) * roomSizeFactor;
+
 		// Apply an echo but only for open spaces
 		if( !skyFactor ) {
 			eaxEffect->echoTime = 0.25f;
@@ -373,6 +388,7 @@ void ReverbEffectSampler::SetMinimalReverbProps() {
 	effect->lateReverbDelay = 0.011f;
 	effect->gainHf = 0.0f;
 	if( auto *eaxEffect = Effect::Cast<EaxReverbEffect *>( effect ) ) {
+		eaxEffect->hfReference = 5000.0f;
 		eaxEffect->echoTime = 0.25f;
 		eaxEffect->echoDepth = 0.0f;
 	}

@@ -137,6 +137,7 @@ void ReverbEffect::ReusePreset( const EfxPresetEntry *presetHandle ) {
 
 void EaxReverbEffect::ReusePreset( const EfxPresetEntry *presetHandle ) {
 	ReverbEffect::ReusePreset( presetHandle );
+	hfReference = presetHandle->preset.referenceHF;
 	echoTime = presetHandle->preset.echoTime;
 	echoDepth = presetHandle->preset.echoDepth;
 }

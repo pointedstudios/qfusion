@@ -124,6 +124,8 @@ void EaxReverbEffect::BindOrUpdate( src_t *src ) {
 	qalEffectf( src->effect, AL_EAXREVERB_LATE_REVERB_GAIN, this->lateReverbGain );
 	qalEffectf( src->effect, AL_EAXREVERB_LATE_REVERB_DELAY, this->lateReverbDelay );
 
+	qalEffectf( src->effect, AL_EAXREVERB_HFREFERENCE, this->hfReference );
+
 	qalEffectf( src->effect, AL_EAXREVERB_ECHO_TIME, this->echoTime );
 	qalEffectf( src->effect, AL_EAXREVERB_ECHO_DEPTH, this->echoDepth );
 
@@ -198,6 +200,7 @@ void EaxReverbEffect::InterpolateProps( const Effect *oldOne, int timeDelta ) {
 
 	Interpolator interpolator( timeDelta );
 	InterpolateCommonReverbProps( interpolator, that );
+	hfReference = interpolator( hfReference, that->hfReference, 1000.0f, 20000.0f );
 	echoTime = interpolator( echoTime, that->echoTime, 0.075f, 0.25f );
 	echoDepth = interpolator( echoDepth, that->echoDepth, 0.0f, 1.0f );
 }
@@ -205,9 +208,11 @@ void EaxReverbEffect::InterpolateProps( const Effect *oldOne, int timeDelta ) {
 void EaxReverbEffect::CopyReverbProps( const ReverbEffect *effect ) {
 	ReverbEffect::CopyReverbProps( effect );
 	if( const auto *that = Cast<EaxReverbEffect *>( effect ) ) {
+		this->hfReference = that->hfReference;
 		this->echoTime = that->echoTime;
 		this->echoDepth = that->echoDepth;
 	} else {
+		this->hfReference = 5000.0f;
 		this->echoTime = 0.25f;
 		this->echoDepth = 0.0f;
 	}
