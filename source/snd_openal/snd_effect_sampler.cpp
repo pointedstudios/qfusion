@@ -1,6 +1,8 @@
 #include "snd_effect_sampler.h"
 #include "snd_leaf_props_cache.h"
 #include "snd_effects_allocator.h"
+#include "snd_presets_registry.h"
+#include "snd_propagation.h"
 
 #include "../gameshared/q_collision.h"
 
@@ -249,7 +251,19 @@ void ReverbEffectSampler::ProcessPrimaryEmissionResults() {
 	// Instead of trying to compute these factors every sampling call,
 	// reuse pre-computed properties of CM map leafs that briefly resemble rooms/convex volumes.
 	assert( src->envUpdateState.leafNum >= 0 );
-	const LeafProps &leafProps = LeafPropsCache::Instance()->GetPropsForLeaf( src->envUpdateState.leafNum );
+
+	const auto *const leafPropsCache = LeafPropsCache::Instance();
+	// Try checking whether there is a preset defined for the leaf.
+	// Few notes:
+	// 1) Presets are not utilized as-is. Some fields like reference frequencies are unused.
+	// 2) Even if we use a preset we still need a secondary emission
+	// for an actual reflections pan, and thus a primary emission too.
+	if( const auto *presetHandle = leafPropsCache->GetPresetForLeaf( src->envUpdateState.leafNum ) ) {
+		effect->ReusePreset( presetHandle );
+		return;
+	}
+
+	const LeafProps &leafProps = leafPropsCache->GetPropsForLeaf( src->envUpdateState.leafNum );
 
 	const float roomSizeFactor = leafProps.RoomSizeFactor();
 	const float metalFactor = leafProps.MetalFactor();
@@ -260,51 +274,90 @@ void ReverbEffectSampler::ProcessPrimaryEmissionResults() {
 	// See EmitSecondaryRays()
 	effect->gain = 0.32f;
 
+	// The density must be within [0.0, 1.0] range.
+	// Lower the density is, more tinny and metallic a sound appear.
+	// Values below 0.3 behave way too artificial.
 	effect->density = 1.0f - 0.7f * metalFactor;
 
+	// The diffusion must be within [0.0, 1.0] range.
+	// Lowering diffusing has an effect that is similar to echoes that quickly change their panning from left to right.
+	// (its probably uses some phase modulation as well).
 	effect->diffusion = 1.0f;
-	if( !skyFactor ) {
-		effect->diffusion = 1.0f - 0.7f * roomSizeFactor;
+	// Apply a non-standard diffusion only for an outdoor environment
+	if( skyFactor ) {
+		// Make sure the diffusion kicks in only for a really huge space
+		effect->diffusion -= roomSizeFactor * roomSizeFactor;
 	}
 
-	effect->decayTime = 0.60f + 2.0f * roomSizeFactor + 0.5f * skyFactor;
-	assert( effect->decayTime <= EaxReverbEffect::MAX_REVERB_DECAY );
+	// The decay time should be within [0.1, 20.0] range.
+	// A reverberation starts being really heard from values greater than 0.5.
+	constexpr auto maxDecay = EaxReverbEffect::MAX_REVERB_DECAY;
+	// This is a minimal decay chosen for tiny rooms
+	constexpr auto minDecay = 0.6f;
+	// This is an additional decay time that is added on an outdoor environment
+	constexpr auto skyExtraDecay = 1.0f;
+	static_assert( maxDecay > minDecay + skyExtraDecay, "" );
 
-	// Let reflections (early reverb) gain be larger for small rooms
-	const float reflectionsGainFactor = ( 1.0f - roomSizeFactor ) * ( 1.0f - roomSizeFactor ) * ( 1.0f - roomSizeFactor );
-	assert( reflectionsGainFactor >= 0.0f && reflectionsGainFactor <= 1.0f );
-	// Let late reverb gain be larger for huge rooms
-	const float lateReverbGainFactor = roomSizeFactor * roomSizeFactor;
-	assert( lateReverbGainFactor >= 0.0f && lateReverbGainFactor <= 1.0f );
+	effect->decayTime = minDecay + ( maxDecay - minDecay - skyExtraDecay ) * roomSizeFactor + skyExtraDecay * skyFactor;
+	assert( effect->decayTime <= maxDecay );
 
-	effect->lateReverbGain = 0.125f + 0.105f * lateReverbGainFactor * ( 1.0f - 0.7f * skyFactor );
-	effect->reflectionsGain = 0.05f + 0.75f * reflectionsGainFactor;
+	// The late reverberation gain affects effect strength a lot.
+	// It must be within [0.0, 10.0] range.
+	// We should really limit us to values below 1.0, preferably even closer to 0.1..0.2 for a generic environment.
+	// Higher values can feel "right" for a "cinematic" scene, but are really annoying for an actual in-game experience.
 
-	if( !skyFactor ) {
-		// Hack: try to detect sewers/caves
-		if( leafProps.WaterFactor() ) {
-			effect->reflectionsGain += 0.50f + 0.75f * reflectionsGainFactor;
-			effect->lateReverbGain += 0.50f * lateReverbGainFactor;
-		}
-	}
+	// This is a base value for huge spaces
+	const float distantGain = 0.055f - 0.015f * skyFactor;
+	// Let's try doing "energy preservation": an increased decay should lead to decreased gain.
+	// These formulae do not have any theoretical foundations but feels good.
+	// The `decayFrac` is close to 0 for tiny rooms/short decay and is close to 1 for huge rooms/long decay
+	const float decayFrac = ( effect->decayTime - minDecay ) / ( maxDecay - minDecay );
+	// This gain factor should be close to 1 for tiny rooms and quickly fall down to almost 0
+	const float gainFactorForRoomSize = std::pow( 1.0f - decayFrac, 5.0f );
+	effect->lateReverbGain = distantGain + 0.8f * gainFactorForRoomSize;
 
+	// This is an early reverberation gain and it should decay quickly with increasing room size.
+	// The values must be within [0.0, 3.16] range.
+	// Lets raise early reverberation for metal environment to simulate "live" surfaces.
+	effect->reflectionsGain = 0.05f + ( 0.25f + 0.25f * metalFactor ) * gainFactorForRoomSize;
+
+	// Must be within [0.0, 0.3] range.
 	// Keep it default... it's hard to tweak
 	effect->reflectionsDelay = 0.007f;
+	// This is the only exception ... a hack that feels great:
+	// Increase the reflections delay for indirect propagation using the propagation path length
+	vec3_t tableDir;
+	float tableDistance;
+	int listenerLeafNum = listenerProps->GetLeafNum();
+	const auto *const table = PropagationTable::Instance();
+	if( table->GetIndirectPathProps( src->envUpdateState.leafNum, listenerLeafNum, tableDir, &tableDistance ) ) {
+		// 2^16 is the maximal distance that may be stored in the table, everything above is clamped
+		effect->reflectionsDelay = 0.299f * std::pow( tableDistance / (float)( 1 << 16 ), 0.33f );
+	}
+
+	// Must be within [0.0 ... 0.1] range
 	effect->lateReverbDelay = 0.011f + 0.088f * roomSizeFactor;
 
 	if( auto *eaxEffect = Effect::Cast<EaxReverbEffect *>( effect ) ) {
-		if( skyFactor ) {
-			eaxEffect->echoTime = 0.075f + 0.125f * roomSizeFactor;
-			// Raise echo depth until sky factor reaches 0.5f, then lower it.
-			// So echo depth is within [0.25f, 0.5f] bounds and reaches its maximum at skyFactor = 0.5f
-			if( skyFactor < 0.5f ) {
-				eaxEffect->echoDepth = 0.25f + 0.5f * 2.0f * skyFactor;
-			} else {
-				eaxEffect->echoDepth = 0.75f - 0.3f * 2.0f * ( skyFactor - 0.5f );
-			}
-		} else {
+		// Apply an echo but only for open spaces
+		if( !skyFactor ) {
 			eaxEffect->echoTime = 0.25f;
+			// Efficiently disable the echo
 			eaxEffect->echoDepth = 0.0f;
+			return;
+		}
+
+		// Must be within [0.075, 0.25] range.
+		// We are not sure whether this is still valid for updated OpenAL SOFT versions,
+		// but the most strong and distinct echo was for the value of 0.125.
+		eaxEffect->echoTime = 0.075f + 0.125f * roomSizeFactor;
+		// The echo depth must be within [0.0, 1.0] range.
+		// Raise echo depth until sky factor reaches 0.5f, then lower it.
+		// So echo depth is within [0.25f, 0.5f] bounds and reaches its maximum at skyFactor = 0.5f
+		if( skyFactor < 0.5f ) {
+			eaxEffect->echoDepth = 0.25f + 0.5f * 2.0f * skyFactor;
+		} else {
+			eaxEffect->echoDepth = 0.75f - 0.3f * 2.0f * ( skyFactor - 0.5f );
 		}
 	}
 }
@@ -335,7 +388,7 @@ void ReverbEffectSampler::EmitSecondaryRays() {
 
 	unsigned numPassedSecondaryRays = 0;
 	if( eaxEffect ) {
-		panningUpdateState->numReflectionPoints = 0;
+		panningUpdateState->numPassedSecondaryRays = 0;
 		for( unsigned i = 0; i < numPrimaryHits; i++ ) {
 			// Cut off by PVS system early, we are not interested in actual ray hit points contrary to the primary emission.
 			if( !trap_LeafsInPVS( listenerLeafNum, trap_PointLeafNum( reflectionPoints[i] ) ) ) {
@@ -345,7 +398,7 @@ void ReverbEffectSampler::EmitSecondaryRays() {
 			trap_Trace( &trace, reflectionPoints[i], testedListenerOrigin, vec3_origin, vec3_origin, MASK_SOLID );
 			if( trace.fraction == 1.0f && !trace.startsolid ) {
 				numPassedSecondaryRays++;
-				float *savedPoint = panningUpdateState->reflectionPoints[panningUpdateState->numReflectionPoints++];
+				float *savedPoint = panningUpdateState->reflectionPoints[panningUpdateState->numPassedSecondaryRays++];
 				VectorCopy( reflectionPoints[i], savedPoint );
 			}
 		}
@@ -366,9 +419,14 @@ void ReverbEffectSampler::EmitSecondaryRays() {
 		float frac = numPassedSecondaryRays / (float)numPrimaryHits;
 		// The secondary rays obstruction is complement to the `frac`
 		effect->secondaryRaysObstruction = 1.0f - frac;
-		// A absence of a HF attenuation sounds poor, metallic/reflective environments should be the only exception.
-		const LeafProps &leafProps = ::LeafPropsCache::Instance()->GetPropsForLeaf( src->envUpdateState.leafNum );
-		effect->gainHf = ( 0.4f + 0.5f * leafProps.MetalFactor() ) * frac;
+		const auto *const leafPropsCache = LeafPropsCache::Instance();
+		// Check whether there were a preset defined for the leaf.
+		// In this case do not modify the HF gain which has been already set from a preset.
+		if( !leafPropsCache->GetPresetForLeaf( src->envUpdateState.leafNum ) ) {
+			// A absence of a HF attenuation sounds poor, metallic/reflective environments should be the only exception.
+			const LeafProps &leafProps = leafPropsCache->GetPropsForLeaf( src->envUpdateState.leafNum );
+			effect->gainHf = ( 0.4f + 0.5f * leafProps.MetalFactor() ) * frac;
+		}
 		// We also modify effect gain by a fraction of secondary rays passed to listener.
 		// This is not right in theory, but is inevitable in the current game sound model
 		// where you can hear across the level through solid walls

@@ -198,7 +198,7 @@ struct PanningUpdateState {
 	static constexpr auto MAX_POINTS = 80;
 	int64_t timeoutAt;
 	vec3_t reflectionPoints[MAX_POINTS];
-	unsigned numReflectionPoints;
+	unsigned numPassedSecondaryRays;
 };
 
 class Effect;

@@ -97,7 +97,7 @@ struct EfxPresetEntry;
 class ReverbEffect: public Effect {
 	float GetMasterGain( struct src_s *src ) const final;
 public:
-	static constexpr float MAX_REVERB_DECAY = 3.6f + 0.001f;
+	static constexpr float MAX_REVERB_DECAY = 5.6f + 0.001f;
 protected:
 	void InterpolateCommonReverbProps( const Interpolator &interpolator, const ReverbEffect *that );
 public:
@@ -143,15 +143,7 @@ class EaxReverbEffect final: public ReverbEffect {
 	friend class EfxPresetsHolder;
 	friend class ReverbEffectSampler;
 
-	const float *MakeFakeSourceOrigin( struct src_s *src,
-									   const vec3_t listenerOrigin,
-									   const vec3_t *reflectionDirs,
-									   unsigned numReflectionDirs );
-
-	void UpdateDelegatedSpatialization( struct src_s *src,
-										const vec3_t listenerOrigin,
-										const vec3_t *reflectionDirs,
-										unsigned numReflectionDirs );
+	void UpdateDelegatedSpatialization( struct src_s *src, const vec3_t listenerOrigin );
 
 	vec3_t tmpSourceOrigin { 0, 0, 0 };
 public:

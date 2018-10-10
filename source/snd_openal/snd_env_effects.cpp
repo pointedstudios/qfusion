@@ -1,9 +1,10 @@
 #include "snd_env_effects.h"
+#include "snd_effect_sampler.h"
+#include "snd_propagation.h"
 
 #include <algorithm>
 #include <limits>
-
-
+#include <cmath>
 
 void Effect::CheckCurrentlyBoundEffect( src_t *src ) {
 	ALint effectType;
@@ -256,17 +257,16 @@ void EchoEffect::BindOrUpdate( struct src_s *src ) {
 void EaxReverbEffect::UpdatePanning( src_s *src, const vec3_t listenerOrigin, const mat3_t listenerAxes ) {
 	const auto *updateState = &src->panningUpdateState;
 
+	// Unfortunately we have to recompute directions every panning update
+	// as the source might have moved and we update panning much more frequently than emission points
+	// (TODO: use cached results for non-moving sources?)
 	vec3_t reflectionDirs[PanningUpdateState::MAX_POINTS];
-	// Mark by infinity by default to indicate excluded reflection dirs for SetFakeSourceOrigin()
-	for( unsigned i = 0; i < updateState->numReflectionPoints; ++i ) {
-		reflectionDirs[i][0] = std::numeric_limits<float>::infinity();
-	}
-
 	unsigned numReflectionDirs = 0;
+
 	// A weighted sum of directions. Will be used for reflections panning.
 	vec3_t reverbPanDir = { 0, 0, 0 };
-	for( unsigned i = 0; i < updateState->numReflectionPoints; ++i ) {
-		float *dir = &reflectionDirs[i][0];
+	for( unsigned i = 0; i < updateState->numPassedSecondaryRays; ++i ) {
+		float *dir = &reflectionDirs[numReflectionDirs][0];
 		VectorSubtract( listenerOrigin, src->panningUpdateState.reflectionPoints[i], dir );
 		float squareDistance = VectorLengthSquared( dir );
 		// Do not even take into account directions that have very short segments
@@ -275,7 +275,7 @@ void EaxReverbEffect::UpdatePanning( src_s *src, const vec3_t listenerOrigin, co
 		}
 
 		numReflectionDirs++;
-		const float distance = sqrtf( squareDistance );
+		const float distance = std::sqrt( squareDistance );
 		VectorScale( dir, 1.0f / distance, dir );
 		// Store the distance as the 4-th vector component
 
@@ -290,7 +290,7 @@ void EaxReverbEffect::UpdatePanning( src_s *src, const vec3_t listenerOrigin, co
 	}
 
 	// "If there is an active EaxReverbEffect, setting source origin/velocity is delegated to it".
-	UpdateDelegatedSpatialization( src, listenerOrigin, reflectionDirs, numReflectionDirs );
+	UpdateDelegatedSpatialization( src, listenerOrigin );
 
 	vec3_t basePan;
 	// Convert to "speakers" coordinate system
@@ -325,10 +325,7 @@ void EaxReverbEffect::UpdatePanning( src_s *src, const vec3_t listenerOrigin, co
 	qalEffectfv( src->effect, AL_EAXREVERB_LATE_REVERB_PAN, lateReverbPan );
 }
 
-void EaxReverbEffect::UpdateDelegatedSpatialization( struct src_s *src,
-													 const vec3_t listenerOrigin,
-													 const vec3_t *reflectionDirs,
-													 unsigned numReflectionDirs ) {
+void EaxReverbEffect::UpdateDelegatedSpatialization( struct src_s *src, const vec3_t listenerOrigin ) {
 	if( src->attenuation == 1.0f ) {
 		// It MUST already be a relative sound
 #ifndef PUBLIC_BUILD
@@ -350,50 +347,32 @@ void EaxReverbEffect::UpdateDelegatedSpatialization( struct src_s *src,
 	// We try modifying the source origin as well to simulate sound propagation.
 	// These conditions must be met:
 	// 1) "realistic" obstruction is enabled
-	// 2) there is a definite reflected sound path
-	// 3) the direct path is obstructed
-	if( s_realistic_obstruction->integer && numReflectionDirs && directObstruction == 1.0f ) {
+	// 2) the direct path is fully obstructed
+	// 3) there is a definite indirect precomputed propagation path
+	if( s_realistic_obstruction->integer && directObstruction == 1.0f ) {
 		// Provide a fake origin for the source that is at the same distance
 		// as the real origin and is aligned to the sound propagation "window"
-		sourceOrigin = MakeFakeSourceOrigin( src, listenerOrigin, reflectionDirs, numReflectionDirs );
+		// TODO: Precache at least the listener leaf for this sound backend update frame
+		if( const int listenerLeaf = trap_PointLeafNum( listenerOrigin ) ) {
+			if( const int srcLeaf = trap_PointLeafNum( src->origin ) ) {
+				vec3_t dir;
+				float distance;
+				if( PropagationTable::Instance()->GetIndirectPathProps( srcLeaf, listenerLeaf, dir, &distance ) ) {
+					// The table stores distance using this granularity, so it might be zero
+					// for very close leaves. Adding an extra distance won't harm
+					// (even if the indirect path length is already larger than the straight euclidean distance).
+					distance += 256.0f;
+					// Negate the vector scale multiplier as the dir is an sound influx dir to the listener
+					// and we want to shift the origin along the line of the dir but from the listener
+					VectorScale( dir, -distance, tmpSourceOrigin );
+					// Shift the listener origin in `dir` direction for `distance` units
+					VectorAdd( listenerOrigin, tmpSourceOrigin, tmpSourceOrigin );
+					// Use the shifted origin as a fake position in the world-space for the source
+					sourceOrigin = tmpSourceOrigin;
+				}
+			}
+		}
 	}
 
 	qalSourcefv( src->source, AL_POSITION, sourceOrigin );
-}
-
-const float *EaxReverbEffect::MakeFakeSourceOrigin( struct src_s *src,
-													const vec3_t listenerOrigin,
-													const vec3_t *reflectionDirs,
-													unsigned numReflectionDirs ) {
-	assert( numReflectionDirs );
-
-	// A sound is intended to propagate along this dir.
-	const float *propagationDir = nullptr;
-	// Take the dir that has the best conformance to the straight source-to-listener dir as a propagation dir
-	vec3_t sourceToListenerDir;
-	VectorSubtract( listenerOrigin, src->origin, sourceToListenerDir );
-	// We must preserve this distance from source to listener for the same attenuation
-	const float distance = sqrtf( VectorLengthSquared( sourceToListenerDir ) );
-	VectorScale( sourceToListenerDir, 1.0f / distance, sourceToListenerDir );
-
-	float bestDot = -1.0f;
-	for( unsigned i = 0; i < numReflectionDirs; ++i ) {
-		float dot = DotProduct( reflectionDirs[i], sourceToListenerDir );
-		if( dot < bestDot ) {
-			continue;
-		}
-		bestDot = dot;
-		propagationDir = reflectionDirs[i];
-	}
-
-	assert( propagationDir );
-
-	float *const fakeOrigin = this->tmpSourceOrigin;
-	// Note: "propagationDir" points from a reflection point to the listener, we have to negate it
-	VectorSubtract( vec3_origin, propagationDir, fakeOrigin );
-	VectorScale( fakeOrigin, distance, fakeOrigin );
-	// Make an origin that is `distance` units away of the listener and is aligned along the `bestDir`
-	VectorAdd( fakeOrigin, listenerOrigin, fakeOrigin );
-
-	return fakeOrigin;
 }
