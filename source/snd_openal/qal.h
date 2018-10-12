@@ -24,6 +24,13 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #ifndef __QAL_H__
 #define __QAL_H__
 
+// WARNING: this might go wrong if OPENAL_RUNTIME is supplied by a
+// build system and not defined in gameshared/q_arch.h, but let's
+// worry about that when this day will actually come.
+#ifdef OPENAL_SOFT_STATIC
+#undef OPENAL_RUNTIME
+#endif
+
 #ifdef OPENAL_RUNTIME
 #define AL_NO_PROTOTYPES
 #define ALC_NO_PROTOTYPES
@@ -32,7 +39,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #if defined ( __MACOSX__ )
 #include <OpenAL/al.h>
 #include <OpenAL/alc.h>
-#elif defined( __ANDROID__ )
+#elif defined( __ANDROID__ ) || defined( OPENAL_SOFT_STATIC )
 #include <AL/al.h>
 #include <AL/alc.h>
 #else
@@ -234,6 +241,42 @@ extern LPALCCAPTURESAMPLES qalcCaptureSamples;
 #define qalcCaptureStart alcCaptureStart
 #define qalcCaptureStop alcCaptureStop
 #define qalcCaptureSamples alcCaptureSamples
+
+#define qalGenEffects alGenEffects
+#define qalDeleteEffects alDeleteEffects
+#define qalIsEffect alIsEffect
+#define qalEffecti alEffecti
+#define qalEffectiv alEffectiv
+#define qalEffectf alEffectf
+#define qalEffectfv alEffectfv
+#define qalGetEffecti alGetEffecti
+#define qalGetEffeciv alGetEffeciv
+#define qalGetEffectf alGetEffectf
+#define qalGetEffectfv alGetEffectfv
+
+#define qalGenFilters alGenFilters
+#define qalDeleteFilters alDeleteFilters
+#define qalIsFilter alIsFilter
+#define qalFilteri alFilteri
+#define qalFilteriv alFilteriv
+#define qalFilterf alFilterf
+#define qalFilterfv alFilterfv
+#define qalGetFilteri alGetFilteri
+#define qalGetFilteriv alGetFilteriv
+#define qalGetFilterf alGetFilterf
+#define qalGetFilterfv alGetFilterfv
+
+#define qalGenAuxiliaryEffectSlots alGenAuxiliaryEffectSlots
+#define qalDeleteAuxiliaryEffectSlots alDeleteAuxiliaryEffectSlots
+#define qalIsAuxiliaryEffectSlot alIsAuxiliaryEffectSlot
+#define qalAuxiliaryEffectSloti alAuxiliaryEffectSloti
+#define qalAuxiliaryEffectSlotiv alAuxiliaryEffectSlotiv
+#define qalAuxiliaryEffectSlotf alAuxiliaryEffectSlotf
+#define qalAuxiliaryEffectSlotfv alAuxiliaryEffectSlotfv
+#define qalGetAuxiliaryEffectSloti alGetAuxiliaryEffectSloti
+#define qalGetAuxiliaryEffectSlotiv alGetAuxiliaryEffectSlotiv
+#define qalGetAuxiliaryEffectSlotf alGetAuxiliaryEffectSlotf
+#define qalGetAuxiliaryEffectSlotfv alGetAuxiliaryEffectSlotfv
 #endif
 
 /* HRTF */

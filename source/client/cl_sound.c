@@ -25,7 +25,6 @@ static mempool_t *cl_soundmodulepool;
 static void *sound_library = NULL;
 
 static cvar_t *s_module = NULL;
-static cvar_t *s_module_fallback = NULL;
 static bool s_loaded = false;
 
 static void CL_SoundModule_SetAttenuationModel( void );
@@ -232,16 +231,19 @@ static const char *CL_SoundModule_GetConfigString( int index ) {
 * CL_SoundModule_Init
 */
 void CL_SoundModule_Init( bool verbose ) {
-	static const char *sound_modules[] = { "qf", "openal" };
+	static const struct {
+		const char *name;
+		const int num;
+	} sound_modules[] = {
+		{ "openal_soft", 3 },
+		{ "openal_system", 2 },
+		{ "qf", 1 }
+	};
 	static const int num_sound_modules = sizeof( sound_modules ) / sizeof( sound_modules[0] );
-	int sm, smfb;
 	sound_import_t import;
 
 	if( !s_module ) {
-		s_module = Cvar_Get( "s_module", "1", CVAR_ARCHIVE | CVAR_LATCH_SOUND );
-	}
-	if( !s_module_fallback ) {
-		s_module_fallback = Cvar_Get( "s_module_fallback", "2", CVAR_LATCH_SOUND );
+		s_module = Cvar_Get( "s_module", "3", CVAR_ARCHIVE | CVAR_LATCH_SOUND );
 	}
 
 	// unload anything we have now
@@ -256,11 +258,6 @@ void CL_SoundModule_Init( bool verbose ) {
 	if( s_module->integer < 0 || s_module->integer > num_sound_modules ) {
 		Com_Printf( "Invalid value for s_module (%i), reseting to default\n", s_module->integer );
 		Cvar_ForceSet( "s_module", s_module->dvalue );
-	}
-
-	if( s_module_fallback->integer < 0 || s_module_fallback->integer > num_sound_modules ) {
-		Com_Printf( "Invalid value for s_module_fallback (%i), reseting to default\n", s_module_fallback->integer );
-		Cvar_ForceSet( "s_module_fallback", s_module_fallback->dvalue );
 	}
 
 	if( !s_module->integer ) {
@@ -343,12 +340,23 @@ void CL_SoundModule_Init( bool verbose ) {
 	import.BufPipe_ReadCmds = QBufPipe_ReadCmds;
 	import.BufPipe_Wait = QBufPipe_Wait;
 
-	sm = bound( 1, s_module->integer, num_sound_modules );
-	smfb = bound( 0, s_module_fallback->integer, num_sound_modules );
+	int sm;
+	for( sm = 0; sm < num_sound_modules; ++sm ) {
+		if( sound_modules[sm].num == s_module->integer ) { break; }
+	}
+	assert( sm != num_sound_modules && "Sound modules definition is bugged" );
 
-	if( !CL_SoundModule_Load( sound_modules[sm - 1], &import, verbose ) ) {
-		if( s_module->integer == smfb || !smfb ||
-			!CL_SoundModule_Load( sound_modules[smfb - 1], &import, verbose ) ) {
+	if ( !CL_SoundModule_Load( sound_modules[sm].name, &import, verbose ) ) {
+		const int tried = sm;
+		for( sm = 0; sm < num_sound_modules; ++sm ) {
+			if( sm == tried ) {
+				continue;
+			}
+			if( CL_SoundModule_Load( sound_modules[sm].name, &import, verbose ) ) {
+				break;
+			}
+		}
+		if( sm == num_sound_modules ) {
 			if( verbose ) {
 				Com_Printf( "Couldn't load a sound module\n" );
 				Com_Printf( "------------------------------------\n" );
@@ -357,7 +365,7 @@ void CL_SoundModule_Init( bool verbose ) {
 			se = NULL;
 			return;
 		}
-		Cvar_ForceSet( "s_module", va( "%i", smfb ) );
+		Cvar_ForceSet( "s_module", va( "%i", sound_modules[sm].num ) );
 	}
 
 	CL_SoundModule_SetAttenuationModel();

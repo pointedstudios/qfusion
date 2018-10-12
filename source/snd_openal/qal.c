@@ -28,6 +28,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "qal.h"
 
+#ifdef OPENAL_RUNTIME
+
 static bool alinit_fail = false;
 
 #define EFX_INIT_UNKNOWN ( -1 )
@@ -36,44 +38,6 @@ static bool alinit_fail = false;
 
 // Negative if not even tried
 static int efx_init_status = EFX_INIT_UNKNOWN;
-
-LPALGENEFFECTS qalGenEffects;
-LPALDELETEEFFECTS qalDeleteEffects;
-LPALISEFFECT qalIsEffect;
-LPALEFFECTI qalEffecti;
-LPALEFFECTIV qalEffectiv;
-LPALEFFECTF qalEffectf;
-LPALEFFECTFV qalEffectfv;
-LPALGETEFFECTI qalGetEffecti;
-LPALGETEFFECTIV qalGetEffeciv;
-LPALGETEFFECTF qalGetEffectf;
-LPALGETEFFECTFV qalGetEffectfv;
-
-LPALGENFILTERS qalGenFilters;
-LPALDELETEFILTERS qalDeleteFilters;
-LPALISFILTER qalIsFilter;
-LPALFILTERI qalFilteri;
-LPALFILTERIV qalFilteriv;
-LPALFILTERF qalFilterf;
-LPALFILTERFV qalFilterfv;
-LPALGETFILTERI qalGetFilteri;
-LPALGETFILTERIV qalGetFilteriv;
-LPALGETFILTERF qalGetFilterf;
-LPALGETFILTERFV qalGetFilterfv;
-
-LPALGENAUXILIARYEFFECTSLOTS qalGenAuxiliaryEffectSlots;
-LPALDELETEAUXILIARYEFFECTSLOTS qalDeleteAuxiliaryEffectSlots;
-LPALISAUXILIARYEFFECTSLOT qalIsAuxiliaryEffectSlot;
-LPALAUXILIARYEFFECTSLOTI qalAuxiliaryEffectSloti;
-LPALAUXILIARYEFFECTSLOTIV qalAuxiliaryEffectSlotiv;
-LPALAUXILIARYEFFECTSLOTF qalAuxiliaryEffectSlotf;
-LPALAUXILIARYEFFECTSLOTFV qalAuxiliaryEffectSlotfv;
-LPALGETAUXILIARYEFFECTSLOTI qalGetAuxiliaryEffectSloti;
-LPALGETAUXILIARYEFFECTSLOTIV qalGetAuxiliaryEffectSlotiv;
-LPALGETAUXILIARYEFFECTSLOTF qalGetAuxiliaryEffectSlotf;
-LPALGETAUXILIARYEFFECTSLOTFV qalGetAuxiliaryEffectSlotfv;
-
-#ifdef OPENAL_RUNTIME
 
 LPALENABLE qalEnable;
 LPALDISABLE qalDisable;
@@ -147,6 +111,43 @@ LPALCGETPROCADDRESS qalcGetProcAddress;
 LPALCGETENUMVALUE qalcGetEnumValue;
 LPALCGETSTRING qalcGetString;
 LPALCGETINTEGERV qalcGetIntegerv;
+
+LPALGENEFFECTS qalGenEffects;
+LPALDELETEEFFECTS qalDeleteEffects;
+LPALISEFFECT qalIsEffect;
+LPALEFFECTI qalEffecti;
+LPALEFFECTIV qalEffectiv;
+LPALEFFECTF qalEffectf;
+LPALEFFECTFV qalEffectfv;
+LPALGETEFFECTI qalGetEffecti;
+LPALGETEFFECTIV qalGetEffeciv;
+LPALGETEFFECTF qalGetEffectf;
+LPALGETEFFECTFV qalGetEffectfv;
+
+LPALGENFILTERS qalGenFilters;
+LPALDELETEFILTERS qalDeleteFilters;
+LPALISFILTER qalIsFilter;
+LPALFILTERI qalFilteri;
+LPALFILTERIV qalFilteriv;
+LPALFILTERF qalFilterf;
+LPALFILTERFV qalFilterfv;
+LPALGETFILTERI qalGetFilteri;
+LPALGETFILTERIV qalGetFilteriv;
+LPALGETFILTERF qalGetFilterf;
+LPALGETFILTERFV qalGetFilterfv;
+
+LPALGENAUXILIARYEFFECTSLOTS qalGenAuxiliaryEffectSlots;
+LPALDELETEAUXILIARYEFFECTSLOTS qalDeleteAuxiliaryEffectSlots;
+LPALISAUXILIARYEFFECTSLOT qalIsAuxiliaryEffectSlot;
+LPALAUXILIARYEFFECTSLOTI qalAuxiliaryEffectSloti;
+LPALAUXILIARYEFFECTSLOTIV qalAuxiliaryEffectSlotiv;
+LPALAUXILIARYEFFECTSLOTF qalAuxiliaryEffectSlotf;
+LPALAUXILIARYEFFECTSLOTFV qalAuxiliaryEffectSlotfv;
+LPALGETAUXILIARYEFFECTSLOTI qalGetAuxiliaryEffectSloti;
+LPALGETAUXILIARYEFFECTSLOTIV qalGetAuxiliaryEffectSlotiv;
+LPALGETAUXILIARYEFFECTSLOTF qalGetAuxiliaryEffectSlotf;
+LPALGETAUXILIARYEFFECTSLOTFV qalGetAuxiliaryEffectSlotfv;
+
 
 /*#if USE_SDL_VIDEO
 #include "SDL.h"
@@ -249,7 +250,7 @@ static void QAL_EFX_Init( ALCdevice *device ) {
 
 	// If the status has not been set to "failure"
 	if( efx_init_status != EFX_INIT_FAILURE ) {
-		assert( efx_init_status = EFX_INIT_UNKNOWN );
+		assert( efx_init_status == EFX_INIT_UNKNOWN );
 		efx_init_status = EFX_INIT_SUCCESS;
 	}
 }
@@ -524,17 +525,24 @@ void QAL_Shutdown( void ) {
 }
 
 bool QAL_Is_EFX_ExtensionSupported( ALCdevice *device ) {
+#ifdef OPENAL_SOFT_STATIC
+	return qalcIsExtensionPresent( device, "ALC_EXT_EFX" );
+#else
 	// We have decided to disable EFX on Android.
 	// Even if a third-party library supports these effects,
 	// and, furthermore, if there is a hardware support for these effects,
 	// there is no sufficient processing power for environment sampling.
 	return false;
+#endif
 }
 
 bool QAL_Is_HRTF_ExtensionSupported( ALCdevice *device ) {
+#ifdef OPENAL_SOFT_STATIC
+	return qalcIsExtensionPresent( device, "ALC_SOFT_HRTF" );
+#else
 	// See reasons for EFX above
 	return false;
+#endif
 }
 
 #endif
-
