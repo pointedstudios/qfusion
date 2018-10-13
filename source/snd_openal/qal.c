@@ -28,176 +28,13 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "qal.h"
 
-#ifdef OPENAL_RUNTIME
-
-static bool alinit_fail = false;
+// Keep loading EFX procedures dynamically even for OpenAL SOFT static builds
 
 #define EFX_INIT_UNKNOWN ( -1 )
 #define EFX_INIT_FAILURE ( 0 )
 #define EFX_INIT_SUCCESS ( +1 )
 
-// Negative if not even tried
 static int efx_init_status = EFX_INIT_UNKNOWN;
-
-LPALENABLE qalEnable;
-LPALDISABLE qalDisable;
-LPALISENABLED qalIsEnabled;
-LPALGETSTRING qalGetString;
-LPALGETBOOLEANV qalGetBooleanv;
-LPALGETINTEGERV qalGetIntegerv;
-LPALGETFLOATV qalGetFloatv;
-LPALGETDOUBLEV qalGetDoublev;
-LPALGETBOOLEAN qalGetBoolean;
-LPALGETINTEGER qalGetInteger;
-LPALGETFLOAT qalGetFloat;
-LPALGETDOUBLE qalGetDouble;
-LPALGETERROR qalGetError;
-LPALISEXTENSIONPRESENT qalIsExtensionPresent;
-LPALGETPROCADDRESS qalGetProcAddress;
-LPALGETENUMVALUE qalGetEnumValue;
-LPALLISTENERF qalListenerf;
-LPALLISTENER3F qalListener3f;
-LPALLISTENERFV qalListenerfv;
-LPALLISTENERI qalListeneri;
-LPALGETLISTENERF qalGetListenerf;
-LPALGETLISTENER3F qalGetListener3f;
-LPALGETLISTENERFV qalGetListenerfv;
-LPALGETLISTENERI qalGetListeneri;
-LPALGENSOURCES qalGenSources;
-LPALDELETESOURCES qalDeleteSources;
-LPALISSOURCE qalIsSource;
-LPALSOURCEF qalSourcef;
-LPALSOURCE3F qalSource3f;
-LPALSOURCEFV qalSourcefv;
-LPALSOURCEI qalSourcei;
-LPALSOURCE3I qalSource3i;
-LPALGETSOURCEF qalGetSourcef;
-LPALGETSOURCE3F qalGetSource3f;
-LPALGETSOURCEFV qalGetSourcefv;
-LPALGETSOURCEI qalGetSourcei;
-LPALSOURCEPLAYV qalSourcePlayv;
-LPALSOURCESTOPV qalSourceStopv;
-LPALSOURCEREWINDV qalSourceRewindv;
-LPALSOURCEPAUSEV qalSourcePausev;
-LPALSOURCEPLAY qalSourcePlay;
-LPALSOURCESTOP qalSourceStop;
-LPALSOURCEREWIND qalSourceRewind;
-LPALSOURCEPAUSE qalSourcePause;
-LPALSOURCEQUEUEBUFFERS qalSourceQueueBuffers;
-LPALSOURCEUNQUEUEBUFFERS qalSourceUnqueueBuffers;
-LPALGENBUFFERS qalGenBuffers;
-LPALDELETEBUFFERS qalDeleteBuffers;
-LPALISBUFFER qalIsBuffer;
-LPALBUFFERDATA qalBufferData;
-LPALGETBUFFERF qalGetBufferf;
-LPALGETBUFFERI qalGetBufferi;
-LPALDOPPLERFACTOR qalDopplerFactor;
-LPALDOPPLERVELOCITY qalDopplerVelocity;
-LPALSPEEDOFSOUND qalSpeedOfSound;
-LPALDISTANCEMODEL qalDistanceModel;
-
-LPALCCREATECONTEXT qalcCreateContext;
-LPALCMAKECONTEXTCURRENT qalcMakeContextCurrent;
-LPALCPROCESSCONTEXT qalcProcessContext;
-LPALCSUSPENDCONTEXT qalcSuspendContext;
-LPALCDESTROYCONTEXT qalcDestroyContext;
-LPALCGETCURRENTCONTEXT qalcGetCurrentContext;
-LPALCGETCONTEXTSDEVICE qalcGetContextsDevice;
-LPALCOPENDEVICE qalcOpenDevice;
-LPALCCLOSEDEVICE qalcCloseDevice;
-LPALCGETERROR qalcGetError;
-LPALCISEXTENSIONPRESENT qalcIsExtensionPresent;
-LPALCGETPROCADDRESS qalcGetProcAddress;
-LPALCGETENUMVALUE qalcGetEnumValue;
-LPALCGETSTRING qalcGetString;
-LPALCGETINTEGERV qalcGetIntegerv;
-
-LPALGENEFFECTS qalGenEffects;
-LPALDELETEEFFECTS qalDeleteEffects;
-LPALISEFFECT qalIsEffect;
-LPALEFFECTI qalEffecti;
-LPALEFFECTIV qalEffectiv;
-LPALEFFECTF qalEffectf;
-LPALEFFECTFV qalEffectfv;
-LPALGETEFFECTI qalGetEffecti;
-LPALGETEFFECTIV qalGetEffeciv;
-LPALGETEFFECTF qalGetEffectf;
-LPALGETEFFECTFV qalGetEffectfv;
-
-LPALGENFILTERS qalGenFilters;
-LPALDELETEFILTERS qalDeleteFilters;
-LPALISFILTER qalIsFilter;
-LPALFILTERI qalFilteri;
-LPALFILTERIV qalFilteriv;
-LPALFILTERF qalFilterf;
-LPALFILTERFV qalFilterfv;
-LPALGETFILTERI qalGetFilteri;
-LPALGETFILTERIV qalGetFilteriv;
-LPALGETFILTERF qalGetFilterf;
-LPALGETFILTERFV qalGetFilterfv;
-
-LPALGENAUXILIARYEFFECTSLOTS qalGenAuxiliaryEffectSlots;
-LPALDELETEAUXILIARYEFFECTSLOTS qalDeleteAuxiliaryEffectSlots;
-LPALISAUXILIARYEFFECTSLOT qalIsAuxiliaryEffectSlot;
-LPALAUXILIARYEFFECTSLOTI qalAuxiliaryEffectSloti;
-LPALAUXILIARYEFFECTSLOTIV qalAuxiliaryEffectSlotiv;
-LPALAUXILIARYEFFECTSLOTF qalAuxiliaryEffectSlotf;
-LPALAUXILIARYEFFECTSLOTFV qalAuxiliaryEffectSlotfv;
-LPALGETAUXILIARYEFFECTSLOTI qalGetAuxiliaryEffectSloti;
-LPALGETAUXILIARYEFFECTSLOTIV qalGetAuxiliaryEffectSlotiv;
-LPALGETAUXILIARYEFFECTSLOTF qalGetAuxiliaryEffectSlotf;
-LPALGETAUXILIARYEFFECTSLOTFV qalGetAuxiliaryEffectSlotfv;
-
-
-/*#if USE_SDL_VIDEO
-#include "SDL.h"
-#include "SDL_loadso.h"
-#define OBJTYPE void *
-#define OBJLOAD(x) SDL_LoadObject(x)
-#define SYMLOAD(x,y) SDL_LoadFunction(x,y)
-#define OBJFREE(x) SDL_UnloadObject(x)*/
-
-#if defined _WIN32
-#include <windows.h>
-#define OBJTYPE HMODULE
-#define OBJLOAD( x ) LoadLibrary( x )
-#define SYMLOAD( x, y ) GetProcAddress( x, y )
-#define OBJFREE( x ) FreeLibrary( x )
-
-#elif defined __linux__ || defined __FreeBSD__ || defined __MACOSX__ || defined __sun
-#include <dlfcn.h>
-#define OBJTYPE void *
-#define OBJLOAD( x ) dlopen( x, RTLD_LAZY | RTLD_GLOBAL )
-#define SYMLOAD( x, y ) dlsym( x, y )
-#define OBJFREE( x ) dlclose( x )
-#else
-
-#error "No lib loading code defined for platform."
-#endif
-
-#if defined __linux__ || defined __FreeBSD__ || defined __MACOSX__
-#include <unistd.h>
-#include <sys/types.h>
-#endif
-
-static OBJTYPE OpenALLib = NULL;
-
-/*
-* GPA
-*/
-static void *GPA( char *str ) {
-	void *rv;
-
-	rv = SYMLOAD( OpenALLib, str );
-	if( !rv ) {
-		Com_Printf( " Couldn't load symbol: %s\n", str );
-		alinit_fail = true;
-		return NULL;
-	} else {
-		//Com_DPrintf( " Loaded symbol: %s (0x%08X)\n", str, rv);
-		return rv;
-	}
-}
 
 static void *GetEfxProcAddress( ALCdevice *device, const char *str ) {
 	if( !qalcGetProcAddress ) {
@@ -293,6 +130,171 @@ static void QAL_EFX_Shutdown() {
 	qalGetAuxiliaryEffectSlotfv = NULL;
 
 	efx_init_status = EFX_INIT_UNKNOWN;
+}
+
+// Always define symbols for loaded procedures
+
+LPALGENEFFECTS qalGenEffects;
+LPALDELETEEFFECTS qalDeleteEffects;
+LPALISEFFECT qalIsEffect;
+LPALEFFECTI qalEffecti;
+LPALEFFECTIV qalEffectiv;
+LPALEFFECTF qalEffectf;
+LPALEFFECTFV qalEffectfv;
+LPALGETEFFECTI qalGetEffecti;
+LPALGETEFFECTIV qalGetEffeciv;
+LPALGETEFFECTF qalGetEffectf;
+LPALGETEFFECTFV qalGetEffectfv;
+
+LPALGENFILTERS qalGenFilters;
+LPALDELETEFILTERS qalDeleteFilters;
+LPALISFILTER qalIsFilter;
+LPALFILTERI qalFilteri;
+LPALFILTERIV qalFilteriv;
+LPALFILTERF qalFilterf;
+LPALFILTERFV qalFilterfv;
+LPALGETFILTERI qalGetFilteri;
+LPALGETFILTERIV qalGetFilteriv;
+LPALGETFILTERF qalGetFilterf;
+LPALGETFILTERFV qalGetFilterfv;
+
+LPALGENAUXILIARYEFFECTSLOTS qalGenAuxiliaryEffectSlots;
+LPALDELETEAUXILIARYEFFECTSLOTS qalDeleteAuxiliaryEffectSlots;
+LPALISAUXILIARYEFFECTSLOT qalIsAuxiliaryEffectSlot;
+LPALAUXILIARYEFFECTSLOTI qalAuxiliaryEffectSloti;
+LPALAUXILIARYEFFECTSLOTIV qalAuxiliaryEffectSlotiv;
+LPALAUXILIARYEFFECTSLOTF qalAuxiliaryEffectSlotf;
+LPALAUXILIARYEFFECTSLOTFV qalAuxiliaryEffectSlotfv;
+LPALGETAUXILIARYEFFECTSLOTI qalGetAuxiliaryEffectSloti;
+LPALGETAUXILIARYEFFECTSLOTIV qalGetAuxiliaryEffectSlotiv;
+LPALGETAUXILIARYEFFECTSLOTF qalGetAuxiliaryEffectSlotf;
+LPALGETAUXILIARYEFFECTSLOTFV qalGetAuxiliaryEffectSlotfv;
+
+#ifdef OPENAL_RUNTIME
+
+static bool alinit_fail = false;
+
+LPALENABLE qalEnable;
+LPALDISABLE qalDisable;
+LPALISENABLED qalIsEnabled;
+LPALGETSTRING qalGetString;
+LPALGETBOOLEANV qalGetBooleanv;
+LPALGETINTEGERV qalGetIntegerv;
+LPALGETFLOATV qalGetFloatv;
+LPALGETDOUBLEV qalGetDoublev;
+LPALGETBOOLEAN qalGetBoolean;
+LPALGETINTEGER qalGetInteger;
+LPALGETFLOAT qalGetFloat;
+LPALGETDOUBLE qalGetDouble;
+LPALGETERROR qalGetError;
+LPALISEXTENSIONPRESENT qalIsExtensionPresent;
+LPALGETPROCADDRESS qalGetProcAddress;
+LPALGETENUMVALUE qalGetEnumValue;
+LPALLISTENERF qalListenerf;
+LPALLISTENER3F qalListener3f;
+LPALLISTENERFV qalListenerfv;
+LPALLISTENERI qalListeneri;
+LPALGETLISTENERF qalGetListenerf;
+LPALGETLISTENER3F qalGetListener3f;
+LPALGETLISTENERFV qalGetListenerfv;
+LPALGETLISTENERI qalGetListeneri;
+LPALGENSOURCES qalGenSources;
+LPALDELETESOURCES qalDeleteSources;
+LPALISSOURCE qalIsSource;
+LPALSOURCEF qalSourcef;
+LPALSOURCE3F qalSource3f;
+LPALSOURCEFV qalSourcefv;
+LPALSOURCEI qalSourcei;
+LPALSOURCE3I qalSource3i;
+LPALGETSOURCEF qalGetSourcef;
+LPALGETSOURCE3F qalGetSource3f;
+LPALGETSOURCEFV qalGetSourcefv;
+LPALGETSOURCEI qalGetSourcei;
+LPALSOURCEPLAYV qalSourcePlayv;
+LPALSOURCESTOPV qalSourceStopv;
+LPALSOURCEREWINDV qalSourceRewindv;
+LPALSOURCEPAUSEV qalSourcePausev;
+LPALSOURCEPLAY qalSourcePlay;
+LPALSOURCESTOP qalSourceStop;
+LPALSOURCEREWIND qalSourceRewind;
+LPALSOURCEPAUSE qalSourcePause;
+LPALSOURCEQUEUEBUFFERS qalSourceQueueBuffers;
+LPALSOURCEUNQUEUEBUFFERS qalSourceUnqueueBuffers;
+LPALGENBUFFERS qalGenBuffers;
+LPALDELETEBUFFERS qalDeleteBuffers;
+LPALISBUFFER qalIsBuffer;
+LPALBUFFERDATA qalBufferData;
+LPALGETBUFFERF qalGetBufferf;
+LPALGETBUFFERI qalGetBufferi;
+LPALDOPPLERFACTOR qalDopplerFactor;
+LPALDOPPLERVELOCITY qalDopplerVelocity;
+LPALSPEEDOFSOUND qalSpeedOfSound;
+LPALDISTANCEMODEL qalDistanceModel;
+
+LPALCCREATECONTEXT qalcCreateContext;
+LPALCMAKECONTEXTCURRENT qalcMakeContextCurrent;
+LPALCPROCESSCONTEXT qalcProcessContext;
+LPALCSUSPENDCONTEXT qalcSuspendContext;
+LPALCDESTROYCONTEXT qalcDestroyContext;
+LPALCGETCURRENTCONTEXT qalcGetCurrentContext;
+LPALCGETCONTEXTSDEVICE qalcGetContextsDevice;
+LPALCOPENDEVICE qalcOpenDevice;
+LPALCCLOSEDEVICE qalcCloseDevice;
+LPALCGETERROR qalcGetError;
+LPALCISEXTENSIONPRESENT qalcIsExtensionPresent;
+LPALCGETPROCADDRESS qalcGetProcAddress;
+LPALCGETENUMVALUE qalcGetEnumValue;
+LPALCGETSTRING qalcGetString;
+LPALCGETINTEGERV qalcGetIntegerv;
+
+/*#if USE_SDL_VIDEO
+#include "SDL.h"
+#include "SDL_loadso.h"
+#define OBJTYPE void *
+#define OBJLOAD(x) SDL_LoadObject(x)
+#define SYMLOAD(x,y) SDL_LoadFunction(x,y)
+#define OBJFREE(x) SDL_UnloadObject(x)*/
+
+#if defined _WIN32
+#include <windows.h>
+#define OBJTYPE HMODULE
+#define OBJLOAD( x ) LoadLibrary( x )
+#define SYMLOAD( x, y ) GetProcAddress( x, y )
+#define OBJFREE( x ) FreeLibrary( x )
+
+#elif defined __linux__ || defined __FreeBSD__ || defined __MACOSX__ || defined __sun
+#include <dlfcn.h>
+#define OBJTYPE void *
+#define OBJLOAD( x ) dlopen( x, RTLD_LAZY | RTLD_GLOBAL )
+#define SYMLOAD( x, y ) dlsym( x, y )
+#define OBJFREE( x ) dlclose( x )
+#else
+
+#error "No lib loading code defined for platform."
+#endif
+
+#if defined __linux__ || defined __FreeBSD__ || defined __MACOSX__
+#include <unistd.h>
+#include <sys/types.h>
+#endif
+
+static OBJTYPE OpenALLib = NULL;
+
+/*
+* GPA
+*/
+static void *GPA( char *str ) {
+	void *rv;
+
+	rv = SYMLOAD( OpenALLib, str );
+	if( !rv ) {
+		Com_Printf( " Couldn't load symbol: %s\n", str );
+		alinit_fail = true;
+		return NULL;
+	} else {
+		//Com_DPrintf( " Loaded symbol: %s (0x%08X)\n", str, rv);
+		return rv;
+	}
 }
 
 /*
@@ -522,11 +524,26 @@ bool QAL_Init( const char *libname, bool verbose ) {
 }
 
 void QAL_Shutdown( void ) {
+#ifdef OPENAL_SOFT_STATIC
+	// While procedures loading is performed on demand when a selected device is known,
+	// this is a single place where they get unloaded
+	// (this is not actually needed but let's do it for consistency)
+	QAL_EFX_Shutdown();
+#endif
 }
 
 bool QAL_Is_EFX_ExtensionSupported( ALCdevice *device ) {
 #ifdef OPENAL_SOFT_STATIC
-	return qalcIsExtensionPresent( device, "ALC_EXT_EFX" );
+	// Must always be present for static OpenAL SOFT builds
+	assert( qalcIsExtensionPresent( device, "ALC_EXT_EFX" ) );
+	// Hovewer, keep loading extension procedures manually.
+	// Same notes about thread-safety apply for this static version as for the regular one.
+	if( efx_init_status == EFX_INIT_UNKNOWN ) {
+		QAL_EFX_Init( device );
+	}
+	// Must not fail
+	assert( efx_init_status == EFX_INIT_SUCCESS );
+	return true;
 #else
 	// We have decided to disable EFX on Android.
 	// Even if a third-party library supports these effects,
@@ -538,10 +555,13 @@ bool QAL_Is_EFX_ExtensionSupported( ALCdevice *device ) {
 
 bool QAL_Is_HRTF_ExtensionSupported( ALCdevice *device ) {
 #ifdef OPENAL_SOFT_STATIC
-	return qalcIsExtensionPresent( device, "ALC_SOFT_HRTF" );
+	// Must always be present for static OpenAL SOFT builds
+	assert( qalcIsExtensionPresent( device, "ALC_SOFT_HRTF" ) );
+	return true;
 #else
-	// See reasons for EFX above
-	return false;
+	// Let's allow using/looking for OpenAL SOFT HRTF on Android
+	// even if its unlikely we will ever run the game on this platform
+	return qalcIsExtensionPresent( device, "ALC_SOFT_HRTF" );
 #endif
 }
 

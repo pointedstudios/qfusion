@@ -242,41 +242,6 @@ extern LPALCCAPTURESAMPLES qalcCaptureSamples;
 #define qalcCaptureStop alcCaptureStop
 #define qalcCaptureSamples alcCaptureSamples
 
-#define qalGenEffects alGenEffects
-#define qalDeleteEffects alDeleteEffects
-#define qalIsEffect alIsEffect
-#define qalEffecti alEffecti
-#define qalEffectiv alEffectiv
-#define qalEffectf alEffectf
-#define qalEffectfv alEffectfv
-#define qalGetEffecti alGetEffecti
-#define qalGetEffeciv alGetEffeciv
-#define qalGetEffectf alGetEffectf
-#define qalGetEffectfv alGetEffectfv
-
-#define qalGenFilters alGenFilters
-#define qalDeleteFilters alDeleteFilters
-#define qalIsFilter alIsFilter
-#define qalFilteri alFilteri
-#define qalFilteriv alFilteriv
-#define qalFilterf alFilterf
-#define qalFilterfv alFilterfv
-#define qalGetFilteri alGetFilteri
-#define qalGetFilteriv alGetFilteriv
-#define qalGetFilterf alGetFilterf
-#define qalGetFilterfv alGetFilterfv
-
-#define qalGenAuxiliaryEffectSlots alGenAuxiliaryEffectSlots
-#define qalDeleteAuxiliaryEffectSlots alDeleteAuxiliaryEffectSlots
-#define qalIsAuxiliaryEffectSlot alIsAuxiliaryEffectSlot
-#define qalAuxiliaryEffectSloti alAuxiliaryEffectSloti
-#define qalAuxiliaryEffectSlotiv alAuxiliaryEffectSlotiv
-#define qalAuxiliaryEffectSlotf alAuxiliaryEffectSlotf
-#define qalAuxiliaryEffectSlotfv alAuxiliaryEffectSlotfv
-#define qalGetAuxiliaryEffectSloti alGetAuxiliaryEffectSloti
-#define qalGetAuxiliaryEffectSlotiv alGetAuxiliaryEffectSlotiv
-#define qalGetAuxiliaryEffectSlotf alGetAuxiliaryEffectSlotf
-#define qalGetAuxiliaryEffectSlotfv alGetAuxiliaryEffectSlotfv
 #endif
 
 /* HRTF */
