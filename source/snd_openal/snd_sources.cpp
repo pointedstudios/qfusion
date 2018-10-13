@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "snd_local.h"
 #include <snd_cmdque.h>
+#include "snd_env_effects.h"
 #include "snd_env_sampler.h"
 
 #include <algorithm>
@@ -144,180 +145,13 @@ static void source_kill( src_t *src ) {
 	ENV_UnregisterSource( src );
 }
 
-void Effect::CheckCurrentlyBoundEffect( src_t *src ) {
-	ALint effectType;
-
-	// We limit every source to have only a single effect.
-	// This is required to comply with the runtime effects count restriction.
-	// If the effect type has been changed, we have to delete an existing effect.
-	qalGetEffecti( src->effect, AL_EFFECT_TYPE, &effectType );
-	if( this->type == effectType ) {
-		return;
-	}
-
-	// Detach the slot from the source
-	qalSource3i( src->source, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, 0, AL_FILTER_NULL );
-	// Detach the effect from the slot
-	qalAuxiliaryEffectSloti( src->effectSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL );
-
-	// TODO: Can we reuse the effect?
-	qalDeleteEffects( 1, &src->effect );
-
-	IntiallySetupEffect( src );
-}
-
-void Effect::IntiallySetupEffect( src_t *src ) {
-	qalGenEffects( 1, &src->effect );
-	qalEffecti( src->effect, AL_EFFECT_TYPE, this->type );
-}
-
-float Effect::GetMasterGain( src_s *src ) const {
-	return src->fvol * src->volumeVar->value;
-}
-
-void Effect::AdjustGain( src_t *src ) const {
-	qalSourcef( src->source, AL_GAIN, GetMasterGain( src ) );
-}
-
-void Effect::AttachEffect( src_t *src ) {
-	// Set gain in any case (useful if the "attenuate on obstruction" flag has been turned off).
-	AdjustGain( src );
-
-	// Attach the effect to the slot
-	qalAuxiliaryEffectSloti( src->effectSlot, AL_EFFECTSLOT_EFFECT, src->effect );
-	// Feed the slot from the source
-	qalSource3i( src->source, AL_AUXILIARY_SEND_FILTER, src->effectSlot, 0, AL_FILTER_NULL );
-}
-
-void UnderwaterFlangerEffect::IntiallySetupEffect( src_t *src ) {
-	Effect::IntiallySetupEffect( src );
-	// This is the only place where the flanger gets tweaked
-	qalEffectf( src->effect, AL_FLANGER_DEPTH, 0.5f );
-	qalEffectf( src->effect, AL_FLANGER_FEEDBACK, -0.4f );
-}
-
-float UnderwaterFlangerEffect::GetMasterGain( src_t *src ) const {
-	float gain = src->fvol * src->volumeVar->value;
-	// Lower gain significantly if there is a medium transition
-	// (if the listener is not in liquid and the source is, and vice versa)
-	if( hasMediumTransition ) {
-		gain *= 0.25f;
-	}
-
-	// Modify the gain by the direct obstruction factor
-	// Lowering the gain by 1/3 on full obstruction is fairly sufficient (its not linearly perceived)
-	gain *= 1.0f - 0.33f * directObstruction;
-	assert( gain >= 0.0f && gain <= 1.0f );
-	return gain;
-}
-
-void UnderwaterFlangerEffect::BindOrUpdate( src_t *src ) {
-	CheckCurrentlyBoundEffect( src );
-
-	qalFilterf( src->directFilter, AL_LOWPASS_GAINHF, 1.0f - directObstruction );
-
-	AttachEffect( src );
-}
-
-float ReverbEffect::GetMasterGain( src_t *src ) const {
-	float gain = src->fvol * src->volumeVar->value;
-
-	// Both partial obstruction factors are within [0, 1] range, so we multiply by 0.5
-	float obstructionFactor = 0.5f * ( this->directObstruction + this->secondaryRaysObstruction );
-	assert( obstructionFactor >= 0.0f && obstructionFactor <= 1.0f );
-	// The gain might be lowered up to 2x
-	gain *= 1.0f - 0.5f * obstructionFactor;
-	assert( gain >= 0.0f && gain <= 1.0f );
-	return gain;
-}
-
-void StandardReverbEffect::BindOrUpdate( src_t *src ) {
-	CheckCurrentlyBoundEffect( src );
-
-	qalEffectf( src->effect, AL_REVERB_DENSITY, this->density );
-	qalEffectf( src->effect, AL_REVERB_DIFFUSION, this->diffusion );
-	qalEffectf( src->effect, AL_REVERB_GAIN, this->gain );
-	qalEffectf( src->effect, AL_REVERB_GAINHF, this->gainHf );
-	qalEffectf( src->effect, AL_REVERB_DECAY_TIME, this->decayTime );
-	qalEffectf( src->effect, AL_REVERB_REFLECTIONS_GAIN, this->reflectionsGain );
-	qalEffectf( src->effect, AL_REVERB_REFLECTIONS_DELAY, this->reflectionsDelay );
-	qalEffectf( src->effect, AL_REVERB_LATE_REVERB_GAIN, this->lateReverbGain );
-	qalEffectf( src->effect, AL_REVERB_LATE_REVERB_DELAY, this->lateReverbDelay );
-
-	qalFilterf( src->directFilter, AL_LOWPASS_GAINHF, 1.0f - directObstruction );
-
-	AttachEffect( src );
-}
-
-void EaxReverbEffect::BindOrUpdate( src_t *src ) {
-	CheckCurrentlyBoundEffect( src );
-
-	qalEffectf( src->effect, AL_EAXREVERB_DENSITY, this->density );
-	qalEffectf( src->effect, AL_EAXREVERB_DIFFUSION, this->diffusion );
-	qalEffectf( src->effect, AL_EAXREVERB_GAIN, this->gain );
-	qalEffectf( src->effect, AL_EAXREVERB_GAINHF, this->gainHf );
-	qalEffectf( src->effect, AL_EAXREVERB_DECAY_TIME, this->decayTime );
-	qalEffectf( src->effect, AL_EAXREVERB_REFLECTIONS_GAIN, this->reflectionsGain );
-	qalEffectf( src->effect, AL_EAXREVERB_REFLECTIONS_DELAY, this->reflectionsDelay );
-	qalEffectf( src->effect, AL_EAXREVERB_LATE_REVERB_GAIN, this->lateReverbGain );
-	qalEffectf( src->effect, AL_EAXREVERB_LATE_REVERB_DELAY, this->lateReverbDelay );
-
-	qalEffectf( src->effect, AL_EAXREVERB_ECHO_TIME, this->echoTime );
-	qalEffectf( src->effect, AL_EAXREVERB_ECHO_DEPTH, this->echoDepth );
-
-	qalFilterf( src->directFilter, AL_LOWPASS_GAINHF, 1.0f - directObstruction );
-
-	AttachEffect( src );
-}
-
-void ChorusEffect::BindOrUpdate( struct src_s *src ) {
-	CheckCurrentlyBoundEffect( src );
-
-	qalEffecti( src->effect, AL_CHORUS_PHASE, phase );
-	qalEffecti( src->effect, AL_CHORUS_WAVEFORM, waveform );
-
-	qalEffectf( src->effect, AL_CHORUS_DELAY, delay );
-	qalEffectf( src->effect, AL_CHORUS_DEPTH, depth );
-	qalEffectf( src->effect, AL_CHORUS_RATE, rate );
-	qalEffectf( src->effect, AL_CHORUS_FEEDBACK, feedback );
-
-	qalFilterf( src->directFilter, AL_LOWPASS_GAINHF, 1.0f );
-
-	AttachEffect( src );
-}
-
-void DistortionEffect::BindOrUpdate( struct src_s *src ) {
-	CheckCurrentlyBoundEffect( src );
-
-	qalEffectf( src->effect, AL_DISTORTION_EDGE, edge );
-	qalEffectf( src->effect, AL_DISTORTION_EDGE, gain );
-
-	qalFilterf( src->directFilter, AL_LOWPASS_GAINHF, 1.0f );
-
-	AttachEffect( src );
-}
-
-void EchoEffect::BindOrUpdate( struct src_s *src ) {
-	CheckCurrentlyBoundEffect( src );
-
-	qalEffectf( src->effect, AL_ECHO_DELAY, delay );
-	qalEffectf( src->effect, AL_ECHO_LRDELAY, lrDelay );
-	qalEffectf( src->effect, AL_ECHO_DAMPING, damping );
-	qalEffectf( src->effect, AL_ECHO_FEEDBACK, feedback );
-	qalEffectf( src->effect, AL_ECHO_SPREAD, spread );
-
-	qalFilterf( src->directFilter, AL_LOWPASS_GAINHF, 1.0f );
-
-	AttachEffect( src );
-}
-
 /*
 * source_spatialize
 */
 static void source_spatialize( src_t *src ) {
 	if( src->envUpdateState.lastEnvUpdateAt ) {
 		// Delegate setting source origin to the effect in this case
-		if( dynamic_cast<EaxReverbEffect *>( src->envUpdateState.effect ) ) {
+		if( Effect::Cast<const EaxReverbEffect *>( src->envUpdateState.effect ) ) {
 			return;
 		}
 	}

@@ -18,6 +18,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
+#ifndef SND_OPENAL_SYSCALLS_H
+#define SND_OPENAL_SYSCALLS_H
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -277,4 +280,6 @@ static inline void trap_BufPipe_Wait( qbufPipe_t *queue, int ( *read )( qbufPipe
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

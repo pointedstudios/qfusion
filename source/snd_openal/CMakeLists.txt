@@ -4,6 +4,7 @@ include_directories(${VORBIS_INCLUDE_DIR} ${OGG_INCLUDE_DIR} "../snd_common" "."
 
 file(GLOB SND_OPENAL_HEADERS
     "*.h"
+    "../gameshared/anorms.h"
 	"../gameshared/q_*.h"
     "../gameshared/gs_qrespath.h"
 	"../client/snd_public.h"
@@ -18,10 +19,17 @@ file(GLOB SND_OPENAL_SOURCES
 )
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-        set(SND_OPENAL_PLATFORM_LIBRARIES "m" "dl")
+        set(SND_OPENAL_PLATFORM_LIBRARIES "m" "dl" "atomic")
 else ()
         set(SND_OPENAL_PLATFORM_LIBRARIES "")
 endif()
+
+# Force -O3 for GCC or Clang release builds
+if (${CMAKE_SYSTEM_NAME} MATCHES "Linux" OR "Darwin")
+    if(${CMAKE_BUILD_TYPE} MATCHES "Release")
+        set_source_files_properties("snd_propagation.cpp" PROPERTIES COMPILE_FLAGS "-O3")
+    endif ()
+endif ()
 
 add_library(snd_openal_system SHARED ${SND_OPENAL_HEADERS} ${SND_OPENAL_SOURCES})
 target_include_directories(snd_openal_system BEFORE PRIVATE ${OPENAL_INCLUDE_DIR})
