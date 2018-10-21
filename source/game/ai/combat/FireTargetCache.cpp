@@ -1,103 +1,7 @@
 #include "FireTargetCache.h"
+#include "../navigation/AasElementsMask.h"
 #include "../ai_trajectory_predictor.h"
-#include "../ai_shutdown_hooks_holder.h"
 #include "../bot.h"
-
-class FixedBitVector {
-private:
-	unsigned size;   // Count of bits this vector is capable to contain
-	uint32_t *words; // Actual bits data. We are limited 32-bit words to work fast on 32-bit processors.
-
-public:
-	explicit FixedBitVector( unsigned size_ ) : size( size_ ) {
-		words = (uint32_t *)( G_Malloc( size_ / 8 + 4 ) );
-		Clear();
-	}
-
-	// These following move-related members are mandatory for intended BitVectorHolder behavior
-
-	explicit FixedBitVector( FixedBitVector &&that ) {
-		size = that.size;
-		words = that.words;
-		that.words = nullptr;
-	}
-
-	FixedBitVector &operator=( FixedBitVector &&that ) {
-		if( words ) {
-			G_Free( words );
-		}
-		size = that.size;
-		words = that.words;
-		that.words = nullptr;
-		return *this;
-	}
-
-	~FixedBitVector() {
-		// If not moved
-		if( words ) {
-			G_Free( words );
-		}
-	}
-
-	void Clear() { memset( words, 0, size / 8 + 4 ); }
-
-	// TODO: Shift by a variable may be an interpreted instruction on some CPUs
-
-	inline bool IsSet( int bitIndex ) const {
-		unsigned wordIndex = (unsigned)bitIndex / 32;
-		unsigned bitOffset = (unsigned)bitIndex - wordIndex * 32;
-
-		return ( words[wordIndex] & ( 1 << bitOffset ) ) != 0;
-	}
-
-	inline void Set( int bitIndex, bool value ) const {
-		unsigned wordIndex = (unsigned)bitIndex / 32;
-		unsigned bitOffset = (unsigned)bitIndex - wordIndex * 32;
-		if( value ) {
-			words[wordIndex] |= ( (unsigned)value << bitOffset );
-		} else {
-			words[wordIndex] &= ~( (unsigned)value << bitOffset );
-		}
-	}
-};
-
-class BitVectorHolder {
-private:
-	StaticVector<FixedBitVector, 1> vectorHolder;
-	unsigned size;
-	bool hasRegisteredShutdownHook;
-
-	BitVectorHolder( BitVectorHolder &&that ) = delete;
-
-public:
-	BitVectorHolder() : size( std::numeric_limits<unsigned>::max() ), hasRegisteredShutdownHook( false ) {}
-
-	FixedBitVector &Get( unsigned size_ ) {
-		if( this->size != size_ ) {
-			vectorHolder.clear();
-		}
-
-		this->size = size_;
-
-		if( vectorHolder.empty() ) {
-			vectorHolder.emplace_back( FixedBitVector( size_ ) );
-		}
-
-		if( !hasRegisteredShutdownHook ) {
-			// Clean up the held bit vector on shutdown
-			const auto hook = [&]() {
-								  this->vectorHolder.clear();
-							  };
-			AiShutdownHooksHolder::Instance()->RegisterHook( hook );
-			hasRegisteredShutdownHook = true;
-		}
-
-		return vectorHolder[0];
-	}
-};
-
-static BitVectorHolder visitedFacesHolder;
-static BitVectorHolder visitedAreasHolder;
 
 struct PointAndDistance {
 	Vec3 point;
@@ -112,11 +16,11 @@ static void FindClosestAreasFacesPoints( float splashRadius, const vec3_t target
 										 StaticVector<PointAndDistance, MAX_CLOSEST_FACE_POINTS + 1> &closestPoints ) {
 	// Retrieve these instances before the loop
 	const AiAasWorld *aasWorld = AiAasWorld::Instance();
-	FixedBitVector &visitedFaces = visitedFacesHolder.Get( (unsigned)aasWorld->NumFaces() );
-	FixedBitVector &visitedAreas = visitedAreasHolder.Get( (unsigned)aasWorld->NumFaces() );
+	BitVector *const visitedFaces = AasElementsMask::FacesMask();
+	BitVector *const visitedAreas = AasElementsMask::AreasMask();
 
-	visitedFaces.Clear();
-	visitedAreas.Clear();
+	visitedFaces->Clear();
+	visitedAreas->Clear();
 
 	// Actually it is not a limit of a queue capacity but a limit of processed areas number
 	constexpr int MAX_FRINGE_AREAS = 16;
@@ -132,20 +36,17 @@ static void FindClosestAreasFacesPoints( float splashRadius, const vec3_t target
 
 	while( areasFringeHead < areasFringeTail ) {
 		const int areaNum = areasFringe[areasFringeHead++];
-		visitedAreas.Set( areaNum, true );
+		visitedAreas->Set( areaNum, true );
 
 		const aas_area_t *area = aasWorld->Areas() + areaNum;
 
 		for( int faceIndexNum = area->firstface; faceIndexNum < area->firstface + area->numfaces; ++faceIndexNum ) {
 			int faceIndex = aasWorld->FaceIndex()[faceIndexNum];
 
-			// If the face has been already processed, skip it
-			if( visitedFaces.IsSet( abs( faceIndex ) ) ) {
+			// If the face has been already processed, skip it.
+			if( !visitedFaces->TrySet( abs( faceIndex ) ) ) {
 				continue;
 			}
-
-			// Mark the face as processed
-			visitedFaces.Set( abs( faceIndex ), true );
 
 			// Get actual face and area behind it by a sign of the faceIndex
 			const aas_face_t *face;
@@ -175,7 +76,7 @@ static void FindClosestAreasFacesPoints( float splashRadius, const vec3_t target
 			// If there is a non-solid are behind face
 			if( areaBehindFace ) {
 				// If the area behind face is not checked yet and areas BFS limit is not reached
-				if( !visitedAreas.IsSet( areaBehindFace ) && areasFringeTail != MAX_FRINGE_AREAS ) {
+				if( !visitedAreas->IsSet( areaBehindFace ) && areasFringeTail != MAX_FRINGE_AREAS ) {
 					// Enqueue `areaBehindFace` to the fringe queue
 					areasFringe[areasFringeTail++] = areaBehindFace;
 				}
