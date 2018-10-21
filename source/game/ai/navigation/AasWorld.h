@@ -287,11 +287,7 @@ class AiAasWorld
 
 	bool Load( const char *mapname );
 
-	void PostLoad() {
-		InitLinkHeap();
-		InitLinkedEntities();
-		ComputeExtraAreaData();
-	}
+	void PostLoad();
 
 	void SwapData();
 

@@ -1,4 +1,5 @@
 #include "AasWorld.h"
+#include "AasElementsMask.h"
 #include "../buffer_builder.h"
 #include "../static_vector.h"
 #include "../ai_local.h"
@@ -1015,7 +1016,20 @@ bool AiAasWorld::Load( const char *mapname ) {
 	return true;
 }
 
+void AiAasWorld::PostLoad() {
+	// This is important for further PostLoad() computations
+	AasElementsMask::Init( this );
+
+	InitLinkHeap();
+	InitLinkedEntities();
+	ComputeExtraAreaData();
+}
+
 AiAasWorld::~AiAasWorld() {
+	// This is valid to call even if there was no matching Init() call.
+	// To avoid possible issues if the code gets reorganized, call it always.
+	AasElementsMask::Shutdown();
+
 	if( !loaded ) {
 		return;
 	}
