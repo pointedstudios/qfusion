@@ -1272,7 +1272,8 @@ class AreasClusterBuilder {
 protected:
 	ClassifyFunc classifyFunc;
 
-	bool *isFlooded;
+	BitVector *const areasMask;
+
 	uint16_t *resultsBase;
 	uint16_t *resultsPtr;
 
@@ -1282,13 +1283,13 @@ protected:
 	vec3_t floodedRegionMaxs;
 
 public:
-	AreasClusterBuilder( bool *isFloodedBuffer, uint16_t *resultsBuffer, AiAasWorld *aasWorld_ )
-		: isFlooded( isFloodedBuffer ), resultsBase( resultsBuffer ), aasWorld( aasWorld_ ) {}
+	AreasClusterBuilder( BitVector *const areasMask_, uint16_t *resultsBuffer, AiAasWorld *aasWorld_ )
+		: areasMask( areasMask_ ), resultsBase( resultsBuffer ), aasWorld( aasWorld_ ) {}
 
 	void FloodAreasRecursive( int areaNum );
 
 	void PrepareToFlood() {
-		memset( isFlooded, 0, sizeof( bool ) * aasWorld->NumAreas() );
+		areasMask->Clear();
 		resultsPtr = &resultsBase[0];
 		ClearBounds( floodedRegionMins, floodedRegionMaxs );
 	}
@@ -1306,7 +1307,7 @@ void AreasClusterBuilder<ClassifyFunc>::FloodAreasRecursive( int areaNum ) {
 	// TODO: Rewrite to stack-based non-recursive version
 
 	*resultsPtr++ = (uint16_t)areaNum;
-	isFlooded[areaNum] = true;
+	areasMask->Set( areaNum, true );
 
 	const auto &currArea = aasAreas[areaNum];
 	AddPointToBounds( currArea.mins, floodedRegionMins, floodedRegionMaxs );
@@ -1317,13 +1318,13 @@ void AreasClusterBuilder<ClassifyFunc>::FloodAreasRecursive( int areaNum ) {
 	const int maxReachNum = reachNum + currAreaSettings.numreachableareas;
 	for( ; reachNum < maxReachNum; ++reachNum ) {
 		const auto &reach = aasReach[reachNum];
-		if( isFlooded[reach.areanum] ) {
+		if( areasMask->IsSet( reach.areanum ) ) {
 			continue;
 		}
 
 		int classifyResult = classifyFunc( currArea, reach, aasAreas[reach.areanum], aasAreaSettings[reach.areanum] );
 		if( classifyResult < 0 ) {
-			isFlooded[reach.areanum] = true;
+			areasMask->Set( reach.areanum, true );
 			continue;
 		}
 
@@ -1372,8 +1373,8 @@ struct ClassifyFloorArea
 class FloorClusterBuilder : public AreasClusterBuilder<ClassifyFloorArea> {
 	bool IsFloodedRegionDegenerate() const;
 public:
-	FloorClusterBuilder( bool *isFloodedBuffer, uint16_t *resultsBuffer, AiAasWorld *aasWorld_ )
-		: AreasClusterBuilder( isFloodedBuffer, resultsBuffer, aasWorld_ ) {}
+	FloorClusterBuilder( BitVector *areasMask_, uint16_t *resultsBuffer, AiAasWorld *aasWorld_ )
+		: AreasClusterBuilder( areasMask_, resultsBuffer, aasWorld_ ) {}
 
 	bool Build( int startAreaNum );
 };
@@ -1479,8 +1480,8 @@ class StairsClusterBuilder: public AreasClusterBuilder<ClassifyStairsArea>
 public:
 	StaticVector<AreaAndScore, 128> areasAndHeights;
 
-	StairsClusterBuilder( bool *isFloodedBuffer, uint16_t *resultsBuffer, AiAasWorld *aasWorld_ )
-		: AreasClusterBuilder( isFloodedBuffer, resultsBuffer, aasWorld_ ), firstAreaIndex(0), lastAreaIndex(0) {}
+	StairsClusterBuilder( BitVector *areasMask_, uint16_t *resultsBuffer, AiAasWorld *aasWorld_ )
+		: AreasClusterBuilder( areasMask_, resultsBuffer, aasWorld_ ), firstAreaIndex(0), lastAreaIndex(0) {}
 
 	bool Build( int startAreaNum );
 
@@ -1634,16 +1635,12 @@ bool StairsClusterBuilder::Build( int startAreaNum ) {
 }
 
 void AiAasWorld::ComputeLogicalAreaClusters() {
-	auto isFloodedBuffer = (bool *)G_LevelMalloc( sizeof( bool ) * this->NumAreas() );
 	auto floodResultsBuffer = (uint16_t *)G_LevelMalloc( sizeof( uint16_t ) * this->NumAreas() );
 
-	FloorClusterBuilder floorClusterBuilder( isFloodedBuffer, floodResultsBuffer, this );
-	StairsClusterBuilder stairsClusterBuilder( isFloodedBuffer, floodResultsBuffer, this );
+	FloorClusterBuilder floorClusterBuilder( AasElementsMask::AreasMask(), floodResultsBuffer, this );
 
 	this->areaFloorClusterNums = (uint16_t *)G_LevelMalloc( sizeof( uint16_t ) * this->NumAreas() );
 	memset( this->areaFloorClusterNums, 0, sizeof( uint16_t ) * this->NumAreas() );
-	this->areaStairsClusterNums = (uint16_t *)G_LevelMalloc( sizeof( uint16_t ) * this->NumAreas() );
-	memset( this->areaStairsClusterNums, 0, sizeof( uint16_t ) * this->NumAreas() );
 
 	BufferBuilder<uint16_t> floorData( 256 );
 	BufferBuilder<int> floorDataOffsets( 32 );
@@ -1685,6 +1682,11 @@ void AiAasWorld::ComputeLogicalAreaClusters() {
 	this->floorClusterData = floorData.FlattenResult();
 	floorData.Clear();
 
+	StairsClusterBuilder stairsClusterBuilder( AasElementsMask::AreasMask(), floodResultsBuffer, this );
+
+	this->areaStairsClusterNums = (uint16_t *)G_LevelMalloc( sizeof( uint16_t ) * this->NumAreas() );
+	memset( this->areaStairsClusterNums, 0, sizeof( uint16_t ) * this->NumAreas() );
+
 	numStairsClusters = 1;
 	stairsDataOffsets.Add( 0 );
 	stairsData.Add( 0 );
@@ -1716,7 +1718,6 @@ void AiAasWorld::ComputeLogicalAreaClusters() {
 	}
 
 	// Clear as no longer needed to provide free space for further allocations
-	G_LevelFree( isFloodedBuffer );
 	G_LevelFree( floodResultsBuffer );
 
 	assert( numStairsClusters == stairsDataOffsets.Size() );
@@ -1792,14 +1793,14 @@ void AiAasWorld::ComputeAreasLeafsLists() {
 template <typename AcceptAreaFunc>
 class ReachPassThroughAreasListBuilder {
 	AiAasWorld *aasWorld;
-	bool *isFloodedBuffer;
+	BitVector *areasMask;
 
 	// TODO: Even if this does not really depend of the template parameter
 	// it probably gets generated for every different template parameter
 	void AddTracedAreas( const aas_reachability_t &reach, BufferBuilder<uint16_t> &builder );
 public:
-	ReachPassThroughAreasListBuilder( AiAasWorld *aasWorld_, bool *isFloodedBuffer_ )
-		: aasWorld( aasWorld_ ), isFloodedBuffer( isFloodedBuffer_ ) {}
+	ReachPassThroughAreasListBuilder( AiAasWorld *aasWorld_, BitVector *areasMask_ )
+		: aasWorld( aasWorld_ ), areasMask( areasMask_ ) {}
 
 	uint16_t *Exec( int travelType );
 };
@@ -1808,7 +1809,7 @@ template <typename AcceptAreaFunc>
 uint16_t *ReachPassThroughAreasListBuilder<AcceptAreaFunc>::Exec( int travelType ) {
 	BufferBuilder<uint16_t> listBuilder( 128 );
 
-	memset( isFloodedBuffer, 0, sizeof( bool ) * aasWorld->NumAreas() );
+	areasMask->Clear();
 
 	// Reserve a space for an actual list size
 	listBuilder.Add( 0 );
@@ -1844,10 +1845,10 @@ void ReachPassThroughAreasListBuilder<AcceptAreaFunc>::AddTracedAreas( const aas
 	int numReachAreas = aasWorld->TraceAreas( reach.start, reach.end, tmpAreaNums, 64 );
 	for( int j = 0; j < numReachAreas; ++j ) {
 		int areaNum = tmpAreaNums[j];
-		if( isFloodedBuffer[areaNum] ) {
+		// Skip if already set
+		if( !areasMask->TrySet( areaNum ) ) {
 			continue;
 		}
-		isFloodedBuffer[areaNum] = true;
 		listBuilder.Add( (uint16_t)areaNum );
 	}
 }
@@ -1878,10 +1879,7 @@ void AiAasWorld::BuildSpecificAreaTypesLists() {
 	this->groundedAreas[0] = (uint16_t)( groundedAreasBuilder.Size() - 1 );
 	groundedAreasBuilder.Clear();
 
-	// TODO: This is not only a duplicated allocation, but a global shared buffer should be used instead
-	auto *const isFloodedBuffer = (bool *)G_LevelMalloc( sizeof( bool ) * NumAreas() );
-
-	ReachPassThroughAreasListBuilder<AcceptAnyArea> acceptAnyAreaBuilder( this, isFloodedBuffer );
+	ReachPassThroughAreasListBuilder<AcceptAnyArea> acceptAnyAreaBuilder( this, AasElementsMask::AreasMask() );
 
 	// We can collect all these areas in a single pass.
 	// However the code would be less clean and would require
@@ -1893,8 +1891,6 @@ void AiAasWorld::BuildSpecificAreaTypesLists() {
 	this->ladderReachPassThroughAreas = acceptAnyAreaBuilder.Exec( TRAVEL_LADDER );
 	this->elevatorReachPassThroughAreas = acceptAnyAreaBuilder.Exec( TRAVEL_ELEVATOR );
 
-	ReachPassThroughAreasListBuilder<AcceptInAirArea> acceptInAirAreaBuilder( this, isFloodedBuffer );
+	ReachPassThroughAreasListBuilder<AcceptInAirArea> acceptInAirAreaBuilder( this, AasElementsMask::AreasMask() );
 	this->walkOffLedgePassThroughAirAreas = acceptInAirAreaBuilder.Exec( TRAVEL_WALKOFFLEDGE );
-
-	G_LevelFree( isFloodedBuffer );
 }
