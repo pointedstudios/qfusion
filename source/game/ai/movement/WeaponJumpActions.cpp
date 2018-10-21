@@ -1,6 +1,7 @@
 #include "WeaponJumpActions.h"
 #include "BestJumpableSpotDetector.h"
 #include "MovementLocal.h"
+#include "../navigation/AasElementsMask.h"
 #include "../ai_manager.h"
 
 class WeaponJumpableSpotDetector: public BestJumpableSpotDetector {
@@ -77,7 +78,6 @@ static void PrepareAnglesAndWeapon( Context *context ) {
 	context->record->pendingWeapon = weaponJumpState.weapon;
 }
 
-uint32_t ScheduleWeaponJumpAction::areasMask[( 1 << 16 ) / 8];
 int ScheduleWeaponJumpAction::dummyTravelTimes[ScheduleWeaponJumpAction::MAX_AREAS];
 
 void ScheduleWeaponJumpAction::PlanPredictionStep( Context *context ) {
@@ -167,7 +167,7 @@ void ScheduleWeaponJumpAction::PlanPredictionStep( Context *context ) {
 		return;
 	}
 
-	ClearAreasMask();
+	AasElementsMask::AreasMask()->Clear();
 	PrecacheBotLeafs( context );
 
 	if( worthWeaponJumping && TryJumpDirectlyToTarget( context, suitableWeapons, numSuitableWeapons ) ) {
@@ -182,19 +182,6 @@ void ScheduleWeaponJumpAction::PlanPredictionStep( Context *context ) {
 
 	Debug( "No method/target was suitable for weapon-jumping, disabling the action for further planning\n" );
 	this->SwitchOrRollback( context, &DefaultWalkAction() );
-}
-
-inline void ScheduleWeaponJumpAction::ClearAreasMask() {
-	memset( areasMask, 0, sizeof( areasMask ) );
-}
-
-inline bool ScheduleWeaponJumpAction::TryMarkAreaInMask( int areaNum ) {
-	int wordNum = areaNum / 32;
-	uint32_t bitMask = 1u << ( areaNum % 32 );
-	// True if was not marked
-	bool result = ( areasMask[wordNum] & bitMask ) == 0;
-	areasMask[wordNum] |= bitMask;
-	return result;
 }
 
 inline void ScheduleWeaponJumpAction::PrecacheBotLeafs( Context *context ) {
@@ -223,6 +210,7 @@ int ScheduleWeaponJumpAction::GetCandidatesForReachChainShortcut( Context *conte
 	const auto *aasReach = aasWorld->Reachabilities();
 	const auto *aasAreas = aasWorld->Areas();
 	const auto *routeCache = bot->RouteCache();
+	auto *const areasMask = AasElementsMask::AreasMask();
 	const float *botOrigin = context->movementState->entityPhysicsState.Origin();
 	const int targetAreaNum = context->NavTargetAasAreaNum();
 	int currAreaNum = context->CurrGroundedAasAreaNum();
@@ -252,7 +240,7 @@ int ScheduleWeaponJumpAction::GetCandidatesForReachChainShortcut( Context *conte
 		int nextAreaNum = nextReach.areanum;
 		currAreaNum = nextAreaNum;
 		// If an area has been already marked (by the "jump to target" call)
-		if( !TryMarkAreaInMask( nextAreaNum ) ) {
+		if( !areasMask->TrySet( nextAreaNum ) ) {
 			continue;
 		}
 
@@ -293,7 +281,17 @@ bool ScheduleWeaponJumpAction::TryJumpDirectlyToTarget( Context *context, const 
 
 	::weaponJumpWeaponsTester.SetSpotData( areaNums, travelTimes, jumpTargets, numPassedReachTestAreas );
 	::weaponJumpWeaponsTester.SetWeapons( suitableWeapons, numWeapons );
-	return ::weaponJumpWeaponsTester.Exec( context, this );
+	if( ::weaponJumpWeaponsTester.Exec( context, this ) ) {
+		return true;
+	}
+
+	auto *const areasMask = AasElementsMask::AreasMask();
+	// All these areas are not reachable by weapon jumping and should be excluded from further testing
+	for( int i = 0; i < numPassedReachTestAreas; ++i ) {
+		areasMask->Set( areaNums[i], true );
+	}
+
+	return false;
 }
 
 int ScheduleWeaponJumpAction::GetCandidatesForJumpingToTarget( Context *context, int *areaNums ) {
