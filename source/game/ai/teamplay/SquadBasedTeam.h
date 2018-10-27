@@ -6,24 +6,10 @@
 #include "../navigation/AasRouteCache.h"
 #include "../navigation/AasWorld.h"
 #include "../static_vector.h"
-#include <deque>
+
 #include <utility>
 
 class Bot;
-
-class CachedTravelTimesMatrix {
-	int aasTravelTimes[MAX_CLIENTS * MAX_CLIENTS];
-	int FindTravelTime( const edict_t *fromClient, const edict_t *toClient );
-
-public:
-	inline void Clear() {
-		// negative values mean that a value should be lazily computed on demand
-		std::fill( aasTravelTimes, aasTravelTimes + MAX_CLIENTS * MAX_CLIENTS, -1 );
-	}
-
-	int GetTravelTime( const edict_t *fromClient, const edict_t *toClient );
-	int GetTravelTime( const Bot *from, const Bot *to );
-};
 
 class AiSquad : public AiFrameAwareUpdatable {
 	friend class AiSquadBasedTeam;
@@ -51,8 +37,6 @@ private:
 	bool botsDetached { false };
 
 	BotsList bots;
-
-	CachedTravelTimesMatrix &travelTimesMatrix;
 
 	bool CheckCanFightTogether() const;
 	bool CheckCanMoveTogether() const;
@@ -129,9 +113,8 @@ protected:
 		squadEnemiesTracker->SetFrameAffinity( modulo, offset );
 	}
 
+	AiSquad();
 public:
-	AiSquad( CachedTravelTimesMatrix &travelTimesMatrix_ );
-	AiSquad( AiSquad &&that );
 	~AiSquad() override;
 
 	bool IsValid() const { return isValid; }
@@ -184,8 +167,6 @@ class AiSquadBasedTeam : public AiBaseTeam {
 	friend class AiBaseTeam;
 	StaticVector<AiSquad, MAX_CLIENTS> squads;
 	StaticVector<Bot*, MAX_CLIENTS> orphanBots;
-
-	CachedTravelTimesMatrix travelTimesMatrix;
 
 protected:
 	void OnBotAdded( Bot *bot ) override;

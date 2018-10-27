@@ -5,59 +5,138 @@
 #include <algorithm>
 #include <limits>
 
-int CachedTravelTimesMatrix::GetTravelTime( const edict_t *client1, const edict_t *client2 ) {
-	const auto client1Num = (int)( client1 - game.edicts );
-	const auto client2Num = (int)( client2 - game.edicts );
+/**
+ * While {@code AiAasRouteCache} is fairly efficient at retrieval of cached results,
+ * we can use retrieval of a cached travel time at cost of a single branch for this specialized cache.
+ * Moreover, travel times must be computed using routing caches of bot clients whether it's possible
+ * for a correct handling of current preferred/allowed travel flags and blocked areas specific to a bot.
+ */
+class ClientToClientTable {
+	mutable int aasTravelTimes[MAX_CLIENTS * MAX_CLIENTS];
 
-#ifdef _DEBUG
-	if( client1Num <= 0 || client1Num > gs.maxclients ) {
-		AI_FailWith( "CachedTravelTimesMatrix::GetAASTravelTime()", "Entity `client1` #%d is not a client\n", client1Num );
+	/**
+	 * A common entry point for every accessor that wraps it.
+	 * Actually tries to fetch a cached value.
+	 */
+	int GetTravelTime( int fromEntNum, int toEntNum ) const;
+
+	/**
+	 * Actually performs travel time computations.
+	 * @note result of this method is not symmetrical in relation to arguments swapping.
+	 */
+	int FindTravelTime( int fromEntNum, int toEntNum ) const;
+
+	/**
+	 * Tries to find an entity area num, possibly dropping entity to floor.
+	 * @param ent an entity to find an area for
+	 * @param areaNums a buffer for result areas, must be capable to store 2 areas.
+	 * @return a number of found areas (up to 2).
+	 */
+	int FindEntityAreas( const edict_t *ent, int *areaNums ) const;
+public:
+	ClientToClientTable() {
+		std::fill( aasTravelTimes, aasTravelTimes + MAX_CLIENTS, -1 );
 	}
-	if( client2Num <= 0 || client2Num > gs.maxclients ) {
-		AI_FailWith( "CachedTravelTimesMatrix::GetAASTravelTime()", "Entity `client2` #%d is not a client\n", client2Num );
+
+	/**
+	 * Must be called every game frame. Invalidates cached results.
+	 */
+	void Update() {
+		// negative values mean that a value should be lazily computed on demand
+		std::fill( aasTravelTimes, aasTravelTimes + MAX_CLIENTS * MAX_CLIENTS, -1 );
+	}
+
+	int GetTravelTime( const edict_t *fromEnt, const edict_t *toEnt ) const {
+		return GetTravelTime( ENTNUM( fromEnt ), ENTNUM( toEnt ) );
+	}
+	int GetTravelTime( const gclient_t *fromClient, const gclient_t *toClient ) const {
+		return GetTravelTime( (int)( fromClient - game.clients ) + 1, (int)( toClient - game.clients ) + 1 );
+	}
+	int GetTravelTime( const Bot *fromBot, const Bot *toBot ) const {
+		return GetTravelTime( ENTNUM( fromBot->Self() ), ENTNUM( toBot->Self() ) );
+	}
+};
+
+int ClientToClientTable::GetTravelTime( int fromEntNum, int toEntNum ) const {
+#ifdef _DEBUG
+	constexpr const char *tag = "ClientToClientTable::GetTravelTime()";
+	if( fromEntNum < 1 || fromEntNum > gs.maxclients ) {
+		AI_FailWith( tag, "`fromEntNum` #%d does not correspond to a client\n", fromEntNum );
+	}
+	if( toEntNum < 1 || toEntNum > gs.maxclients ) {
+		AI_FailWith( tag, "`toEntNum` #%d does not correspond to a client\n", fromEntNum );
 	}
 #endif
-	int index = client1Num * MAX_CLIENTS + client2Num;
-	if( aasTravelTimes[index] < 0 ) {
-		aasTravelTimes[index] = FindTravelTime( client1, client2 );
+	int *const valuePtr = &aasTravelTimes[( fromEntNum - 1 ) * MAX_CLIENTS + ( toEntNum - 1 )];
+	if( *valuePtr < 0 ) {
+		*valuePtr = FindTravelTime( fromEntNum, toEntNum );
 	}
-	return aasTravelTimes[index];
+	return *valuePtr;
 }
 
-// Can't be defined in header since Bot class is not visible in it
-int CachedTravelTimesMatrix::GetTravelTime( const Bot *from, const Bot *to ) {
-	return GetTravelTime( from->self, to->self );
-}
+int ClientToClientTable::FindTravelTime( int fromEntNum, int toEntNum ) const {
+	const AiAasRouteCache *routeCache;
 
-int CachedTravelTimesMatrix::FindTravelTime( const edict_t *client1, const edict_t *client2 ) {
-	AiGroundTraceCache *groundTraceCache = AiGroundTraceCache::Instance();
-	AiAasWorld *aasWorld = AiAasWorld::Instance();
-	AiAasRouteCache *routeCache = AiAasRouteCache::Shared();
+	int fromAreaNums[2] = { 0, 0 };
+	int numFromAreas;
 
-	const edict_t *clients[2] = { client1, client2 };
-	vec3_t origins[2];
-	int areaNums[2] = { 0, 0 };
+	int toAreaNums[2] = { 0, 0 };
+	int numToAreas;
 
-	for( int i = 0; i < 2; ++i ) {
-		if( !groundTraceCache->TryDropToFloor( clients[i], 96.0f, origins[i] ) ) {
-			return 0;
-		}
-		areaNums[i] = aasWorld->FindAreaNum( origins[i] );
-		if( !areaNums[i] ) {
-			return 0;
+	const edict_t *const fromEnt = game.edicts + fromEntNum;
+	if( fromEnt->ai && fromEnt->ai->botRef ) {
+		routeCache = fromEnt->ai->botRef->RouteCache();
+		numFromAreas = fromEnt->ai->botRef->EntityPhysicsState()->PrepareRoutingStartAreas( fromAreaNums );
+	} else {
+		routeCache = AiAasRouteCache::Shared();
+		numFromAreas = FindEntityAreas( fromEnt, fromAreaNums );
+	}
+
+	const edict_t *const toEnt = game.edicts + toEntNum;
+	if( toEnt->ai && toEnt->ai->botRef ) {
+		numToAreas = fromEnt->ai->botRef->EntityPhysicsState()->PrepareRoutingStartAreas( toAreaNums );
+	} else {
+		numToAreas = FindEntityAreas( toEnt, toAreaNums );
+	}
+
+	// AAS routines return 0 on failure (1 is the minimal feasible travel time)
+	int bestTravelTime = 0;
+	for( int i = 0; i < numToAreas; ++i ) {
+		if( const int travelTime = routeCache->PreferredRouteToGoalArea( fromAreaNums, numFromAreas, toAreaNums[i] ) ) {
+			if( bestTravelTime && travelTime > bestTravelTime ) {
+				continue;
+			}
+			bestTravelTime = travelTime;
 		}
 	}
 
-	int travelFlags[2] = { client1->ai->aiRef->PreferredTravelFlags(), client1->ai->aiRef->AllowedTravelFlags() };
-	for( int i = 0; i < 2; ++i ) {
-		int travelTime = routeCache->TravelTimeToGoalArea( areaNums[0], areaNums[1], travelFlags[i] );
-		if( travelTime ) {
-			return travelTime;
+	return bestTravelTime;
+}
+
+int ClientToClientTable::FindEntityAreas( const edict_t *ent, int *areaNums ) const {
+	const auto *aasWorld = AiAasWorld::Instance();
+	int numResultAreas = 0;
+	int areaNum = aasWorld->FindAreaNum( ent );
+	if( areaNum ) {
+		areaNums[numResultAreas++] = areaNum;
+		// If the first area already has ground
+		if( aasWorld->AreaGrounded( areaNum ) ) {
+			return numResultAreas;
 		}
 	}
 
-	return 0;
+	vec3_t tmpOrigin;
+	if( AiGroundTraceCache::Instance()->TryDropToFloor( ent, 64.0f, tmpOrigin ) ) {
+		const int droppedAreaNum = aasWorld->FindAreaNum( tmpOrigin );
+		if( droppedAreaNum && droppedAreaNum != areaNum ) {
+			areaNums[numResultAreas++] = droppedAreaNum;
+		}
+	}
+
+	return numResultAreas;
 }
+
+static ClientToClientTable clientToClientTable;
 
 AiSquad::SquadEnemiesTracker::SquadEnemiesTracker( AiSquad *squad_, float skill )
 	: AiEnemiesTracker( skill ), squad( squad_ ) {
@@ -171,8 +250,7 @@ void AiSquad::SquadEnemiesTracker::OnBotEnemyAssigned( const edict_t *bot, const
 	botEnemies[GetBotSlot( bot->ai->botRef )] = enemy;
 }
 
-AiSquad::AiSquad( CachedTravelTimesMatrix &travelTimesMatrix_ )
-	: travelTimesMatrix( travelTimesMatrix_ ) {
+AiSquad::AiSquad() {
 	std::fill_n( lastDroppedByBotTimestamps, MAX_SIZE, 0 );
 	std::fill_n( lastDroppedForBotTimestamps, MAX_SIZE, 0 );
 
@@ -180,27 +258,6 @@ AiSquad::AiSquad( CachedTravelTimesMatrix &travelTimesMatrix_ )
 	float skill = std::min( 1.0f, 0.33f * ( 0.1f + skillLevel + random() ) ); // (0..1)
 	// There is a clash with a getter name, thus we have to introduce a type alias
 	squadEnemiesTracker = new ( G_Malloc( sizeof( SquadEnemiesTracker ) ) )SquadEnemiesTracker( this, skill );
-}
-
-AiSquad::AiSquad( AiSquad &&that )
-	: travelTimesMatrix( that.travelTimesMatrix ) {
-	isValid = that.isValid;
-	inUse = that.inUse;
-	canFightTogether = that.canFightTogether;
-	canMoveTogether = that.canMoveTogether;
-	brokenConnectivityTimeoutAt = that.brokenConnectivityTimeoutAt;
-	botsDetached = that.botsDetached;
-	for( Bot *bot: that.bots )
-		bots.push_back( bot );
-
-	std::fill_n( lastDroppedByBotTimestamps, MAX_SIZE, 0 );
-	std::fill_n( lastDroppedForBotTimestamps, MAX_SIZE, 0 );
-
-	// Move the allocated enemy pool
-	this->squadEnemiesTracker = that.squadEnemiesTracker;
-	// Hack! Since EnemiesTracker refers to `that`, modify the reference
-	this->squadEnemiesTracker->squad = this;
-	that.squadEnemiesTracker = nullptr;
 }
 
 AiSquad::~AiSquad() {
@@ -335,13 +392,13 @@ bool AiSquad::CheckCanMoveTogether() const {
 	for( unsigned i = 0; i < bots.size(); ++i ) {
 		for( unsigned j = i + 1; j < bots.size(); ++j ) {
 			// Check direct travel time (it's given in seconds^-2)
-			aasTravelTime = travelTimesMatrix.GetTravelTime( bots[i], bots[j] );
+			aasTravelTime = ::clientToClientTable.GetTravelTime( bots[i], bots[j] );
 			// At least bot j is reachable from bot i, move to next bot
 			if( aasTravelTime && aasTravelTime < CONNECTIVITY_MOVE_CENTISECONDS / 2 ) {
 				continue;
 			}
 			// Bot j is not reachable from bot i, check travel time from j to i
-			aasTravelTime = travelTimesMatrix.GetTravelTime( bots[j], bots[i] );
+			aasTravelTime = ::clientToClientTable.GetTravelTime( bots[j], bots[i] );
 			if( !aasTravelTime || aasTravelTime >= CONNECTIVITY_MOVE_CENTISECONDS / 2 ) {
 				return false;
 			}
@@ -751,7 +808,7 @@ void AiSquad::FindSupplierCandidates( unsigned botNum, StaticVector<unsigned, Ai
 		}
 
 		// The lowest feasible AAS travel time is 1, 0 means that thatBot is not reachable for currBot
-		int travelTime = travelTimesMatrix.GetTravelTime( bots[botNum], bots[thatBotNum] );
+		int travelTime = ::clientToClientTable.GetTravelTime( bots[botNum], bots[thatBotNum] );
 		if( !travelTime ) {
 			continue;
 		}
@@ -1062,11 +1119,11 @@ bool AiSquad::MayAttachBot( const Bot *bot ) const {
 			continue;
 		}
 
-		int toPresentTravelTime = travelTimesMatrix.GetTravelTime( bot, presentBot );
+		int toPresentTravelTime = ::clientToClientTable.GetTravelTime( bot, presentBot );
 		if( !toPresentTravelTime ) {
 			continue;
 		}
-		int fromPresentTravelTime = travelTimesMatrix.GetTravelTime( presentBot, bot );
+		int fromPresentTravelTime = ::clientToClientTable.GetTravelTime( presentBot, bot );
 		if( !fromPresentTravelTime ) {
 			continue;
 		}
@@ -1101,8 +1158,8 @@ void AiSquadBasedTeam::Frame() {
 		squad.ReleaseBotsTo( orphanBots );
 	}
 
-	// This should be called before AiSquad::Update() (since squads refer to this matrix)
-	travelTimesMatrix.Clear();
+	// This should be called before AiSquad::Update() (since squads expect this to be valid)
+	::clientToClientTable.Update();
 
 	// Call squads Update() (and, thus, Frame() and, maybe, Think()) each frame as it is expected
 	// even if all squad AI logic is performed only in AiSquad::Think()
@@ -1183,9 +1240,7 @@ void NearbyMatesList::Add( const NearbyBotProps &props ) {
 	}
 }
 
-static void SelectNearbyMates( NearbyMatesList *nearbyMates,
-							   StaticVector<Bot*, MAX_CLIENTS> &orphanBots,
-							   CachedTravelTimesMatrix &travelTimesMatrix ) {
+static void SelectNearbyMates( NearbyMatesList *nearbyMates, StaticVector<Bot*, MAX_CLIENTS> &orphanBots ) {
 	for( unsigned i = 0; i < orphanBots.size(); ++i ) {
 		nearbyMates[i].botIndex = i;
 		if( orphanBots[i]->IsGhosting() ) {
@@ -1212,11 +1267,11 @@ static void SelectNearbyMates( NearbyMatesList *nearbyMates,
 			// Check whether bots may mutually reach each other in short amount of time
 			// (this means bots are not clustered across boundaries of teleports and other triggers)
 			// (implementing clustering across teleports breaks cheap distance rejection)
-			int firstToSecondTime = travelTimesMatrix.GetTravelTime( firstEnt, secondEnt );
+			int firstToSecondTime = ::clientToClientTable.GetTravelTime( firstEnt, secondEnt );
 			if( !firstToSecondTime ) {
 				continue;
 			}
-			int secondToFirstTime = travelTimesMatrix.GetTravelTime( secondEnt, firstEnt );
+			int secondToFirstTime = ::clientToClientTable.GetTravelTime( secondEnt, firstEnt );
 			if( !secondToFirstTime ) {
 				continue;
 			}
@@ -1320,7 +1375,7 @@ static unsigned MakeNewSquads( NearbyMatesList **sortedMatesLists, unsigned list
 void AiSquadBasedTeam::SetupSquads() {
 	NearbyMatesList nearbyMates[MAX_CLIENTS];
 
-	SelectNearbyMates( nearbyMates, orphanBots, travelTimesMatrix );
+	SelectNearbyMates( nearbyMates, orphanBots );
 
 	// We should start assignation from bots that have closest teammates
 	// Thus, NearbyMatesList's should be sorted by minimal distance to a teammate
@@ -1388,7 +1443,7 @@ unsigned AiSquadBasedTeam::GetFreeSquadSlot() {
 			return i;
 		}
 	}
-	squads.emplace_back( AiSquad( travelTimesMatrix ) );
+	new( squads.unsafe_grow_back() )AiSquad;
 	// This is very important action, otherwise the squad will not think
 	squads.back().SetFrameAffinity( frameAffinityModulo, frameAffinityOffset );
 	squads.back().PrepareToAddBots();
