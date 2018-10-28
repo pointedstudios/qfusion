@@ -75,6 +75,7 @@ class Bot: public Ai {
 	friend class AiObjectiveBasedTeam;
 	friend class BotPlanner;
 	friend class AiSquad;
+	friend class SquadsBuilder;
 	friend class AiEnemiesTracker;
 	friend class PathBlockingTracker;
 	friend class BotAwarenessModule;
@@ -105,6 +106,9 @@ class Bot: public Ai {
 	friend class CorrectWeaponJumpAction;
 
 	friend class CachedTravelTimesMatrix;
+
+	template <typename T> friend T *Link( T *, T **, int );
+	template <typename T> friend T *Unlink( T *, T **, int );
 public:
 	static constexpr auto PREFERRED_TRAVEL_FLAGS =
 		TFL_WALK | TFL_WALKOFFLEDGE | TFL_JUMP | TFL_STRAFEJUMP | TFL_AIR | TFL_TELEPORT | TFL_JUMPPAD;
@@ -121,6 +125,8 @@ public:
 
 	// Should be preferred instead of use of Self() that is deprecated and will be removed
 	int EntNum() const { return ENTNUM( self ); }
+
+	int ClientNum() const { return ENTNUM( self ) - 1; }
 
 	const player_state_t *PlayerState() const { return &self->r.client->ps; }
 	player_state_t *PlayerState() { return &self->r.client->ps; }
@@ -428,6 +434,20 @@ private:
 	BotMovementModule movementModule;
 
 	AiSquad *squad;
+
+	/**
+	 * {@code next[]} and {@code prev[]} links below are addressed by these indices
+	 */
+	enum { SQUAD_LINKS, TMP_LINKS };
+
+	Bot *next[2] { nullptr, nullptr };
+	Bot *prev[2] { nullptr, nullptr };
+
+	Bot *NextInSquad() { return next[SQUAD_LINKS]; };
+	const Bot *NextInSquad() const { return next[SQUAD_LINKS]; }
+
+	Bot *NextInTmpList() { return next[TMP_LINKS]; }
+	const Bot *NextInTmpList() const { return next[TMP_LINKS]; }
 
 	ObjectiveSpotDef objectiveSpotDef;
 

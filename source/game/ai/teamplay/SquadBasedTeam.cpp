@@ -2,6 +2,8 @@
 #include "ObjectiveBasedTeam.h"
 #include "../ai_ground_trace_cache.h"
 #include "../bot.h"
+#include "../../../qalgo/Links.h"
+
 #include <algorithm>
 #include <limits>
 
@@ -140,28 +142,11 @@ static ClientToClientTable clientToClientTable;
 
 AiSquad::SquadEnemiesTracker::SquadEnemiesTracker( AiSquad *squad_, float skill )
 	: AiEnemiesTracker( skill ), squad( squad_ ) {
-	std::fill_n( botRoleWeights, AiSquad::MAX_SIZE, 0.0f );
-	std::fill_n( botEnemies, AiSquad::MAX_SIZE, nullptr );
-}
-
-unsigned AiSquad::SquadEnemiesTracker::GetBotSlot( const Bot *bot ) const {
-	for( unsigned i = 0, end = squad->bots.size(); i < end; ++i ) {
-		if( bot == squad->bots[i] ) {
-			return i;
-		}
-	}
-
-	if( bot ) {
-		FailWith( "Can't find a slot for bot %s", bot->Tag() );
-	} else {
-		FailWith( "Can't find a slot for a null bot" );
-	}
+	std::fill_n( botRoleWeights, MAX_CLIENTS, 0.0f );
+	std::fill_n( botEnemies, MAX_CLIENTS, nullptr );
 }
 
 void AiSquad::SquadEnemiesTracker::CheckSquadValid() const {
-	if( !squad->InUse() ) {
-		FailWith( "The squad %s is not in use", squad->Tag() );
-	}
 	if( !squad->IsValid() ) {
 		FailWith( "The squad %s is not valid", squad->Tag() );
 	}
@@ -172,7 +157,7 @@ void AiSquad::SquadEnemiesTracker::CheckSquadValid() const {
 void AiSquad::SquadEnemiesTracker::OnHurtByNewThreat( const edict_t *newThreat ) {
 	CheckSquadValid();
 	// TODO: Use more sophisticated bot selection?
-	for( Bot *bot: squad->bots ) {
+	for( Bot *bot = squad->botsListHead; bot; bot = bot->NextInSquad() ) {
 		if( !bot->IsGhosting() ) {
 			bot->OnHurtByNewThreat( newThreat, this );
 		}
@@ -181,7 +166,7 @@ void AiSquad::SquadEnemiesTracker::OnHurtByNewThreat( const edict_t *newThreat )
 
 bool AiSquad::SquadEnemiesTracker::CheckHasQuad() const {
 	CheckSquadValid();
-	for( Bot *bot: squad->bots ) {
+	for( Bot *bot = squad->botsListHead; bot; bot = bot->NextInSquad() ) {
 		if( !bot->IsGhosting() && ::HasQuad( bot->Self() ) ) {
 			return true;
 		}
@@ -191,7 +176,7 @@ bool AiSquad::SquadEnemiesTracker::CheckHasQuad() const {
 
 bool AiSquad::SquadEnemiesTracker::CheckHasShell() const {
 	CheckSquadValid();
-	for( Bot *bot: squad->bots ) {
+	for( Bot *bot = squad->botsListHead; bot; bot = bot->NextInSquad() ) {
 		if( !bot->IsGhosting() && ::HasShell( bot->Self() ) ) {
 			return true;
 		}
@@ -202,7 +187,7 @@ bool AiSquad::SquadEnemiesTracker::CheckHasShell() const {
 float AiSquad::SquadEnemiesTracker::ComputeDamageToBeKilled() const {
 	CheckSquadValid();
 	float result = 0.0f;
-	for( Bot *bot: squad->bots ) {
+	for( Bot *bot = squad->botsListHead; bot; bot = bot->NextInSquad() ) {
 		if( !bot->IsGhosting() ) {
 			result += DamageToKill( bot->self );
 		}
@@ -212,14 +197,14 @@ float AiSquad::SquadEnemiesTracker::ComputeDamageToBeKilled() const {
 
 void AiSquad::SquadEnemiesTracker::OnEnemyRemoved( const TrackedEnemy *enemy ) {
 	CheckSquadValid();
-	for( Bot *bot: squad->bots ) {
+	for( Bot *bot = squad->botsListHead; bot; bot = bot->NextInSquad() ) {
 		bot->OnEnemyRemoved( enemy );
 	}
 }
 
 void AiSquad::SquadEnemiesTracker::SetBotRoleWeight( const edict_t *bot, float weight ) {
 	CheckSquadValid();
-	botRoleWeights[GetBotSlot( bot->ai->botRef )] = weight;
+	botRoleWeights[ENTNUM( bot ) - 1] = weight;
 }
 
 float AiSquad::SquadEnemiesTracker::GetAdditionalEnemyWeight( const edict_t *bot, const edict_t *enemy ) const {
@@ -230,15 +215,16 @@ float AiSquad::SquadEnemiesTracker::GetAdditionalEnemyWeight( const edict_t *bot
 
 	// TODO: Use something more sophisticated...
 
-	const unsigned botSlot = GetBotSlot( bot->ai->botRef );
 	float result = 0.0f;
-	for( unsigned i = 0, end = squad->bots.size(); i < end; ++i ) {
+	for( Bot *thatBot = squad->botsListHead; thatBot; thatBot = thatBot->NextInSquad() ) {
 		// Do not add extra score for the own enemy
-		if( botSlot == i ) {
+		if( thatBot->Self() == bot ) {
 			continue;
 		}
-		if( botEnemies[i] && enemy == botEnemies[i]->ent ) {
-			result += botRoleWeights[i];
+
+		const auto thatClientNum = thatBot->ClientNum();
+		if( botEnemies[thatClientNum] && enemy == botEnemies[thatClientNum]->ent ) {
+			result += botRoleWeights[thatClientNum];
 		}
 	}
 
@@ -247,61 +233,53 @@ float AiSquad::SquadEnemiesTracker::GetAdditionalEnemyWeight( const edict_t *bot
 
 void AiSquad::SquadEnemiesTracker::OnBotEnemyAssigned( const edict_t *bot, const TrackedEnemy *enemy ) {
 	CheckSquadValid();
-	botEnemies[GetBotSlot( bot->ai->botRef )] = enemy;
+	botEnemies[ENTNUM( bot ) - 1] = enemy;
 }
 
-AiSquad::AiSquad() {
-	std::fill_n( lastDroppedByBotTimestamps, MAX_SIZE, 0 );
-	std::fill_n( lastDroppedForBotTimestamps, MAX_SIZE, 0 );
-
-	float skillLevel = trap_Cvar_Value( "sv_skilllevel" ); // {0, 1, 2}
-	float skill = std::min( 1.0f, 0.33f * ( 0.1f + skillLevel + random() ) ); // (0..1)
-	// There is a clash with a getter name, thus we have to introduce a type alias
-	squadEnemiesTracker = new ( G_Malloc( sizeof( SquadEnemiesTracker ) ) )SquadEnemiesTracker( this, skill );
+AiSquad::AiSquad( AiSquadBasedTeam *parent_ )
+	: parent( parent_ ) {
+	std::fill_n( lastDroppedByBotTimestamps, MAX_SQUAD_SIZE, 0 );
+	std::fill_n( lastDroppedForBotTimestamps, MAX_SQUAD_SIZE, 0 );
 }
 
 AiSquad::~AiSquad() {
-	// If the enemy pool has not been moved
 	if( squadEnemiesTracker ) {
 		squadEnemiesTracker->~SquadEnemiesTracker();
 		G_Free( squadEnemiesTracker );
 	}
 }
 
-void AiSquad::OnBotRemoved( Bot *bot ) {
-	// Unused squads do not have bots. From the other hand, invalid squads may still have some bots to remove
-	if( !inUse ) {
-		return;
-	}
-
-	for( auto it = bots.begin(); it != bots.end(); ++it ) {
-		if( *it == bot ) {
-			// First detach bots (if not called yet), erase bot only then
-			Invalidate();
-			bots.erase( it );
-			return;
-		}
-	}
+AiSquad::SquadEnemiesTracker *AiSquad::NewEnemiesTracker() {
+	float skillLevel = trap_Cvar_Value( "sv_skilllevel" ); // {0, 1, 2}
+	float skill = std::min( 1.0f, 0.33f * ( 0.1f + skillLevel + random() ) ); // (0..1)
+	void *mem = G_Malloc( sizeof( SquadEnemiesTracker ) );
+	return new( mem )SquadEnemiesTracker( this, skill );
 }
 
-void AiSquad::Invalidate() {
-	if( !botsDetached ) {
-		for( Bot *bot: bots ) {
-			bot->OnDetachedFromSquad( this );
-		}
-		botsDetached = true;
+void AiSquad::DetachBots() {
+	if( botsDetached ) {
+		return;
 	}
-	isValid = false;
+	Bot *nextBot;
+	for( Bot *bot = botsListHead; bot; bot = nextBot ) {
+		nextBot = bot->NextInSquad();
+		bot->OnDetachedFromSquad( this );
+		::Link( bot, &parent->orphanBotsHead, Bot::SQUAD_LINKS );
+	}
+	botsListHead = nullptr;
+	botsDetached = true;
 }
 
 bool AiSquad::IsSupporter( const edict_t *bot ) const {
-	if( !isValid || !inUse ) {
+	if( !isValid ) {
 		return false;
 	}
 
-	for( Bot *member: bots ) {
-		if( !member->IsGhosting() && IsCarrier( member->Self() ) ) {
-			return !IsCarrier( bot );
+	for( Bot *otherBot = botsListHead; otherBot; otherBot = otherBot->NextInSquad() ) {
+		if( otherBot->Self() != bot ) {
+			if( !otherBot->IsGhosting() && IsCarrier( otherBot->Self() ) ) {
+				return !IsCarrier( bot );
+			}
 		}
 	}
 	return false;
@@ -314,25 +292,25 @@ constexpr unsigned CONNECTIVITY_TIMEOUT = 750;
 /**
  * This value defines a distance limit for quick rejection of non-feasible bot pairs for new squads
  */
-constexpr float CONNECTIVITY_PROXIMITY = 500;
+constexpr float CONNECTIVITY_PROXIMITY = 192.0f;
 /**
  * This value defines summary AAS movement time limit from one bot to other and back
  */
-constexpr int CONNECTIVITY_MOVE_CENTISECONDS = 400;
+constexpr int CONNECTIVITY_MOVE_CENTISECONDS = 175;
 
 void AiSquad::Frame() {
 	// Update enemy pool
-	if( inUse && isValid ) {
-		squadEnemiesTracker->Update();
+	if( isValid ) {
+		EnemiesTracker()->Update();
 	}
 }
 
 void AiSquad::Think() {
-	if( !inUse || !isValid ) {
+	if( !isValid ) {
 		return;
 	}
 
-	for( const auto &bot: bots ) {
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
 		if( bot->IsGhosting() ) {
 			Invalidate();
 			return;
@@ -352,6 +330,15 @@ void AiSquad::Think() {
 		return;
 	}
 
+#if 0
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
+		const int colors[3] = { COLOR_RGB( 128, 0, 0 ), COLOR_RGB( 0, 128, 0 ), COLOR_RGB( 0, 0, 128 ) };
+		for( Bot *otherBot = bot->NextInSquad(); otherBot; otherBot = otherBot->NextInSquad() ) {
+			AITools_DrawColorLine( bot->Origin(), otherBot->Origin(), colors[Num() % 3], 0 );
+		}
+	}
+#endif
+
 	UpdateBotRoleWeights();
 
 	CheckMembersInventory();
@@ -359,23 +346,23 @@ void AiSquad::Think() {
 
 bool AiSquad::CheckCanMoveTogether() const {
 	// Test for a possible cheap shortcut using floor cluster nums of the bots
-	if( auto firstClusterNum = GetBotFloorCluster( bots[0] ) ) {
+	if( const auto firstClusterNum = GetBotFloorCluster( botsListHead ) ) {
 		// Check whether all bots are in the same floor cluster
-		unsigned i = 1;
-		for(; i < bots.size(); ++i ) {
-			if( firstClusterNum != GetBotFloorCluster( bots[i] ) ) {
+		Bot *nextBot = botsListHead->NextInSquad();
+		for(; nextBot; nextBot = nextBot->NextInSquad() ) {
+			if( firstClusterNum != GetBotFloorCluster( nextBot ) ) {
 				break;
 			}
 		}
 
 		// All bots are in the same floor cluster.
-		if( i == bots.size() ) {
+		if( !nextBot ) {
 			// Just check the distance between bots corresponding to CONNECTIVITY_MOVE_CENTISECONDS
 			// Assume the average moving speed to be 450 ups (average as physics defines in 3D space)
 			float distanceThreshold = 450 * ( CONNECTIVITY_MOVE_CENTISECONDS * 1e-2f );
-			for( i = 0; i < bots.size() / 2 + 1; ++i ) {
-				for( unsigned j = 1; j < bots.size(); ++j ) {
-					float squareDistance = DistanceSquared( bots[i]->self->s.origin, bots[j]->self->s.origin );
+			for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
+				for( Bot *otherBot = bot->NextInSquad(); otherBot; otherBot = otherBot->NextInSquad() ) {
+					float squareDistance = DistanceSquared( bot->Origin(), otherBot->Origin() );
 					if( squareDistance > distanceThreshold * distanceThreshold ) {
 						return false;
 					}
@@ -389,16 +376,16 @@ bool AiSquad::CheckCanMoveTogether() const {
 	// or may reach at least a single other bot
 	// (some reachabilities such as teleports are not reversible)
 	int aasTravelTime;
-	for( unsigned i = 0; i < bots.size(); ++i ) {
-		for( unsigned j = i + 1; j < bots.size(); ++j ) {
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
+		for( Bot *otherBot = bot->NextInSquad(); otherBot; otherBot = otherBot->NextInSquad() ) {
 			// Check direct travel time (it's given in seconds^-2)
-			aasTravelTime = ::clientToClientTable.GetTravelTime( bots[i], bots[j] );
+			aasTravelTime = ::clientToClientTable.GetTravelTime( bot, otherBot );
 			// At least bot j is reachable from bot i, move to next bot
 			if( aasTravelTime && aasTravelTime < CONNECTIVITY_MOVE_CENTISECONDS / 2 ) {
 				continue;
 			}
 			// Bot j is not reachable from bot i, check travel time from j to i
-			aasTravelTime = ::clientToClientTable.GetTravelTime( bots[j], bots[i] );
+			aasTravelTime = ::clientToClientTable.GetTravelTime( otherBot, bot );
 			if( !aasTravelTime || aasTravelTime >= CONNECTIVITY_MOVE_CENTISECONDS / 2 ) {
 				return false;
 			}
@@ -409,14 +396,16 @@ bool AiSquad::CheckCanMoveTogether() const {
 
 bool AiSquad::CheckCanFightTogether() const {
 	// Just check that each bot is visible for each other one
+	// TODO: share teammates visibility checks with /awareness stuff?
+
 	trace_t trace;
 	const auto *pvsCache = EntitiesPvsCache::Instance();
-	for( unsigned i = 0; i < bots.size(); ++i ) {
-		for( unsigned j = i + 1; j < bots.size(); ++j ) {
-			auto *const firstEnt = const_cast<edict_t*>( bots[i]->Self() );
-			auto *const secondEnt = const_cast<edict_t*>( bots[j]->Self() );
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
+		for( Bot *otherBot = bot->NextInSquad(); otherBot; otherBot = otherBot->NextInSquad() ) {
+			auto *const firstEnt = const_cast<edict_t*>( bot->Self() );
+			auto *const secondEnt = const_cast<edict_t*>( otherBot->Self() );
 			if( !pvsCache->AreInPvs( firstEnt, secondEnt ) ) {
-				continue;
+				return false;
 			}
 
 			G_Trace( &trace, firstEnt->s.origin, nullptr, nullptr, secondEnt->s.origin, firstEnt, MASK_AISOLID );
@@ -425,6 +414,7 @@ bool AiSquad::CheckCanFightTogether() const {
 			}
 		}
 	}
+
 	return true;
 }
 
@@ -441,46 +431,80 @@ int AiSquad::GetBotFloorCluster( Bot *bot ) const {
 }
 
 void AiSquad::UpdateBotRoleWeights() {
-	if( !inUse || !isValid ) {
+	if( !isValid ) {
 		return;
 	}
 
 	// Find a carrier
 	bool hasCarriers = false;
-	for( Bot *bot: bots ) {
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
 		if( !bot->IsGhosting() && IsCarrier( bot->Self() ) ) {
 			hasCarriers = true;
 			break;
 		}
 	}
+
+	// Save the result of this lazy getter
+	auto *const enemiesTracker = EnemiesTracker();
 	if( !hasCarriers ) {
-		for( Bot *bot: bots ) {
-			squadEnemiesTracker->SetBotRoleWeight( bot->Self(), 0.25f );
+		for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
+			enemiesTracker->SetBotRoleWeight( bot->Self(), 0.25f );
 		}
 	} else {
-		for( Bot *bot: bots ) {
+		for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
 			if( !bot->IsGhosting() && IsCarrier( bot->Self() ) ) {
-				squadEnemiesTracker->SetBotRoleWeight( bot->Self(), 1.0f );
+				enemiesTracker->SetBotRoleWeight( bot->Self(), 1.0f );
 			} else {
-				squadEnemiesTracker->SetBotRoleWeight( bot->Self(), 0.0f );
+				enemiesTracker->SetBotRoleWeight( bot->Self(), 0.0f );
 			}
 		}
 	}
 }
 
-static bool areWeaponDefHelpersInitialized = false;
-// i-th value contains a tier for weapon #i
-static int tiersForWeapon[WEAP_TOTAL];
-// Contains weapons sorted by tier in descending order (best weapons first)
-static int bestWeapons[WEAP_TOTAL];
-// i-th value contains weapon def for weapon #i
-static gs_weapon_definition_t *weaponDefs[WEAP_TOTAL];
+class ExtendedWeaponDefsCache {
+	int tiersForWeapon[WEAP_TOTAL];
+	int sortedByTierWeapons[WEAP_TOTAL];
+	const gs_weapon_definition_t *weaponDefs[WEAP_TOTAL];
 
-static void InitWeaponDefHelpers() {
-	if( areWeaponDefHelpersInitialized ) {
-		return;
+	mutable bool initialized { false };
+
+	void EnsureInitialized() const {
+		if( !initialized ) {
+			const_cast<ExtendedWeaponDefsCache *>( this )->Initialize();
+			initialized = true;
+		}
 	}
 
+	void Initialize();
+public:
+	/**
+	 * Gets cached weapon definitions (useful for future changes)
+	 */
+	const gs_weapon_definition_t *const *WeaponDefs() const {
+		EnsureInitialized();
+		return &weaponDefs[0];
+	}
+
+	/**
+	 * Gets an array of tiers for every weapon (addressed by weapon number)
+	 */
+	const int *WeaponTiers() const {
+		EnsureInitialized();
+		return tiersForWeapon;
+	}
+
+	/**
+	 * Gets an array of all known weapon numbers sorted by their tiers (worst first)
+	 */
+	const int *SortedByTierWeapons() const {
+		EnsureInitialized();
+		return sortedByTierWeapons;
+	}
+};
+
+static ExtendedWeaponDefsCache extendedWeaponDefsCache;
+
+void ExtendedWeaponDefsCache::Initialize() {
 	struct WeaponAndTier {
 		int weapon, tier;
 		WeaponAndTier(): weapon( 0 ), tier( 0 ) {}
@@ -508,50 +532,53 @@ static void InitWeaponDefHelpers() {
 
 	std::sort( weaponTiers, weaponTiers + WEAP_TOTAL );
 	for( int i = 0; i < WEAP_TOTAL; ++i ) {
-		bestWeapons[i] = weaponTiers[i].weapon;
+		sortedByTierWeapons[i] = weaponTiers[i].weapon;
 	}
 
 	for( int weapon = WEAP_NONE; weapon < WEAP_TOTAL; ++weapon ) {
 		weaponDefs[weapon] = GS_GetWeaponDef( weapon );
 	}
-
-	areWeaponDefHelpersInitialized = true;
 }
 
 int AiSquad::FindBotWeaponsTiers( int *maxBotWeaponTiers ) const {
-	InitWeaponDefHelpers();
+	const auto *const weaponDefs = extendedWeaponDefsCache.WeaponDefs();
+	const auto *const tiersForWeapon = extendedWeaponDefsCache.WeaponTiers();
 
-	std::fill_n( maxBotWeaponTiers, MAX_SIZE, 0 );
+	std::fill_n( maxBotWeaponTiers, MAX_CLIENTS, 0 );
 	// Lowest best weapon tier among all squad bots
 	int minBotWeaponTier = 3;
 
-	for( unsigned botNum = 0; botNum < bots.size(); ++botNum ) {
-		for( int weapon = WEAP_GUNBLADE; weapon != WEAP_TOTAL; ++weapon ) {
-			if( bots[botNum]->Inventory()[weapon] ) {
-				int weaponAmmoTag = weaponDefs[weapon]->firedef.ammo_id;
-				if( weaponAmmoTag == AMMO_NONE ) {
-					continue;
-				}
-				if( bots[botNum]->Inventory()[weaponAmmoTag] > weaponDefs[weapon]->firedef.ammo_low ) {
-					if( maxBotWeaponTiers[botNum] < tiersForWeapon[weapon] ) {
-						maxBotWeaponTiers[botNum] = tiersForWeapon[weapon];
-					}
-				}
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
+		auto *const botTierPtr = maxBotWeaponTiers + bot->ClientNum();
+		for( int weaponNum = WEAP_GUNBLADE; weaponNum != WEAP_TOTAL; ++weaponNum ) {
+			if( !bot->Inventory()[weaponNum] ) {
+				continue;
+			}
+			const auto ammoTag = weaponDefs[weaponNum]->firedef.ammo_id;
+			if( ammoTag == AMMO_NONE ) {
+				continue;
+			}
+			if( bot->Inventory()[ammoTag] <= weaponDefs[weaponNum]->firedef.ammo_low ) {
+				continue;
+			}
+			if( *botTierPtr < tiersForWeapon[weaponNum] ) {
+				*botTierPtr = tiersForWeapon[weaponNum];
 			}
 		}
-		if( minBotWeaponTier > maxBotWeaponTiers[botNum] ) {
-			minBotWeaponTier = maxBotWeaponTiers[botNum];
+		if( minBotWeaponTier > *botTierPtr ) {
+			minBotWeaponTier = *botTierPtr;
 		}
 	}
 
 	return minBotWeaponTier;
 }
 
+
 int AiSquad::FindLowestBotHealth() const {
-	int result = bots[0]->Health();
-	for( unsigned botNum = 1; botNum < bots.size(); ++botNum ) {
-		if( bots[botNum]->Health() < result ) {
-			result = bots[botNum]->Health();
+	int result = botsListHead->Health();
+	for( Bot *bot = botsListHead->NextInSquad(); bot; bot = bot->NextInSquad() ) {
+		if( bot->Health() < result ) {
+			result = bot->Health();
 		}
 	}
 
@@ -559,30 +586,28 @@ int AiSquad::FindLowestBotHealth() const {
 }
 
 int AiSquad::FindLowestBotArmor() const {
-	int result = bots[0]->Armor();
-	for( unsigned botNum = 1; botNum < bots.size(); ++botNum ) {
-		if( bots[botNum]->Armor() < result ) {
-			result = bots[botNum]->Armor();
+	int result = botsListHead->Armor();
+	for( Bot *bot = botsListHead->NextInSquad(); bot; bot = bot->NextInSquad() ) {
+		if( bot->Armor() < result ) {
+			result = bot->Armor();
 		}
 	}
 
 	return result;
 }
 
-bool AiSquad::FindHealthSuppliers( bool wouldSupplyHealth[MAX_SIZE] ) const {
+bool AiSquad::FindHealthSuppliers( bool wouldSupplyHealth[MAX_CLIENTS] ) const {
 	bool result = false;
-	for( unsigned i = 0; i < bots.size(); ++i ) {
-		wouldSupplyHealth[i] = bots[i]->CanAndWouldDropHealth();
-		result |= wouldSupplyHealth[i];
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
+		result |= ( wouldSupplyHealth[bot->ClientNum()] = bot->CanAndWouldDropHealth() );
 	}
 	return result;
 }
 
-bool AiSquad::FindArmorSuppliers( bool wouldSupplyArmor[MAX_SIZE] ) const {
+bool AiSquad::FindArmorSuppliers( bool wouldSupplyArmor[MAX_CLIENTS] ) const {
 	bool result = false;
-	for( unsigned i = 0; i < bots.size(); ++i ) {
-		wouldSupplyArmor[i] = bots[i]->CanAndWouldDropArmor();
-		result |= wouldSupplyArmor[i];
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
+		result |= ( wouldSupplyArmor[bot->ClientNum()] = bot->CanAndWouldDropArmor() );
 	}
 	return result;
 }
@@ -590,8 +615,8 @@ bool AiSquad::FindArmorSuppliers( bool wouldSupplyArmor[MAX_SIZE] ) const {
 void AiSquad::CheckMembersInventory() {
 	// In this function we try to do cheap test first to reject expensive calls early
 
-	// i-th bot has best weapon of tier maxBotWeaponTiers[i]
-	int maxBotWeaponTiers[MAX_SIZE];
+	// i-th client has best weapon of tier maxBotWeaponTiers[i]
+	int maxBotWeaponTiers[MAX_CLIENTS];
 	bool canDropWeapons = false;
 	bool shouldDropWeapons = false;
 	if( level.gametype.dropableItemsMask & ( IT_WEAPON | IT_AMMO ) ) {
@@ -607,13 +632,13 @@ void AiSquad::CheckMembersInventory() {
 		return;
 	}
 
-	bool wouldBotDropHealth[MAX_SIZE];
+	bool wouldBotDropHealth[MAX_CLIENTS];
 	bool wouldDropHealth = false;
 	if( shouldDropHealth && ( level.gametype.dropableItemsMask & IT_HEALTH ) ) {
 		wouldDropHealth = FindHealthSuppliers( wouldBotDropHealth );
 	}
 
-	bool wouldBotDropArmor[MAX_SIZE];
+	bool wouldBotDropArmor[MAX_CLIENTS];
 	bool wouldDropArmor = false;
 	if( shouldDropArmor && ( level.gametype.dropableItemsMask & IT_ARMOR ) ) {
 		wouldDropArmor = FindArmorSuppliers( wouldBotDropArmor );
@@ -628,15 +653,15 @@ void AiSquad::CheckMembersInventory() {
 		return;
 	}
 
-	for( unsigned botNum = 0; botNum < bots.size(); ++botNum ) {
-		// We can't set special goal immediately (a dropped entity must touch a solid first)
-		// For this case, we just prevent dropping for this bot for 2000 ms
-		if( level.time - lastDroppedForBotTimestamps[botNum] < 2000 ) {
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
+		const int botNum = bot->ClientNum();
+		// Do not drop anything for a bot again during 3 seconds after last drop
+		if( level.time - lastDroppedForBotTimestamps[botNum] < 3000 ) {
 			continue;
 		}
 
 		// Check whether a bot is likely to already have a dropped item as a goal
-		const SelectedNavEntity &selectedNavEntity = bots[botNum]->GetSelectedNavEntity();
+		const SelectedNavEntity &selectedNavEntity = bot->GetSelectedNavEntity();
 		if( selectedNavEntity.IsValid() && !selectedNavEntity.IsEmpty() ) {
 			if( selectedNavEntity.navEntity->IsDroppedEntity() && selectedNavEntity.GetCost() > 3.0f ) {
 				continue;
@@ -645,30 +670,30 @@ void AiSquad::CheckMembersInventory() {
 
 		const bool needsWeapon = maxBotWeaponTiers[botNum] <= 2;
 		// TODO: Check player class abilities
-		const bool needsHealth = bots[botNum]->Health() < 75;
-		const bool needsArmor = bots[botNum]->Armor() < 50;
+		const bool needsHealth = bot->Health() < 75;
+		const bool needsArmor = bot->Armor() < 50;
 
 		// Skip expensive FindSupplierCandidates() call by doing this cheap test first
 		if( !needsWeapon && !needsHealth && !needsArmor ) {
 			continue;
 		}
 
-		StaticVector<unsigned, MAX_SIZE - 1> supplierCandidates;
-		FindSupplierCandidates( botNum, supplierCandidates );
+		Bot *suppliersListHead = nullptr;
+		FindSupplierCandidates( bot, &suppliersListHead );
 
 		// Do not do simultaneous drops by different bots.
 		// In theory dropping health, armor and weapon+ammo by a single bot is OK
 		// but its unlikely that there are player classes capable of doing that.
 
-		if( needsHealth && wouldDropHealth && RequestHealthDrop( botNum, wouldBotDropHealth, supplierCandidates ) ) {
+		if( needsHealth && wouldDropHealth && RequestHealthDrop( bot, wouldBotDropHealth, suppliersListHead ) ) {
 			continue;
 		}
 
-		if( needsWeapon && canDropWeapons && RequestWeaponAndAmmoDrop( botNum, maxBotWeaponTiers, supplierCandidates ) ) {
+		if( needsWeapon && canDropWeapons && RequestWeaponAndAmmoDrop( bot, maxBotWeaponTiers, suppliersListHead ) ) {
 			continue;
 		}
 
-		if( needsArmor && wouldDropArmor && RequestArmorDrop( botNum, wouldBotDropArmor, supplierCandidates ) ) {
+		if( needsArmor && wouldDropArmor && RequestArmorDrop( bot, wouldBotDropArmor, suppliersListHead ) ) {
 			continue;
 		}
 	}
@@ -678,7 +703,7 @@ bool AiSquad::ShouldNotDropItemsNow() const {
 	// First, compute squad AABB
 	vec3_t mins, maxs;
 	ClearBounds( mins, maxs );
-	for( const Bot *bot: bots ) {
+	for( const Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
 		const float *origin = bot->Self()->s.origin;
 		for( int i = 0; i < 3; ++i ) {
 			if( maxs[i] < origin[i] ) {
@@ -707,8 +732,8 @@ bool AiSquad::ShouldNotDropItemsNow() const {
 	};
 
 	// First reject enemies by distance
-	StaticVector<MaybeStealer, MAX_EDICTS> potentialStealers;
-	for( const TrackedEnemy *enemy = squadEnemiesTracker->TrackedEnemiesHead(); enemy; enemy = enemy->NextInTrackedList() ) {
+	StaticVector<MaybeStealer, MAX_EDICTS> maybeStealers;
+	for( const TrackedEnemy *enemy = EnemiesTracker()->TrackedEnemiesHead(); enemy; enemy = enemy->NextInTrackedList() ) {
 		// Check whether an enemy has been invalidated and invalidation is not processed yet to prevent crash
 		if( !enemy->IsValid() || G_ISGHOSTING( enemy->ent ) ) {
 			continue;
@@ -734,7 +759,7 @@ bool AiSquad::ShouldNotDropItemsNow() const {
 		Vec3 enemyToSquadCenterDir( squadCenter );
 		enemyToSquadCenterDir -= extrapolatedLastSeenPosition;
 		if( enemyToSquadCenterDir.SquaredLength() < 1 ) {
-			potentialStealers.push_back( MaybeStealer( enemy, extrapolatedLastSeenPosition ) );
+			maybeStealers.push_back( MaybeStealer( enemy, extrapolatedLastSeenPosition ) );
 			continue;
 		}
 
@@ -743,26 +768,26 @@ bool AiSquad::ShouldNotDropItemsNow() const {
 		float directionFactor = enemyToSquadCenterDir.Dot( enemyVelocityDir );
 		if( directionFactor < 0 ) {
 			if( BoundsAndSphereIntersect( mins, maxs, extrapolatedLastSeenPosition.Data(), 192.0f ) ) {
-				potentialStealers.push_back( MaybeStealer( enemy, extrapolatedLastSeenPosition ) );
+				maybeStealers.push_back( MaybeStealer( enemy, extrapolatedLastSeenPosition ) );
 			}
 		} else {
 			float radius = 192.0f + extrapolationSeconds * enemySpeed * directionFactor;
 			if( BoundsAndSphereIntersect( mins, maxs, extrapolatedLastSeenPosition.Data(), radius ) ) {
-				potentialStealers.push_back( MaybeStealer( enemy, extrapolatedLastSeenPosition ) );
+				maybeStealers.push_back( MaybeStealer( enemy, extrapolatedLastSeenPosition ) );
 			}
 		}
 	}
 
 	// Sort all stealers based on last seen time (recently seen first)
-	std::sort( potentialStealers.begin(), potentialStealers.end() );
+	std::sort( maybeStealers.begin(), maybeStealers.end() );
 
 	// Check not more than 4 most recently seen stealers.
 	// Use trace instead of path travel time estimation because pathfinder may fail to find a path.
 	trace_t trace;
 	const auto *pvsCache = EntitiesPvsCache::Instance();
-	for( unsigned i = 0, end = std::min( 4u, potentialStealers.size() ); i < end; ++i ) {
-		MaybeStealer stealer = potentialStealers[i];
-		for( const Bot *bot: bots ) {
+	for( unsigned i = 0, end = std::min( 4u, maybeStealers.size() ); i < end; ++i ) {
+		MaybeStealer stealer = maybeStealers[i];
+		for( const Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
 			auto *const botEnt = const_cast<edict_t*>( bot->self );
 			if( !pvsCache->AreInPvs( botEnt, stealer.enemy->ent ) ) {
 				continue;
@@ -778,8 +803,8 @@ bool AiSquad::ShouldNotDropItemsNow() const {
 	return false;
 }
 
-void AiSquad::FindSupplierCandidates( unsigned botNum, StaticVector<unsigned, AiSquad::MAX_SIZE - 1> &result ) const {
-	Vec3 botVelocityDir( bots[botNum]->self->velocity );
+void AiSquad::FindSupplierCandidates( Bot *consumer, Bot **suppliersListHead ) const {
+	Vec3 botVelocityDir( consumer->Velocity() );
 	float squareBotSpeed = botVelocityDir.SquaredLength();
 
 	// If a bot moves fast, modify score for mates depending of the bot velocity direction
@@ -791,45 +816,46 @@ void AiSquad::FindSupplierCandidates( unsigned botNum, StaticVector<unsigned, Ai
 	}
 
 	struct BotAndScore {
-		unsigned botNum;
+		Bot *bot;
 		float score;
-		BotAndScore( unsigned botNum_, float score_ ) : botNum( botNum_ ), score( score_ ) {}
+		BotAndScore( Bot *bot_, float score_ ) : bot( bot_ ), score( score_ ) {}
 		bool operator<( const BotAndScore &that ) const { return score > that.score; }
 	};
 
-	StaticVector<BotAndScore, MAX_SIZE - 1> candidates;
-	for( unsigned thatBotNum = 0; thatBotNum < bots.size(); ++thatBotNum ) {
-		if( thatBotNum == botNum ) {
+	StaticVector<BotAndScore, MAX_SQUAD_SIZE - 1> candidates;
+
+	const auto thisBotNum = consumer->ClientNum();
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
+		const auto thatBotNum = bot->ClientNum();
+		if( thatBotNum == thisBotNum ) {
 			continue;
 		}
 		// Wait a second for next drop
-		if( level.time - lastDroppedByBotTimestamps[botNum] < 1000 ) {
+		if( level.time - lastDroppedByBotTimestamps[thatBotNum] < 1000 ) {
 			continue;
 		}
 
-		// The lowest feasible AAS travel time is 1, 0 means that thatBot is not reachable for currBot
-		int travelTime = ::clientToClientTable.GetTravelTime( bots[botNum], bots[thatBotNum] );
+		int travelTime = ::clientToClientTable.GetTravelTime( consumer, bot );
 		if( !travelTime ) {
 			continue;
 		}
 
 		float score = 1.0f - BoundedFraction( travelTime, CONNECTIVITY_MOVE_CENTISECONDS );
 		if( applyDirectionFactor ) {
-			Vec3 botToThatBot( bots[thatBotNum]->Self()->s.origin );
-			botToThatBot -= bots[botNum]->Self()->s.origin;
+			Vec3 botToThatBot( bot->Origin() );
+			botToThatBot -= consumer->Origin();
 			botToThatBot.NormalizeFast();
 			score *= 0.5f + 0.5f * botToThatBot.Dot( botVelocityDir );
 		}
-		candidates.push_back( BotAndScore( thatBotNum, score ) );
+		candidates.push_back( BotAndScore( bot, score ) );
 	}
 
 	// Sort mates, most suitable item suppliers first
 	std::sort( candidates.begin(), candidates.end() );
 
-	// Copy sorted mates nums to result
-	result.clear();
+	*suppliersListHead = nullptr;
 	for( BotAndScore &botAndScore: candidates ) {
-		result.push_back( botAndScore.botNum );
+		::Link( botAndScore.bot, suppliersListHead, Bot::TMP_LINKS );
 	}
 }
 
@@ -864,50 +890,53 @@ void AiSquad::SetDroppedEntityAsBotGoal( edict_t *ent ) {
 	bot->ai->botRef->ForcePlanBuilding();
 }
 
-bool AiSquad::RequestWeaponAndAmmoDrop( unsigned botNum, const int *maxBotWeaponTiers, Suppliers &supplierCandidates ) {
+bool AiSquad::RequestWeaponAndAmmoDrop( Bot *consumer, const int *maxBotWeaponTiers, Bot *suppliersListHead ) {
+	const auto *const weaponDefs = extendedWeaponDefsCache.WeaponDefs();
+	const auto *const sortedByTierWeapons = extendedWeaponDefsCache.SortedByTierWeapons();
+
 	// Should be set to a first chosen supplier's botNum
 	// Further drop attempts should be made only for this bot.
 	// (Items should be dropped from the same origin to be able to set a common movement goal)
-	unsigned chosenSupplier = std::numeric_limits<unsigned>::max();
+	Bot *chosenSupplier = nullptr;
 	// Not more than 3 items may be dropped on the same time (and by the same bot)
 	int droppedItemsCount = 0;
 
 	for( int i = 0; i < WEAP_TOTAL; ++i ) {
-		const int currWeapon = bestWeapons[i];
+		const int currWeapon = sortedByTierWeapons[i];
 		const auto &fireDef = weaponDefs[currWeapon]->firedef;
 
 		edict_t *dropped = nullptr;
 
 		// If the bot has this weapon, check whether he needs an ammo for it
-		if( bots[botNum]->Inventory()[currWeapon] ) {
+		if( consumer->Inventory()[currWeapon] ) {
 			// No ammo is required, go to the next weapon
 			if( fireDef.ammo_id == AMMO_NONE ) {
 				continue;
 			}
 			// Bot has enough ammo, go to the next weapon
-			if( bots[botNum]->Inventory()[fireDef.ammo_id] > fireDef.ammo_low ) {
+			if( consumer->Inventory()[fireDef.ammo_id] > fireDef.ammo_low ) {
 				continue;
 			}
 
 			// Find who may drop an ammo
 			if( level.gametype.dropableItemsMask & IT_AMMO ) {
-				if( chosenSupplier != std::numeric_limits<unsigned>::max() ) {
-					dropped = TryDropAmmo( botNum, chosenSupplier, currWeapon );
+				if( chosenSupplier ) {
+					dropped = TryDropAmmo( consumer, chosenSupplier, currWeapon );
 				} else {
-					for( unsigned mateNum: supplierCandidates ) {
+					for( Bot *supplier = suppliersListHead; supplier; supplier = supplier->NextInTmpList() ) {
 						// We have checked this once during supplier candidates selection
 						// mostly for suppliers selection algorithm optimization,
 						// but this may have changed during weapon/health/armor drops in this frame.
-						if( level.time - lastDroppedByBotTimestamps[mateNum] < 1000 ) {
+						if( level.time - lastDroppedByBotTimestamps[supplier->ClientNum()] < 1000 ) {
 							continue;
 						}
 
-						dropped = TryDropAmmo( botNum, mateNum, currWeapon );
+						dropped = TryDropAmmo( consumer, supplier, currWeapon );
 						if( !dropped ) {
 							continue;
 						}
 
-						chosenSupplier = mateNum;
+						chosenSupplier = supplier;
 						break;
 					}
 				}
@@ -916,20 +945,20 @@ bool AiSquad::RequestWeaponAndAmmoDrop( unsigned botNum, const int *maxBotWeapon
 
 		// Check who may drop a weapon
 		if( !dropped ) {
-			if( chosenSupplier != std::numeric_limits<unsigned>::max() ) {
-				dropped = TryDropWeapon( botNum, chosenSupplier, currWeapon, maxBotWeaponTiers );
+			if( chosenSupplier ) {
+				dropped = TryDropWeapon( consumer, chosenSupplier, currWeapon, maxBotWeaponTiers );
 			} else {
-				for( unsigned mateNum: supplierCandidates ) {
-					if( level.time - lastDroppedByBotTimestamps[mateNum] < 1000 ) {
+				for( Bot *supplier = suppliersListHead; supplier; supplier = supplier->NextInTmpList() ) {
+					if( level.time - lastDroppedByBotTimestamps[supplier->ClientNum()] < 1000 ) {
 						continue;
 					}
 
-					dropped = TryDropWeapon( botNum, mateNum, currWeapon, maxBotWeaponTiers );
+					dropped = TryDropWeapon( consumer, supplier, currWeapon, maxBotWeaponTiers );
 					if( !dropped ) {
 						continue;
 					}
 
-					chosenSupplier = mateNum;
+					chosenSupplier = supplier;
 					break;
 				}
 			}
@@ -938,12 +967,12 @@ bool AiSquad::RequestWeaponAndAmmoDrop( unsigned botNum, const int *maxBotWeapon
 		if( dropped ) {
 			// If this is first dropped item, set is as a pending goal
 			if( !droppedItemsCount ) {
-				dropped->target_ent = bots[botNum]->Self();
+				dropped->target_ent = consumer->Self();
 				dropped->enemy = (edict_t *)this;
 				dropped->stop = AiSquad::SetDroppedEntityAsBotGoal;
 				// Register drop timestamp
-				lastDroppedForBotTimestamps[botNum] = level.time;
-				lastDroppedByBotTimestamps[chosenSupplier] = level.time;
+				lastDroppedForBotTimestamps[consumer->ClientNum()] = level.time;
+				lastDroppedByBotTimestamps[chosenSupplier->ClientNum()] = level.time;
 			}
 			droppedItemsCount++;
 			if( droppedItemsCount == 3 ) {
@@ -955,38 +984,38 @@ bool AiSquad::RequestWeaponAndAmmoDrop( unsigned botNum, const int *maxBotWeapon
 	return droppedItemsCount > 0;
 }
 
-edict_t *AiSquad::TryDropAmmo( unsigned botNum, unsigned supplierNum, int weapon ) {
-	Bot *mate = bots[supplierNum];
-	const auto &fireDef = weaponDefs[weapon]->firedef;
+edict_t *AiSquad::TryDropAmmo( Bot *consumer, Bot *supplier, int weapon ) {
+	const auto &fireDef = extendedWeaponDefsCache.WeaponDefs()[weapon]->firedef;
 	// Min ammo quantity to be able to drop it
 	float minAmmo = fireDef.ammo_pickup;
 	// If mate has not only ammo but weapon, leave mate some ammo
-	if( mate->Inventory()[weapon] ) {
+	if( supplier->Inventory()[weapon] ) {
 		minAmmo += fireDef.ammo_low;
 	}
 
-	if( mate->Inventory()[fireDef.ammo_id] < minAmmo ) {
+	if( supplier->Inventory()[fireDef.ammo_id] < minAmmo ) {
 		return nullptr;
 	}
 
-	edict_t *dropped = G_DropItem( mate->self, GS_FindItemByTag( fireDef.ammo_id ) );
+	edict_t *dropped = G_DropItem( supplier->Self(), GS_FindItemByTag( fireDef.ammo_id ) );
 	if( dropped ) {
-		G_Say_Team( bots[supplierNum]->self, va( "Dropped %%d at %%D for %s", Nick( bots[botNum]->self ) ), false );
+		G_Say_Team( supplier->Self(), va( "Dropped %%d at %%D for %s", consumer->Nick() ), false );
 	}
 	return dropped;
 }
 
-edict_t *AiSquad::TryDropWeapon( unsigned botNum, unsigned supplierNum, int weapon, const int *maxBotWeaponTiers ) {
-	Bot *mate = bots[supplierNum];
+edict_t *AiSquad::TryDropWeapon( Bot *consumer, Bot *supplier, int weapon, const int *maxBotWeaponTiers ) {
+	const auto *const weaponDefs = extendedWeaponDefsCache.WeaponDefs();
+	const auto *const weaponTiers = extendedWeaponDefsCache.WeaponTiers();
 
 	// The mate does not have this weapon
-	if( !mate->Inventory()[weapon] ) {
+	if( !supplier->Inventory()[weapon] ) {
 		return nullptr;
 	}
 
 	const auto &fireDef = weaponDefs[weapon]->firedef;
 	// The mate does not have enough ammo for this weapon
-	if( mate->Inventory()[fireDef.ammo_id] <= fireDef.ammo_low ) {
+	if( supplier->Inventory()[fireDef.ammo_id] <= fireDef.ammo_low ) {
 		return nullptr;
 	}
 
@@ -996,51 +1025,52 @@ edict_t *AiSquad::TryDropWeapon( unsigned botNum, unsigned supplierNum, int weap
 		if( otherWeapon == weapon ) {
 			continue;
 		}
-		if( !mate->Inventory()[otherWeapon] ) {
+		if( !supplier->Inventory()[otherWeapon] ) {
 			continue;
 		}
 		const auto &otherFireDef = weaponDefs[otherWeapon]->firedef;
-		if( mate->Inventory()[otherFireDef.ammo_id] <= otherFireDef.ammo_low ) {
+		if( supplier->Inventory()[otherFireDef.ammo_id] <= otherFireDef.ammo_low ) {
 			continue;
 		}
 
-		newMaxBestWeaponTier = std::max( newMaxBestWeaponTier, tiersForWeapon[otherWeapon] );
+		newMaxBestWeaponTier = std::max( newMaxBestWeaponTier, weaponTiers[otherWeapon] );
 	}
 
 	// If the does not keep its top weapon tier after dropping a weapon
-	if( newMaxBestWeaponTier < maxBotWeaponTiers[supplierNum] ) {
+	if( newMaxBestWeaponTier < maxBotWeaponTiers[supplier->ClientNum()] ) {
 		return nullptr;
 	}
 
 	// Try drop a weapon
-	edict_t *dropped = G_DropItem( mate->self, GS_FindItemByTag( weapon ) );
+	edict_t *dropped = G_DropItem( supplier->Self(), GS_FindItemByTag( weapon ) );
 	if( dropped ) {
-		G_Say_Team( bots[supplierNum]->self, va( "Dropped %%d at %%D for %s", Nick( bots[botNum]->self ) ), false );
+		G_Say_Team( supplier->Self(), va( "Dropped %%d at %%D for %s", consumer->Nick() ), false );
 	}
 	return dropped;
 }
 
-bool AiSquad::RequestHealthDrop( unsigned botNum, bool wouldSupplyHealth[MAX_SIZE], Suppliers &suppliers ) {
-	return RequestDrop( botNum, wouldSupplyHealth, suppliers, &Bot::DropHealth );
+bool AiSquad::RequestHealthDrop( Bot *consumer, bool wouldSupplyHealth[MAX_CLIENTS], Bot *suppliersListHead ) {
+	return RequestDrop( consumer, wouldSupplyHealth, suppliersListHead, &Bot::DropHealth );
 }
 
-bool AiSquad::RequestArmorDrop( unsigned botNum, bool wouldSupplyArmor[MAX_SIZE], Suppliers &suppliers ) {
-	return RequestDrop( botNum, wouldSupplyArmor, suppliers, &Bot::DropArmor );
+bool AiSquad::RequestArmorDrop( Bot *consumer, bool wouldSupplyArmor[MAX_CLIENTS], Bot *suppliersListHead ) {
+	return RequestDrop( consumer, wouldSupplyArmor, suppliersListHead, &Bot::DropArmor );
 }
 
-bool AiSquad::RequestDrop( unsigned botNum, bool wouldSupply[MAX_SIZE], Suppliers &suppliers, void ( Bot::*dropFunc )() ) {
-	const int botFloorClusterNum = GetBotFloorCluster( bots[botNum] );
+bool AiSquad::RequestDrop( Bot *consumer, bool wouldSupply[MAX_CLIENTS], Bot *suppliers, void ( Bot::*dropFunc )() ) {
+	const int botFloorClusterNum = GetBotFloorCluster( consumer );
 	// Disallow dropping items outside of floor clusters
 	if( !botFloorClusterNum ) {
 		return false;
 	}
 
-	for( const unsigned supplierNum: suppliers ) {
+	for( Bot *supplier = suppliers; supplier; supplier->NextInTmpList() ) {
+		const auto supplierNum = supplier->ClientNum();
 		if( !wouldSupply[supplierNum] ) {
 			continue;
 		}
 
-		if( botFloorClusterNum != GetBotFloorCluster( bots[supplierNum] ) ) {
+		if( botFloorClusterNum != GetBotFloorCluster( supplier ) ) {
 			continue;
 		}
 
@@ -1051,71 +1081,57 @@ bool AiSquad::RequestDrop( unsigned botNum, bool wouldSupply[MAX_SIZE], Supplier
 			continue;
 		}
 
-		( bots[supplierNum]->*dropFunc )();
+		( supplier->*dropFunc )();
 		lastDroppedByBotTimestamps[supplierNum] = level.time;
-		lastDroppedForBotTimestamps[botNum] = level.time;
-		G_Say_Team( bots[supplierNum]->self, va( "Dropped %%d at %%D for %s", Nick( bots[botNum]->self ) ), false );
+		lastDroppedForBotTimestamps[consumer->ClientNum()] = level.time;
+		G_Say_Team( supplier->Self(), va( "Dropped %%d at %%D for %s", consumer->Nick() ), false );
 		return true;
 	}
 	return false;
 }
 
-void AiSquad::ReleaseBotsTo( StaticVector<Bot *, MAX_CLIENTS> &orphans ) {
-	for( Bot *bot: bots ) {
-		orphans.push_back( bot );
-	}
-
-	bots.clear();
-	inUse = false;
-}
-
 void AiSquad::PrepareToAddBots() {
 	isValid = true;
-	inUse = true;
 	canFightTogether = false;
 	canMoveTogether = false;
-	brokenConnectivityTimeoutAt = level.time + 1;
+	brokenConnectivityTimeoutAt = level.time + CONNECTIVITY_TIMEOUT;
 	botsDetached = false;
-	bots.clear();
+	botsListHead = nullptr;
+	numBots = 0;
 }
 
 void AiSquad::AddBot( Bot *bot ) {
 #ifdef _DEBUG
-	if( !inUse || !isValid ) {
+	if( !isValid ) {
 		AI_FailWith( "AiSquad::AddBot()", "Can't add a bot to a unused or invalid squad\n" );
 	}
 
-	for( const Bot *presentBot: bots ) {
+	for( Bot *presentBot = botsListHead; presentBot; presentBot = presentBot->NextInSquad() ) {
 		if( presentBot == bot ) {
 			AI_FailWith( "AiSquad::AddBot()", "Can't add a bot to the squad (it is already present)\n" );
 		}
 	}
 #endif
 
-	bots.push_back( bot );
+	Link( bot, &botsListHead, Bot::SQUAD_LINKS );
+	numBots++;
 	bot->OnAttachedToSquad( this );
 }
 
 bool AiSquad::MayAttachBot( const Bot *bot ) const {
-	if( !inUse || !isValid ) {
+	if( !isValid ) {
 		return false;
 	}
-	if( bots.size() == bots.capacity() ) {
+	if( numBots == MAX_SQUAD_SIZE ) {
 		return false;
 	}
 
-#ifdef _DEBUG
-	// First, check all bots...
-	for( Bot *presentBot: bots ) {
-		if( presentBot == bot ) {
-			AI_FailWith( "AiSquad::MayAttachBot()", "Can't attach a bot to the squad (it is already present)\n" );
+	for( Bot *presentBot = botsListHead; presentBot; presentBot = presentBot->NextInSquad() ) {
+		if( bot == presentBot ) {
+			continue;
 		}
-	}
-#endif
-
-	for( Bot *presentBot: bots ) {
 		constexpr float squaredDistanceLimit = CONNECTIVITY_PROXIMITY * CONNECTIVITY_PROXIMITY;
-		if( DistanceSquared( bot->self->s.origin, presentBot->self->s.origin ) > squaredDistanceLimit ) {
+		if( DistanceSquared( bot->Origin(), presentBot->Origin() ) > squaredDistanceLimit ) {
 			continue;
 		}
 
@@ -1135,27 +1151,54 @@ bool AiSquad::MayAttachBot( const Bot *bot ) const {
 	return false;
 }
 
-bool AiSquad::TryAttachBot( Bot *bot ) {
-	if( MayAttachBot( bot ) ) {
-		AddBot( bot );
-		return true;
+AiSquadBasedTeam::AiSquadBasedTeam( int team_ )
+	: AiBaseTeam( team_ ) {
+	// We have to construct squads explicitly since they do not have a default/trivial constructor
+	// Note: avoid getting an address of next (non-existent yet) element that is harmless but triggers a debug assertion
+
+	auto *squad = new( squads.unsafe_grow_back() )AiSquad( this );
+	squad->prev = nullptr;
+	squad->next = squads.begin() + 1;
+	squad->squadNum = 0;
+
+	for( int i = 1; i < MAX_CLIENTS - 1; ++i ) {
+		squad = new( squads.unsafe_grow_back() )AiSquad( this );
+		squad->prev = &squads[i - 1];
+		squad->next = squads.begin() + i + 1;
+		squad->squadNum = i;
 	}
-	return false;
+
+	squad = new( squads.unsafe_grow_back() )AiSquad( this );
+	assert( squad == &squads[MAX_CLIENTS - 1] );
+	squad->prev = &squads[MAX_CLIENTS - 2];
+	squad->next = nullptr;
+	squad->squadNum = MAX_CLIENTS - 1;
+
+	freeSquadsHead = &squads[0];
+}
+
+AiSquadBasedTeam::~AiSquadBasedTeam() {
+	// We must detach bots since this destructor may be called mid-game
+	// (when a script requests a team logic with more features and this team is replaced by other one)
+	// Otherwise bots are going to do use-after-free memory access and crash the game subsequently.
+	for( AiSquad *squad = usedSquadsHead; squad; squad = squad->NextInList() ) {
+		squad->DetachBots();
+	}
 }
 
 void AiSquadBasedTeam::Frame() {
 	// Call super method first, it may contain some logic
 	AiBaseTeam::Frame();
 
-	// Drain invalid squads
-	for( auto &squad: squads ) {
-		if( !squad.InUse() ) {
+	// Try to unlink invalid squads (they might have invalidated themselves)
+	AiSquad *nextSquad;
+	for( AiSquad *squad = usedSquadsHead; squad; squad = nextSquad ) {
+		nextSquad = squad->NextInList();
+		if( squad->IsValid() ) {
 			continue;
 		}
-		if( squad.IsValid() ) {
-			continue;
-		}
-		squad.ReleaseBotsTo( orphanBots );
+		Unlink( squad, &usedSquadsHead );
+		Link( squad, &freeSquadsHead );
 	}
 
 	// This should be called before AiSquad::Update() (since squads expect this to be valid)
@@ -1164,26 +1207,68 @@ void AiSquadBasedTeam::Frame() {
 	// Call squads Update() (and, thus, Frame() and, maybe, Think()) each frame as it is expected
 	// even if all squad AI logic is performed only in AiSquad::Think()
 	// to prevent further errors if we decide later to put some logic in Frame()
-	for( auto &squad: squads ) {
-		squad.Update();
+	for( AiSquad *squad = usedSquadsHead; squad; squad = squad->NextInList() ) {
+		squad->Update();
 	}
 }
 
 void AiSquadBasedTeam::OnBotAdded( Bot *bot ) {
-	orphanBots.push_back( bot );
+	// Link to orphan bots and wait for squads clustering
+	Link( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
 }
 
 void AiSquadBasedTeam::OnBotRemoved( Bot *bot ) {
-	for( auto &squad: squads ) {
-		squad.OnBotRemoved( bot );
+	// Perform some additional checks unless this is a public release build.
+	// These checks have turned to be very useful to catch bugs.
+
+	// TODO: This test is skipped until the rare glitch in round-based gametypes is fixed.
+	// Currently a failure of this assertion is harmless but its better to ensure correctness for future additions.
+#if 0
+	// If the bot is in squad, we should invalidate the squad.
+	// The AiSquad::Invalidate() links all squad bots to our orphan lists.
+	bool wasInSquad = false;
+	if( auto *const squad = bot->squad ) {
+		wasInSquad = true;
+		Bot *squadBot = nullptr;
+		for( squadBot = squad->botsListHead; squadBot; squadBot = squadBot->NextInSquad() ) {
+			if( squadBot == bot ) {
+				// This call links the bot to the orphans list
+				squad->Invalidate();
+				break;
+			}
+		}
+		// If the loop has not been interrupted, the bot has not been found
+		if( !squadBot ) {
+			FailWith( "OnBotRemoved(%p): the bot was not in squad %p", bot, squad );
+		}
 	}
 
-	// Remove from orphans as well
-	for( auto it = orphanBots.begin(); it != orphanBots.end(); ++it ) {
-		if( *it == bot ) {
-			orphanBots.erase( it );
+	// Now the bot should be in orphans list regardless whether was it in squad or not.
+	for( Bot *orphanBot = orphanBotsHead; orphanBot; orphanBot = orphanBot->NextInSquad() ) {
+		if( orphanBot == bot ) {
+			Unlink( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
 			return;
 		}
+	}
+
+	if( wasInSquad ) {
+		FailWith( "OnBotRemoved(%p): the bot has not appeared in orphans list", bot );
+	} else {
+		FailWith( "OnBotRemoved(%p): the bot was not in orphans list", bot );
+	}
+#else
+	if( auto *const squad = bot->squad ) {
+		squad->Invalidate();
+	}
+
+	Unlink( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
+#endif
+}
+
+void AiSquadBasedTeam::TransferStateFrom( AiBaseTeam *that ) {
+	if( auto *thatSquadBasedTeam = dynamic_cast<AiSquadBasedTeam *>( that ) ) {
+		this->orphanBotsHead = thatSquadBasedTeam->orphanBotsHead;
+		thatSquadBasedTeam->orphanBotsHead = nullptr;
 	}
 }
 
@@ -1191,179 +1276,236 @@ void AiSquadBasedTeam::Think() {
 	// Call super method first, this call must not be omitted
 	AiBaseTeam::Think();
 
-	if( !orphanBots.empty() ) {
+	// Try setting up squads for orphan bots
+	if( orphanBotsHead ) {
 		SetupSquads();
 	}
 }
 
-class NearbyMatesList;
+struct NearbyMates;
 
+/**
+ * An entry of the {@code NearbyMatesList}
+ */
 struct NearbyBotProps {
 	Bot *bot;
-	unsigned botOrphanIndex;
-	NearbyMatesList *botMates;
 	float distance;
 
-	NearbyBotProps( Bot *bot_, unsigned botOrphanIndex_, NearbyMatesList *botMates_, float distance_ )
-		: bot( bot_ ), botOrphanIndex( botOrphanIndex_ ), botMates( botMates_ ), distance( distance_ ) {}
+	NearbyBotProps( Bot *bot_, float distance_ )
+		: bot( bot_ ), distance( distance_ ) {}
 
+	/**
+	 * An operator for sorting in ascending order by distance.
+	 * This operator gets used for eviction of a heap entry with the largest distance.
+	 * (The STL heap is a max-heap).
+	 */
 	bool operator<( const NearbyBotProps &that ) const { return distance < that.distance; }
+
+	int BotClientNum() const { return bot->EntNum() - 1; }
 };
 
-class NearbyMatesList {
-	StaticVector<NearbyBotProps, AiSquad::MAX_SIZE> mates;
+struct NearbyMates {
+	StaticVector<NearbyBotProps, AiSquad::MAX_SQUAD_SIZE> mates;
+
+	enum { RAW_LIST, SORTED_LIST };
+
+	Bot *orphan { nullptr };
+
+	NearbyMates *prev[2] { nullptr, nullptr };
+	NearbyMates *next[2] { nullptr, nullptr };
 
 	float minDistance { std::numeric_limits<float>::max() };
 
-public:
-	unsigned botIndex { std::numeric_limits<unsigned>::max() };
+	NearbyMates *NextInRawList() { return next[RAW_LIST]; }
+	NearbyMates *NextInSortedList() { return next[SORTED_LIST]; }
+
 	typedef const NearbyBotProps *const_iterator;
 
 	const_iterator begin() const { return &( *mates.cbegin() ); }
 	const_iterator end() const { return &( *mates.cend() ); }
 	bool empty() const { return mates.empty(); }
 
-	void Add( const NearbyBotProps &props );
+	int BotClientIndex() const { return orphan->EntNum() - 1; }
 
-	bool operator<( const NearbyMatesList &that ) const { return minDistance < that.minDistance; }
+	void Add( Bot *bot, float distanceLike );
+
+	bool Contains( int botClientNum ) const;
 };
 
-void NearbyMatesList::Add( const NearbyBotProps &props ) {
-	if( mates.size() == AiSquad::MAX_SIZE ) {
+void NearbyMates::Add( Bot *bot, float distanceLike ) {
+	// If the capacity has been exceeded, remove the entry with the largest distance
+	if( mates.size() == AiSquad::MAX_SQUAD_SIZE ) {
 		std::pop_heap( mates.begin(), mates.end() );
 		mates.pop_back();
 	}
-	mates.push_back( props );
+	mates.emplace_back( NearbyBotProps( bot, distanceLike ) );
 	std::push_heap( mates.begin(), mates.end() );
-	if( minDistance < props.distance ) {
-		minDistance = props.distance;
+	if( minDistance < distanceLike ) {
+		minDistance = distanceLike;
 	}
 }
 
-static void SelectNearbyMates( NearbyMatesList *nearbyMates, StaticVector<Bot*, MAX_CLIENTS> &orphanBots ) {
-	for( unsigned i = 0; i < orphanBots.size(); ++i ) {
-		nearbyMates[i].botIndex = i;
-		if( orphanBots[i]->IsGhosting() ) {
+bool NearbyMates::Contains( int botClientNum ) const {
+	for( const auto &mateProps: mates ) {
+		if( mateProps.BotClientNum() == botClientNum ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+class SquadsBuilder {
+protected:
+	AiSquadBasedTeam *const parent;
+
+	NearbyMates nearbyMatesForClient[MAX_CLIENTS];
+
+	/**
+	 * Fills a corresponding {@code NearbyMates} for every orphan bot
+	 * (an element #i of {@code nearbyMates} corresponds to client #i).
+	 * Returns a chain of non-empty {@code NearbyMates} items.
+	 */
+	NearbyMates *SelectNearbyMates( Bot *orphanBotsList );
+
+	/**
+	 * Given a head of raw chain of {@code NearbyMates},
+	 * builds a sorted one so an item having lowest minimal distance between mates is first.
+	 */
+	NearbyMates *SortByMinDistance( NearbyMates *rawLists );
+
+	unsigned AssignSquadNumbers( NearbyMates *lists, uint8_t *orphanSquadIds );
+public:
+	explicit SquadsBuilder( AiSquadBasedTeam *parent_ ): parent( parent_ ) {}
+
+	void Exec( Bot **orphanBotsList );
+};
+
+NearbyMates *SquadsBuilder::SelectNearbyMates( Bot *orphanBotsList ) {
+	NearbyMates *resultList = nullptr;
+
+	for( Bot *bot = orphanBotsList; bot; bot = bot->NextInSquad() ) {
+		NearbyMates *const matesListForBot = nearbyMatesForClient + bot->ClientNum();
+		matesListForBot->orphan = bot;
+		if( bot->IsGhosting() ) {
 			continue;
 		}
 
-		// Always initialize mates list by an empty container
-		for( unsigned j = 0; j < orphanBots.size(); ++j ) {
-			if( i == j ) {
+		for( Bot *otherBot = bot->NextInSquad(); otherBot; otherBot = otherBot->NextInSquad() ) {
+			if( bot == otherBot ) {
 				continue;
 			}
-			if( orphanBots[j]->IsGhosting() ) {
+			if( otherBot->IsGhosting() ) {
 				continue;
 			}
-
-			const edict_t *firstEnt = orphanBots[i]->Self();
-			const edict_t *secondEnt = orphanBots[j]->Self();
 
 			// Reject mismatching pair by doing a cheap vector distance test first
-			if( DistanceSquared( firstEnt->s.origin, secondEnt->s.origin ) > CONNECTIVITY_PROXIMITY * CONNECTIVITY_PROXIMITY ) {
+			const float squareDistance = DistanceSquared( bot->Origin(), otherBot->Origin() );
+			if( squareDistance > CONNECTIVITY_PROXIMITY * CONNECTIVITY_PROXIMITY ) {
 				continue;
 			}
 
 			// Check whether bots may mutually reach each other in short amount of time
 			// (this means bots are not clustered across boundaries of teleports and other triggers)
 			// (implementing clustering across teleports breaks cheap distance rejection)
-			int firstToSecondTime = ::clientToClientTable.GetTravelTime( firstEnt, secondEnt );
+			int firstToSecondTime = ::clientToClientTable.GetTravelTime( bot, otherBot );
 			if( !firstToSecondTime ) {
 				continue;
 			}
-			int secondToFirstTime = ::clientToClientTable.GetTravelTime( secondEnt, firstEnt );
+			int secondToFirstTime = ::clientToClientTable.GetTravelTime( otherBot, bot );
 			if( !secondToFirstTime ) {
 				continue;
 			}
 
 			// AAS time is measured in seconds^-2
-			if( firstToSecondTime + secondToFirstTime < CONNECTIVITY_MOVE_CENTISECONDS ) {
-				// Use the sum as a similar to distance thing
-				float distanceLike = firstToSecondTime + secondToFirstTime;
-				nearbyMates[i].Add( NearbyBotProps( orphanBots[j], j, nearbyMates + j, distanceLike ) );
-			}
-		}
-	}
-}
-
-static void MakeSortedNearbyMatesLists( NearbyMatesList **sortedMatesLists, NearbyMatesList *nearbyMates, unsigned listsCount ) {
-	// First, fill array of references
-	for( unsigned i = 0; i < listsCount; ++i ) {
-		sortedMatesLists[i] = nearbyMates + i;
-	}
-
-	// Then, sort by referenced values
-	auto cmp = [=]( const NearbyMatesList *a, const NearbyMatesList *b ) { return *a < *b; };
-	std::sort( sortedMatesLists, sortedMatesLists + listsCount, cmp );
-}
-
-// For i-th orphan sets orphanSquadIds[i] to a numeric id of a new squad (that starts from 1),
-// or 0 if bot has not been assigned to a new squad.
-// Returns count of new squads.
-static unsigned MakeNewSquads( NearbyMatesList **sortedMatesLists, unsigned listsCount, uint8_t *orphanSquadIds ) {
-	static_assert( std::numeric_limits<uint8_t>::max() > AiSquad::MAX_SIZE,
-				   "Use uint16_t type for squads larger than 256(!) clients" );
-	uint8_t orphanSquadMatesCount[MAX_CLIENTS];
-
-	std::fill_n( orphanSquadIds, listsCount, 0 );
-	std::fill_n( orphanSquadMatesCount, listsCount, 0 );
-
-	uint8_t newSquadsCount = 0;
-
-	// For each bot and its mates list starting from bot that has closest teammates
-	// (note that i-th list does not correspond to i-th orphan
-	// after sorting but count of orphans and their lists is kept)
-	for( unsigned i = 0; i < listsCount; ++i ) {
-		NearbyMatesList *matesList = sortedMatesLists[i];
-		unsigned ownerOrphanIndex = matesList->botIndex;
-		if( orphanSquadMatesCount[ownerOrphanIndex] >= AiSquad::MAX_SIZE - 1 ) {
-			continue;
-		}
-
-		unsigned char squadId = orphanSquadIds[ownerOrphanIndex];
-
-		StaticVector<unsigned, AiSquad::MAX_SIZE - 1> assignedMatesOrphanIds;
-
-		// For each bot close to the current orphan
-		for( NearbyBotProps botProps: *matesList ) {
-			unsigned botOrphanIndex = botProps.botOrphanIndex;
-			// Already assigned to some other squad
-			if( orphanSquadMatesCount[botOrphanIndex] ) {
+			if( firstToSecondTime + secondToFirstTime > CONNECTIVITY_MOVE_CENTISECONDS ) {
 				continue;
 			}
 
-			bool areMutuallyClosest = false;
-			for( NearbyBotProps thatProps: *botProps.botMates ) {
-				if( thatProps.botOrphanIndex == ownerOrphanIndex ) {
-					areMutuallyClosest = true;
-					break;
-				}
+			matesListForBot->Add( otherBot, squareDistance );
+			// Add this bot to the nearby mates list of other bot as well
+			// (this does not however guarantee it will be among few nearest ones)
+			nearbyMatesForClient[otherBot->ClientNum()].Add( bot, squareDistance );
+		}
+	}
+
+	// Now collect results
+	for( Bot *bot = orphanBotsList; bot; bot = bot->NextInSquad() ) {
+		auto *nearbyMates = nearbyMatesForClient + bot->ClientNum();
+		if( !nearbyMates->empty() ) {
+			::Link( nearbyMates, &resultList, NearbyMates::RAW_LIST );
+		}
+	}
+
+	return resultList;
+}
+
+NearbyMates *SquadsBuilder::SortByMinDistance( NearbyMates *rawLists ) {
+	NearbyMates *sortedListHead = nullptr;
+	// TODO: Acttually sort!
+	for( NearbyMates *list = rawLists; list; list = list->NextInRawList() ) {
+		::Link( list, &sortedListHead, NearbyMates::SORTED_LIST );
+	}
+	return sortedListHead;
+}
+
+unsigned SquadsBuilder::AssignSquadNumbers( NearbyMates *lists, uint8_t *orphanSquadIds ) {
+	static_assert( std::numeric_limits<uint8_t>::max() > AiSquad::MAX_SQUAD_SIZE,
+				   "Use uint16_t type for squads larger than 256(!) clients" );
+	uint8_t orphanSquadMatesCount[MAX_CLIENTS];
+
+	std::fill_n( orphanSquadIds, MAX_CLIENTS, 0 );
+	std::fill_n( orphanSquadMatesCount, MAX_CLIENTS, 0 );
+
+	uint8_t newSquadsCount = 0;
+
+	for( NearbyMates *matesList = lists; matesList; matesList = matesList->NextInSortedList() ) {
+		const auto currOrphanIndex = matesList->BotClientIndex();
+		if( orphanSquadMatesCount[currOrphanIndex] >= AiSquad::MAX_SQUAD_SIZE - 1 ) {
+			continue;
+		}
+
+		// The current value of the squad (may be unassigned)
+		uint8_t squadId = orphanSquadIds[currOrphanIndex];
+
+		// Holds client numbers of mates that were assigned for the current orphans
+		StaticVector<int, AiSquad::MAX_SQUAD_SIZE - 1> assignedMatesOrphanIds;
+
+		// For each nearby teammate of the current orphan bot
+		for( NearbyBotProps botProps: *matesList ) {
+			const auto thatOrphanIndex = botProps.BotClientNum();
+			// Already assigned to some other squad
+			if( orphanSquadMatesCount[thatOrphanIndex] ) {
+				continue;
 			}
-			if( !areMutuallyClosest ) {
+
+			// If the current orphan is not in the list of closest teammates of that bot
+			if( !matesList[thatOrphanIndex].Contains( currOrphanIndex ) ) {
 				continue;
 			}
 
 			// Mutually assign orphans
-			assignedMatesOrphanIds.push_back( botOrphanIndex );
+			assignedMatesOrphanIds.push_back( thatOrphanIndex );
 			// Increase mates count of the mates list owner (the count does not include a bot itself)
-			orphanSquadMatesCount[ownerOrphanIndex]++;
-			const auto matesCount = orphanSquadMatesCount[ownerOrphanIndex];
+			orphanSquadMatesCount[thatOrphanIndex]++;
+			const auto matesCount = orphanSquadMatesCount[thatOrphanIndex];
 			// For all already assigned mates modify their mates count
-			for( unsigned orphanId: assignedMatesOrphanIds ) {
+			for( auto orphanId: assignedMatesOrphanIds ) {
 				orphanSquadMatesCount[orphanId] = matesCount;
 			}
 
 			// Make new squad id only when we are sure that there are some selected squad members
 			// (squad ids must be sequential and indicate feasible squads)
+			// Note: this squad id is not related to AiSquad::Num() and is just to distinguish newly created formations
 			if( !squadId ) {
 				squadId = ++newSquadsCount;
 			}
 
-			orphanSquadIds[ownerOrphanIndex] = squadId;
-			orphanSquadIds[botOrphanIndex] = squadId;
+			// Assign or update squad ids for current and that orphan
+			orphanSquadIds[currOrphanIndex] = squadId;
+			orphanSquadIds[thatOrphanIndex] = squadId;
 
-			// Stop assignation of squad mates for the bot that is i-th NearbyMatesList owner
-			if( matesCount == AiSquad::MAX_SIZE - 1 ) {
+			// Stop assignation of squad mates for the bot that is i-th NearbyMates owner
+			if( matesCount == AiSquad::MAX_SQUAD_SIZE - 1 ) {
 				break;
 			}
 		}
@@ -1373,81 +1515,74 @@ static unsigned MakeNewSquads( NearbyMatesList **sortedMatesLists, unsigned list
 }
 
 void AiSquadBasedTeam::SetupSquads() {
-	NearbyMatesList nearbyMates[MAX_CLIENTS];
+	SquadsBuilder builder( this );
+	builder.Exec( &orphanBotsHead );
+}
 
-	SelectNearbyMates( nearbyMates, orphanBots );
-
-	// We should start assignation from bots that have closest teammates
-	// Thus, NearbyMatesList's should be sorted by minimal distance to a teammate
-
-	// Addresses held in NearbyMatesProps should be kept stable
-	// Thus, we sort not mates array itself but an array of references to these lists
-	NearbyMatesList *sortedMatesLists[MAX_CLIENTS];
-	MakeSortedNearbyMatesLists( sortedMatesLists, nearbyMates, orphanBots.size() );
+void SquadsBuilder::Exec( Bot **orphanBotsList ) {
+	NearbyMates *list = SortByMinDistance( SelectNearbyMates( *orphanBotsList ) );
 
 	uint8_t orphanSquadIds[MAX_CLIENTS];
-	const auto newSquadsCount = MakeNewSquads( sortedMatesLists, orphanBots.size(), orphanSquadIds );
+	const auto newSquadsCount = AssignSquadNumbers( list, orphanSquadIds );
 
 	bool isSquadJustCreated[MAX_CLIENTS];
 	std::fill_n( isSquadJustCreated, MAX_CLIENTS, false );
 
+	// Now for every valid formation id allocate a new squad
+	// and add bots that belong to this newly created squad
 	for( unsigned squadId = 1; squadId <= newSquadsCount; ++squadId ) {
-		unsigned squadSlot = GetFreeSquadSlot();
-		isSquadJustCreated[squadSlot] = true;
-		for( unsigned i = 0; i < orphanBots.size(); ++i ) {
-			if( orphanSquadIds[i] == squadId ) {
-				squads[squadSlot].AddBot( orphanBots[i] );
+		AiSquad *squad = parent->AllocSquad();
+		isSquadJustCreated[squad->Num()] = true;
+		Bot *nextBot;
+		for( Bot *bot = *orphanBotsList; bot; bot = nextBot ) {
+			nextBot = bot->NextInSquad();
+			if( orphanSquadIds[bot->ClientNum()] == squadId ) {
+				// Unlink the bot from orphans list
+				::Unlink( bot, orphanBotsList, Bot::SQUAD_LINKS );
+				// Link the bot to the squad
+				squad->AddBot( bot );
 			}
 		}
 	}
 
-	StaticVector<Bot*, MAX_CLIENTS> keptOrphans;
 	// For each orphan bot try attach a bot to an existing squad.
-	// It a bot can't be attached, copy it to `keptOrphans`
-	// (We can't modify orphanBots inplace, a logic assumes stable orphanBots indices)
-	for( unsigned i = 0; i < orphanBots.size(); ++i ) {
+	Bot *nextBot;
+	for( Bot *bot = *orphanBotsList; bot; bot = nextBot ) {
+		nextBot = bot->NextInSquad();
 		// Skip just created squads
-		if( orphanSquadIds[i] ) {
+		if( orphanSquadIds[bot->ClientNum()] ) {
 			continue;
 		}
 
-		bool attached = false;
-		for( unsigned j = 0; j < squads.size(); ++j ) {
+		for( AiSquad *squad = parent->usedSquadsHead; squad; squad = squad->NextInList() ) {
 			// Attaching a bot to a newly created squad is useless
 			// (if a bot has not been included in it from the very beginning)
-			if( isSquadJustCreated[j] ) {
+			if( isSquadJustCreated[squad->Num()] ) {
 				continue;
 			}
 
-			if( squads[j].TryAttachBot( orphanBots[i] ) ) {
-				attached = true;
-				break;
+			if( !squad->MayAttachBot( bot ) ) {
+				continue;
 			}
-		}
-		if( !attached ) {
-			keptOrphans.push_back( orphanBots[i] );
-		}
-	}
 
-	// There are no `orphanBot` ops left, `orphanBots` can be modified now
-	orphanBots.clear();
-	for( unsigned i = 0; i < keptOrphans.size(); ++i ) {
-		orphanBots.push_back( keptOrphans[i] );
+			// Unlink the bot from orphans list
+			::Unlink( bot, orphanBotsList, Bot::SQUAD_LINKS );
+			// Link the bot to the squad
+			squad->AddBot( bot );
+		}
 	}
 }
 
-unsigned AiSquadBasedTeam::GetFreeSquadSlot() {
-	for( unsigned i = 0; i < squads.size(); ++i ) {
-		if( !squads[i].InUse() ) {
-			squads[i].PrepareToAddBots();
-			return i;
-		}
-	}
-	new( squads.unsafe_grow_back() )AiSquad;
+AiSquad *AiSquadBasedTeam::AllocSquad() {
+	// We never exhaust squads capacity as MAX_CLIENTS is the maximum number of squads
+	assert( freeSquadsHead );
+
+	AiSquad *const squad = Unlink( freeSquadsHead, &freeSquadsHead );
+	Link( squad, &usedSquadsHead );
 	// This is very important action, otherwise the squad will not think
-	squads.back().SetFrameAffinity( frameAffinityModulo, frameAffinityOffset );
-	squads.back().PrepareToAddBots();
-	return squads.size() - 1;
+	squad->SetFrameAffinity( frameAffinityModulo, frameAffinityOffset );
+	squad->PrepareToAddBots();
+	return squad;
 }
 
 AiSquadBasedTeam *AiSquadBasedTeam::InstantiateTeam( int teamNum ) {

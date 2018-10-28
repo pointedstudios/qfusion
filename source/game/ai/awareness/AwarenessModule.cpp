@@ -31,6 +31,10 @@ void BotAwarenessModule::OnDetachedFromSquad( AiSquad *squad_ ) {
 	}
 	this->squad = nullptr;
 	this->activeEnemiesTracker = &ownEnemiesTracker;
+	// Prevent use-after-free since the squad memory might be released as well, and these entities refer to it.
+	// (happens when AI team is replaced by more feature-reach in runtime on demand)
+	this->selectedEnemies.Invalidate();
+	this->lostEnemies.Invalidate();
 }
 
 void BotAwarenessModule::OnEnemyViewed( const edict_t *enemy ) {
