@@ -139,4 +139,46 @@ inline Item *Unlink( Item *item, int16_t *listHeadRef, int listIndex, Item *base
 	return item;
 }
 
+/**
+ * A simplified version of {@code Link(Item *, Item **, int)} for items that need only one pair of links.
+ * @tparam Item any type that has {@code next} and {@code prev} links of the same type.
+ * @param item an item to link
+ * @param listHeadRef and address of the current list head
+ * @return the newly linked item (same as the argument) conforming to fluent API style.
+ */
+template<typename Item>
+inline Item *Link( Item *item, Item **listHeadRef ) {
+	if( *listHeadRef ) {
+		( *listHeadRef )->prev = item;
+	}
+	item->prev = nullptr;
+	item->next = *listHeadRef;
+	*listHeadRef = item;
+	return item;
+}
+
+/**
+ * A simplified version of {@code Unlink(Item, Item **, int) for items that need only one pair of links.
+ * @tparam Item any type that has {@code next} and {@code prev} links of the same type.
+ * @param item an item to unlink
+ * @param listHeadRef an address of the current list head
+ * @return the newly unlinked item (same as the argument) conforming to fluent API style.
+ */
+template<typename Item>
+inline Item *Unlink( Item *item, Item **listHeadRef ) {
+	if( auto *next = item->next ) {
+		next->prev = item->prev;
+	}
+	if( auto *prev = item->prev ) {
+		prev->next = item->next;
+	} else {
+		assert( item == *listHeadRef );
+		*listHeadRef = item->next;
+	}
+
+	item->prev = nullptr;
+	item->next = nullptr;
+	return item;
+}
+
 #endif
