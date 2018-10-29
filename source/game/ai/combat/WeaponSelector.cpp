@@ -174,7 +174,7 @@ void BotWeaponSelector::SuggestSniperRangeWeapon( const WorldState &worldState )
 		if( PlasmasReadyToFireCount() && weaponChoiceRandom > 0.5f ) {
 			chosenWeapon = WEAP_PLASMAGUN;
 		}
-	} else if( !bot->ShouldKeepXhairOnEnemy() ) {
+	} else if( !bot->ShouldAimPrecisely() ) {
 		// In this case try preferring weapons that does not require precise aiming.
 		// Otherwise the bot is unlikely to start firing at all due to view angles mismatch.
 		if( PlasmasReadyToFireCount() && weaponChoiceRandom > 0.7f ) {
@@ -330,7 +330,7 @@ void BotWeaponSelector::SuggestFarRangeWeapon( const WorldState &worldState ) {
 	}
 
 	// Add extra scores for weapons that do not require precise aiming in this case
-	if( !bot->ShouldKeepXhairOnEnemy() ) {
+	if( !bot->ShouldAimPrecisely() ) {
 		weaponScores[PG].score *= 3.0f;
 		weaponScores[RG].score *= 2.0f;
 	}
@@ -459,7 +459,7 @@ void BotWeaponSelector::SuggestMiddleRangeWeapon( const WorldState &worldState )
 	weaponScores[GL].score *= targetEnvironment.factor;
 
 	// Add extra scores for weapons that do not require precise aiming in this case
-	if( !bot->ShouldKeepXhairOnEnemy() ) {
+	if( !bot->ShouldAimPrecisely() ) {
 		weaponScores[PG].score *= 1.5f;
 		weaponScores[RG].score *= 2.0f;
 		weaponScores[GL].score *= 1.5f;

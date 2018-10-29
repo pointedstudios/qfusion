@@ -599,6 +599,16 @@ public:
 	bool WillAttackMelee() const { return selectedTactics.willAttackMelee; }
 	bool ShouldRushHeadless() const { return selectedTactics.shouldRushHeadless; }
 
+	/**
+	 * A hint for the weapon usage module.
+	 * If true, bot should wait for better match of a "crosshair" and an enemy,
+	 * otherwise shoot immediately if there is such opportunity.
+	 */
+	bool ShouldAimPrecisely() const {
+		// Try shooting immediately if "attacking out of despair"
+		return ShouldKeepXhairOnEnemy() && botPlanner.activeGoal != &attackOutOfDespairGoal;
+	}
+
 	// Whether the bot should stop bunnying even if it could produce
 	// good predicted results and concentrate on combat/dodging
 	bool ShouldSkinBunnyInFavorOfCombatMovement() const;

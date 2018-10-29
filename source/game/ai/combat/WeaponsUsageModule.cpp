@@ -317,6 +317,8 @@ bool BotWeaponsUsageModule::IsShotBlockedBySolidWall( trace_t *tr,
 bool BotWeaponsUsageModule::CheckShot( const AimParams &aimParams,
 									   const BotInput *input,
 									   const GenericFireDef &fireDef ) {
+	const bool shouldAimPrecisely = bot->ShouldAimPrecisely();
+
 	// Convert modified angles to direction back (due to limited view speed it rarely will match given direction)
 	Vec3 newLookDir( 0, 0, 0 );
 	AngleVectors( input->AlreadyComputedAngles().Data(), newLookDir.Data(), nullptr, nullptr );
@@ -373,7 +375,7 @@ bool BotWeaponsUsageModule::CheckShot( const AimParams &aimParams,
 		}
 
 		float testedSplashRadius = fireDef.SplashRadius();
-		if( bot->ShouldKeepXhairOnEnemy() ) {
+		if( shouldAimPrecisely ) {
 			testedSplashRadius *= 0.75f;
 		}
 		return DistanceSquared( tr.endpos, aimParams.fireTarget ) < testedSplashRadius * testedSplashRadius;
@@ -400,7 +402,7 @@ bool BotWeaponsUsageModule::CheckShot( const AimParams &aimParams,
 		if( fireDef.IsBuiltin() ) {
 			// Put very low restrictions on PG since spammy fire style is even adviced.
 			if( fireDef.WeaponNum() == WEAP_PLASMAGUN ) {
-				if( bot->ShouldKeepXhairOnEnemy() ) {
+				if( shouldAimPrecisely ) {
 					return toTargetDotLookDir > 0.75f + 0.10f * velocityFactor;
 				}
 				return toTargetDotLookDir > 0.60f + 0.15f * velocityFactor;
@@ -411,7 +413,7 @@ bool BotWeaponsUsageModule::CheckShot( const AimParams &aimParams,
 				// Shockwave requires rather precise directional aiming on long range
 				if( squareDistance > 128.0f * 128.0f ) {
 					const float distanceFactor = BoundedFraction( SQRTFAST( squareDistance ), 1024.0f );
-					if( bot->ShouldKeepXhairOnEnemy() ) {
+					if( shouldAimPrecisely ) {
 						return toTargetDotLookDir > 0.9f + 0.09f * distanceFactor;
 					}
 					return toTargetDotLookDir > 0.9f + 0.05f * distanceFactor;
@@ -435,7 +437,7 @@ bool BotWeaponsUsageModule::CheckShot( const AimParams &aimParams,
 			}
 		}
 
-		if( bot->ShouldKeepXhairOnEnemy() ) {
+		if( shouldAimPrecisely ) {
 			return toTargetDotLookDir > 0.90f + 0.07 * velocityFactor;
 		}
 		return toTargetDotLookDir > 0.85f + 0.05f * velocityFactor;
@@ -455,13 +457,13 @@ bool BotWeaponsUsageModule::CheckShot( const AimParams &aimParams,
 		}
 
 		float testedSplashRadius = fireDef.SplashRadius();
-		if( !bot->ShouldKeepXhairOnEnemy() ) {
+		if( !shouldAimPrecisely ) {
 			testedSplashRadius *= 1.25f;
 		}
 		return DistanceSquared( tr.endpos, aimParams.fireTarget ) < testedSplashRadius * testedSplashRadius;
 	}
 
-	if( fireDef.IsBuiltin() && bot->ShouldKeepXhairOnEnemy() ) {
+	if( fireDef.IsBuiltin() && shouldAimPrecisely ) {
 		// For one-shot instant-hit weapons each shot is important, so check against a player bounding box
 		// This is an extra hack for EB/IG, otherwise they miss too lot due to premature firing
 		if( fireDef.WeaponNum() == WEAP_ELECTROBOLT || fireDef.WeaponNum() == WEAP_INSTAGUN ) {
@@ -482,7 +484,7 @@ bool BotWeaponsUsageModule::CheckShot( const AimParams &aimParams,
 				absMaxs += playerbox_stand_maxs;
 
 				float skillFactor = ( 1.0f - 0.75f * bot->Skill() );
-				if( bot->ShouldKeepXhairOnEnemy() ) {
+				if( shouldAimPrecisely ) {
 					skillFactor *= 1.0f - 0.75 * bot->Skill();
 				}
 
@@ -500,14 +502,14 @@ bool BotWeaponsUsageModule::CheckShot( const AimParams &aimParams,
 	float dotThreshold = 0.97f;
 	if( fireDef.IsBuiltin() ) {
 		if( fireDef.WeaponNum() == WEAP_LASERGUN || fireDef.WeaponNum() == WEAP_RIOTGUN ) {
-			if( bot->ShouldKeepXhairOnEnemy() ) {
+			if( shouldAimPrecisely ) {
 				dotThreshold -= 0.15f - 0.075f * velocityFactor;
 			} else {
 				dotThreshold -= 0.25f - 0.10f * velocityFactor;
 			}
 		}
 	} else {
-		if( !bot->ShouldKeepXhairOnEnemy() ) {
+		if( !shouldAimPrecisely ) {
 			dotThreshold -= 0.05f - 0.025f * velocityFactor;
 		}
 	}
