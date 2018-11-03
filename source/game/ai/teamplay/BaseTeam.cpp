@@ -2,16 +2,12 @@
 #include "SquadBasedTeam.h"
 #include "../ai_shutdown_hooks_holder.h"
 #include "../bot.h"
+#include "../../../qalgo/Links.h"
 
 AiBaseTeam *AiBaseTeam::teamsForNums[GS_MAX_TEAMS - 1];
 
 AiBaseTeam::AiBaseTeam( int teamNum_ )
 	: teamNum( teamNum_ ) {
-	svFps = -1;
-	svSkill = -1;
-	teamAffinityModulo = -1;
-	teamAffinityOffset = -1;
-
 	memset( botAffinityModulo, 0, sizeof( botAffinityModulo ) );
 	memset( botAffinityOffsets, 0, sizeof( botAffinityOffsets ) );
 }
@@ -125,17 +121,32 @@ void AiBaseTeam::InitTeamAffinity() const {
 void AiBaseTeam::AddBot( Bot *bot ) {
 	Debug( "new bot %s has been added\n", bot->Nick() );
 
+	// Link first
+	::Link( bot, &teamBotsHead, Bot::TEAM_LINKS );
+	// Acquire affinity after linking
 	AcquireBotFrameAffinity( ENTNUM( bot->self ) );
-	// Call subtype method (if any)
+	// Call subtype method (if any) last
 	OnBotAdded( bot );
 }
 
 void AiBaseTeam::RemoveBot( Bot *bot ) {
 	Debug( "bot %s has been removed\n", bot->Nick() );
 
-	ReleaseBotFrameAffinity( ENTNUM( bot->self ) );
-	// Call subtype method (if any)
+	// Call subtype method (if any) first
 	OnBotRemoved( bot );
+	// Release affinity before linking
+	ReleaseBotFrameAffinity( ENTNUM( bot->self ) );
+	// Unlink last
+	::Unlink( bot, &teamBotsHead, Bot::TEAM_LINKS );
+}
+
+void AiBaseTeam::TransferStateFrom( AiBaseTeam *that ) {
+	// Copy lazily-computed counterparts of frame affinity modulo and offset
+	this->frameAffinityModulo = that->frameAffinityModulo;
+	this->frameAffinityOffset = that->frameAffinityOffset;
+	// Transfer bots list
+	this->teamBotsHead = that->teamBotsHead;
+	that->teamBotsHead = nullptr;
 }
 
 void AiBaseTeam::AcquireBotFrameAffinity( int entNum ) {

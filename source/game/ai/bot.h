@@ -67,6 +67,10 @@ struct SelectedMiscTactics {
 	}
 };
 
+struct AiObjectiveSpot;
+struct AiDefenceSpot;
+struct AiOffenseSpot;
+
 class Bot: public Ai {
 	friend class AiManager;
 	friend class BotEvolutionManager;
@@ -276,7 +280,7 @@ public:
 	 * Tracks record of what objective spot a bot is assigned to.
 	 */
 	struct ObjectiveSpotDef {
-		int id { -1 };
+		AiObjectiveSpot *spot;
 		/**
 		 * A weight of a spot as a nav entity for selection of a best nav entity.
 		 */
@@ -285,12 +289,13 @@ public:
 		 * A weight of a planning goal if this spot is selected as a nav entity.
 		 */
 		float goalWeight { 0.0f };
+
 		bool isDefenceSpot { false };
 
-		void Invalidate() { id = -1; }
-		bool IsActive() const { return id >= 0; }
-		int DefenceSpotId() const { return ( IsActive() && isDefenceSpot ) ? id : -1; }
-		int OffenseSpotId() const { return ( IsActive() && !isDefenceSpot ) ? id : -1; }
+		void Invalidate() { spot = nullptr; }
+		bool IsActive() const { return spot != nullptr; }
+		int DefenceSpotId() const;
+		int OffenseSpotId() const;
 	};
 
 	ObjectiveSpotDef &GetObjectiveSpot() {
@@ -301,19 +306,8 @@ public:
 		objectiveSpotDef.Invalidate();
 	}
 
-	// TODO: Provide goal weight as well as nav weight?
-	void SetDefenceSpot( int spotId, float weight ) {
-		objectiveSpotDef.id = spotId;
-		objectiveSpotDef.navWeight = objectiveSpotDef.goalWeight = weight;
-		objectiveSpotDef.isDefenceSpot = false;
-	}
-
-	// TODO: Provide goal weight as well as nav weight?
-	void SetOffenseSpot( int spotId, float weight ) {
-		objectiveSpotDef.id = spotId;
-		objectiveSpotDef.navWeight = objectiveSpotDef.goalWeight = weight;
-		objectiveSpotDef.isDefenceSpot = false;
-	}
+	void SetDefenceSpot( AiDefenceSpot *spot, float navWeight, float goalWeight = -1.0f );
+	void SetOffenseSpot( AiOffenseSpot *spot, float navWeight, float goalWeight = -1.0f );
 
 	/**
 	 * Returns a field of view of the bot in degrees (dependent of skill level).
@@ -438,16 +432,22 @@ private:
 	/**
 	 * {@code next[]} and {@code prev[]} links below are addressed by these indices
 	 */
-	enum { SQUAD_LINKS, TMP_LINKS };
+	enum { SQUAD_LINKS, TMP_LINKS, TEAM_LINKS, OBJECTIVE_LINKS };
 
-	Bot *next[2] { nullptr, nullptr };
-	Bot *prev[2] { nullptr, nullptr };
+	Bot *next[4] { nullptr, nullptr, nullptr, nullptr };
+	Bot *prev[4] { nullptr, nullptr, nullptr, nullptr };
 
 	Bot *NextInSquad() { return next[SQUAD_LINKS]; };
 	const Bot *NextInSquad() const { return next[SQUAD_LINKS]; }
 
 	Bot *NextInTmpList() { return next[TMP_LINKS]; }
 	const Bot *NextInTmpList() const { return next[TMP_LINKS]; }
+
+	Bot *NextInBotsTeam() { return next[TEAM_LINKS]; }
+	const Bot *NextInBotsTeam() const { return next[TEAM_LINKS]; }
+
+	Bot *NextInObjective() { return next[OBJECTIVE_LINKS]; }
+	const Bot *NextInObjective() const { return next[OBJECTIVE_LINKS]; }
 
 	ObjectiveSpotDef objectiveSpotDef;
 

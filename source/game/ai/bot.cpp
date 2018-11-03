@@ -1,6 +1,7 @@
 #include "bot.h"
 #include "navigation/AasWorld.h"
 #include "navigation/NavMeshManager.h"
+#include "teamplay/ObjectiveBasedTeam.h"
 #include "../g_gametypes.h"
 #include <algorithm>
 #include <array>
@@ -80,6 +81,42 @@ Bot::~Bot() {
 	if( navMeshQuery ) {
 		AiNavMeshManager::Instance()->FreeQuery( navMeshQuery );
 	}
+}
+
+int Bot::ObjectiveSpotDef::DefenceSpotId() const {
+	if( IsActive() && isDefenceSpot ) {
+		return spot->id;
+	}
+	return -1;
+}
+
+int Bot::ObjectiveSpotDef::OffenseSpotId() const {
+	if( IsActive() && !isDefenceSpot ) {
+		return spot->id;
+	}
+	return -1;
+}
+
+void Bot::SetDefenceSpot( AiDefenceSpot *spot, float navWeight, float goalWeight ) {
+	assert( navWeight >= 0 );
+	if( goalWeight < 0 ) {
+		goalWeight = navWeight;
+	}
+	objectiveSpotDef.spot = spot;
+	objectiveSpotDef.navWeight = navWeight;
+	objectiveSpotDef.goalWeight = goalWeight;
+	objectiveSpotDef.isDefenceSpot = true;
+}
+
+void Bot::SetOffenseSpot( AiOffenseSpot *spot, float navWeight, float goalWeight ) {
+	assert( navWeight >= 0 );
+	if( goalWeight < 0 ) {
+		goalWeight = navWeight;
+	}
+	objectiveSpotDef.spot = spot;
+	objectiveSpotDef.navWeight = navWeight;
+	objectiveSpotDef.goalWeight = goalWeight;
+	objectiveSpotDef.isDefenceSpot = false;
 }
 
 void Bot::TouchedOtherEntity( const edict_t *entity ) {

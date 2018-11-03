@@ -20,7 +20,7 @@ void BotItemsSelector::UpdateInternalItemAndGoalWeights() {
 	if( spotDef.IsActive() ) {
 		const auto *team = AiBaseTeam::GetTeamForNum( self->s.team );
 		if( const auto *objectiveBasedTeam = dynamic_cast<const AiObjectiveBasedTeam *>( team ) ) {
-			objectiveSpotEntity = objectiveBasedTeam->GetSpotUnderlyingEntity( spotDef.id, spotDef.isDefenceSpot );
+			objectiveSpotEntity = objectiveBasedTeam->GetAssignedEntity( self->ai->botRef, spotDef.spot );
 		}
 	}
 

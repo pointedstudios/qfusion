@@ -1266,6 +1266,10 @@ void AiSquadBasedTeam::OnBotRemoved( Bot *bot ) {
 }
 
 void AiSquadBasedTeam::TransferStateFrom( AiBaseTeam *that ) {
+	// The super method must always be called
+	AiBaseTeam::TransferStateFrom( that );
+
+	// Transfer the orphan bots list if possible
 	if( auto *thatSquadBasedTeam = dynamic_cast<AiSquadBasedTeam *>( that ) ) {
 		this->orphanBotsHead = thatSquadBasedTeam->orphanBotsHead;
 		thatSquadBasedTeam->orphanBotsHead = nullptr;

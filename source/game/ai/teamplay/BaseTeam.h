@@ -11,12 +11,12 @@ class AiBaseTeam : public AiFrameAwareUpdatable {
 
 	// We can't initialize these vars in constructor, because game exports may be not yet intialized.
 	// These values are set to -1 in constructor and computed on demand
-	mutable int svFps;
-	mutable int svSkill;
+	mutable int svFps { -1 };
+	mutable int svSkill { -1 };
 
 	// These vars are used instead of AiFrameAwareUpdatable for lazy intiailization
-	mutable int teamAffinityModulo;
-	mutable int teamAffinityOffset;
+	mutable int teamAffinityModulo { -1 };
+	mutable int teamAffinityOffset { -1 };
 	static constexpr int MAX_AFFINITY_OFFSET = 4;
 	// This array contains count of bots that use corresponding offset for each possible affinity offset
 	unsigned affinityOffsetsInUse[MAX_AFFINITY_OFFSET];
@@ -41,6 +41,8 @@ class AiBaseTeam : public AiFrameAwareUpdatable {
 protected:
 	explicit AiBaseTeam( int teamNum_ );
 
+	Bot *teamBotsHead { nullptr };
+
 	const int teamNum;
 
 	void AddBot( class Bot *bot );
@@ -48,9 +50,13 @@ protected:
 	virtual void OnBotAdded( class Bot *bot ) {};
 	virtual void OnBotRemoved( class Bot *bot ) {};
 
-	// Transfers a state from an existing team to this instance.
-	// Moving and not copying semantics is implied.
-	virtual void TransferStateFrom( AiBaseTeam *that ) {}
+	/**
+	 * Transfers a state from an existing team to this instance.
+	 * Moving and not copying semantics is implied
+	 * (actual data should be moved from {@code that} if possible (without a copy creation).
+	 * @note overridden methods must call parent ones first.
+	 */
+	virtual void TransferStateFrom( AiBaseTeam *that );
 
 	void AcquireBotFrameAffinity( int entNum );
 	void ReleaseBotFrameAffinity( int entNum );

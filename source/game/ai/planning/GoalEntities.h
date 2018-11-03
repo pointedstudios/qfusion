@@ -91,7 +91,7 @@ public:
 
 	inline bool IsDroppedEntity() const { return IsFlagSet( NavEntityFlags::DROPPED_ENTITY ); }
 
-	inline bool MayBeReachedInGroup() const { return IsFlagSet( NavEntityFlags::REACH_IN_GROUP ); }
+	inline bool ShouldBeReachedInGroup() const { return IsFlagSet( NavEntityFlags::REACH_IN_GROUP ); }
 
 	uint64_t MaxWaitDuration() const;
 
@@ -213,7 +213,7 @@ public:
 
 	inline bool MayBeReachedInGroup() const {
 		if( navEntity ) {
-			return navEntity->MayBeReachedInGroup();
+			return navEntity->ShouldBeReachedInGroup();
 		}
 		return IsFlagSet( NavTargetFlags::REACH_IN_GROUP );
 	}
@@ -306,7 +306,7 @@ public:
 	NavEntity *AddNavEntity( edict_t *ent, int aasAreaNum, NavEntityFlags flags );
 	void RemoveNavEntity( NavEntity *navEntity );
 
-	inline NavEntity *NavEntityForEntity( edict_t *ent ) {
+	inline NavEntity *NavEntityForEntity( const edict_t *ent ) {
 		if( !ent ) {
 			return nullptr;
 		}

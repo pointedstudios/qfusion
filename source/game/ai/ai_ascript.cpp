@@ -724,89 +724,145 @@ static const asClassDescriptor_t asAiScriptWeaponDefClassDescriptor =
 static constexpr auto DEFAULT_MAX_DEFENDERS = 5;
 static constexpr auto DEFAULT_MAX_ATTACKERS = 5;
 
-static void objectAiDefenceSpot_constructor( AiDefenceSpot *spot, int id, const edict_t *entity, float radius )
+// Unused but mandatory for non-POD AS objects
+static void objectAiDefenceSpot_defaultConstructor( void *mem )
 {
+    new( mem )AiDefenceSpot();
+}
+
+static void objectAiDefenceSpot_constructor( void *mem, int id, const edict_t *entity, float radius )
+{
+    auto *spot = new( mem )AiDefenceSpot;
     spot->id = id;
     spot->entity = entity;
     spot->radius = radius;
     spot->usesAutoAlert = true;
-    spot->minDefenders = 1;
-    spot->maxDefenders = DEFAULT_MAX_DEFENDERS;
+    spot->minAssignedBots = 1;
+    spot->maxAssignedBots = DEFAULT_MAX_DEFENDERS;
     spot->regularEnemyAlertScale = 1.0f;
     spot->carrierEnemyAlertScale = 1.0f;
+}
+
+static void objectAiDefenceSpot_destructor( void *mem )
+{
+    ( ( AiDefenceSpot *) mem )->~AiDefenceSpot();
 }
 
 #define DECLARE_CONSTRUCTOR(params, nativeFunc) \
     { asBEHAVE_CONSTRUCT, ASLIB_FUNCTION_DECL(void, f, params), asFUNCTION(nativeFunc), asCALL_CDECL_OBJFIRST }
 
+#define DECLARE_DESTRUCTOR(params, nativeFunc) \
+    { asBEHAVE_DESTRUCT, ASLIB_FUNCTION_DECL(void, f, params), asFUNCTION(nativeFunc), asCALL_CDECL_OBJFIRST }
+
+// These script bindings are a mess and must be refactored ASAP.
+// Let us limit to fields really used by scripts for testing objective-based gametypes right now.
+
+#define DEFINE_SPOT_ACCESSORS( SpotClass, type, field )                                  \
+static type objectAi##SpotClass##_get##field( Ai##SpotClass *spot )                      \
+    { return spot->field; }                                                              \
+static void objectAi##SpotClass##_set##field( Ai##SpotClass *spot, type value )          \
+    { spot->field = value; }
+
+#define DEFINE_DEFENCE_SPOT_ACCESSORS( type, field ) \
+    DEFINE_SPOT_ACCESSORS( DefenceSpot, type, field )
+
+DEFINE_DEFENCE_SPOT_ACCESSORS( int, minAssignedBots )
+DEFINE_DEFENCE_SPOT_ACCESSORS( int, maxAssignedBots )
+DEFINE_DEFENCE_SPOT_ACCESSORS( float, regularEnemyAlertScale )
+DEFINE_DEFENCE_SPOT_ACCESSORS( float, carrierEnemyAlertScale )
+
+#define DECLARE_SPOT_ACCESSORS( SpotClass, scriptType, scriptField, nativeField )                           \
+DECLARE_METHOD(void, set_##scriptField, (scriptType value), objectAi##SpotClass##_set##nativeField),\
+DECLARE_METHOD(scriptType, get_##scriptField, (), objectAi##SpotClass##_get##nativeField)
+
+#define DECLARE_DEFENCE_SPOT_ACCESSORS( scriptType, scriptField, nativeField ) \
+    DECLARE_SPOT_ACCESSORS( DefenceSpot, scriptType, scriptField, nativeField )
+
 static const asBehavior_t asAiDefenceSpot_ObjectBehaviors[] =
 {
+	DECLARE_CONSTRUCTOR((), objectAiDefenceSpot_defaultConstructor),
     DECLARE_CONSTRUCTOR((int id, const Entity @entity, float radius), objectAiDefenceSpot_constructor),
+    DECLARE_DESTRUCTOR((), objectAiDefenceSpot_destructor),
 
     ASLIB_BEHAVIOR_NULL
 };
 
-static const asProperty_t asAiDefenceSpot_Properties[] =
-{
-    { ASLIB_PROPERTY_DECL(int, id), ASLIB_FOFFSET(AiDefenceSpot, id) },
-    { ASLIB_PROPERTY_DECL(const Entity @, entity), ASLIB_FOFFSET(AiDefenceSpot, entity) },
-    { ASLIB_PROPERTY_DECL(float, radius), ASLIB_FOFFSET(AiDefenceSpot, radius) },
-    { ASLIB_PROPERTY_DECL(bool, usesAutoAlert), ASLIB_FOFFSET(AiDefenceSpot, usesAutoAlert) },
-    { ASLIB_PROPERTY_DECL(uint, minDefenders), ASLIB_FOFFSET(AiDefenceSpot, minDefenders) },
-    { ASLIB_PROPERTY_DECL(uint, maxDefenders), ASLIB_FOFFSET(AiDefenceSpot, maxDefenders) },
-    { ASLIB_PROPERTY_DECL(float, regularEnemyAlertScale), ASLIB_FOFFSET(AiDefenceSpot, regularEnemyAlertScale) },
-    { ASLIB_PROPERTY_DECL(float, carrierEnemyAlertScale), ASLIB_FOFFSET(AiDefenceSpot, carrierEnemyAlertScale) },
+static const asMethod_t asAiDefenceSpot_Methods[] = {
+    DECLARE_DEFENCE_SPOT_ACCESSORS( int, minDefenders, minAssignedBots ),
+    DECLARE_DEFENCE_SPOT_ACCESSORS( int, maxDefenders, maxAssignedBots ),
+    DECLARE_DEFENCE_SPOT_ACCESSORS( int, regularEnemyAlertScale, regularEnemyAlertScale ),
+    DECLARE_DEFENCE_SPOT_ACCESSORS( int, carrierEnemyAlertScale, carrierEnemyAlertScale ),
 
-    ASLIB_PROPERTY_NULL
+    ASLIB_METHOD_NULL
 };
 
 static const asClassDescriptor_t asAiDefenceSpotClassDescriptor =
 {
     "AIDefenceSpot",
-    asOBJ_VALUE|asOBJ_POD,
+    asOBJ_VALUE,
     sizeof(AiDefenceSpot),
     EMPTY_FUNCDEFS,
     asAiDefenceSpot_ObjectBehaviors,
-    EMPTY_METHODS,
-    asAiDefenceSpot_Properties,
+    asAiDefenceSpot_Methods,
+    EMPTY_PROPERTIES,
 
     NULL, NULL
 };
 
-static void objectAiOffenseSpot_constructor( AiOffenseSpot *spot, int id, const edict_t *entity )
+static void objectAiOffenseSpot_defaultConstructor( void *mem )
 {
+    new( mem )AiOffenseSpot;
+}
+
+static void objectAiOffenseSpot_constructor( void *mem, int id, const edict_t *entity )
+{
+    auto *spot = new( mem )AiOffenseSpot;
     spot->id = id;
     spot->entity = entity;
-    spot->minAttackers = 1;
-    spot->maxAttackers = DEFAULT_MAX_ATTACKERS;
+    spot->minAssignedBots = 1;
+    spot->maxAssignedBots = DEFAULT_MAX_ATTACKERS;
 }
+
+static void objectAiOffenseSpot_destructor( void *mem )
+{
+    ( ( AiOffenseSpot * ) mem )->~AiOffenseSpot();
+}
+
+#define DEFINE_OFFENSE_SPOT_ACCESSORS( type, field ) \
+    DEFINE_SPOT_ACCESSORS( OffenseSpot, type, field )
+
+#define DECLARE_OFFENSE_SPOT_ACCESSORS( scriptType, scriptField, nativeField ) \
+    DECLARE_SPOT_ACCESSORS( OffenseSpot, scriptType, scriptField, nativeField )
+
+DEFINE_OFFENSE_SPOT_ACCESSORS( int, minAssignedBots )
+DEFINE_OFFENSE_SPOT_ACCESSORS( int, maxAssignedBots )
 
 static const asBehavior_t asAiOffenseSpot_ObjectBehaviors[] =
 {
+	DECLARE_CONSTRUCTOR((), objectAiOffenseSpot_defaultConstructor),
     DECLARE_CONSTRUCTOR((int id, const Entity @entity), objectAiOffenseSpot_constructor),
+    DECLARE_DESTRUCTOR((), objectAiOffenseSpot_destructor),
 
     ASLIB_BEHAVIOR_NULL
 };
 
-static const asProperty_t asAiOffenseSpot_Properties[] =
+static const asMethod_t asAiOffenseSpot_ObjectMethods[] =
 {
-    { ASLIB_PROPERTY_DECL(int, id), ASLIB_FOFFSET(AiOffenseSpot, id) },
-    { ASLIB_PROPERTY_DECL(const Entity @, entity), ASLIB_FOFFSET(AiOffenseSpot, entity) },
-    { ASLIB_PROPERTY_DECL(uint, minAttackers), ASLIB_FOFFSET(AiOffenseSpot, minAttackers) },
-    { ASLIB_PROPERTY_DECL(uint, maxAttackers), ASLIB_FOFFSET(AiOffenseSpot, maxAttackers) },
+    DECLARE_OFFENSE_SPOT_ACCESSORS( int, minAttackers, minAssignedBots ),
+    DECLARE_OFFENSE_SPOT_ACCESSORS( int, maxAttackers, maxAssignedBots ),
 
-    ASLIB_PROPERTY_NULL
+    ASLIB_METHOD_NULL
 };
 
 static const asClassDescriptor_t asAiOffenseSpotClassDescriptor =
 {
     "AIOffenseSpot",
-    asOBJ_VALUE|asOBJ_POD,
+    asOBJ_VALUE,
     sizeof(AiOffenseSpot),
     EMPTY_FUNCDEFS,
     asAiOffenseSpot_ObjectBehaviors,
-    EMPTY_METHODS,
-    asAiOffenseSpot_Properties,
+    asAiOffenseSpot_ObjectMethods,
+    EMPTY_PROPERTIES,
 
     NULL, NULL
 };
@@ -1465,6 +1521,15 @@ void asFunc_RemoveOffenseSpot( int team, int id )
     GetObjectiveBasedTeam(__FUNCTION__, team)->RemoveOffenseSpot(id);
 }
 
+void asFunc_RemoveAllObjectiveSpots()
+{
+    if( !GS_TeamBasedGametype() ) {
+        return;
+    }
+    GetObjectiveBasedTeam(__FUNCTION__, TEAM_ALPHA)->RemoveAllObjectiveSpots();
+    GetObjectiveBasedTeam(__FUNCTION__, TEAM_BETA)->RemoveAllObjectiveSpots();
+}
+
 // AS does not have forward class declarations, and script AIScriptGoalFactory class
 // cannot be registered to the moment of the base engine script initialization.
 // We have to pass a reference to a script goal factory in the `any` container class.
@@ -1510,6 +1575,8 @@ const asglobfuncs_t asAIGlobFuncs[] =
     DECLARE_FUNC("void AddOffenseSpot(int team, const AIOffenseSpot &in spot )", asFunc_AddOffenseSpot),
     DECLARE_FUNC("void RemoveDefenceSpot(int team, int id)", asFunc_RemoveDefenceSpot),
     DECLARE_FUNC("void RemoveOffenseSpot(int team, int id)", asFunc_RemoveOffenseSpot),
+
+	DECLARE_FUNC("void RemoveAllObjectiveSpots()", asFunc_RemoveAllObjectiveSpots),
 
     DECLARE_FUNC("void DefenceSpotAlert(int team, int id, float level, uint timeoutPeriod)", asFunc_DefenceSpotAlert),
 
