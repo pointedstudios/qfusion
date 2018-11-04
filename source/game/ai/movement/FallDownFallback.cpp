@@ -41,6 +41,20 @@ void FallDownFallback::SetupMovement( Context *context ) {
 	botInput->isUcmdSet = true;
 
 	if( entityPhysicsState.GroundEntity() ) {
+		// Keep looking at this point.
+		// Otherwise bot spinning in front of enemy looks weird.
+		if( auto *keptInFovPoint = bot->GetKeptInFovPoint() ) {
+			Vec3 toPointVec( keptInFovPoint );
+			toPointVec -= entityPhysicsState.Origin();
+			botInput->SetIntendedLookDir( toPointVec, false );
+			int keyMoves[2];
+			context->TraceCache().MakeKeyMovesToTarget( context, toTargetDir, keyMoves );
+			botInput->SetForwardMovement( keyMoves[0] );
+			botInput->SetRightMovement( keyMoves[1] );
+			botInput->canOverrideLookVec = true;
+			return;
+		}
+
 		botInput->SetIntendedLookDir( toTargetDir, true );
 		const float dot = toTargetDir.Dot( entityPhysicsState.ForwardDir() );
 		if( dot < 0.9f ) {
