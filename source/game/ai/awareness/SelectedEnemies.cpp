@@ -232,7 +232,7 @@ float SelectedEnemies::ComputeThreatFactor( const edict_t *ent, int enemyNum ) c
 		if( !GetCanHit( enemyNum, dot ) ) {
 			result *= 0.5f;
 		}
-	} else if( !TestCanHit( ent, dot ) ) {
+	} else if( !TestCanHit( ent, self, dot ) ) {
 		result *= 0.5f;
 	}
 
@@ -315,12 +315,12 @@ bool SelectedEnemies::GetCanHit( int enemyNum, float viewDot ) const {
 	}
 
 	canEnemyHitComputedAt[enemyNum] = level.time;
-	canEnemyHit[enemyNum] = TestCanHit( activeEnemies[enemyNum]->ent, viewDot );
+	canEnemyHit[enemyNum] = TestCanHit( activeEnemies[enemyNum]->ent, self, viewDot );
 	return canEnemyHit[enemyNum];
 }
 
-bool SelectedEnemies::TestCanHit( const edict_t *enemy, float viewDot ) const {
-	if( !enemy ) {
+bool SelectedEnemies::TestCanHit( const edict_t *attacker, const edict_t *victim, float viewDot ) const {
+	if( !( attacker && victim ) ) {
 		return false;
 	}
 
@@ -328,13 +328,13 @@ bool SelectedEnemies::TestCanHit( const edict_t *enemy, float viewDot ) const {
 		return false;
 	}
 
-	if( !EntitiesPvsCache::Instance()->AreInPvs( enemy, self ) ) {
+	if( !EntitiesPvsCache::Instance()->AreInPvs( attacker, victim ) ) {
 		return false;
 	}
 
-	auto *targetEnt = const_cast<edict_t *>( self );
+	auto *targetEnt = const_cast<edict_t *>( attacker );
 	trace_t trace;
-	auto *enemyEnt = const_cast<edict_t *>( enemy );
+	auto *enemyEnt = const_cast<edict_t *>( victim );
 	Vec3 traceStart( enemyEnt->s.origin );
 	traceStart.Z() += enemyEnt->viewheight;
 
@@ -357,6 +357,25 @@ bool SelectedEnemies::TestCanHit( const edict_t *enemy, float viewDot ) const {
 	// This test is for getting a coarse info anyway.
 
 	return false;
+}
+
+bool SelectedEnemies::CouldBeHitIfBotTurns() const {
+	CheckValid( __FUNCTION__ );
+
+	if( couldHitIfTurnsComputedAt == level.time ) {
+		return couldHitIfTurns;
+	}
+
+	// Lets take into account only primary enemy
+	assert( primaryEnemy == activeEnemies.front() );
+	couldHitIfTurns = TestCanHit( self, primaryEnemy->ent, 1.0f );
+	couldHitIfTurnsComputedAt = level.time;
+	return couldHitIfTurns;
+}
+
+bool SelectedEnemies::CanBeHit() const {
+	// Check whether it could be possibly hit from bot origin and the bot is looking at it
+	return CouldBeHitIfBotTurns() && GetBotViewDirDotToEnemyDirValues()[0] > self->ai->botRef->FovDotFactor();
 }
 
 bool SelectedEnemies::HaveGoodSniperRangeWeapons() const {

@@ -13,6 +13,13 @@ void BotGenericRunAvoidingCombatActionRecord::Deactivate() {
 }
 
 AiBaseActionRecord::Status BotGenericRunAvoidingCombatActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+	const auto &selectedEnemies = self->ai->botRef->GetSelectedEnemies();
+	if( selectedEnemies.AreValid() && selectedEnemies.CouldBeHitIfBotTurns() ) {
+		self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
+	} else {
+		self->ai->botRef->GetMiscTactics().PreferRunRatherThanAttack();
+	}
+
 	// It really gets invalidated on goal reevaluation
 
 	if( ( navTarget.Origin() - self->s.origin ).LengthFast() <= GOAL_PICKUP_ACTION_RADIUS ) {

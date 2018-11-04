@@ -63,7 +63,7 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 		worldState->EnemyHasGoodFarRangeWeaponsVar().SetValue( selectedEnemies.HaveGoodFarRangeWeapons() );
 		worldState->EnemyHasGoodMiddleRangeWeaponsVar().SetValue( selectedEnemies.HaveGoodMiddleRangeWeapons() );
 		worldState->EnemyHasGoodCloseRangeWeaponsVar().SetValue( selectedEnemies.HaveGoodCloseRangeWeapons() );
-		worldState->EnemyCanHitVar().SetValue( selectedEnemies.CanHit() );
+		worldState->CanHitEnemyVar().SetValue( selectedEnemies.CanBeHit() );
 	} else {
 		worldState->EnemyOriginVar().SetIgnore( true );
 		worldState->HasThreateningEnemyVar().SetIgnore( true );
@@ -74,6 +74,7 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 		worldState->EnemyHasGoodMiddleRangeWeaponsVar().SetIgnore( true );
 		worldState->EnemyHasGoodCloseRangeWeaponsVar().SetIgnore( true );
 		worldState->EnemyCanHitVar().SetIgnore( true );
+		worldState->CanHitEnemyVar().SetIgnore( true );
 	}
 
 	auto &lostEnemies = self->ai->botRef->lostEnemies;
@@ -170,7 +171,6 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 	worldState->HasJustPickedGoalItemVar().SetValue( self->ai->botRef->HasJustPickedGoalItem() );
 
 	worldState->HasPositionalAdvantageVar().SetValue( false );
-	worldState->CanHitEnemyVar().SetValue( true );
 
 	worldState->HasJustKilledEnemyVar().SetValue( false );
 

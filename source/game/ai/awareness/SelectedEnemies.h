@@ -19,6 +19,7 @@ class SelectedEnemies: public Selection {
 	mutable int64_t canEnemyHitComputedAt[MAX_ACTIVE_ENEMIES];
 	mutable int64_t maxThreatFactorComputedAt { 0 };
 	mutable int64_t canEnemiesHitComputedAt { 0 };
+	mutable int64_t couldHitIfTurnsComputedAt { 0 };
 	mutable int64_t botViewDirDotToEnemyDirComputedAt { 0 };
 	mutable int64_t enemyViewDirDotToBotDirComputedAt { 0 };
 	mutable int64_t aboutToHitEBorIGComputedAt { 0 };
@@ -30,6 +31,7 @@ class SelectedEnemies: public Selection {
 	mutable float enemyViewDirDotToBotDir[MAX_ACTIVE_ENEMIES];
 	mutable bool canEnemyHit[MAX_ACTIVE_ENEMIES];
 	mutable bool canEnemiesHit { false };
+	mutable bool couldHitIfTurns { false };
 	mutable bool aboutToHitEBorIG { false };
 	mutable bool aboutToHitLGorPG { false };
 	mutable bool aboutToHitRLorSW { false };
@@ -216,7 +218,10 @@ public:
 
 	bool CanHit() const;
 	bool GetCanHit( int enemyNum, float viewDot ) const;
-	bool TestCanHit( const edict_t *enemy, float viewDot ) const;
+	bool TestCanHit( const edict_t *attacker, const edict_t *victim, float viewDot ) const;
+
+	bool CanBeHit() const;
+	bool CouldBeHitIfBotTurns() const;
 
 	bool HaveGoodSniperRangeWeapons() const;
 	bool HaveGoodFarRangeWeapons() const;
