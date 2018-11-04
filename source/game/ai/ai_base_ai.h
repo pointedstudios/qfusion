@@ -332,14 +332,17 @@ public:
 
 	typedef StaticVector<ReachAndTravelTime, MAX_REACH_CACHED> ReachChainVector;
 
+	static constexpr float DEFAULT_YAW_SPEED = 330.0f;
+	static constexpr float DEFAULT_PITCH_SPEED = 170.0f;
+
 	Ai( edict_t *self_
 	  , BasePlanner *planner_
 	  , AiAasRouteCache *routeCache_
 	  , AiEntityPhysicsState *entityPhysicsState_
 	  , int preferredAasTravelFlags_
 	  , int allowedAasTravelFlags_
-	  , float yawSpeed = 330.0f
-	  , float pitchSpeed = 170.0f );
+	  , float yawSpeed = DEFAULT_YAW_SPEED
+	  , float pitchSpeed = DEFAULT_PITCH_SPEED );
 
 	inline bool IsGhosting() const { return G_ISGHOSTING( self ); }
 

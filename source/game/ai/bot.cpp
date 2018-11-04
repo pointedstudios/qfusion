@@ -19,7 +19,9 @@ Bot::Bot( edict_t *self_, float skillLevel_ )
 		, AiAasRouteCache::NewInstance( &travelFlags[0] )
 		, &movementModule.movementState.entityPhysicsState
 		, PREFERRED_TRAVEL_FLAGS
-		, ALLOWED_TRAVEL_FLAGS )
+		, ALLOWED_TRAVEL_FLAGS
+		, skillLevel_ > 0.33f ? DEFAULT_YAW_SPEED * 1.5f : DEFAULT_YAW_SPEED
+		, skillLevel_ > 0.33f ? DEFAULT_PITCH_SPEED * 1.2f : DEFAULT_PITCH_SPEED )
 	, weightConfig( self_ )
 	, awarenessModule( self_, this, skillLevel_ )
 	, botPlanner( this, skillLevel_ )
