@@ -1,5 +1,7 @@
 #include "Goals.h"
 #include "../bot.h"
+#include <cmath>
+#include <cstdlib>
 
 inline const SelectedNavEntity &BotBaseGoal::SelectedNavEntity() const {
 	return self->ai->botRef->GetSelectedNavEntity();
@@ -308,7 +310,31 @@ void BotReactToEnemyLostGoal::UpdateWeight( const WorldState &currWorldState ) {
 	}
 
 	const auto &configGroup = WeightConfig().nativeGoals.reactToEnemyLost;
-	this->weight = configGroup.baseWeight + configGroup.offCoeff * self->ai->botRef->GetEffectiveOffensiveness();
+	const float offensiveness = self->ai->botRef->GetEffectiveOffensiveness();
+	this->weight = configGroup.baseWeight + configGroup.offCoeff * offensiveness;
+
+	// We know a certain distance threshold that losing enemy out of sight can be very dangerous. This is LG range.
+
+	const float distanceToEnemy = currWorldState.LostEnemyLastSeenOriginVar().DistanceTo( currWorldState.BotOriginVar() );
+	// TODO: Check whether the lost enemy actually had LG and was actually going to attack the bot
+	if( distanceToEnemy > GS_GetWeaponDef( WEAP_LASERGUN )->firedef.timeout ) {
+		return;
+	}
+
+	// If the bot might see enemy after turn, its likely the enemy sees the bot too and can attack
+	if( currWorldState.MightSeeLostEnemyAfterTurnVar() ) {
+		// Force turning back
+		this->weight *= 1.75f + 3.0f * offensiveness;
+		return;
+	}
+
+	// Don't add weight for pursuing far enemies
+	if( distanceToEnemy > 192.0f ) {
+		return;
+	}
+
+	// Force pursuit if the enemy is very close
+	this->weight *= 1.25f + 3.0f * ( 1.0f - std::sqrt( distanceToEnemy / 192.0f ) ) * offensiveness;
 }
 
 void BotReactToEnemyLostGoal::GetDesiredWorldState( WorldState *worldState ) {
