@@ -260,8 +260,6 @@ inline unsigned MovementPredictionContext::MillisAheadForFrameStart( unsigned fr
 	return totalMillisAhead;
 }
 
-typedef EnvironmentTraceCache::ObstacleAvoidanceResult ObstacleAvoidanceResult;
-
 inline ObstacleAvoidanceResult MovementPredictionContext::TryAvoidFullHeightObstacles( float correctionFraction ) {
 	// Make a modifiable copy of the intended look dir
 	Vec3 intendedLookVec( this->record->botInput.IntendedLookDir() );

@@ -1,12 +1,56 @@
 #include "EnvironmentTraceCache.h"
 #include "MovementLocal.h"
 
+/**
+ * Contains signs of forward and right key values for 8 tested directions
+ */
+static const int sideDirSigns[8][2] = {
+	{ +1, +0 }, // forward
+	{ -1, +0 }, // back
+	{ +0, -1 }, // left
+	{ +0, +1 }, // right
+	{ +1, -1 }, // front left
+	{ +1, +1 }, // front right
+	{ -1, -1 }, // back left
+	{ -1, +1 }, // back right
+};
+
+/**
+ * Contains fractions for forward and right dirs for 8 tested directions
+ */
+static const float sideDirFractions[8][2] = {
+	{ +1.000f, +0.000f }, // front
+	{ -1.000f, +0.000f }, // back
+	{ +0.000f, -1.000f }, // left
+	{ +0.000f, +1.000f }, // right
+	{ +0.707f, -0.707f }, // front left
+	{ +0.707f, +0.707f }, // front right
+	{ -0.707f, -0.707f }, // back left
+	{ -0.707f, +0.707f }, // back right
+};
+
+/**
+ * Makes a trace directory for a given direction number
+ * @param dirNum a number of a direction among 8 tested ones
+ * @param front2DDir a current front (forward) direction for a bot
+ * @param right2DDir a current right direction for a bot
+ * @param traceDir a result storage
+ */
+static inline void MakeTraceDir( unsigned dirNum, const vec3_t front2DDir, const vec3_t right2DDir, vec3_t traceDir ) {
+	const float *fractions = sideDirFractions[dirNum];
+	VectorScale( front2DDir, fractions[0], traceDir );
+	VectorMA( traceDir, fractions[1], right2DDir, traceDir );
+	VectorNormalizeFast( traceDir );
+}
+
 inline unsigned EnvironmentTraceCache::SelectNonBlockedDirs( Context *context, unsigned *nonBlockedDirIndices ) {
-	this->TestForResultsMask( context, this->FullHeightMask( FULL_SIDES_MASK ) );
+	// Test for all 8 lower bits of full-height mask
+	this->TestForResultsMask( context, 0xFF );
 
 	unsigned numNonBlockedDirs = 0;
 	for( unsigned i = 0; i < 8; ++i ) {
-		if( this->FullHeightTraceForSideIndex( i ).IsEmpty() ) {
+		const TraceResult &traceResult = results[i];
+		if( traceResult.IsEmpty() ) {
 			nonBlockedDirIndices[numNonBlockedDirs++] = i;
 		}
 	}
@@ -31,9 +75,9 @@ void EnvironmentTraceCache::MakeRandomizedKeyMovesToTarget( Context *context, co
 	float scoresSum = 0.0f;
 	for( unsigned i = 0; i < numNonBlockedDirs; ++i ) {
 		vec3_t keyMoveVec;
-		const float *dirFractions = sideDirXYFractions[nonBlockedDirIndices[i]];
-		VectorScale( forwardDir.Data(), dirFractions[0], keyMoveVec );
-		VectorMA( keyMoveVec, dirFractions[1], rightDir.Data(), keyMoveVec );
+		const float *fractions = sideDirFractions[nonBlockedDirIndices[i]];
+		VectorScale( forwardDir.Data(), fractions[0], keyMoveVec );
+		VectorMA( keyMoveVec, fractions[1], rightDir.Data(), keyMoveVec );
 		scoresSum += 0.55f + 0.45f * intendedMoveDir.Dot( keyMoveVec );
 		dirDistributionUpperBound[i] = scoresSum;
 	}
@@ -46,7 +90,7 @@ void EnvironmentTraceCache::MakeRandomizedKeyMovesToTarget( Context *context, co
 		}
 
 		int dirIndex = nonBlockedDirIndices[i];
-		const int *dirMoves = sideDirXYMoves[dirIndex];
+		const int *dirMoves = sideDirSigns[dirIndex];
 		Vector2Copy( dirMoves, keyMoves );
 		return;
 	}
@@ -64,13 +108,13 @@ void EnvironmentTraceCache::MakeKeyMovesToTarget( Context *context, const Vec3 &
 	assert( ( intendedMoveDir.Length() - 1.0f ) < 0.0001f );
 
 	float bestScore = 0.0f;
-	unsigned bestDirIndex = (unsigned)-1;
+	auto bestDirIndex = std::numeric_limits<unsigned>::max();
 	for( unsigned i = 0; i < numNonBlockedDirs; ++i ) {
 		vec3_t keyMoveVec;
 		unsigned dirIndex = nonBlockedDirIndices[i];
-		const float *dirFractions = sideDirXYFractions[dirIndex];
-		VectorScale( forwardDir.Data(), dirFractions[0], keyMoveVec );
-		VectorMA( keyMoveVec, dirFractions[1], rightDir.Data(), keyMoveVec );
+		const float *const fractions = sideDirFractions[dirIndex];
+		VectorScale( forwardDir.Data(), fractions[0], keyMoveVec );
+		VectorMA( keyMoveVec, fractions[1], rightDir.Data(), keyMoveVec );
 		float score = 0.55f + 0.45f * intendedMoveDir.Dot( keyMoveVec );
 		if( score > bestScore ) {
 			bestScore = score;
@@ -78,7 +122,7 @@ void EnvironmentTraceCache::MakeKeyMovesToTarget( Context *context, const Vec3 &
 		}
 	}
 	if( bestScore > 0 ) {
-		const int *dirMoves = sideDirXYMoves[bestDirIndex];
+		const int *dirMoves = sideDirSigns[bestDirIndex];
 		Vector2Copy( dirMoves, keyMoves );
 		return;
 	}
@@ -91,40 +135,39 @@ void EnvironmentTraceCache::MakeRandomKeyMoves( Context *context, int *keyMoves 
 	unsigned numNonBlockedDirs = SelectNonBlockedDirs( context, nonBlockedDirIndices );
 	if( numNonBlockedDirs ) {
 		int dirIndex = nonBlockedDirIndices[(unsigned)( 0.9999f * numNonBlockedDirs * random() )];
-		const int *dirMoves = sideDirXYMoves[dirIndex];
+		const int *const dirMoves = sideDirSigns[dirIndex];
 		Vector2Copy( dirMoves, keyMoves );
 		return;
 	}
 	Vector2Set( keyMoves, 0, 0 );
 }
 
-void EnvironmentTraceCache::SetFullHeightCachedTracesEmpty( const vec3_t front2DDir, const vec3_t right2DDir ) {
-	for( unsigned i = 0; i < 6; ++i ) {
-		auto &fullResult = results[i + 0];
-		auto &jumpableResult = results[i + 6];
-		fullResult.trace.fraction = 1.0f;
-		fullResult.trace.fraction = 1.0f;
+void EnvironmentTraceCache::SetAllResultsToEmpty( const vec3_t front2DDir, const vec3_t right2DDir ) {
+	for( unsigned i = 0; i < 8; ++i ) {
+		TraceResult *const fullResult = &results[i + 0];
+		TraceResult *const jumpableResult = &results[i + 8];
+		fullResult->trace.fraction = 1.0f;
+		jumpableResult->trace.fraction = 1.0f;
 		// We have to save a legal trace dir
-		MakeTraceDir( i, front2DDir, right2DDir, fullResult.traceDir );
-		VectorCopy( fullResult.traceDir, jumpableResult.traceDir );
+		MakeTraceDir( i, front2DDir, right2DDir, fullResult->traceDir );
+		VectorCopy( fullResult->traceDir, jumpableResult->traceDir );
 	}
-	resultsMask |= ALL_SIDES_MASK;
+
+	resultsMask |= 0xFFFF;
 	hasNoFullHeightObstaclesAround = true;
 }
 
-void EnvironmentTraceCache::SetJumpableHeightCachedTracesEmpty( const vec3_t front2DDir, const vec3_t right2DDir ) {
-	for( unsigned i = 0; i < 6; ++i ) {
-		auto &result = results[i + 6];
-		result.trace.fraction = 1.0f;
+void EnvironmentTraceCache::SetAllJumpableToEmpty( const vec_t *front2DDir, const vec_t *right2DDir ) {
+	for( unsigned i = 0; i < 8; ++i ) {
+		TraceResult *result = &results[i + 8];
+		result->trace.fraction = 1.0f;
 		// We have to save a legal trace dir
-		MakeTraceDir( i, front2DDir, right2DDir, result.traceDir );
+		MakeTraceDir( i, front2DDir, right2DDir, result->traceDir );
 	}
-	resultsMask |= JUMPABLE_SIDES_MASK;
+	resultsMask |= 0xFF00;
 }
 
-inline bool EnvironmentTraceCache::CanSkipTracingForAreaHeight( const vec3_t origin,
-																const aas_area_t &area,
-																float minZOffset ) {
+static inline bool CanSkipTracingForAreaHeight( const vec3_t origin, const aas_area_t &area, float minZOffset ) {
 	if( area.mins[2] >= origin[2] + minZOffset ) {
 		return false;
 	}
@@ -133,38 +176,6 @@ inline bool EnvironmentTraceCache::CanSkipTracingForAreaHeight( const vec3_t ori
 	}
 
 	return true;
-}
-
-const int EnvironmentTraceCache::sideDirXYMoves[8][2] =
-	{
-		{ +1, +0 }, // forward
-		{ -1, +0 }, // back
-		{ +0, -1 }, // left
-		{ +0, +1 }, // right
-		{ +1, -1 }, // front left
-		{ +1, +1 }, // front right
-		{ -1, -1 }, // back left
-		{ -1, +1 }, // back right
-	};
-
-const float EnvironmentTraceCache::sideDirXYFractions[8][2] =
-	{
-		{ +1.000f, +0.000f }, // front
-		{ -1.000f, +0.000f }, // back
-		{ +0.000f, -1.000f }, // left
-		{ +0.000f, +1.000f }, // right
-		{ +0.707f, -0.707f }, // front left
-		{ +0.707f, +0.707f }, // front right
-		{ -0.707f, -0.707f }, // back left
-		{ -0.707f, +0.707f }, // back right
-	};
-
-inline void EnvironmentTraceCache::MakeTraceDir( unsigned dirNum, const vec3_t front2DDir,
-												 const vec3_t right2DDir, vec3_t traceDir ) {
-	const float *dirFractions = sideDirXYFractions[dirNum];
-	VectorScale( front2DDir, dirFractions[0], traceDir );
-	VectorMA( traceDir, dirFractions[1], right2DDir, traceDir );
-	VectorNormalizeFast( traceDir );
 }
 
 bool EnvironmentTraceCache::TrySkipTracingForCurrOrigin( Context *context, const vec3_t front2DDir, const vec3_t right2DDir ) {
@@ -201,12 +212,12 @@ bool EnvironmentTraceCache::TrySkipTracingForCurrOrigin( Context *context, const
 	// If the area bounds test has lead to conclusion that there is enough free space in side directions
 	if( sideNum == 2 ) {
 		if( CanSkipTracingForAreaHeight( origin, area, playerbox_stand_mins[2] + 0.25f ) ) {
-			SetFullHeightCachedTracesEmpty( front2DDir, right2DDir );
+			SetAllResultsToEmpty( front2DDir, right2DDir );
 			return true;
 		}
 
 		if( CanSkipTracingForAreaHeight( origin, area, playerbox_stand_maxs[2] + AI_JUMPABLE_HEIGHT - 0.5f ) ) {
-			SetJumpableHeightCachedTracesEmpty( front2DDir, right2DDir );
+			SetAllJumpableToEmpty( front2DDir, right2DDir );
 			// We might still need to perform full height traces in TestForResultsMask()
 			return false;
 		}
@@ -223,14 +234,14 @@ bool EnvironmentTraceCache::TrySkipTracingForCurrOrigin( Context *context, const
 	mins.Z() += 0.25f;
 	StaticWorldTrace( &trace, origin, origin, MASK_SOLID | MASK_WATER, mins.Data(), maxs.Data() );
 	if( trace.fraction == 1.0f ) {
-		SetFullHeightCachedTracesEmpty( front2DDir, right2DDir );
+		SetAllResultsToEmpty( front2DDir, right2DDir );
 		return true;
 	}
 
 	mins.Z() += AI_JUMPABLE_HEIGHT - 1.0f;
 	StaticWorldTrace( &trace, origin, origin, MASK_SOLID | MASK_WATER, mins.Data(), maxs.Data() );
 	if( trace.fraction == 1.0f ) {
-		SetJumpableHeightCachedTracesEmpty( front2DDir, right2DDir );
+		SetAllJumpableToEmpty( front2DDir, right2DDir );
 		// We might still need to perform full height traces in TestForResultsMask()
 		return false;
 	}
@@ -240,7 +251,7 @@ bool EnvironmentTraceCache::TrySkipTracingForCurrOrigin( Context *context, const
 
 void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requiredResultsMask ) {
 	// There must not be any extra bits
-	Assert( ( requiredResultsMask & ~ALL_SIDES_MASK ) == 0 );
+	Assert( ( requiredResultsMask & ~0xFFFFu ) == 0 );
 	// All required traces have been already cached
 	if( ( this->resultsMask & requiredResultsMask ) == requiredResultsMask ) {
 		return;
@@ -260,59 +271,81 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 	}
 
 	const float *origin = entityPhysicsState.Origin();
+	constexpr auto contentsMask = MASK_SOLID | MASK_WATER;
 
 	// First, test all full side traces.
 	// If a full side trace is empty, a corresponding "jumpable" side trace can be set as empty too.
 
 	// Test these bits for a quick computations shortcut
-	unsigned actualFullSides = this->resultsMask & FULL_SIDES_MASK;
-	unsigned resultFullSides = requiredResultsMask & FULL_SIDES_MASK;
+	const unsigned actualFullSides = this->resultsMask & 0xFFu;
+	const unsigned resultFullSides = requiredResultsMask & 0xFFu;
+	// If we do not have some of required result bit set
 	if( ( actualFullSides & resultFullSides ) != resultFullSides ) {
-		const unsigned endMask = FullHeightMask( LAST_SIDE );
-		for( unsigned i = 0, mask = FullHeightMask( FIRST_SIDE ); mask <= endMask; ++i, mask *= 2 ) {
-			if( !( mask & requiredResultsMask ) || ( mask & this->resultsMask ) ) {
+		vec3_t mins;
+		VectorCopy( playerbox_stand_mins, mins );
+		mins[2] += 1.0f;
+		float *const maxs = playerbox_stand_maxs;
+		for( unsigned i = 0, mask = 1; i < 8; ++i, mask <<= 1 ) {
+			// Skip not required sides
+			if( !( mask & requiredResultsMask ) ) {
+				continue;
+			}
+			// Skip already computed sides
+			if( mask & this->resultsMask ) {
 				continue;
 			}
 
 			MakeTraceDir( i, front2DDir, right2DDir, traceEnd );
 			// Save the trace dir
-			auto &fullResult = results[i];
-			VectorCopy( traceEnd, fullResult.traceDir );
+			TraceResult *const fullResult = &results[i];
+			VectorCopy( traceEnd, fullResult->traceDir );
 			// Convert from a direction to the end point
 			VectorScale( traceEnd, TRACE_DEPTH, traceEnd );
 			VectorAdd( traceEnd, origin, traceEnd );
-			StaticWorldTrace( &fullResult.trace, origin, traceEnd, MASK_SOLID | MASK_WATER,
-							  playerbox_stand_mins, playerbox_stand_maxs );
+			// Compute the trace of the cached result
+			StaticWorldTrace( &fullResult->trace, origin, traceEnd, contentsMask, mins, maxs );
 			this->resultsMask |= mask;
-			// If full trace is empty, we can set partial trace as empty too
-			if( fullResult.trace.fraction == 1.0f ) {
-				auto &jumpableResult = results[i + 6];
-				jumpableResult.trace.fraction = 1.0f;
-				VectorCopy( fullResult.traceDir, jumpableResult.traceDir );
-				this->resultsMask |= ( mask << 6 );
+			if( fullResult->trace.fraction != 1.0f ) {
+				continue;
 			}
+
+			// If full trace is empty, we can set partial trace as empty too
+			// Results for jumpable height have indices shifted by 8
+			TraceResult *const jumpableResult = &results[i + 8];
+			jumpableResult->trace.fraction = 1.0f;
+			VectorCopy( fullResult->traceDir, jumpableResult->traceDir );
+			this->resultsMask |= ( mask << 8u );
 		}
 	}
 
-	unsigned actualJumpableSides = this->resultsMask & JUMPABLE_SIDES_MASK;
-	unsigned resultJumpableSides = requiredResultsMask & JUMPABLE_SIDES_MASK;
+	// Test these bits for quick computation shortcut
+	const unsigned actualJumpableSides = this->resultsMask & 0xFF00u;
+	const unsigned resultJumpableSides = requiredResultsMask & 0xFF00u;
+	// If we do not have some of required result bit set
 	if( ( actualJumpableSides & resultJumpableSides ) != resultJumpableSides ) {
-		Vec3 mins( playerbox_stand_mins );
-		mins.Z() += AI_JUMPABLE_HEIGHT;
-		const unsigned endMask = JumpableHeightMask( LAST_SIDE );
-		for( unsigned i = 0, mask = JumpableHeightMask( FIRST_SIDE ); mask <= endMask; ++i, mask *= 2 ) {
-			if( !( mask & requiredResultsMask ) || ( mask & this->resultsMask ) ) {
+		vec3_t mins;
+		VectorCopy( playerbox_stand_mins, mins );
+		mins[2] += AI_JUMPABLE_HEIGHT;
+		float *const maxs = playerbox_stand_maxs;
+		for( unsigned i = 0, mask = 0x100; i < 8; ++i, mask <<= 1 ) {
+			// Skip not required sides
+			if( !( mask & requiredResultsMask ) ) {
+				continue;
+			}
+			// Skip already computed sides
+			if( mask & this->resultsMask ) {
 				continue;
 			}
 
 			MakeTraceDir( i, front2DDir, right2DDir, traceEnd );
 			// Save the trace dir
-			auto &result = results[i + 6];
-			VectorCopy( traceEnd, result.traceDir );
+			TraceResult *const result = &results[i + 8];
+			VectorCopy( traceEnd, result->traceDir );
 			// Convert from a direction to the end point
 			VectorScale( traceEnd, TRACE_DEPTH, traceEnd );
 			VectorAdd( traceEnd, origin, traceEnd );
-			StaticWorldTrace( &result.trace, origin, traceEnd, MASK_SOLID | MASK_WATER, mins.Data(), playerbox_stand_maxs );
+			// Compute the trace of the cached result
+			StaticWorldTrace( &result->trace, origin, traceEnd, contentsMask, mins, maxs );
 			this->resultsMask |= mask;
 		}
 	}
@@ -357,20 +390,25 @@ bool EnvironmentTraceCache::CanSkipPMoveCollision( Context *context ) {
 	return this->hasNoFullHeightObstaclesAround;
 }
 
-// Make a type alias to fit into a line length limit
-typedef EnvironmentTraceCache::ObstacleAvoidanceResult ObstacleAvoidanceResult;
-
 ObstacleAvoidanceResult EnvironmentTraceCache::TryAvoidObstacles( Context *context,
 																  Vec3 *intendedLookVec,
 																  float correctionFraction,
 																  unsigned sidesShift ) {
-	TestForResultsMask( context, FRONT << sidesShift );
+	// Request computation of only the front trace first
+	TestForResultsMask( context, 1u << sidesShift );
 	const TraceResult &frontResult = results[0 + sidesShift];
 	if( frontResult.trace.fraction == 1.0f ) {
 		return ObstacleAvoidanceResult::NO_OBSTACLES;
 	}
 
-	TestForResultsMask( context, ( LEFT | RIGHT | FRONT_LEFT | FRONT_RIGHT ) << sidesShift );
+	const auto leftQuery( Query::Left() );
+	const auto rightQuery( Query::Right() );
+	const auto frontLeftQuery( Query::FrontLeft() );
+	const auto frontRightQuery( Query::FrontRight() );
+
+	assert( sidesShift == 0 || sidesShift == 8 );
+	const unsigned mask = leftQuery.mask | rightQuery.mask | frontLeftQuery.mask | frontRightQuery.mask;
+	TestForResultsMask( context, mask << sidesShift );
 
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	Vec3 velocityDir2D( entityPhysicsState.Velocity()[0], entityPhysicsState.Velocity()[1], 0 );
@@ -390,7 +428,7 @@ ObstacleAvoidanceResult EnvironmentTraceCache::TryAvoidObstacles( Context *conte
 	float maxScore = frontResult.trace.fraction * ( alpha + beta * velocityDir2D.Dot( results[0 + sidesShift].traceDir ) );
 	const TraceResult *bestTraceResult = nullptr;
 
-	for( unsigned i = 2; i <= 5; ++i ) {
+	for( int i : { leftQuery.index, rightQuery.index, frontLeftQuery.index, frontRightQuery.index } ) {
 		const TraceResult &result = results[i + sidesShift];
 		float score = result.trace.fraction;
 		// Make sure that non-blocked directions are in another category

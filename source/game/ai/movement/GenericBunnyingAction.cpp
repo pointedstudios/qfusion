@@ -92,8 +92,9 @@ void GenericRunBunnyingAction::SetupCommonBunnyingInput( Context *context ) {
 		if( entityPhysicsState.Speed() < context->GetDashSpeed() && entityPhysicsState.GroundEntity() ) {
 			// Prevent dashing into obstacles
 			auto &traceCache = context->TraceCache();
-			traceCache.TestForResultsMask( context, traceCache.FullHeightMask( traceCache.FRONT ) );
-			if( traceCache.FullHeightFrontTrace().trace.fraction == 1.0f ) {
+			auto query( EnvironmentTraceCache::Query::Front() );
+			traceCache.TestForQuery( context, query );
+			if( traceCache.ResultForQuery( query ).trace.fraction == 1.0f ) {
 				shouldDash = true;
 			}
 		}
@@ -284,8 +285,9 @@ bool GenericRunBunnyingAction::CanSetWalljump( Context *context ) const {
 	velocity2DDir *= 1.0f / speed2D;
 
 	auto &traceCache = context->TraceCache();
-	traceCache.TestForResultsMask( context, traceCache.FullHeightMask( traceCache.FRONT ) );
-	const auto &frontResult = traceCache.FullHeightFrontTrace();
+	auto query( EnvironmentTraceCache::Query::Front() );
+	traceCache.TestForQuery( context, query );
+	const auto &frontResult = traceCache.ResultForQuery( query );
 	if( velocity2DDir.Dot( frontResult.traceDir ) < 0.7f ) {
 		return false;
 	}
@@ -296,13 +298,19 @@ bool GenericRunBunnyingAction::CanSetWalljump( Context *context ) const {
 	// Do not force full-height traces for sides to be computed.
 	// Walljump height rules are complicated, and full simulation of these rules seems to be excessive.
 	// In worst case a potential walljump might be skipped.
-	auto sidesMask = traceCache.FULL_SIDES_MASK & ~( traceCache.BACK | traceCache.BACK_LEFT | traceCache.BACK_RIGHT );
-	traceCache.TestForResultsMask( context, traceCache.JumpableHeightMask( sidesMask ) );
 
-	TEST_TRACE_RESULT_NORMAL( traceCache.JumpableHeightLeftTrace() );
-	TEST_TRACE_RESULT_NORMAL( traceCache.JumpableHeightRightTrace() );
-	TEST_TRACE_RESULT_NORMAL( traceCache.JumpableHeightFrontLeftTrace() );
-	TEST_TRACE_RESULT_NORMAL( traceCache.JumpableHeightFrontLeftTrace() );
+	const auto leftQuery( EnvironmentTraceCache::Query::Left().JumpableHeight() );
+	const auto rightQuery( EnvironmentTraceCache::Query::Right().JumpableHeight() );
+	const auto frontLeftQuery( EnvironmentTraceCache::Query::FrontLeft().JumpableHeight() );
+	const auto frontRightQuery( EnvironmentTraceCache::Query::FrontRight().JumpableHeight() );
+
+	const unsigned mask = leftQuery.mask | rightQuery.mask | frontLeftQuery.mask | frontRightQuery.mask;
+	traceCache.TestForResultsMask( context, mask );
+
+	TEST_TRACE_RESULT_NORMAL( traceCache.ResultForQuery( leftQuery ) );
+	TEST_TRACE_RESULT_NORMAL( traceCache.ResultForQuery( rightQuery ) );
+	TEST_TRACE_RESULT_NORMAL( traceCache.ResultForQuery( frontLeftQuery ) );
+	TEST_TRACE_RESULT_NORMAL( traceCache.ResultForQuery( frontRightQuery ) );
 
 	return hasGoodWalljumpNormal;
 }
