@@ -767,6 +767,15 @@ MovementFallback *FallbackMovementAction::TryShortcutOtherFallbackByJumping( Con
 		return nullptr;
 	}
 
+	// Check the input set by the current fallback
+	const auto &botInput = context->record->botInput;
+	// It's very likely that the current fallback was aware of
+	// a kept-in-fov-point if there are left/right/dash keys pressed.
+	// That usually produces better bot behaviour and should be kept.
+	if( botInput.RightMovement() || botInput.IsSpecialButtonSet() ) {
+		return nullptr;
+	}
+
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 
 	// Check necessary preconditions first to cut off expensive trajectory prediction

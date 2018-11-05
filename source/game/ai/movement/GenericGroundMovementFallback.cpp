@@ -39,6 +39,80 @@ int GenericGroundMovementFallback::GetCurrBotAreas( int *areaNums, Context *cont
 	return bot->EntityPhysicsState()->PrepareRoutingStartAreas( areaNums );
 }
 
+bool GenericGroundMovementFallback::SetupForKeptPointInFov( MovementPredictionContext *context,
+															const float *steeringTarget,
+															const float *keptInFovPoint ) {
+	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
+	auto *botInput = &context->record->botInput;
+
+	Vec3 intendedMoveDir( steeringTarget );
+	intendedMoveDir -= entityPhysicsState.Origin();
+	const float distanceToTarget = intendedMoveDir.Normalize();
+	int keyMoves[2];
+	// While using MakeRandomizedKeyMovesToTarget() is desirable,
+	// we do not use movement prediction and thus it should be avoided due to possible bot mistakes.
+	context->TraceCache().MakeKeyMovesToTarget( context, intendedMoveDir, keyMoves );
+	// The call above does not guarantee producing at least a single pressed direction key
+	if( !( keyMoves[0] | keyMoves[1] ) ) {
+		return false;
+	}
+
+	Vec3 intendedLookVec( keptInFovPoint );
+	intendedLookVec -= entityPhysicsState.Origin();
+	botInput->SetIntendedLookDir( intendedLookVec, false );
+	botInput->canOverrideLookVec = true;
+	botInput->isUcmdSet = true;
+	botInput->SetForwardMovement( keyMoves[0] );
+	botInput->SetRightMovement( keyMoves[1] );
+
+	if( !this->allowDashing ) {
+		return true;
+	}
+
+	// Check whether various bot state parameters allow dashing.
+	// Return with successfully set up state for kept-in-fov point anyway.
+
+	if( !entityPhysicsState.GroundEntity() ) {
+		return true;
+	}
+
+	if( ( bot->ShouldBeSilent() || bot->ShouldMoveCarefully() ) ) {
+		return true;
+	}
+
+	const auto *pmStats = context->currPlayerState->pmove.stats;
+	if( !( ( pmStats[PM_STAT_FEATURES] & PMFEAT_DASH ) && !pmStats[PM_STAT_DASHTIME] ) ) {
+		return true;
+	}
+
+	// Check whether it's safe to dash
+	// 1) there should be only a single direction defined
+	// 2) the target should be relatively far from the bot
+	// 3) the target should conform to the direction key well
+
+	if( !( keyMoves[0] ^ keyMoves[1] ) ) {
+		return true;
+	}
+
+	if( distanceToTarget < dashDistanceToTargetThreshold ) {
+		return true;
+	}
+
+	bool setDash = false;
+	if( keyMoves[0] ) {
+		if( ( keyMoves[0] * entityPhysicsState.ForwardDir() ).Dot( intendedMoveDir ) > dashDotProductToTargetThreshold ) {
+			setDash = true;
+		}
+	} else {
+		if( ( keyMoves[1] * entityPhysicsState.RightDir() ).Dot( intendedMoveDir ) > dashDotProductToTargetThreshold ) {
+			setDash = true;
+		}
+	}
+
+	botInput->SetSpecialButton( setDash );
+	return true;
+}
+
 void GenericGroundMovementFallback::SetupMovement( Context *context ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	auto *botInput = &context->record->botInput;
@@ -51,6 +125,14 @@ void GenericGroundMovementFallback::SetupMovement( Context *context ) {
 #if 0
 	AITools_DrawColorLine( entityPhysicsState.Origin(), steeringTarget, DebugColor(), 0 );
 #endif
+
+	// Try to keep looking at this point if it is present and use 4 direction keys.
+	// Even if there might be some faults, turning from (potential) enemies looks poor.
+	if( const float *keptInFovPoint = bot->GetKeptInFovPoint() ) {
+		if( SetupForKeptPointInFov( context, steeringTarget, keptInFovPoint ) ) {
+			return;
+		}
+	}
 
 	Vec3 intendedLookDir( steeringTarget );
 	intendedLookDir -= entityPhysicsState.Origin();
