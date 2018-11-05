@@ -344,14 +344,9 @@ bool GenericRunBunnyingAction::CheckStepSpeedGainOrLoss( Context *context ) {
 		}
 	}
 
-	// Ignore bumping into a wall/speed loss if it happens far from a marked for path truncation origin
-	// as there will be later planning next frames and the path will be for sure corrected
-	if ( mayStopAtAreaNum && DistanceSquared( mayStopAtOrigin, newPMove->origin ) > SQUARE( 56 ) ) {
-		return true;
-	}
-
-	// Avoid bumping into walls
-	if( newSquare2DSpeed < 10 * 10 && oldSquare2DSpeed > 100 * 100 ) {
+	// Avoid bumping into walls.
+	// Note: the lower speed limit is raised to actually trigger this check.
+	if( newSquare2DSpeed < 50 * 50 && oldSquare2DSpeed > 100 * 100 ) {
 		Debug( "A prediction step has lead to close to zero 2D speed while it was significant\n" );
 		this->shouldTryObstacleAvoidance = true;
 		return false;
@@ -375,10 +370,16 @@ bool GenericRunBunnyingAction::CheckStepSpeedGainOrLoss( Context *context ) {
 
 	currentSpeedLossSequentialMillis += context->predictionStepMillis;
 	if( tolerableSpeedLossSequentialMillis < currentSpeedLossSequentialMillis ) {
-		const char *format_ = "A sequential speed loss interval of %d millis exceeds the tolerable one of %d millis\n";
-		Debug( format_, currentSpeedLossSequentialMillis, tolerableSpeedLossSequentialMillis );
-		this->shouldTryObstacleAvoidance = true;
-		return false;
+		// Let actually interrupt it if the new speed is less than this threshold.
+		// Otherwise many trajectories that look feasible get rejected.
+		// We should not however completely eliminate this interruption
+		// as sometimes it prevents bumping in obstacles pretty well.
+		if( newEntityPhysicsState.Speed2D() < 0.5f * ( context->GetRunSpeed() + context->GetDashSpeed() ) ) {
+			const char *format_ = "A sequential speed loss interval of %d millis exceeds the tolerable one of %d millis\n";
+			Debug( format_, currentSpeedLossSequentialMillis, tolerableSpeedLossSequentialMillis );
+			this->shouldTryObstacleAvoidance = true;
+			return false;
+		}
 	}
 
 	return true;
@@ -578,14 +579,14 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 		}
 	}
 
-	if( squareDistanceFromStart < SQUARE( 80 ) ) {
-		if( SequenceDuration( context ) < 512 ) {
+	if( squareDistanceFromStart < SQUARE( 64 ) ) {
+		if( SequenceDuration( context ) < 384 ) {
 			context->SaveSuggestedActionForNextFrame( this );
 			return;
 		}
 
 		// Prevent wasting CPU cycles on further prediction
-		Debug( "The bot still has not covered 80 units yet in 512 millis\n" );
+		Debug( "The bot still has not covered 64 units yet in 384 millis\n" );
 		context->SetPendingRollback();
 		return;
 	}
@@ -627,21 +628,17 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 		return;
 	}
 
-	// Do not stop prediction if the bot has
-	if( !mayStopAtAreaNum && newEntityPhysicsState.Speed2D() < context->GetRunSpeed() ) {
-		context->SaveSuggestedActionForNextFrame( this );
-		return;
-	}
-
 	// If we're at the best reached position currently
-	if( currTravelTimeToNavTarget == minTravelTimeToNavTargetSoFar ) {
-		// Chop the last frame to prevent jumping if the predicted path will be fully utilized
-		if( context->frameEvents.hasJumped && context->topOfStackIndex ) {
-			context->StopTruncatingStackAt( context->topOfStackIndex - 1 );
-		} else {
-			context->isCompleted = true;
+	if( travelTimeAtSequenceStart && travelTimeAtSequenceStart > currTravelTimeToNavTarget ) {
+		if( currTravelTimeToNavTarget == minTravelTimeToNavTargetSoFar ) {
+			// Chop the last frame to prevent jumping if the predicted path will be fully utilized
+			if( context->frameEvents.hasJumped && context->topOfStackIndex ) {
+				context->StopTruncatingStackAt( context->topOfStackIndex - 1 );
+			} else {
+				context->isCompleted = true;
+			}
+			return;
 		}
-		return;
 	}
 
 	// If we have reached here, we are sure we have not:
@@ -651,8 +648,23 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 
 	// If there were no area (and consequently, frame) marked as suitable for path truncation
 	if( !mayStopAtAreaNum ) {
-		if( squareDistanceFromStart > SQUARE( 144 ) ) {
-			Debug( "The action still have not managed to mark \"may stop\" area, do not waste cycles anymore\n" );
+		constexpr unsigned maxStepsLimit = ( 7 * Context::MAX_PREDICTED_STATES ) / 8;
+		static_assert( maxStepsLimit + 1 < Context::MAX_PREDICTED_STATES, "" );
+		// If we have reached prediction limits
+		if( squareDistanceFromStart > SQUARE( 192 ) || context->topOfStackIndex > maxStepsLimit ) {
+			// Try considering this as a success if these conditions are met:
+			// 1) The current travel time is not worse than 250 millis relative to the best one during prediction
+			// 2) The current travel time is at least 750 millis better than the travel time at start
+			// 3) We have landed in some floor cluster (not stairs/ramp/obstacle).
+			if( minTravelTimeToNavTargetSoFar && currTravelTimeToNavTarget < minTravelTimeToNavTargetSoFar + 25 ) {
+				if( travelTimeAtSequenceStart && currTravelTimeToNavTarget + 75 < travelTimeAtSequenceStart ) {
+					if( aasWorld->FloorClusterNum( groundedAreaNum ) ) {
+						context->isCompleted = true;
+						return;
+					}
+				}
+			}
+
 			context->SetPendingRollback();
 			return;
 		}
@@ -663,7 +675,7 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 	// Consider an attempt successful if we've landed in the same floor cluster and there is no gap to the best position
 	if( const int clusterNum = aasWorld->FloorClusterNum( mayStopAtAreaNum ) ) {
 		if( clusterNum == aasWorld->FloorClusterNum( groundedAreaNum ) ) {
-			if( IsAreaWalkableInFloorCluster( groundedAreaNum, mayStopAtStackFrame ) ) {
+			if( IsAreaWalkableInFloorCluster( groundedAreaNum, mayStopAtAreaNum ) ) {
 				context->StopTruncatingStackAt( (unsigned)mayStopAtStackFrame );
 				return;
 			}
@@ -691,8 +703,8 @@ bool GenericRunBunnyingAction::CastRayForPrematureCompletion( MovementPrediction
 	Vec3 velocityDir( newEntityPhysicsState.Velocity() );
 	velocityDir *= 1.0f / newEntityPhysicsState.Speed();
 	Vec3 xerpPoint( velocityDir );
-	float checkDistanceLimit = 40.0f + 40.0f * BoundedFraction( newEntityPhysicsState.Speed2D(), 750.0f );
-	xerpPoint *= 256.0f;
+	float checkDistanceLimit = 48.0f + 72.0f * BoundedFraction( newEntityPhysicsState.Speed2D(), 750.0f );
+	xerpPoint *= 2.0f * checkDistanceLimit;
 	float timeSeconds = sqrtf( Distance2DSquared( xerpPoint.Data(), vec3_origin ) );
 	timeSeconds /= newEntityPhysicsState.Speed2D();
 	xerpPoint += newEntityPhysicsState.Origin();
@@ -738,7 +750,7 @@ bool GenericRunBunnyingAction::CastRayForPrematureCompletion( MovementPrediction
 		return true;
 	}
 
-	return firstHitNormal.Dot( velocityDir ) < 0.3f;
+	return firstHitNormal.Dot( velocityDir ) > -0.3f;
 }
 
 void GenericRunBunnyingAction::OnApplicationSequenceStarted( Context *context ) {
