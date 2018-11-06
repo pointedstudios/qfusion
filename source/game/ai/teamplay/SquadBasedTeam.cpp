@@ -1,5 +1,6 @@
 #include "SquadBasedTeam.h"
 #include "ObjectiveBasedTeam.h"
+#include "TeamplayLocal.h"
 #include "../ai_ground_trace_cache.h"
 #include "../bot.h"
 #include "../../../qalgo/Links.h"
@@ -1320,6 +1321,11 @@ struct NearbyMates {
 
 	float minDistance { std::numeric_limits<float>::max() };
 
+	bool operator<( const NearbyMates &that ) const {
+		// Items that have the lowest minimal distance should be first after sorting
+		return this->minDistance < that.minDistance;
+	}
+
 	NearbyMates *NextInRawList() { return next[RAW_LIST]; }
 	NearbyMates *NextInSortedList() { return next[SORTED_LIST]; }
 
@@ -1444,12 +1450,7 @@ NearbyMates *SquadsBuilder::SelectNearbyMates( Bot *orphanBotsList ) {
 }
 
 NearbyMates *SquadsBuilder::SortByMinDistance( NearbyMates *rawLists ) {
-	NearbyMates *sortedListHead = nullptr;
-	// TODO: Acttually sort!
-	for( NearbyMates *list = rawLists; list; list = list->NextInRawList() ) {
-		::Link( list, &sortedListHead, NearbyMates::SORTED_LIST );
-	}
-	return sortedListHead;
+	return ::SortLinkedList( rawLists, NearbyMates::RAW_LIST, NearbyMates::SORTED_LIST, std::less<NearbyMates>() );
 }
 
 unsigned SquadsBuilder::AssignSquadNumbers( NearbyMates *lists, uint8_t *orphanSquadIds ) {

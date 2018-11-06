@@ -1,5 +1,6 @@
 #include "../ai_ground_trace_cache.h"
 #include "ObjectiveBasedTeam.h"
+#include "TeamplayLocal.h"
 #include "../navigation/AasRouteCache.h"
 #include "../bot.h"
 #include "../../../qalgo/Links.h"
@@ -358,14 +359,9 @@ void AiObjectiveBasedTeam::FindAllCandidates( Candidates &candidates ) {
  */
 template <typename Spot>
 Spot *SortByWeightImpl( Spot *knownSpotsHead ) {
-	Spot *resultHead = nullptr;
-
-	// TODO: Actually sort
-	for( Spot *spot = knownSpotsHead; spot; spot = spot->Next() ) {
-		::Link( spot, &resultHead, Spot::SORTED_LIST );
-	}
-
-	return resultHead;
+	// Best-weight spots should be first after sorting
+	auto less = []( const Spot &lhs, const Spot &rhs ) { return lhs.weight > rhs.weight; };
+	return ::SortLinkedList( knownSpotsHead, Spot::STORAGE_LIST, Spot::SORTED_LIST, less );
 }
 
 AiObjectiveBasedTeam::DefenceSpot *AiObjectiveBasedTeam::DefenceSpot::SortByWeight( ObjectiveSpotImpl *head ) {
