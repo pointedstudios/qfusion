@@ -78,7 +78,10 @@ protected:
 	// Can be overridden for finer control over tests
 	virtual bool CheckStepSpeedGainOrLoss( MovementPredictionContext *context );
 
-	bool CastRayForPrematureCompletion( MovementPredictionContext *context );
+	bool GenericCheckForPrematureCompletion( MovementPredictionContext *context );
+	bool CheckForPrematureCompletionInFloorCluster( MovementPredictionContext *context,
+													int currGroundedAreaNum,
+													int floorClusterNum );
 
 	inline void MarkForTruncation( MovementPredictionContext *context );
 public:

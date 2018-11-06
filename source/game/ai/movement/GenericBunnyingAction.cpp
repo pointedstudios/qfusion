@@ -601,11 +601,19 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 				return;
 			}
 
-			if( aasWorld->AreaSettings()[groundedAreaNum].areaflags & AREA_NOFALL ) {
+			const auto *const aasAreaFloorClusterNums = aasWorld->AreaFloorClusterNums();
+			// If the area is in a floor cluster, we can perform a cheap and robust 2D raycasting test
+			// that should be preferred for AREA_NOFALL areas as well.
+			if( const int floorClusterNum = aasAreaFloorClusterNums[groundedAreaNum] ) {
+				if( CheckForPrematureCompletionInFloorCluster( context, groundedAreaNum, floorClusterNum ) ) {
+					context->isCompleted = true;
+					return;
+				}
+			} else if( aasWorld->AreaSettings()[groundedAreaNum].areaflags & AREA_NOFALL ) {
 				// We have decided still perform additional checks in this case.
 				// (the bot is in a "check stop at area num" area and is in a "no-fall" area but is in air).
 				// Bumping into walls on high speed is the most painful issue.
-				if( CastRayForPrematureCompletion( context ) ) {
+				if( GenericCheckForPrematureCompletion( context ) ) {
 					context->isCompleted = true;
 					return;
 				}
@@ -696,7 +704,7 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 	context->StopTruncatingStackAt( (unsigned)mayStopAtStackFrame );
 }
 
-bool GenericRunBunnyingAction::CastRayForPrematureCompletion( MovementPredictionContext *context ) {
+bool GenericRunBunnyingAction::GenericCheckForPrematureCompletion( Context *context ) {
 	const auto &newEntityPhysicsState = context->movementState->entityPhysicsState;
 
 	// Interpolate origin using full (non-2D) velocity
@@ -751,6 +759,78 @@ bool GenericRunBunnyingAction::CastRayForPrematureCompletion( MovementPrediction
 	}
 
 	return firstHitNormal.Dot( velocityDir ) > -0.3f;
+}
+
+bool GenericRunBunnyingAction::CheckForPrematureCompletionInFloorCluster( Context *context,
+																		  int currGroundedAreaNum,
+																		  int floorClusterNum ) {
+	const auto &newEntityPhysicsState = context->movementState->entityPhysicsState;
+	const Vec3 currVelocity( newEntityPhysicsState.Velocity() );
+
+	const float heightOverGround = newEntityPhysicsState.HeightOverGround();
+	if( !std::isfinite( heightOverGround ) ) {
+		return false;
+	}
+	// Almost landed in the "good" area
+	if( heightOverGround < 1.0f ) {
+		return true;
+	}
+	// The bot is going to land in the target area
+	const float speed2D = newEntityPhysicsState.Speed2D();
+	if( speed2D < 1.0f ) {
+		return true;
+	}
+
+	const float gravity = level.gravity;
+	const float currVelocityZ = currVelocity.Z();
+	// Assuming the 2D velocity remains the same (this is not true but is an acceptable approximation)
+	// the quadratic equation is
+	// (0.5 * gravity) * timeTillLanding^2 - currVelocityZ * timeTillLanding - heightOverGround = 0
+	// A = 0.5 * gravity (the gravity conforms to the landing direction)
+	// B = -currVelocityZ (the current Z velocity contradicts the landing direction if positive)
+	// C = -heightOverGround
+	const float d = currVelocityZ * currVelocityZ + 4.0f * ( 0.5f * gravity ) * heightOverGround;
+	// The bot must always land on the floor cluster plane
+	assert( d >= 0 );
+
+	const float sqd = std::sqrt( d );
+	float timeTillLanding = ( currVelocityZ - sqd ) / ( 2 * ( 0.5f * gravity ) );
+	if( timeTillLanding < 0 ) {
+		timeTillLanding = ( currVelocityZ + sqd ) / ( 2 * ( 0.5f * gravity ) );
+	}
+	assert( timeTillLanding >= 0 );
+	// Don't extrapolate more than for 1 second
+	if( timeTillLanding > 1.0f ) {
+		return false;
+	}
+
+	Vec3 landingPoint( currVelocity );
+	landingPoint.Z() = 0;
+	// Now "landing point" contains a 2D velocity.
+	// Scale it by the time to get the shift.
+	landingPoint *= timeTillLanding;
+	// Convert the spatial shift to an absolute origin.
+	landingPoint += newEntityPhysicsState.Origin();
+	// The heightOverGround is a height of bot feet over ground
+	// Lower the landing point to the ground
+	landingPoint.Z() += playerbox_stand_mins[2];
+	// Add few units above the ground plane for AAS sampling
+	landingPoint.Z() += 4.0f;
+
+	const auto *aasWorld = AiAasWorld::Instance();
+	const int landingAreaNum = aasWorld->PointAreaNum( landingPoint.Data() );
+	// If it's the same area
+	if( landingAreaNum == currGroundedAreaNum ) {
+		return true;
+	}
+
+	// If the extrapolated origin is in another floor cluster (this condition cuts off being in solid too)
+	if( aasWorld->AreaFloorClusterNums()[landingAreaNum] != floorClusterNum ) {
+		return false;
+	}
+
+	// Perform 2D raycast in a cluster to make sure we don't leave it/hit solid (a cluster is not a convex poly)
+	return IsAreaWalkableInFloorCluster( currGroundedAreaNum, landingAreaNum );
 }
 
 void GenericRunBunnyingAction::OnApplicationSequenceStarted( Context *context ) {
