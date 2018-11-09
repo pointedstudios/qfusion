@@ -737,6 +737,7 @@ static void objectAiDefenceSpot_constructor( void *mem, int id, const edict_t *e
     spot->entity = entity;
     spot->radius = radius;
     spot->usesAutoAlert = true;
+    spot->alertMessage = nullptr;
     spot->minAssignedBots = 1;
     spot->maxAssignedBots = DEFAULT_MAX_DEFENDERS;
     spot->regularEnemyAlertScale = 1.0f;
@@ -778,6 +779,16 @@ DECLARE_METHOD(scriptType, get_##scriptField, (), objectAi##SpotClass##_get##nat
 #define DECLARE_DEFENCE_SPOT_ACCESSORS( scriptType, scriptField, nativeField ) \
     DECLARE_SPOT_ACCESSORS( DefenceSpot, scriptType, scriptField, nativeField )
 
+static void objectAiDefenceSpot_setAlertMessage( AiDefenceSpot *spot, asstring_t *message )
+{
+    if( !message || !message->buffer ) {
+        spot->alertMessage = nullptr;
+        return;
+    }
+
+    spot->alertMessage = G_LevelCopyString( message->buffer );
+}
+
 static const asBehavior_t asAiDefenceSpot_ObjectBehaviors[] =
 {
 	DECLARE_CONSTRUCTOR((), objectAiDefenceSpot_defaultConstructor),
@@ -792,6 +803,8 @@ static const asMethod_t asAiDefenceSpot_Methods[] = {
     DECLARE_DEFENCE_SPOT_ACCESSORS( int, maxDefenders, maxAssignedBots ),
     DECLARE_DEFENCE_SPOT_ACCESSORS( int, regularEnemyAlertScale, regularEnemyAlertScale ),
     DECLARE_DEFENCE_SPOT_ACCESSORS( int, carrierEnemyAlertScale, carrierEnemyAlertScale ),
+
+    DECLARE_METHOD( void, set_alertMessage, (const String &), objectAiDefenceSpot_setAlertMessage ),
 
     ASLIB_METHOD_NULL
 };

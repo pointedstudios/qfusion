@@ -32,6 +32,7 @@ struct AiDefenceSpot: public AiObjectiveSpot {
 	bool usesAutoAlert;
 	float regularEnemyAlertScale;
 	float carrierEnemyAlertScale;
+	const char *alertMessage;
 };
 
 /**
@@ -128,6 +129,11 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 
 		DefenceSpot *NextSorted() override { return next[SORTED_LIST]; }
 		const DefenceSpot *NextSorted() const { return next[SORTED_LIST]; }
+
+		/**
+		 * Computed lazily on demand, negative if not computed yet
+		 */
+		int locationTag { -1 };
 
 		float alertLevel { 0.0f };
 		int64_t alertTimeoutAt { 0 };
