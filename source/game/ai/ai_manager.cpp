@@ -2,7 +2,6 @@
 #include "planning/BasePlanner.h"
 #include "teamplay/BaseTeam.h"
 #include "bot_evolution_manager.h"
-#include "ai_shutdown_hooks_holder.h"
 #include "bot.h"
 #include "combat/TacticalSpotsRegistry.h"
 #include "../../qalgo/Links.h"

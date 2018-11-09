@@ -1,6 +1,6 @@
 #include "bot.h"
-#include "ai_shutdown_hooks_holder.h"
 #include "ai_manager.h"
+#include "ai_ground_trace_cache.h"
 #include "navigation/NavMeshManager.h"
 #include "teamplay/ObjectiveBasedTeam.h"
 #include "combat/TacticalSpotsRegistry.h"
@@ -199,6 +199,8 @@ void AI_InitLevel( void ) {
 	AiAasRouteCache::Init( *AiAasWorld::Instance() );
 	AiNavMeshManager::Init( level.mapname );
 	TacticalSpotsRegistry::Init( level.mapname );
+	AiGroundTraceCache::Init();
+	HazardsSelectorCache::Init();
 
 	AiManager::Init( g_gametype->string, level.mapname );
 
@@ -209,8 +211,6 @@ void AI_Shutdown( void ) {
 	hubAreas.clear();
 
 	AI_AfterLevelScriptShutdown();
-
-	AiShutdownHooksHolder::Instance()->InvokeHooks();
 }
 
 void AI_BeforeLevelLevelScriptShutdown() {
@@ -225,6 +225,8 @@ void AI_AfterLevelScriptShutdown() {
 		AiManager::Shutdown();
 	}
 
+	HazardsSelectorCache::Shutdown();
+	AiGroundTraceCache::Shutdown();
 	TacticalSpotsRegistry::Shutdown();
 	AiNavMeshManager::Shutdown();
 	AiAasRouteCache::Shutdown();

@@ -1,6 +1,5 @@
 #include "BaseTeam.h"
 #include "SquadBasedTeam.h"
-#include "../ai_shutdown_hooks_holder.h"
 #include "../bot.h"
 #include "../../../qalgo/Links.h"
 

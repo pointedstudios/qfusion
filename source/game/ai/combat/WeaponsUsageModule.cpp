@@ -1,6 +1,5 @@
 #include "WeaponsUsageModule.h"
 #include "../ai_trajectory_predictor.h"
-#include "../ai_shutdown_hooks_holder.h"
 #include "../bot.h"
 
 BotWeaponsUsageModule::BotWeaponsUsageModule( Bot *bot_ )

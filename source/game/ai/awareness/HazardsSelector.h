@@ -70,4 +70,27 @@ public:
 					   float splashRadius = 0.0f );
 };
 
+class HazardsSelectorCache {
+	friend class SameDirBeamsList;
+
+	template <typename, unsigned> friend class StaticVector;
+
+	uint8_t *storageMem;
+	class CachingAllocator *sortedProjectilesAllocator;
+	class CachingAllocator *plasmaBeamsAllocator;
+
+	HazardsSelectorCache();
+	~HazardsSelectorCache();
+
+	static HazardsSelectorCache *instance;
+public:
+	static HazardsSelectorCache *Instance() {
+		assert( instance );
+		return instance;
+	}
+
+	static void Init();
+	static void Shutdown();
+};
+
 #endif
