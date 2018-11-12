@@ -71,6 +71,9 @@ class BotTacticalSpotsCache
 	bool FindCloseRangeTacticalSpot( const Vec3 &origin, const Vec3 &enemyOrigin, vec3_t result );
 	bool FindCoverSpot( const Vec3 &origin, const Vec3 &enemyOrigin, vec3_t result );
 
+	template <typename ProblemParams>
+	inline void TakeEnemiesIntoAccount( ProblemParams &problemParams );
+
 	// We can't(?) refer to a nested class in a forward declaration, so declare the parameter as a template one
 	template <typename ProblemParams>
 	inline bool FindForOrigin( const ProblemParams &problemParams, const Vec3 &origin, float searchRadius, vec3_t result );
