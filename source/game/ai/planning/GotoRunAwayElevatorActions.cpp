@@ -47,7 +47,7 @@ PlannerNode *BotStartGotoRunAwayElevatorAction::TryApply( const WorldState &worl
 
 void BotDoRunAwayViaElevatorActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
-	self->ai->botRef->SetNavTarget( &navTarget );
+	self->ai->botRef->SetNavTarget( &navSpot );
 }
 
 void BotDoRunAwayViaElevatorActionRecord::Deactivate() {

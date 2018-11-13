@@ -276,10 +276,9 @@ protected:
 	vec3_t angularViewSpeed;
 
 	// An actually used nav target, be it a nav entity or a spot
-	NavTarget *navTarget { nullptr };
+	const NavTarget *navTarget { nullptr };
 	const NavTarget *lastReachedNavTarget { nullptr };
-	// A storage navTarget might point to in case when it is just a spot and not a nav entity
-	NavTarget localNavTargetStorage;
+	NavSpot localNavSpotStorage { NavSpot::Dummy() };
 
 	// Negative  = enemy
 	// Zero      = ignore (don't attack)
@@ -388,13 +387,14 @@ public:
 
 	void ResetNavigation();
 
-	inline void SetNavTarget( NavTarget *navTarget_ ) {
+	inline void SetNavTarget( const NavTarget *navTarget_ ) {
 		this->navTarget = navTarget_;
 		OnNavTargetSet();
 	}
 
 	inline void SetNavTarget( const Vec3 &navTargetOrigin, float reachRadius ) {
-		localNavTargetStorage.SetToTacticalSpot( navTargetOrigin, reachRadius );
+		localNavSpotStorage.Set( navTargetOrigin, reachRadius, NavTargetFlags::REACH_ON_RADIUS );
+		this->navTarget = &localNavSpotStorage;
 		OnNavTargetSet();
 	}
 

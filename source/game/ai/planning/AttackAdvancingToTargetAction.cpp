@@ -3,8 +3,11 @@
 
 void BotAttackAdvancingToTargetActionRecord::Activate() {
 	AiBaseActionRecord::Activate();
-	this->navTarget.SetToNavEntity( self->ai->botRef->GetSelectedNavEntity().GetNavEntity() );
-	self->ai->botRef->SetNavTarget( &this->navTarget );
+	// Let's provide a spot origin that matches the nav entity
+	// (we should use spots since to conform to the rest of combat actions).
+	Vec3 origin( self->ai->botRef->GetSelectedNavEntity().GetNavEntity()->Origin() );
+	this->navSpot.Set( origin, 16.0f, NavTargetFlags::REACH_ON_RADIUS );
+	self->ai->botRef->SetNavTarget( &this->navSpot );
 	self->ai->botRef->GetMiscTactics().Clear();
 	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
 	// This flag affects weapons choice. This action is very likely to behave similar to retreating.

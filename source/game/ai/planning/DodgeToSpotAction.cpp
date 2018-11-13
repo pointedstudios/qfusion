@@ -3,7 +3,7 @@
 
 void BotDodgeToSpotActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
-	self->ai->botRef->SetNavTarget( &navTarget );
+	self->ai->botRef->SetNavTarget( &navSpot );
 	timeoutAt = level.time + Hazard::TIMEOUT;
 	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
 }
@@ -16,7 +16,7 @@ void BotDodgeToSpotActionRecord::Deactivate() {
 AiBaseActionRecord::Status BotDodgeToSpotActionRecord::CheckStatus( const WorldState &currWorldState ) const {
 	// If the bot has reached the spot, consider the action completed
 	// (use a low threshold because dodging is a precise movement)
-	if( ( navTarget.Origin() - self->s.origin ).SquaredLength() < 16 * 16 ) {
+	if( ( navSpot.Origin() - self->s.origin ).SquaredLength() < 16 * 16 ) {
 		return COMPLETED;
 	}
 

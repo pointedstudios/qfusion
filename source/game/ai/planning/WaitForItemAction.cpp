@@ -5,8 +5,8 @@ void BotWaitForItemActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
 	self->ai->botRef->GetMiscTactics().shouldMoveCarefully = true;
 	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
-	self->ai->botRef->SetNavTarget( &navTarget );
-	self->ai->botRef->SetCampingSpot( AiCampingSpot( navTarget.Origin(), GOAL_PICKUP_ACTION_RADIUS, 0.5f ) );
+	self->ai->botRef->SetNavTarget( navEntity );
+	self->ai->botRef->SetCampingSpot( AiCampingSpot( navEntity->Origin(), GOAL_PICKUP_ACTION_RADIUS, 0.5f ) );
 }
 
 void BotWaitForItemActionRecord::Deactivate() {
@@ -22,20 +22,20 @@ AiBaseActionRecord::Status BotWaitForItemActionRecord::CheckStatus( const WorldS
 	}
 
 	const auto &currSelectedNavEntity = self->ai->botRef->GetSelectedNavEntity();
-	if( !navTarget.IsBasedOnNavEntity( currSelectedNavEntity.GetNavEntity() ) ) {
-		Debug( "Nav target does no longer match current selected nav entity\n" );
+	if( !navEntity->IsBasedOnNavEntity( currSelectedNavEntity.GetNavEntity() ) ) {
+		Debug( "Nav entity does no longer match current selected nav entity\n" );
 		return INVALID;
 	}
-	if( !navTarget.SpawnTime() ) {
-		Debug( "Illegal nav target spawn time (looks like it has been invalidated)\n" );
+	if( !navEntity->SpawnTime() ) {
+		Debug( "Illegal nav entity spawn time (looks like it has been invalidated)\n" );
 		return INVALID;
 	}
 	// Wait duration is too long (more than it was estimated)
-	uint64_t waitDuration = (uint64_t)( navTarget.SpawnTime() - level.time );
-	if( waitDuration > navTarget.MaxWaitDuration() ) {
-		constexpr auto *format =
-			"Wait duration %" PRIu64 " is too long (the maximum allowed value for the nav target is %" PRIu64 ")\n";
-		Debug( format, waitDuration, navTarget.MaxWaitDuration() );
+	const auto waitDuration = (uint64_t)( navEntity->SpawnTime() - level.time );
+	if( waitDuration > navEntity->MaxWaitDuration() ) {
+		constexpr auto *format = "Wait duration %" PRIu64 " is too long "
+								 "(the maximum allowed value for a nav entity is %" PRIu64 ")\n";
+		Debug( format, waitDuration, navEntity->MaxWaitDuration() );
 		return INVALID;
 	}
 	if( currWorldState.DistanceToNavTarget() > GOAL_PICKUP_ACTION_RADIUS ) {

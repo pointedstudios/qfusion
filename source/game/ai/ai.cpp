@@ -204,7 +204,7 @@ void AI_InitLevel( void ) {
 
 	AiManager::Init( g_gametype->string, level.mapname );
 
-	NavEntitiesRegistry::Instance()->Init();
+	NavEntitiesRegistry::Init();
 }
 
 void AI_Shutdown( void ) {
@@ -225,6 +225,7 @@ void AI_AfterLevelScriptShutdown() {
 		AiManager::Shutdown();
 	}
 
+	NavEntitiesRegistry::Shutdown();
 	HazardsSelectorCache::Shutdown();
 	AiGroundTraceCache::Shutdown();
 	TacticalSpotsRegistry::Shutdown();
@@ -351,16 +352,21 @@ void AI_AddNavEntity( edict_t *ent, ai_nav_entity_flags flags ) {
 }
 
 void AI_RemoveNavEntity( edict_t *ent ) {
-	NavEntity *navEntity = NavEntitiesRegistry::Instance()->NavEntityForEntity( ent );
+	auto *const navEntitiesRegistry = NavEntitiesRegistry::Instance();
+	if( !navEntitiesRegistry ) {
+		return;
+	}
+
+	NavEntity *const navEntity = navEntitiesRegistry->NavEntityForEntity( ent );
 	// (An nav. item absence is not an error, this function is called for each entity in game)
 	if( !navEntity ) {
 		return;
 	}
 
-	if( AiManager::Instance() ) {
-		AiManager::Instance()->NavEntityReachedBy( navEntity, nullptr );
+	if( auto *const aiManager = AiManager::Instance() ) {
+		aiManager->NavEntityReachedBy( navEntity, nullptr );
 	}
-	NavEntitiesRegistry::Instance()->RemoveNavEntity( navEntity );
+	navEntitiesRegistry->RemoveNavEntity( navEntity );
 }
 
 void AI_NavEntityReached( edict_t *ent ) {

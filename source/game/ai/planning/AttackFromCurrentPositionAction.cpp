@@ -5,7 +5,7 @@
 void BotAttackFromCurrentPositionActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
 	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
-	self->ai->botRef->SetNavTarget( &navTarget );
+	self->ai->botRef->SetNavTarget( &navSpot );
 }
 
 void BotAttackFromCurrentPositionActionRecord::Deactivate() {
@@ -18,7 +18,7 @@ AiBaseActionRecord::Status BotAttackFromCurrentPositionActionRecord::CheckStatus
 		return INVALID;
 	}
 
-	if( navTarget.Origin().SquareDistance2DTo( self->s.origin ) < 16 * 16 ) {
+	if( navSpot.Origin().SquareDistance2DTo( self->s.origin ) < 16 * 16 ) {
 		vec3_t spotOrigin;
 		SideStepDodgeProblemSolver::OriginParams originParams( self, 128.0f, AiAasRouteCache::Shared() );
 		const float *keepVisibleOrigin = self->ai->botRef->GetSelectedEnemies().LastSeenOrigin().Data();

@@ -5,7 +5,7 @@ void BotTakeCoverActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
 	// Since bot should be already close to the nav target, give (a defencive) aiming a higher priority
 	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
-	self->ai->botRef->SetNavTarget( &navTarget );
+	self->ai->botRef->SetNavTarget( &navSpot );
 }
 
 void BotTakeCoverActionRecord::Deactivate() {
@@ -21,7 +21,7 @@ AiBaseActionRecord::Status BotTakeCoverActionRecord::CheckStatus( const WorldSta
 		return INVALID;
 	}
 
-	float distanceToActionNavTarget = ( navTarget.Origin() - self->s.origin ).SquaredLength();
+	float distanceToActionNavTarget = ( navSpot.Origin() - self->s.origin ).SquaredLength();
 	if( distanceToActionNavTarget > GOAL_PICKUP_ACTION_RADIUS ) {
 		Debug( "Bot is too far from nav target\n" );
 		return INVALID;

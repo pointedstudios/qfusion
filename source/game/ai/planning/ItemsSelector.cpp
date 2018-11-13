@@ -26,8 +26,7 @@ void BotItemsSelector::UpdateInternalItemAndGoalWeights() {
 
 	const auto levelTime = level.time;
 	auto *navEntitiesRegistry = NavEntitiesRegistry::Instance();
-	for( auto it = navEntitiesRegistry->begin(), end = navEntitiesRegistry->end(); it != end; ++it ) {
-		const NavEntity *goalEnt = *it;
+	for( const NavEntity *goalEnt = navEntitiesRegistry->Head(); goalEnt; goalEnt = goalEnt->Next() ) {
 		// Picking clients as goal entities is currently disabled
 		if( goalEnt->IsClient() ) {
 			continue;
@@ -213,8 +212,7 @@ SelectedNavEntity BotItemsSelector::SuggestGoalNavEntity( const SelectedNavEntit
 	StaticVector<NavEntityAndWeight, MAX_NAVENTS> rawWeightCandidates;
 	const auto levelTime = level.time;
 	auto *navEntitiesRegistry = NavEntitiesRegistry::Instance();
-	for( auto it = navEntitiesRegistry->begin(), end = navEntitiesRegistry->end(); it != end; ++it ) {
-		const NavEntity *navEnt = *it;
+	for( const NavEntity *navEnt = navEntitiesRegistry->Head(); navEnt; navEnt = navEnt->Next() ) {
 		if( navEnt->IsDisabled() ) {
 			continue;
 		}
@@ -441,7 +439,7 @@ bool BotItemsSelector::IsShortRangeReachable( const NavEntity *navEnt, const int
 		return false;
 	}
 
-	if( !navEnt->IsSpawnedAtm() ) {
+	if( !navEnt->IsSpawnedNow() ) {
 		return false;
 	}
 

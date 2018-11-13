@@ -4,7 +4,7 @@
 void BotGenericRunAvoidingCombatActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
 	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
-	self->ai->botRef->SetNavTarget( &navTarget );
+	self->ai->botRef->SetNavTarget( &navSpot );
 }
 
 void BotGenericRunAvoidingCombatActionRecord::Deactivate() {
@@ -22,7 +22,7 @@ AiBaseActionRecord::Status BotGenericRunAvoidingCombatActionRecord::CheckStatus(
 
 	// It really gets invalidated on goal reevaluation
 
-	if( ( navTarget.Origin() - self->s.origin ).LengthFast() <= GOAL_PICKUP_ACTION_RADIUS ) {
+	if( ( navSpot.Origin() - self->s.origin ).LengthFast() <= GOAL_PICKUP_ACTION_RADIUS ) {
 		return COMPLETED;
 	}
 

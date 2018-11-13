@@ -6,7 +6,7 @@ void BotAdvanceToGoodPositionActionRecord::Activate() {
 	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
 	// Set a hint for weapon selection
 	self->ai->botRef->GetMiscTactics().willAdvance = true;
-	self->ai->botRef->SetNavTarget( &navTarget );
+	self->ai->botRef->SetNavTarget( &navSpot );
 }
 
 void BotAdvanceToGoodPositionActionRecord::Deactivate() {
@@ -19,7 +19,7 @@ AiBaseActionRecord::Status BotAdvanceToGoodPositionActionRecord::CheckStatus( co
 		return INVALID;
 	}
 
-	if( ( navTarget.Origin() - self->s.origin ).SquaredLength() < TACTICAL_SPOT_RADIUS * TACTICAL_SPOT_RADIUS ) {
+	if( ( navSpot.Origin() - self->s.origin ).SquaredLength() < TACTICAL_SPOT_RADIUS * TACTICAL_SPOT_RADIUS ) {
 		return COMPLETED;
 	}
 

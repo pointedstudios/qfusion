@@ -5,7 +5,7 @@ void BotGenericRunToItemActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
 	// Attack if view angles needed for movement fit aiming
 	self->ai->botRef->GetMiscTactics().PreferRunRatherThanAttack();
-	self->ai->botRef->SetNavTarget( &navTarget );
+	self->ai->botRef->SetNavTarget( navEntity );
 }
 
 void BotGenericRunToItemActionRecord::Deactivate() {
@@ -15,11 +15,11 @@ void BotGenericRunToItemActionRecord::Deactivate() {
 
 AiBaseActionRecord::Status BotGenericRunToItemActionRecord::CheckStatus( const WorldState &currWorldState ) const {
 	const auto &selectedNavEntity = self->ai->botRef->GetSelectedNavEntity();
-	if( !navTarget.IsBasedOnNavEntity( selectedNavEntity.GetNavEntity() ) ) {
+	if( !navEntity->IsBasedOnNavEntity( selectedNavEntity.GetNavEntity() ) ) {
 		Debug( "Nav target does no longer match selected nav entity\n" );
 		return INVALID;
 	}
-	if( navTarget.SpawnTime() == 0 ) {
+	if( navEntity->SpawnTime() == 0 ) {
 		Debug( "Illegal nav target spawn time (looks like it has been invalidated)\n" );
 		return INVALID;
 	}

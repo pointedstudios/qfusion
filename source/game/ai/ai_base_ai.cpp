@@ -17,7 +17,7 @@ Ai::Ai( edict_t *self_,
 	, entityPhysicsState( entityPhysicsState_ )
 	, travelFlagsRange( travelFlags, 2 )
 	, blockedTimeoutAt( level.time + 15000 )
-	, localNavTargetStorage( NavTarget::Dummy() ) {
+	, localNavSpotStorage( NavSpot::Dummy() ) {
 	travelFlags[0] = preferredAasTravelFlags_;
 	travelFlags[1] = allowedAasTravelFlags_;
 	angularViewSpeed[YAW] = yawSpeed;

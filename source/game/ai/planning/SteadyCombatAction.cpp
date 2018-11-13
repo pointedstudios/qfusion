@@ -4,7 +4,7 @@
 void BotSteadyCombatActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
 	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
-	self->ai->botRef->SetNavTarget( &navTarget );
+	self->ai->botRef->SetNavTarget( &navSpot );
 }
 
 void BotSteadyCombatActionRecord::Deactivate() {
@@ -22,7 +22,7 @@ AiBaseActionRecord::Status BotSteadyCombatActionRecord::CheckStatus( const World
 
 	// Bot often moves out of TACTICAL_SPOT_RADIUS during "camping a spot" movement
 	constexpr float invalidationRadius = 1.5f * TACTICAL_SPOT_RADIUS;
-	if( ( navTarget.Origin() - self->s.origin ).SquaredLength() > invalidationRadius * invalidationRadius ) {
+	if( ( navSpot.Origin() - self->s.origin ).SquaredLength() > invalidationRadius * invalidationRadius ) {
 		return INVALID;
 	}
 

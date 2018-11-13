@@ -5,7 +5,7 @@ void BotGotoAvailableGoodPositionActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
 	// Since the combat movement has a decent quality and this action is often triggered in combat, set flags this way.
 	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
-	self->ai->botRef->SetNavTarget( &navTarget );
+	self->ai->botRef->SetNavTarget( &navSpot );
 }
 
 void BotGotoAvailableGoodPositionActionRecord::Deactivate() {
@@ -18,7 +18,7 @@ AiBaseActionRecord::Status BotGotoAvailableGoodPositionActionRecord::CheckStatus
 		return INVALID;
 	}
 
-	if( ( navTarget.Origin() - self->s.origin ).SquaredLength() < TACTICAL_SPOT_RADIUS * TACTICAL_SPOT_RADIUS ) {
+	if( ( navSpot.Origin() - self->s.origin ).SquaredLength() < TACTICAL_SPOT_RADIUS * TACTICAL_SPOT_RADIUS ) {
 		return COMPLETED;
 	}
 

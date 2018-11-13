@@ -42,7 +42,7 @@ PlannerNode *BotStartGotoRunAwayJumppadAction::TryApply( const WorldState &world
 
 void BotDoRunAwayViaJumppadActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
-	self->ai->botRef->SetNavTarget( &navTarget );
+	self->ai->botRef->SetNavTarget( &navSpot );
 }
 
 void BotDoRunAwayViaJumppadActionRecord::Deactivate() {
@@ -73,7 +73,7 @@ AiBaseActionRecord::Status BotDoRunAwayViaJumppadActionRecord::CheckStatus( cons
 	}
 	// Use the same radius as for goal items pickups
 	// (running actions for picking up an item and running away might be shared)
-	if( ( navTarget.Origin() - self->s.origin ).SquaredLength() > GOAL_PICKUP_ACTION_RADIUS * GOAL_PICKUP_ACTION_RADIUS ) {
+	if( ( navSpot.Origin() - self->s.origin ).SquaredLength() > GOAL_PICKUP_ACTION_RADIUS * GOAL_PICKUP_ACTION_RADIUS ) {
 		Debug( "Bot is too far from the jumppad trigger\n" );
 		return INVALID;
 	}
