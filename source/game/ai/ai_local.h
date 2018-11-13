@@ -289,6 +289,7 @@ public:
 	}
 	const T *begin() const { return begin_; }
 	const T *end() const { return end_; }
+	const size_t size() const { return (size_t)( end_ - begin_ ); }
 };
 
 // This is a compact storage for 64-bit values.

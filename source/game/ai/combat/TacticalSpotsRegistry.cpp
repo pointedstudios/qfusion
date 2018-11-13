@@ -1,6 +1,7 @@
 #include "TacticalSpotsRegistry.h"
 #include "../ai_precomputed_file_handler.h"
 #include "../bot.h"
+#include "../../../qalgo/Links.h"
 
 typedef TacticalSpotsRegistry::SpotsQueryVector SpotsQueryVector;
 
@@ -1144,31 +1145,46 @@ void TacticalSpotsRegistry::SpotsGridBuilder::CopyTo( PrecomputedSpotsGrid *prec
 typedef TacticalSpotsRegistry::SpotsAndScoreVector SpotsAndScoreVector;
 
 SpotsAndScoreVector &TacticalSpotsRegistry::TemporariesAllocator::GetNextCleanSpotsAndScoreVector() {
+	// It's better to use generic link utilities even if maintaining
+	// a double-linked list adds some overhead that is however
+	// negligible both from memory and execution speed sides.
+	// We win a lot by caching these allocated results anyway compared to naive malloc calls.
 	if( freeHead ) {
-		auto &result = freeHead->data;
-		auto *nextFree = freeHead->next;
-		freeHead->next = usedHead;
-		usedHead = freeHead;
-		freeHead = nextFree;
-		result.clear();
-		return result;
+		auto *const unlinked = ::Unlink( freeHead, &freeHead );
+		::Link( unlinked, &usedHead );
+		if( !usedTail ) {
+			usedTail = unlinked;
+		}
+		auto &data = unlinked->data;
+		data.clear();
+		return data;
 	}
 
 	auto *newEntry = new( G_Malloc( sizeof( SpotsAndScoreCacheEntry ) ) )SpotsAndScoreCacheEntry;
-	newEntry->next = usedHead;
-	usedHead = newEntry;
-	return usedHead->data;
+	::Link( newEntry, &usedHead );
+	if( !usedTail ) {
+		usedTail = newEntry;
+	}
+	return newEntry->data;
 }
 
 void TacticalSpotsRegistry::TemporariesAllocator::Release() {
-	// Copy from used to free list... todo... figure out how to do it in a single step
-	for( auto *entry = usedHead; entry; entry = entry->next ) {
-		entry->next = freeHead;
-		freeHead = entry;
+	if( !usedTail ) {
+		assert( !usedHead );
+		return;
 	}
 
-	usedHead = nullptr;
-	// TODO: do a cleanup of spots query vector/excluded spots mask?
+	// Merge used list tail and free list head
+
+	assert( !usedTail->next );
+	usedTail->next = freeHead;
+	if( freeHead ) {
+		assert( !freeHead->prev );
+		freeHead->prev = usedTail;
+	}
+
+	freeHead = usedHead;
+	usedHead = usedTail = nullptr;
 }
 
 TacticalSpotsRegistry::TemporariesAllocator::~TemporariesAllocator() {
@@ -1177,7 +1193,7 @@ TacticalSpotsRegistry::TemporariesAllocator::~TemporariesAllocator() {
 	}
 
 	SpotsAndScoreCacheEntry *nextEntry;
-	for( auto *entry = usedHead; entry; entry = nextEntry ) {
+	for( auto *entry = freeHead; entry; entry = nextEntry ) {
 		nextEntry = entry->next;
 		entry->~SpotsAndScoreCacheEntry();
 		G_Free( entry );
