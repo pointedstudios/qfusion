@@ -147,9 +147,6 @@ DECLARE_ACTION( BotAdvanceToGoodPositionAction, 2 );
 DECLARE_COMBAT_ACTION_RECORD( BotRetreatToGoodPositionActionRecord );
 DECLARE_ACTION( BotRetreatToGoodPositionAction, 2 );
 
-DECLARE_COMBAT_ACTION_RECORD( BotSteadyCombatActionRecord );
-DECLARE_ACTION( BotSteadyCombatAction, 2 );
-
 DECLARE_COMBAT_ACTION_RECORD( BotGotoAvailableGoodPositionActionRecord );
 DECLARE_ACTION( BotGotoAvailableGoodPositionAction, 2 );
 

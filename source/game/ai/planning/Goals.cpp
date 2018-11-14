@@ -109,7 +109,6 @@ PlannerNode *BotKillEnemyGoal::GetWorldStateTransitions( const WorldState &world
 	TRY_APPLY_ACTION( attackAdvancingToTargetAction );
 	TRY_APPLY_ACTION( advanceToGoodPositionAction );
 	TRY_APPLY_ACTION( retreatToGoodPositionAction );
-	TRY_APPLY_ACTION( steadyCombatAction );
 	TRY_APPLY_ACTION( gotoAvailableGoodPositionAction );
 	TRY_APPLY_ACTION( attackFromCurrentPositionAction );
 
@@ -228,7 +227,6 @@ PlannerNode *BotAttackOutOfDespairGoal::GetWorldStateTransitions( const WorldSta
 
 	TRY_APPLY_ACTION( advanceToGoodPositionAction );
 	TRY_APPLY_ACTION( retreatToGoodPositionAction );
-	TRY_APPLY_ACTION( steadyCombatAction );
 	TRY_APPLY_ACTION( gotoAvailableGoodPositionAction );
 	TRY_APPLY_ACTION( attackFromCurrentPositionAction );
 

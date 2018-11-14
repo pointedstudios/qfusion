@@ -400,7 +400,6 @@ private:
 	BotKillEnemyAction killEnemyAction;
 	BotAdvanceToGoodPositionAction advanceToGoodPositionAction;
 	BotRetreatToGoodPositionAction retreatToGoodPositionAction;
-	BotSteadyCombatAction steadyCombatAction;
 	BotGotoAvailableGoodPositionAction gotoAvailableGoodPositionAction;
 	BotAttackFromCurrentPositionAction attackFromCurrentPositionAction;
 	BotAttackAdvancingToTargetAction attackAdvancingToTargetAction;

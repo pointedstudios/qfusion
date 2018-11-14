@@ -34,8 +34,6 @@ AiBaseActionRecord::Status BotAttackFromCurrentPositionActionRecord::CheckStatus
 }
 
 PlannerNode *BotAttackFromCurrentPositionAction::TryApply( const WorldState &worldState ) {
-	// Use almost the same criteria as for BotSteadyCombatAction
-	// with the exception that tactical spots must be absent for low offensiveness.
 	// Allow attacking from current position on high offensiveness even if a tactical spot exist
 	// (attacking from tactical spots has more restrictive conditions on kill/be killed damage ratio).
 
