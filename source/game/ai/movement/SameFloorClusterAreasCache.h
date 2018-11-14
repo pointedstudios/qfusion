@@ -53,6 +53,4 @@ public:
 								 float *resultPoint, int *areaNum = nullptr ) const;
 };
 
-bool IsAreaWalkableInFloorCluster( int startAreaNum, int targetAreaNum );
-
 #endif

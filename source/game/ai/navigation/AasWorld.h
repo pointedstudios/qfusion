@@ -487,7 +487,15 @@ public:
 		return stairsClusterData + stairsClusterDataOffsets[stairsClusterNum];
 	}
 
-	inline int *Face2DProjVertexNums() const { return face2DProjVertexNums; }
+	/**
+	 * Performs a 2D ray-casting in a floor cluster.
+	 * A floor cluster is not usually a convex N-gon.
+	 * A successful result means that there is a straight-walkable path between areas.
+	 * @param startAreaNum a start area
+	 * @param targetAreaNum a target area
+	 * @return true if the segment between areas is fully inside the cluster boundaries.
+	 */
+	bool IsAreaWalkableInFloorCluster( int startAreaNum, int targetAreaNum ) const;
 
 	inline const int *AreaMapLeafsList( int areaNum ) const {
 		assert( areaNum >= 0 && areaNum < numareas );

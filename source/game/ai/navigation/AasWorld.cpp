@@ -11,6 +11,9 @@
 #include <memory>
 #include <tuple>
 
+#include <cmath>
+#include <cstdlib>
+
 // Static member definition
 AiAasWorld *AiAasWorld::instance = nullptr;
 
@@ -1893,4 +1896,136 @@ void AiAasWorld::BuildSpecificAreaTypesLists() {
 
 	ReachPassThroughAreasListBuilder<AcceptInAirArea> acceptInAirAreaBuilder( this, AasElementsMask::AreasMask() );
 	this->walkOffLedgePassThroughAirAreas = acceptInAirAreaBuilder.Exec( TRAVEL_WALKOFFLEDGE );
+}
+
+template<typename T1, typename T2>
+static inline float PerpDot2D( const T1 &v1, const T2 &v2 ) {
+	return v1[0] * v2[1] - v1[1] * v2[0];
+}
+
+bool AiAasWorld::IsAreaWalkableInFloorCluster( int startAreaNum, int targetAreaNum ) const {
+	// Lets keep this old behaviour.
+	// Consider it walkable even if the area is not necessarily belongs to some floor cluster.
+	// In this case an area itself is a "micro-cluster".
+	if( startAreaNum == targetAreaNum ) {
+		return true;
+	}
+
+	// Make hints for a compiler
+	const auto *const __restrict floorClusterNums = this->areaFloorClusterNums;
+
+	int startFloorClusterNum = floorClusterNums[startAreaNum];
+	if( !startFloorClusterNum ) {
+		return false;
+	}
+
+	if( startFloorClusterNum != floorClusterNums[targetAreaNum] ) {
+		return false;
+	}
+
+	const auto *const __restrict aasAreas = this->areas;
+	const auto *const __restrict aasFaceIndex = this->faceindex;
+	const auto *const __restrict aasFaces = this->faces;
+	const auto *const __restrict aasPlanes = this->planes;
+	const auto *const __restrict aasVertices = this->vertexes;
+	const auto *const __restrict face2DProjVertexNums = this->face2DProjVertexNums;
+
+	const vec3_t testedSegEnd { aasAreas[targetAreaNum].center[0], aasAreas[targetAreaNum].center[1], 0.0f };
+	vec3_t testedSegStart { aasAreas[startAreaNum].center[0], aasAreas[startAreaNum].center[1], 0.0f };
+
+	Vec3 rayDir( testedSegEnd );
+	rayDir -= testedSegStart;
+	rayDir.NormalizeFast();
+
+	int currAreaNum = startAreaNum;
+	while( currAreaNum != targetAreaNum ) {
+		const auto &currArea = aasAreas[currAreaNum];
+		// For each area face
+		int faceIndexNum = currArea.firstface;
+		const int endFaceIndexNum = faceIndexNum + currArea.numfaces;
+		for(; faceIndexNum != endFaceIndexNum; ++faceIndexNum) {
+			int signedFaceNum = aasFaceIndex[faceIndexNum];
+			const auto &face = aasFaces[abs( signedFaceNum )];
+			const auto &plane = aasPlanes[face.planenum];
+			// Reject non-2D faces
+			if( std::fabs( plane.normal[2] ) > 0.1f ) {
+				continue;
+			}
+			// We assume we're inside the area.
+			// Do not try intersection tests for already "passed" by the ray faces
+			int areaBehindFace;
+			if( signedFaceNum < 0 ) {
+				if( rayDir.Dot( plane.normal ) < 0 ) {
+					continue;
+				}
+				areaBehindFace = face.frontarea;
+			} else {
+				if( rayDir.Dot( plane.normal ) > 0 ) {
+					continue;
+				}
+				areaBehindFace = face.backarea;
+			}
+
+			// If an area behind the face is in another or zero floor cluster
+			if( floorClusterNums[areaBehindFace] != startFloorClusterNum ) {
+				continue;
+			}
+
+			const auto *const projVertexNums = face2DProjVertexNums + 2 * std::abs( signedFaceNum );
+			const float *const edgePoint1 = aasVertices[projVertexNums[0]];
+			const float *const edgePoint2 = aasVertices[projVertexNums[1]];
+
+			// Here goes the inlined body of FindSegments2DIntersectionPoint().
+			// We want this 2D raycast method to be very fast and cheap to call since it is/is going to be widely used.
+			// Inlining provides control-flow optimization opportunities for a compiler.
+
+			// Copyright 2001 softSurfer, 2012 Dan Sunday
+			// This code may be freely used and modified for any purpose
+			// providing that this copyright notice is included with it.
+			// SoftSurfer makes no warranty for this code, and cannot be held
+			// liable for any real or imagined damage resulting from its use.
+			// Users of this code must verify correctness for their application.
+
+			// Compute first segment direction vector
+			const vec3_t u = { testedSegEnd[0] - testedSegStart[0], testedSegEnd[1] - testedSegStart[1], 0 };
+			// Compute second segment direction vector
+			const vec3_t v = { edgePoint2[0] - edgePoint1[0], edgePoint2[1] - edgePoint1[1], 0 };
+			// Compute a vector from second start point to the first one
+			const vec3_t w = { testedSegStart[0] - edgePoint1[0], testedSegStart[1] - edgePoint1[1], 0 };
+
+			// |u| * |v| * sin( u ^ v ), if parallel than zero, if some of inputs has zero-length than zero
+			const float dot = PerpDot2D( u, v );
+
+			// We treat parallel or degenerate cases as a failure
+			if( std::fabs( dot ) < 0.0001f ) {
+				continue;
+			}
+
+			const float invDot = 1.0f / dot;
+			const float t1 = PerpDot2D( v, w ) * invDot;
+			const float t2 = PerpDot2D( u, w ) * invDot;
+
+			// If the first segment direction vector is "behind" or "ahead" of testedSegStart-to-edgePoint1 vector
+			// if( t1 < 0 || t1 > 1 )
+			// If the second segment direction vector is "behind" or "ahead" of testedSegStart-to-edgePoint1 vector
+			// if( t2 < 0 || t2 > 1 )
+
+			// These conditions are optimized for a happy path
+			// Force computations first, then use a single branch
+			const bool outside = ( t1 < 0 ) | ( t1 > 1 ) | ( t2 < 0 ) | ( t2 > 1 );
+			if( outside ) {
+				continue;
+			}
+
+			VectorMA( testedSegStart, t1, u, testedSegStart );
+			currAreaNum = areaBehindFace;
+			goto nextArea;
+		}
+
+		// There are no feasible areas behind feasible faces of the current area
+		return false;
+nextArea:;
+	}
+
+	return true;
 }

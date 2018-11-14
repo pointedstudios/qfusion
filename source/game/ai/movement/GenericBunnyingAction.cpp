@@ -683,7 +683,7 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 	// Consider an attempt successful if we've landed in the same floor cluster and there is no gap to the best position
 	if( const int clusterNum = aasWorld->FloorClusterNum( mayStopAtAreaNum ) ) {
 		if( clusterNum == aasWorld->FloorClusterNum( groundedAreaNum ) ) {
-			if( IsAreaWalkableInFloorCluster( groundedAreaNum, mayStopAtAreaNum ) ) {
+			if( aasWorld->IsAreaWalkableInFloorCluster( groundedAreaNum, mayStopAtAreaNum ) ) {
 				context->StopTruncatingStackAt( (unsigned)mayStopAtStackFrame );
 				return;
 			}
@@ -830,7 +830,7 @@ bool GenericRunBunnyingAction::CheckForPrematureCompletionInFloorCluster( Contex
 	}
 
 	// Perform 2D raycast in a cluster to make sure we don't leave it/hit solid (a cluster is not a convex poly)
-	return IsAreaWalkableInFloorCluster( currGroundedAreaNum, landingAreaNum );
+	return aasWorld->IsAreaWalkableInFloorCluster( currGroundedAreaNum, landingAreaNum );
 }
 
 void GenericRunBunnyingAction::OnApplicationSequenceStarted( Context *context ) {

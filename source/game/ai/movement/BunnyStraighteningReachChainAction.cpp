@@ -200,7 +200,7 @@ AreaAndScore *BunnyStraighteningReachChainAction::SelectCandidateAreas( Context 
 		// Make sure the bot can see the ground
 		// On failure, restore minScore (it might have been set to the value of the rejected area score on this loop step)
 		if( floorClusterNum && floorClusterNum == aasAreaFloorClusterNums[areaNum] ) {
-			if( !IsAreaWalkableInFloorCluster( currAreaNum, areaNum ) ) {
+			if( !aasWorld->IsAreaWalkableInFloorCluster( currAreaNum, areaNum ) ) {
 				continue;
 			}
 		} else {

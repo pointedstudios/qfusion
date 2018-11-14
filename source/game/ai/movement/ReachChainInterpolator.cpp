@@ -93,7 +93,7 @@ bool ReachChainInterpolator::Exec( Context *context ) {
 			assert( !singleFarReach );
 			// Check for possible CM trace replacement by much cheaper 2D raycasting in floor cluster
 			if( currAreaFloorClusterNum && currAreaFloorClusterNum == aasAreaFloorClusterNums[reachStartArea] ) {
-				if( IsAreaWalkableInFloorCluster( currAreaNum, reachStartArea ) ) {
+				if( aasWorld->IsAreaWalkableInFloorCluster( currAreaNum, reachStartArea ) ) {
 					singleFarReach = &reach;
 				}
 			} else {
@@ -110,7 +110,7 @@ bool ReachChainInterpolator::Exec( Context *context ) {
 
 		// Check for possible CM trace replacement by much cheaper 2D raycasting in floor cluster
 		if( currAreaFloorClusterNum && currAreaFloorClusterNum == aasAreaFloorClusterNums[reachStartArea] ) {
-			if( !IsAreaWalkableInFloorCluster( currAreaNum, reachStartArea ) ) {
+			if( !aasWorld->IsAreaWalkableInFloorCluster( currAreaNum, reachStartArea ) ) {
 				break;
 			}
 		} else {

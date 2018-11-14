@@ -2,137 +2,6 @@
 #include "MovementLocal.h"
 #include "../combat/TacticalSpotsRegistry.h"
 
-template<typename T1, typename T2>
-static inline float PerpDot2D( const T1 &v1, const T2 &v2 ) {
-	return v1[0] * v2[1] - v1[1] * v2[0];
-}
-
-static bool FindSegments2DIntersectionPoint( const vec3_t start1,
-											 const vec3_t end1,
-											 const vec3_t start2,
-											 const vec3_t end2,
-											 vec3_t result ) {
-	// Copyright 2001 softSurfer, 2012 Dan Sunday
-	// This code may be freely used and modified for any purpose
-	// providing that this copyright notice is included with it.
-	// SoftSurfer makes no warranty for this code, and cannot be held
-	// liable for any real or imagined damage resulting from its use.
-	// Users of this code must verify correctness for their application.
-
-	// Compute first segment direction vector
-	const vec3_t u = { end1[0] - start1[0], end1[1] - start1[1], 0 };
-	// Compute second segment direction vector
-	const vec3_t v = { end2[0] - start2[0], end2[1] - start2[1], 0 };
-	// Compute a vector from second start point to the first one
-	const vec3_t w = { start1[0] - start2[0], start1[1] - start2[1], 0 };
-
-	// |u| * |v| * sin( u ^ v ), if parallel than zero, if some of inputs has zero-length than zero
-	const float d = PerpDot2D( u, v );
-
-	// We treat parallel or degenerate cases as a failure
-	if( fabsf( d ) < 0.0001f ) {
-		return false;
-	}
-
-	// Group computations together aside from branches
-	const float t1 = PerpDot2D( v, w ) / d;
-	const float t2 = PerpDot2D( u, w ) / d;
-
-	// If the first segment direction vector is "behind" or "ahead" of start1-to-start2 vector
-	if( t1 < 0 || t1 > 1 )
-		return false;
-
-	// If the second segment direction vector is "behind" or "ahead" of start1-to-start2 vector
-	if( t2 < 0 || t2 > 1 )
-		return false;
-
-	VectorMA( start1, t1, u, result );
-	return true;
-}
-
-bool IsAreaWalkableInFloorCluster( int startAreaNum, int targetAreaNum ) {
-	// Consider matching areas walkable (even if the area does not belong to some cluster).
-	if( startAreaNum == targetAreaNum ) {
-		return true;
-	}
-
-	const auto *aasWorld = AiAasWorld::Instance();
-	const auto *areaFloorClusterNums = aasWorld->AreaFloorClusterNums();
-	int startFloorClusterNum = areaFloorClusterNums[startAreaNum];
-	if( !startFloorClusterNum ) {
-		return false;
-	}
-
-	const auto *aasAreas = aasWorld->Areas();
-	Vec3 testedSegmentEnd( aasAreas[targetAreaNum].center[0], aasAreas[targetAreaNum].center[1], 0.0f );
-	Vec3 testedSegmentStart( aasAreas[startAreaNum].center[0], aasAreas[startAreaNum].center[1], 0.0f );
-
-	Vec3 rayDir( testedSegmentEnd );
-	rayDir -= testedSegmentStart;
-	rayDir.NormalizeFast();
-
-	const auto *aasFaceIndex = aasWorld->FaceIndex();
-	const auto *aasFaces = aasWorld->Faces();
-	const auto *aasPlanes = aasWorld->Planes();
-	const auto *aasVertices = aasWorld->Vertexes();
-	const auto *face2DProjVertexNums = aasWorld->Face2DProjVertexNums();
-
-	int currAreaNum = startAreaNum;
-	while( currAreaNum != targetAreaNum ) {
-		const auto &currArea = aasAreas[currAreaNum];
-		// For each area face
-		int faceIndexNum = currArea.firstface;
-		const int endFaceIndexNum = faceIndexNum + currArea.numfaces;
-		for(; faceIndexNum != endFaceIndexNum; ++faceIndexNum) {
-			int signedFaceNum = aasFaceIndex[faceIndexNum];
-			const auto &face = aasFaces[abs( signedFaceNum )];
-			const auto &plane = aasPlanes[face.planenum];
-			// Reject non-2D faces
-			if( fabsf( plane.normal[2] ) > 0.1f ) {
-				continue;
-			}
-			// We assume we're inside the area.
-			// Do not try intersection tests for already "passed" by the ray faces
-			int areaBehindFace;
-			if( signedFaceNum < 0 ) {
-				if( rayDir.Dot( plane.normal ) < 0 ) {
-					continue;
-				}
-				areaBehindFace = face.frontarea;
-			} else {
-				if( rayDir.Dot( plane.normal ) > 0 ) {
-					continue;
-				}
-				areaBehindFace = face.backarea;
-			}
-
-			// If an area behind the face is in another or zero floor cluster
-			if( areaFloorClusterNums[areaBehindFace] != startFloorClusterNum ) {
-				continue;
-			}
-
-			const auto *projVertexNums = face2DProjVertexNums + 2 * abs( signedFaceNum );
-			const float *edgePoint1 = aasVertices[projVertexNums[0]];
-			const float *edgePoint2 = aasVertices[projVertexNums[1]];
-			vec3_t intersectionPoint;
-			if( !FindSegments2DIntersectionPoint( testedSegmentStart.Data(), testedSegmentEnd.Data(),
-												  edgePoint1, edgePoint2, intersectionPoint ) ) {
-				continue;
-			}
-
-			testedSegmentStart.Set( intersectionPoint );
-			currAreaNum = areaBehindFace;
-			goto nextArea;
-		}
-
-		// There are no feasible areas behind feasible faces of the current area
-		return false;
-		nextArea:;
-	}
-
-	return true;
-}
-
 bool BotSameFloorClusterAreasCache::AreaPassesCollisionTest( Context *context, int areaNum ) const {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 
@@ -182,7 +51,7 @@ bool BotSameFloorClusterAreasCache::NeedsToComputed( Context *context ) const {
 	// Walkability tests in cluster are cheap but sometimes produce false negatives,
 	// so do not check for walkability in the first second to prevent choice jitter
 	if( level.time - computedAt > 1000 ) {
-		if( !IsAreaWalkableInFloorCluster( context->CurrGroundedAasAreaNum(), computedTargetAreaNum ) ) {
+		if( !aasWorld->IsAreaWalkableInFloorCluster( context->CurrGroundedAasAreaNum(), computedTargetAreaNum ) ) {
 			return true;
 		}
 	}
@@ -267,7 +136,7 @@ int BotSameFloorClusterAreasCache::FindClosestToTargetPoint( Context *context, i
 		int travelTime = (int)( -candidateAreasHeap.back().score );
 		candidateAreasHeap.pop_back();
 
-		if( !IsAreaWalkableInFloorCluster( currGroundedAreaNum, areaNum ) ) {
+		if( !aasWorld->IsAreaWalkableInFloorCluster( currGroundedAreaNum, areaNum ) ) {
 			continue;
 		}
 
