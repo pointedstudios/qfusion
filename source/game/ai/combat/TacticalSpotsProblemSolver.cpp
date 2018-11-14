@@ -1,5 +1,6 @@
 #include "TacticalSpotsProblemSolver.h"
 #include "SpotsProblemSolversLocal.h"
+#include "../ai_ground_trace_cache.h"
 
 SpotsAndScoreVector &TacticalSpotsProblemSolver::SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) {
 	const float minHeightAdvantageOverOrigin = problemParams.minHeightAdvantageOverOrigin;
@@ -192,13 +193,21 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckEnemiesInfluence( SpotsAnd
 	}
 
 	// Precompute some enemy parameters that are going to be used in an inner loop.
-	StaticVector<Vec3, MAX_INFLUENTIAL_ENEMIES> enemyOrigins;
-	StaticVector<Vec3, MAX_INFLUENTIAL_ENEMIES> enemyVelocity2DDirs;
-	StaticVector<float, MAX_INFLUENTIAL_ENEMIES> enemySpeed2DValues;
-	StaticVector<int, MAX_INFLUENTIAL_ENEMIES> enemyLeafNums;
-	StaticVector<Vec3, MAX_INFLUENTIAL_ENEMIES> enemyLookDirs;
 
+	struct CachedEnemyData {
+		vec3_t origin;
+		vec3_t lookDir;
+		vec3_t velocityDir2D;
+		float speed2D;
+		int leafNum;
+		int groundedAreaNum;
+	};
+
+	StaticVector<CachedEnemyData, MAX_INFLUENTIAL_ENEMIES> cachedEnemyData;
+
+	const auto *aasWorld = AiAasWorld::Instance();
 	const int64_t levelTime = level.time;
+
 	for( const TrackedEnemy *enemy = problemParams.enemiesListHead; enemy; enemy = enemy->NextInTrackedList() ) {
 		if( levelTime - enemy->LastSeenAt() > problemParams.lastSeenEnemyMillisThreshold ) {
 			continue;
@@ -212,39 +221,55 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckEnemiesInfluence( SpotsAnd
 			continue;
 		}
 
-		new( enemyOrigins.unsafe_grow_back() )Vec3( enemy->LastSeenOrigin() );
-		new( enemyLookDirs.unsafe_grow_back() )Vec3( enemy->LookDir() );
+		CachedEnemyData *const enemyData = cachedEnemyData.unsafe_grow_back();
 
-		new( enemyVelocity2DDirs.unsafe_grow_back() )Vec3( enemy->LastSeenVelocity() );
-		enemyVelocity2DDirs.back().Z() = 0;
-		enemySpeed2DValues.push_back( enemyVelocity2DDirs.back().SquaredLength() );
-		if( enemySpeed2DValues.back() > 0.001f ) {
-			float speed2D = enemySpeed2DValues.back() = std::sqrt( enemySpeed2DValues.back() );
-			enemyVelocity2DDirs.back() *= 1.0f / speed2D;
+		enemy->LastSeenOrigin().CopyTo( enemyData->origin );
+		enemy->LookDir().CopyTo( enemyData->lookDir );
+		enemy->LastSeenVelocity().CopyTo( enemyData->velocityDir2D );
+		enemyData->velocityDir2D[2] = 0;
+		enemyData->speed2D = VectorLengthSquared( enemyData->velocityDir2D );
+		if( enemyData->speed2D > 0.001f ) {
+			enemyData->speed2D = std::sqrt( enemyData->speed2D );
+			float scale = 1.0f / enemyData->speed2D;
+			VectorScale( enemyData->velocityDir2D, scale, enemyData->velocityDir2D );
 		}
 
 		// We can't reuse entity leaf nums since last seen origin is shifted from its actual origin.
 		// TODO: Cache that for every seen enemy state?
 		Vec3 mins( playerbox_stand_mins );
 		Vec3 maxs( playerbox_stand_maxs );
-		mins += enemyOrigins.back();
-		maxs += enemyOrigins.back();
+		mins += enemyData->origin;
+		maxs += enemyData->origin;
 
-		int leafNums[1] { 0 }, tmp;
-		trap_CM_BoxLeafnums( mins.Data(), maxs.Data(), leafNums, 1, &tmp );
-		enemyLeafNums.push_back( leafNums[0] );
+		int tmpTopNode;
+		enemyData->leafNum = 0;
+		trap_CM_BoxLeafnums( mins.Data(), maxs.Data(), &enemyData->leafNum, 1, &tmpTopNode );
+
+		if( enemy->ent->ai && enemy->ent->ai->botRef ) {
+			int areaNums[2] = { 0, 0 };
+			enemy->ent->ai->botRef->EntityPhysicsState()->PrepareRoutingStartAreas( areaNums );
+			// TODO: PrepareRoutingStartAreas() should always put grounded area first.
+			// The currently saved data is a valid input for further tests but could lead to false negatives.
+			enemyData->groundedAreaNum = areaNums[0];
+		} else {
+			vec3_t tmpOrigin;
+			const float *testedOrigin = enemyData->origin;
+			if( AiGroundTraceCache::Instance()->TryDropToFloor( enemy->ent, 64.0f, tmpOrigin ) ) {
+				testedOrigin = tmpOrigin;
+			}
+			enemyData->groundedAreaNum = aasWorld->FindAreaNum( testedOrigin );
+		}
 
 		// Check not more than "threshold" enemies.
 		// This is not correct since the enemies are not sorted starting from the most dangerous one
 		// but fits realistic situations well. The gameplay is a mess otherwise anyway.
-		if( enemyOrigins.size() == problemParams.maxInfluentialEnemies ) {
+		if( cachedEnemyData.size() == problemParams.maxInfluentialEnemies ) {
 			break;
 		}
 	}
 
 	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
 	const auto *const spots = tacticalSpotsRegistry->spots;
-	const auto *const aasWorld = AiAasWorld::Instance();
 
 	float spotEnemyVisScore[MAX_ENEMY_INFLUENCE_CHECKED_SPOTS];
 	std::fill_n( spotEnemyVisScore, problemParams.maxCheckedSpots, 0.0f );
@@ -262,9 +287,10 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckEnemiesInfluence( SpotsAnd
 		const auto *const areaLeafsList = aasWorld->AreaMapLeafsList( spot.aasAreaNum );
 		// Lets take only the first leaf (if it exists)
 		const int spotLeafNum = *areaLeafsList ? areaLeafsList[1] : 0;
-		for( unsigned j = 0; j < enemyOrigins.size(); ++j ) {
+		const int spotFloorClusterNum = aasWorld->AreaFloorClusterNums()[spot.aasAreaNum];
+		for( const CachedEnemyData &enemyData: cachedEnemyData ) {
 			Vec3 toSpotDir( spot.origin );
-			toSpotDir -= enemyOrigins[j];
+			toSpotDir -= enemyData.origin;
 			float squareDistanceToSpot = toSpotDir.SquaredLength();
 			// Skip far enemies
 			if( squareDistanceToSpot > 1000 * 1000 ) {
@@ -273,24 +299,32 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckEnemiesInfluence( SpotsAnd
 			// Skip not very close enemies that are seemingly running away from spot
 			if( squareDistanceToSpot > 384 * 384 ) {
 				toSpotDir *= 1.0f / std::sqrt( squareDistanceToSpot );
-				if( toSpotDir.Dot( enemyLookDirs[j] ) < 0 ) {
-					if( enemySpeed2DValues[j] >= DEFAULT_PLAYERSPEED ) {
-						if( toSpotDir.Dot( enemyVelocity2DDirs[j] ) < 0 ) {
+				if( toSpotDir.Dot( enemyData.lookDir ) < 0 ) {
+					if( enemyData.speed2D >= DEFAULT_PLAYERSPEED ) {
+						if( toSpotDir.Dot( enemyData.velocityDir2D ) < 0 ) {
 							continue;
 						}
 					}
 				}
 			}
-			// If the spot is not even in PVS for the enemy
-			if( !trap_CM_LeafsInPVS( spotLeafNum, enemyLeafNums[j] ) ) {
-				continue;
+
+			// If the spot and the enemy are in the same floor cluster
+			if( spotFloorClusterNum && spotFloorClusterNum == enemyData.groundedAreaNum ) {
+				if( !aasWorld->IsAreaWalkableInFloorCluster( enemyData.groundedAreaNum, spotFloorClusterNum ) ) {
+					continue;
+				}
+			} else {
+				// If the spot is not even in PVS for the enemy
+				if( !trap_CM_LeafsInPVS( spotLeafNum, enemyData.leafNum ) ) {
+					continue;
+				}
+
+				SolidWorldTrace( &trace, spot.origin, enemyData.origin );
+				if( trace.fraction != 1.0f ) {
+					continue;
+				}
 			}
-			// TODO: We can use a 2D raycast if the enemy and the spot are in the same AAS floor cluster
-			// to determine whether the spot and the enemy are guaranteed to be visible... Port this from /movement.
-			SolidWorldTrace( &trace, spot.origin, enemyOrigins[j].Data() );
-			if( trace.fraction != 1.0f ) {
-				continue;
-			}
+
 			// Just add a unit on influence for every enemy.
 			// We can't fully predict enemy future state
 			// (e.g. whether it can become very dangerous by picking something).
