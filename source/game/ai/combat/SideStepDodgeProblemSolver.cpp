@@ -1,4 +1,5 @@
 #include "SideStepDodgeProblemSolver.h"
+#include "SpotsProblemSolversLocal.h"
 
 bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
 	trace_t trace;
@@ -6,16 +7,10 @@ bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
 	Vec3 *droppedToFloorOrigin = nullptr;
 	int testedAreaNum = -1;
 	if( auto originEntity = originParams.originEntity ) {
-		int areaNums[2];
 		if( originEntity->groundentity ) {
 			tmpVec3.Set( originEntity->s.origin );
 			tmpVec3.Z() += originEntity->r.mins[2];
 			droppedToFloorOrigin = &tmpVec3;
-			// Check whether it's a bot even in this case to read a cached area num
-			if( originEntity->ai && originEntity->ai->botRef ) {
-				originEntity->ai->botRef->EntityPhysicsState()->PrepareRoutingStartAreas( areaNums );
-				testedAreaNum = areaNums[0];
-			}
 		} else if( originEntity->ai && originEntity->ai->botRef ) {
 			const auto &entityPhysicsState = originEntity->ai->botRef->EntityPhysicsState();
 			if( entityPhysicsState->HeightOverGround() < 32.0f ) {
@@ -23,8 +18,6 @@ bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
 				tmpVec3.Z() += playerbox_stand_mins[2];
 				tmpVec3.Z() -= entityPhysicsState->HeightOverGround();
 				droppedToFloorOrigin = &tmpVec3;
-				entityPhysicsState->PrepareRoutingStartAreas( areaNums );
-				testedAreaNum = areaNums[0];
 			}
 		} else {
 			auto *ent = const_cast<edict_t *>( originEntity );
@@ -48,6 +41,30 @@ bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
 
 	if( !droppedToFloorOrigin ) {
 		return false;
+	}
+
+	float velocityInfluence = 0.0f;
+	vec3_t velocityDir;
+	// Perform deferred retrieval of these additional parameters
+	if( const auto *originEntity = originParams.originEntity ) {
+		if( originEntity->ai && originEntity->ai->botRef ) {
+			const auto &entityPhysicsState = originEntity->ai->botRef->EntityPhysicsState();
+			int areaNums[2];
+			entityPhysicsState->PrepareRoutingStartAreas( areaNums );
+			testedAreaNum = areaNums[0];
+			if( !originEntity->groundentity ) {
+				float speed = entityPhysicsState->Speed();
+				if( speed > DEFAULT_PLAYERSPEED ) {
+					velocityInfluence = 0.75f;
+				} else if( speed > 1 ) {
+					velocityInfluence = 0.5f;
+				}
+				if( velocityInfluence > 0 ) {
+					VectorCopy( entityPhysicsState->Velocity(), velocityDir );
+					VectorScale( velocityDir, 1.0f / speed, velocityDir );
+				}
+			}
+		}
 	}
 
 	Vec3 testedOrigin( *droppedToFloorOrigin );
@@ -113,9 +130,11 @@ bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
 			dir *= 1.0f / distance;
 
 			// Give side spots a greater score, but make sure the score is always positive for each spot
-			float score = ( 1.0f - std::fabs( dir.Dot( keepVisible2DDir ) ) ) + 0.1f;
+			float score = ( 1.0f - fabsf( dir.Dot( keepVisible2DDir ) ) ) + 0.1f;
 			// Modulate score by distance (give nearby spots a priority too)
 			score *= 0.5f + 0.5f * ( 1.0f - ( distance / originParams.searchRadius ) );
+			// Modulate by velocity influence
+			score *= ( 1.0f - velocityInfluence ) + velocityInfluence * ( 1.0f + dir.Dot( velocityDir ) );
 			if( score <= bestScore ) {
 				continue;
 			}
@@ -185,10 +204,14 @@ bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
 
 			// Give side spots a greater score, but make sure the score is always positive for each spot
 			float score = ( 1.0f - std::fabs( spot2DDir.Dot( keepVisible2DDir ) ) ) + 0.1f;
-			if( score > bestScore ) {
-				bestScore = score;
-				spot2DDir.CopyTo( bestDir );
+			// Modulate by velocity influence
+			score *= ( 1.0f - velocityInfluence ) + velocityInfluence * ( 1.0f + spot2DDir.Dot( velocityDir ) );
+			if( score <= bestScore ) {
+				continue;
 			}
+
+			bestScore = score;
+			spot2DDir.CopyTo( bestDir );
 		}
 	}
 
