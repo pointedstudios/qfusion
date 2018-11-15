@@ -20,7 +20,7 @@ AiBaseActionRecord::Status BotAttackFromCurrentPositionActionRecord::CheckStatus
 
 	if( navSpot.Origin().SquareDistance2DTo( self->s.origin ) < 16 * 16 ) {
 		vec3_t spotOrigin;
-		SideStepDodgeProblemSolver::OriginParams originParams( self, 128.0f, AiAasRouteCache::Shared() );
+		SideStepDodgeProblemSolver::OriginParams originParams( self, 192.0f, AiAasRouteCache::Shared() );
 		const float *keepVisibleOrigin = self->ai->botRef->GetSelectedEnemies().LastSeenOrigin().Data();
 		SideStepDodgeProblemSolver::ProblemParams problemParams( keepVisibleOrigin );
 		SideStepDodgeProblemSolver solver( originParams, problemParams );
