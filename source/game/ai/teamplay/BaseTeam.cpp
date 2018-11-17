@@ -155,30 +155,8 @@ void AiBaseTeam::AcquireBotFrameAffinity( int entNum ) {
 		return;
 	}
 
-	if( GS_TeamBasedGametype() ) {
-		unsigned modulo = AffinityModulo(); // Precompute
-		static_assert( MAX_AFFINITY_OFFSET == 4, "Only two teams are supported" );
-		switch( modulo ) {
-			case 4:
-				// If the think cycle consist of 4 frames:
-				// the Alpha AI team thinks on frame 0, bots of team Alpha think on frame 1,
-				// the Beta AI team thinks on frame 2, bots of team Beta think on frame 3
-				SetBotFrameAffinity( entNum, modulo, 2 * ( (unsigned)teamNum - TEAM_ALPHA ) + 1 );
-				break;
-			case 3:
-				// If the think cycle consist of 3 frames:
-				// AI teams think on frame 0, bots of team Alpha think on frame 1, bots of team Beta think on frame 2
-				SetBotFrameAffinity( entNum, modulo, 1 + (unsigned)teamNum - TEAM_ALPHA );
-				break;
-			case 2:
-				// If the think cycle consist of 2 frames:
-				// the Alpha AI team and team Alpha bots think on frame 0,
-				// the Beta AI team and team Beta bots think on frame 1
-				SetBotFrameAffinity( entNum, modulo, (unsigned)teamNum - TEAM_ALPHA );
-				break;
-		}
-	} else {
-		// Select less used offset (thus, less loaded frames)
+	// Just distribute bot think frames evenly for non-team gametypes
+	if( !GS_TeamBasedGametype() ) {
 		unsigned chosenOffset = 0;
 		for( unsigned i = 1; i < MAX_AFFINITY_OFFSET; ++i ) {
 			if( affinityOffsetsInUse[chosenOffset] > affinityOffsetsInUse[i] ) {
@@ -187,6 +165,47 @@ void AiBaseTeam::AcquireBotFrameAffinity( int entNum ) {
 		}
 		affinityOffsetsInUse[chosenOffset]++;
 		SetBotFrameAffinity( entNum, AffinityModulo(), chosenOffset );
+		return;
+	}
+
+	const unsigned modulo = AffinityModulo();
+	assert( modulo >= 1 && modulo <= 4 );
+
+	// This is the value that gets actually used.
+	// Older versions used to set think frames of every team bot one frame after the team thinks.
+	// It was expected that the team logic is going to be quite computational expensive.
+	// Actually it is not more expensive than logic of a single bot.
+	// Lets distribute frames evenly (giving the team the same weight as for a bot).
+	if( modulo == 4 ) {
+		// 0 for ALPHA, 2 for BETA
+		const auto teamOffset = 2 * (unsigned)( teamNum - TEAM_ALPHA );
+		assert( teamOffset == 0 || teamOffset == 2 );
+		unsigned chosenOffset = teamOffset;
+		// If more bots think at teamOffset frames (counting the team as a "bot" too)
+		if( affinityOffsetsInUse[teamOffset] + 1 > affinityOffsetsInUse[teamOffset + 1] ) {
+			chosenOffset = teamOffset + 1;
+		}
+		affinityOffsetsInUse[chosenOffset]++;
+		SetBotFrameAffinity( entNum, modulo, chosenOffset );
+		return;
+	}
+
+	// These modulo values are not really used but let's keep this code for various reasons.
+	// Just do not complicate things by trying distribute think frames evenly.
+
+	// If the think cycle consist of 3 frames:
+	if( modulo == 3 ) {
+		// AI teams think on frame 0, bots of team Alpha think on frame 1, bots of team Beta think on frame 2
+		SetBotFrameAffinity( entNum, modulo, 1 + (unsigned)teamNum - TEAM_ALPHA );
+		return;
+	}
+
+	// If the think cycle consist of 2 frames:
+	if( modulo == 2 ) {
+		// the Alpha AI team and team Alpha bots think on frame 0,
+		// the Beta AI team and team Beta bots think on frame 1
+		SetBotFrameAffinity( entNum, modulo, (unsigned)teamNum - TEAM_ALPHA );
+		return;
 	}
 }
 
