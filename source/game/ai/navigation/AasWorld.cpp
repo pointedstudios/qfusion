@@ -3,6 +3,7 @@
 #include "../buffer_builder.h"
 #include "../static_vector.h"
 #include "../ai_local.h"
+#include "../ai_precomputed_file_handler.h"
 #include "../../../qalgo/md5.h"
 #include "../../../qalgo/base64.h"
 
@@ -479,6 +480,9 @@ void AiAasWorld::ComputeExtraAreaData() {
 	ComputeLogicalAreaClusters();
 	ComputeFace2DProjVertices();
 	ComputeAreasLeafsLists();
+
+	// Assumes clusters and area leaves to be already computed
+	LoadFloorClustersVisibility( trap_GetConfigString( CS_WORLDMODEL ) );
 
 	// These computations expect (are going to expect) that logical clusters are valid
 	for( int areaNum = 1; areaNum < numareas; ++areaNum ) {
@@ -1116,6 +1120,10 @@ AiAasWorld::~AiAasWorld() {
 	}
 	if( areaMapLeafsData ) {
 		G_LevelFree( areaMapLeafsData );
+	}
+
+	if( floorClustersVisTable ) {
+		G_LevelFree( floorClustersVisTable );
 	}
 
 	if( groundedAreas ) {
@@ -2028,4 +2036,146 @@ nextArea:;
 	}
 
 	return true;
+}
+
+static constexpr uint32_t FLOOR_CLUSTERS_VIS_VERSION = 1337;
+
+void AiAasWorld::LoadFloorClustersVisibility( const char *mapName ) {
+	if( !numFloorClusters ) {
+		return;
+	}
+
+	AiPrecomputedFileReader reader( "FloorClustersVisReader", FLOOR_CLUSTERS_VIS_VERSION );
+
+	char buffer[MAX_QPATH];
+	Q_strncpyz( buffer, mapName, sizeof( buffer ) );
+	char *filePath = buffer;
+	const char *oldPrefix = "maps/";
+	const char *newPrefix = "ai/";
+	const char *newExtension = ".floorvis";
+	// Skip "maps/" prefix
+	if( !Q_stricmp( oldPrefix, filePath ) ) {
+		auto oldPrefixLen = strlen( oldPrefix );
+		auto newPrefixLen = strlen( newPrefix );
+		assert( newPrefixLen <= oldPrefixLen );
+		filePath += oldPrefixLen - newPrefixLen;
+		memcpy( filePath, newPrefix, newPrefixLen );
+		filePath += newPrefixLen;
+	}
+	char *extension = strstr( filePath, ".bsp" );
+	if( !extension ) {
+		extension = filePath + strlen( filePath );
+	}
+	// Prevent buffer overflow. The name just is not going to be FS-correct in worst case.
+	if( extension + strlen( newExtension ) < buffer + sizeof( buffer ) ) {
+		memcpy( extension, newExtension, strlen( newExtension ) + 1 );
+	}
+
+	const auto expectedSize = (uint32_t)( ( numFloorClusters - 1 ) * ( numFloorClusters - 1 ) * sizeof( bool ) );
+	if( reader.BeginReading( filePath ) == AiPrecomputedFileReader::SUCCESS ) {
+		uint8_t *data;
+		uint32_t dataLength;
+		if( reader.ReadLengthAndData( &data, &dataLength )  ) {
+			if( dataLength == expectedSize ) {
+				this->floorClustersVisTable = (bool *)data;
+				return;
+			}
+			G_LevelFree( data );
+		}
+	}
+
+	G_Printf( "About to compute floor clusters mutual visibility...\n" );
+	const uint32_t actualSize = ComputeFloorClustersVisibility();
+	// Make sure we are not going to write junk bytes
+	assert( floorClustersVisTable && expectedSize == actualSize );
+
+	AiPrecomputedFileWriter writer( "FloorClustersVisWriter", FLOOR_CLUSTERS_VIS_VERSION );
+	if( !writer.BeginWriting( filePath ) ) {
+		return;
+	}
+
+	writer.WriteLengthAndData( (const uint8_t *)floorClustersVisTable, actualSize );
+}
+
+uint32_t AiAasWorld::ComputeFloorClustersVisibility() {
+	// Must not be called for low number of clusters
+	assert( numFloorClusters );
+
+	const int stride = numFloorClusters - 1;
+	// Do not allocate data for the dummy zero cluster
+	const auto dataSizeInBytes = (uint32_t)( stride * stride * sizeof( bool ) );
+	floorClustersVisTable = (bool *)G_LevelMalloc( dataSizeInBytes );
+	memset( floorClustersVisTable, 0, dataSizeInBytes );
+
+	// Start loops from 0 even if we skip the zero cluster for table addressing convenience
+	for( int i = 0; i < stride; ++i ) {
+		floorClustersVisTable[i * stride + i] = true;
+		for( int j = i + 1; j < stride; ++j ) {
+			// We should shift indices to get actual cluster numbers
+			// (we use index 0 for a 1-st valid cluster)
+			bool visible = ComputeVisibilityForClustersPair( i + 1, j + 1 );
+			floorClustersVisTable[i * stride + j] = visible;
+			floorClustersVisTable[j * stride + i] = visible;
+		}
+	}
+
+	return dataSizeInBytes;
+}
+
+bool AiAasWorld::ComputeVisibilityForClustersPair( int floorClusterNum1, int floorClusterNum2 ) {
+	assert( floorClusterNum1 != floorClusterNum2 );
+	const auto *const thisAreaNums = FloorClusterData( floorClusterNum1 ) + 1;
+	const auto *const thatAreaNums = FloorClusterData( floorClusterNum2 ) + 1;
+
+	trace_t trace;
+
+	// We have to compute visibility for every pair of areas (these sets do not intersect).
+	// Fortunately the number of floor clusters is fairly small
+	// and PVS cuts off lots of computations as well.
+	for( int i = 0; i < thisAreaNums[-1]; ++i ) {
+		const int areaNum1 = thisAreaNums[i];
+		const float *const areaCenter1 = areas[areaNum1].center;
+		for( int j = 0; j < thatAreaNums[-1]; ++j ) {
+			const int areaNum2 = thatAreaNums[j];
+			if( !AreAreasInPvs( areaNum1, areaNum2 ) ) {
+				continue;
+			}
+
+			StaticWorldTrace( &trace, areaCenter1, areas[areaNum2].center, CONTENTS_SOLID | CONTENTS_WATER );
+			if( trace.fraction == 1.0f ) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+bool AiAasWorld::AreAreasInPvs( int areaNum1, int areaNum2 ) const {
+	assert( areaNum1 >= 0 );
+	assert( areaNum2 >= 0 );
+
+	// Return false if some area is dummy
+	if( !( areaNum2 * areaNum1 ) ) {
+		return false;
+	}
+
+	// This not only cuts off computations but ensures "restrict" specifier correctness
+	if( areaNum1 == areaNum2 ) {
+		return true;
+	}
+
+	const auto *const __restrict data = areaMapLeafsData;
+	const auto *const __restrict offsets = areaMapLeafListOffsets;
+	const auto *const __restrict leafsList1 = data + offsets[areaNum1];
+	const auto *const __restrict leafsList2 = data + offsets[areaNum2];
+	for( int i = 0; i < leafsList1[-1]; ++i ) {
+		for( int j = 0; j < leafsList2[-1]; ++j ) {
+			if( trap_CM_LeafsInPVS( leafsList1[i], leafsList2[j] ) ) {
+				return true;
+			}
+		}
+	}
+
+	return false;
 }

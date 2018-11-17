@@ -273,6 +273,8 @@ class AiAasWorld
 	int *areaMapLeafListOffsets;    // An element #i contains an offset of leafs list data in the joint data
 	int *areaMapLeafsData;          // Contains area map (collision/vis) leafs lists, each one is prepended by the length
 
+	bool *floorClustersVisTable { nullptr };
+
 	uint16_t *groundedAreas { nullptr };
 	uint16_t *jumppadReachPassThroughAreas { nullptr };
 	uint16_t *ladderReachPassThroughAreas { nullptr };
@@ -303,6 +305,11 @@ class AiAasWorld
 	void ComputeAreasLeafsLists();
 	// Builds lists of specific area types
 	void BuildSpecificAreaTypesLists();
+
+	void LoadFloorClustersVisibility( const char *mapName );
+	// Returns the actual data size in bytes
+	uint32_t ComputeFloorClustersVisibility();
+	bool ComputeVisibilityForClustersPair( int floorClusterNum1, int floorClusterNum2 );
 
 	void TrySetAreaLedgeFlags( int areaNum );
 	void TrySetAreaWallFlags( int areaNum );
@@ -507,6 +514,31 @@ public:
 	const uint16_t *LadderReachPassThroughAreas() const { return ladderReachPassThroughAreas; }
 	const uint16_t *ElevatorReachPassThroughAreas() const { return elevatorReachPassThroughAreas; }
 	const uint16_t *WalkOffLedgePassThroughAirAreas() const { return walkOffLedgePassThroughAirAreas; }
+
+	/**
+	 * Retrieves a cached mutual floor cluster visibility result.
+	 * Clusters are considered visible if some area in a cluster is visible from some other area in another cluster.
+	 * @param clusterNum1 a number of first floor cluster
+	 * @param clusterNum2 a number of second floor cluster
+	 * @return true if supplied floor clusters are visible, false if the visibility test failed
+	 * @note there could be false negatives as the visibility determination algorithm is probabilistic.
+	 * That's what the "certainly" part stands for.
+	 */
+	bool AreFloorClustersCertainlyVisible( int clusterNum1, int clusterNum2 ) const {
+		assert( (unsigned)clusterNum1 < (unsigned)numFloorClusters );
+		assert( (unsigned)clusterNum2 < (unsigned)numFloorClusters );
+		// Skip the dummy zero leaf
+		return floorClustersVisTable[( clusterNum1 - 1 ) * ( numFloorClusters - 1 ) + clusterNum2 - 1];
+	}
+
+	/**
+	 * Checks whether areas are in PVS.
+	 * Areas are considered to be in PVS if some leaf that area occupies is visible from some other leaf of another area.
+	 * @param areaNum1 a number of the first area
+	 * @param areaNum2 a number of another area
+	 * @return true if areas are in PVS.This test is precise (no false positives/negatives are produced).
+	 */
+	bool AreAreasInPvs( int areaNum1, int areaNum2 ) const;
 };
 
 #endif
