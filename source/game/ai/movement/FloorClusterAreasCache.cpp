@@ -218,6 +218,7 @@ void FloorClusterAreasCache::BuildCandidateAreasHeap( MovementPredictionContext 
 	const auto *aasAreas = aasWorld->Areas();
 	const auto *routeCache = bot->RouteCache();
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
+	const int currAreaNum = context->CurrAasAreaNum();
 	const int toAreaNum = context->NavTargetAasAreaNum();
 
 	const float squareNearThreshold = areaSelectionNearThreshold * areaSelectionNearThreshold;
@@ -242,6 +243,15 @@ void FloorClusterAreasCache::BuildCandidateAreasHeap( MovementPredictionContext 
 		}
 
 		if( hazardToEvade && hazardToEvade->HasImpactOnPoint( areaPoint ) ) {
+			continue;
+		}
+
+		// Skip routing calls for areas that are not in PVS.
+		// Area-to-area PVS test is quite cheap.
+		// We eliminate necessity in having a large heap of candidates
+		// by rejecting a-priori not visible areas this early.
+		// That's why the heap vector size has been reduced.
+		if( !aasWorld->AreAreasInPvs( currAreaNum, areaNum ) ) {
 			continue;
 		}
 
@@ -334,6 +344,11 @@ int NextFloorClusterAreasCache::FindClosestToTargetPoint( Context *context, int 
 	}
 
 	if( !nextClusterNum ) {
+		return false;
+	}
+
+	// If we are currently in a floor cluster and its very likely that the next cluster is not visible
+	if( startClusterNum && !aasWorld->AreFloorClustersCertainlyVisible( startClusterNum, nextClusterNum ) ) {
 		return false;
 	}
 

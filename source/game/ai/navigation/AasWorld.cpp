@@ -2054,13 +2054,13 @@ void AiAasWorld::LoadFloorClustersVisibility( const char *mapName ) {
 	const char *newPrefix = "ai/";
 	const char *newExtension = ".floorvis";
 	// Skip "maps/" prefix
-	if( !Q_stricmp( oldPrefix, filePath ) ) {
-		auto oldPrefixLen = strlen( oldPrefix );
+	const auto oldPrefixLen = strlen( oldPrefix );
+	assert( oldPrefixLen < sizeof( buffer ) );
+	if( !memcmp( oldPrefix, filePath, oldPrefixLen ) ) {
 		auto newPrefixLen = strlen( newPrefix );
 		assert( newPrefixLen <= oldPrefixLen );
 		filePath += oldPrefixLen - newPrefixLen;
 		memcpy( filePath, newPrefix, newPrefixLen );
-		filePath += newPrefixLen;
 	}
 	char *extension = strstr( filePath, ".bsp" );
 	if( !extension ) {

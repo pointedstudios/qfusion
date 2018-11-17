@@ -9,7 +9,7 @@ class MovementPredictionContext;
 
 class FloorClusterAreasCache {
 protected:
-	using CandidateAreasHeap = StaticVector<AreaAndScore, 48>;
+	using CandidateAreasHeap = StaticVector<AreaAndScore, 24>;
 
 	/**
 	 * If a bot remains in the same area candidates computation might be skipped
