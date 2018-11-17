@@ -2,7 +2,7 @@
 #include "MovementLocal.h"
 
 BunnyToBestShortcutAreaAction::BunnyToBestShortcutAreaAction( BotMovementModule *module_ )
-	: BunnyTestingMultipleLookDirsAction( module_, NAME, COLOR_RGB( 255, 64, 0 ) ) {
+	: Super( module_, NAME, COLOR_RGB( 255, 64, 0 ) ) {
 	supportsObstacleAvoidance = false;
 	// The constructor cannot be defined in the header due to this bot member access
 	suggestedAction = &module->walkOrSlideInterpolatingReachChainAction;

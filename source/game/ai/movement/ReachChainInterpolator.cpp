@@ -1,6 +1,6 @@
 #include "MovementLocal.h"
 #include "ReachChainInterpolator.h"
-#include "SameFloorClusterAreasCache.h"
+#include "FloorClusterAreasCache.h"
 
 bool ReachChainInterpolator::TrySetDirToRegionExitArea( Context *context, const aas_area_t &area, float distanceThreshold ) {
 	const float *origin = context->movementState->entityPhysicsState.Origin();
@@ -114,7 +114,7 @@ bool ReachChainInterpolator::Exec( Context *context ) {
 				break;
 			}
 		} else {
-			if( !BunnyTestingMultipleLookDirsAction::TraceArcInSolidWorld( entityPhysicsState, origin, reach.start ) ) {
+			if( TraceArcInSolidWorld( entityPhysicsState, origin, reach.start ) ) {
 				break;
 			}
 

@@ -1,23 +1,28 @@
 #ifndef QFUSION_BUNNYTOBESTCLUSTERPOINTACTION_H
 #define QFUSION_BUNNYTOBESTCLUSTERPOINTACTION_H
 
-#include "GenericBunnyingAction.h"
+#include "BunnyTestingMultipleLookDirsAction.h"
 
-class BunnyToBestFloorClusterPointAction: public GenericRunBunnyingAction
-{
-	vec3_t spotOrigin;
-	bool hasSpotOrigin;
+class BunnyToBestFloorClusterPointAction final : public BunnyTestingMultipleLookDirsAction {
+	using Super = BunnyTestingMultipleLookDirsAction;
+
+	Vec3 localDirStorage { 0, 0, 0 };
+
+	bool hasTestedSameCluster { false };
+	bool hasTestedNextCluster { false };
+
+	static constexpr const char *NAME = "BunnyToBestFloorClusterPointAction";
+
+	void OnApplicationSequenceStarted( MovementPredictionContext *context ) override;
+
+	void OnApplicationSequenceFailed( MovementPredictionContext *context, unsigned ) override;
 public:
-	DECLARE_BUNNYING_MOVEMENT_ACTION_CONSTRUCTOR( BunnyToBestFloorClusterPointAction, COLOR_RGB( 255, 0, 255 ) ) {
-		supportsObstacleAvoidance = false;
-		hasSpotOrigin = false;
-	}
-
-	void PlanPredictionStep( MovementPredictionContext *context ) override;
+	explicit BunnyToBestFloorClusterPointAction( BotMovementModule *module_ );
 
 	void BeforePlanning() override {
-		GenericRunBunnyingAction::BeforePlanning();
-		hasSpotOrigin = false;
+		Super::BeforePlanning();
+		hasTestedSameCluster = false;
+		hasTestedNextCluster = false;
 	}
 };
 

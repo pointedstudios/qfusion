@@ -1,10 +1,10 @@
 #include "BunnyStraighteningReachChainAction.h"
 #include "MovementLocal.h"
-#include "SameFloorClusterAreasCache.h"
+#include "FloorClusterAreasCache.h"
 #include "../ai_manager.h"
 
 BunnyStraighteningReachChainAction::BunnyStraighteningReachChainAction( BotMovementModule *module_ )
-	: BunnyTestingMultipleLookDirsAction( module_, NAME, COLOR_RGB( 0, 192, 0 ) ) {
+	: Super( module_, NAME, COLOR_RGB( 0, 192, 0 ) ) {
 	supportsObstacleAvoidance = false;
 	// The constructor cannot be defined in the header due to this bot member access
 	suggestedAction = &module->bunnyToBestShortcutAreaAction;

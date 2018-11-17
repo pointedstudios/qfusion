@@ -6,7 +6,7 @@ class BaseMovementAction;
 #include "BotInput.h"
 #include "MovementState.h"
 #include "NavMeshQueryCache.h"
-#include "SameFloorClusterAreasCache.h"
+#include "FloorClusterAreasCache.h"
 #include "EnvironmentTraceCache.h"
 
 struct MovementActionRecord {
@@ -96,7 +96,8 @@ public:
 		static inline HitWhileRunningTestResult Failure() { return HitWhileRunningTestResult(); }
 	};
 
-	BotSameFloorClusterAreasCache sameFloorClusterAreasCache;
+	SameFloorClusterAreasCache sameFloorClusterAreasCache;
+	NextFloorClusterAreasCache nextFloorClusterAreasCache;
 	BotNavMeshQueryCache navMeshQueryCache;
 private:
 	struct PredictedMovementAction {

@@ -1,98 +1,46 @@
 #include "BunnyTestingMultipleLookDirsAction.h"
 #include "MovementLocal.h"
 
-bool BunnyTestingMultipleLookDirsAction::TraceArcInSolidWorld( const AiEntityPhysicsState &startPhysicsState,
-															   const vec3_t from, const vec3_t to ) {
-	trace_t trace;
-	auto brushMask = MASK_WATER | MASK_SOLID;
-
-	float velocityZ = startPhysicsState.Velocity()[2];
-	if( startPhysicsState.GroundEntity() ) {
-		// We're going to jump...
-		velocityZ = DEFAULT_JUMPSPEED;
-	} else if( velocityZ < 0.0f ) {
-		StaticWorldTrace( &trace, from, to, brushMask );
-		return trace.fraction == 1.0f;
-	}
-
-	Vec3 midPoint( to );
-	midPoint += from;
-	midPoint *= 0.5f;
-
-	// Lets figure out deltaZ making an assumption that all forward momentum is converted to the direction to the point one
-
-	const float squareDistanceToMidPoint = SQUARE( from[0] - midPoint.X() ) + SQUARE( from[1] - midPoint.Y() );
-	if( squareDistanceToMidPoint < SQUARE( 32 ) ) {
-		StaticWorldTrace( &trace, from, to, brushMask );
-		return trace.fraction == 1.0f;
-	}
-
-	const float timeToMidPoint = sqrtf( squareDistanceToMidPoint ) / startPhysicsState.Speed2D();
-	const float deltaZ = velocityZ * timeToMidPoint - 0.5f * level.gravity * ( timeToMidPoint * timeToMidPoint );
-
-	// Does not worth making an arc
-	// Note that we ignore negative deltaZ since the real trajectory differs anyway
-	if( deltaZ < 2.0f ) {
-		StaticWorldTrace( &trace, from, to, brushMask );
-		return trace.fraction == 1.0f;
-	}
-
-	midPoint.Z() += deltaZ;
-
-	StaticWorldTrace( &trace, from, midPoint.Data(), brushMask );
-	if( trace.fraction != 1.0f ) {
-		return false;
-	}
-
-	StaticWorldTrace( &trace, midPoint.Data(), to, brushMask );
-	return trace.fraction == 1.0f;
-}
-
 void BunnyTestingMultipleLookDirsAction::BeforePlanning() {
 	GenericRunBunnyingAction::BeforePlanning();
-	currSuggestedLookDirNum = 0;
-	suggestedLookDirs.clear();
-	dirsBaseAreas.clear();
 
 	// Ensure the suggested action has been set in subtype constructor
 	Assert( suggestedAction );
+	suggestedDir = nullptr;
 }
 
-void BunnyTestingMultipleLookDirsAction::OnApplicationSequenceStarted( Context *ctx ) {
-	GenericRunBunnyingAction::OnApplicationSequenceStarted( ctx );
-	// If there is no dirs tested yet
-	if( currSuggestedLookDirNum == 0 ) {
-		suggestedLookDirs.clear();
-		dirsBaseAreas.clear();
-		if( ctx->NavTargetAasAreaNum() ) {
-			SaveSuggestedLookDirs( ctx );
-		}
+void BunnyTestingSavedLookDirsAction::OnApplicationSequenceStarted( MovementPredictionContext *context ) {
+	BunnyTestingMultipleLookDirsAction::OnApplicationSequenceStarted( context );
+	if( !currSuggestedLookDirNum ) {
+		SaveSuggestedLookDirs( context );
 	}
+	if( currSuggestedLookDirNum < suggestedLookDirs.size() ) {
+		suggestedDir = suggestedLookDirs[currSuggestedLookDirNum].Data();
+		checkStopAtAreaNums.push_back( dirsBaseAreas[currSuggestedLookDirNum] );
+	}
+}
+
+void BunnyTestingSavedLookDirsAction::OnApplicationSequenceFailed( MovementPredictionContext *context, unsigned ) {
+	// If another suggested look dir does not exist
+	if( currSuggestedLookDirNum + 1 >= suggestedLookDirs.size() ) {
+		return;
+	}
+
+	currSuggestedLookDirNum++;
+	// Allow the action application after the context rollback to savepoint
+	disabledForApplicationFrameIndex = std::numeric_limits<unsigned>::max();
+	// Ensure this action will be used after rollback
+	context->SaveSuggestedActionForNextFrame( this );
 }
 
 void BunnyTestingMultipleLookDirsAction::OnApplicationSequenceStopped( Context *context,
 																	   SequenceStopReason stopReason,
 																	   unsigned stoppedAtFrameIndex ) {
 	GenericRunBunnyingAction::OnApplicationSequenceStopped( context, stopReason, stoppedAtFrameIndex );
-	// If application sequence succeeded
-	if( stopReason != FAILED ) {
-		if( stopReason != DISABLED ) {
-			currSuggestedLookDirNum = 0;
-		}
-		return;
-	}
 
-	// If another suggested look dir exists
-	if( currSuggestedLookDirNum + 1 < suggestedLookDirs.size() ) {
-		currSuggestedLookDirNum++;
-		// Allow the action application after the context rollback to savepoint
-		this->disabledForApplicationFrameIndex = std::numeric_limits<unsigned>::max();
-		// Ensure this action will be used after rollback
-		context->SaveSuggestedActionForNextFrame( this );
-		return;
+	if( stopReason == FAILED ) {
+		OnApplicationSequenceFailed( context, stoppedAtFrameIndex );
 	}
-	// Otherwise use the first dir in a new sequence started on some other frame
-	currSuggestedLookDirNum = 0;
 }
 
 inline float SuggestObstacleAvoidanceCorrectionFraction( const Context *context ) {
@@ -109,18 +57,18 @@ void BunnyTestingMultipleLookDirsAction::PlanPredictionStep( Context *context ) 
 		return;
 	}
 
-	// Do this test after GenericCheckIsActionEnabled(), otherwise disabledForApplicationFrameIndex does not get tested
-	if( currSuggestedLookDirNum >= suggestedLookDirs.size() ) {
+	if( !suggestedDir ) {
 		Debug( "There is no suggested look dirs yet/left\n" );
 		context->SetPendingRollback();
 		return;
 	}
 
+	// Do this test after GenericCheckIsActionEnabled(), otherwise disabledForApplicationFrameIndex does not get tested
 	if( !CheckCommonBunnyingPreconditions( context ) ) {
 		return;
 	}
 
-	context->record->botInput.SetIntendedLookDir( suggestedLookDirs[currSuggestedLookDirNum], true );
+	context->record->botInput.SetIntendedLookDir( suggestedDir, true );
 
 	if( isTryingObstacleAvoidance ) {
 		context->TryAvoidJumpableObstacles( SuggestObstacleAvoidanceCorrectionFraction( context ) );
@@ -132,10 +80,10 @@ void BunnyTestingMultipleLookDirsAction::PlanPredictionStep( Context *context ) 
 	}
 }
 
-inline AreaAndScore *BunnyTestingMultipleLookDirsAction::TakeBestCandidateAreas( AreaAndScore *inputBegin,
-																				 AreaAndScore *inputEnd,
-																				 unsigned maxAreas ) {
-	Assert( inputEnd >= inputBegin );
+AreaAndScore *BunnyTestingSavedLookDirsAction::TakeBestCandidateAreas( AreaAndScore *inputBegin,
+																	   AreaAndScore *inputEnd,
+																	   unsigned maxAreas ) {
+	assert( inputEnd >= inputBegin );
 	const uintptr_t numAreas = inputEnd - inputBegin;
 	const uintptr_t numResultAreas = numAreas < maxAreas ? numAreas : maxAreas;
 
@@ -154,15 +102,15 @@ inline AreaAndScore *BunnyTestingMultipleLookDirsAction::TakeBestCandidateAreas(
 	return inputBegin + numResultAreas;
 }
 
-void BunnyTestingMultipleLookDirsAction::SaveCandidateAreaDirs( Context *context,
-																AreaAndScore *candidateAreasBegin,
-																AreaAndScore *candidateAreasEnd ) {
+void BunnyTestingSavedLookDirsAction::SaveCandidateAreaDirs( MovementPredictionContext *context,
+															 AreaAndScore *candidateAreasBegin,
+															 AreaAndScore *candidateAreasEnd ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	const int navTargetAreaNum = context->NavTargetAasAreaNum();
 	const auto *aasAreas = AiAasWorld::Instance()->Areas();
 
 	AreaAndScore *takenAreasBegin = candidateAreasBegin;
-	Assert( maxSuggestedLookDirs <= suggestedLookDirs.capacity() );
+	assert( maxSuggestedLookDirs <= suggestedLookDirs.capacity() );
 	unsigned maxAreas = maxSuggestedLookDirs - suggestedLookDirs.size();
 	AreaAndScore *takenAreasEnd = TakeBestCandidateAreas( candidateAreasBegin, candidateAreasEnd, maxAreas );
 

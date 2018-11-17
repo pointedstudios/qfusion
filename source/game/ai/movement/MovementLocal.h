@@ -426,4 +426,12 @@ extern TriggerAreaNumsCache triggerAreaNumsCache;
 
 int TravelTimeWalkingOrFallingShort( const AiAasRouteCache *routeCache, int fromAreaNum, int toAreaNum );
 
+/**
+ * Serves for candidate spots selection.
+ * Tracing a straight line between two points fails in stairs-like environment way too often.
+ * This routine uses extremely coarse arc approximation which still should be sufficient
+ * to avoid the mentioned failure in some environment kinds.
+ */
+bool TraceArcInSolidWorld( const AiEntityPhysicsState &startPhysicsState, const vec3_t from, const vec3_t to );
+
 #endif

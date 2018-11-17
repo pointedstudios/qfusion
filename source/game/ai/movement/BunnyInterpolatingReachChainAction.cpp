@@ -67,7 +67,7 @@ void BunnyInterpolatingReachChainAction::PlanPredictionStep( Context *context ) 
 }
 
 BunnyInterpolatingChainAtStartAction::BunnyInterpolatingChainAtStartAction( BotMovementModule *module_ )
-	: BunnyTestingMultipleLookDirsAction( module_, NAME, COLOR_RGB( 72, 108, 0 ) ) {
+	: BunnyTestingSavedLookDirsAction( module_, NAME, COLOR_RGB( 72, 108, 0 ) ) {
 	supportsObstacleAvoidance = false;
 	// The constructor cannot be defined in the header due to this bot member access
 	suggestedAction = &module->bunnyInVelocityDirectionAction;
