@@ -185,10 +185,16 @@ BaseMovementAction *MovementPredictionContext::GetActionAndRecordForCurrTime( Mo
 	auto *action = GetCachedActionAndRecordForCurrTime( record_ );
 	if( !action ) {
 		BuildPlan();
+#if 0
+		// Enabling this should be accompanied by setting sv_pps 62 to prevent running out of entities
+		ShowBuiltPlanPath();
+#endif
 		action = GetCachedActionAndRecordForCurrTime( record_ );
 	}
 
-	//AITools_DrawColorLine(self->s.origin, (Vec3(0, 0, 48) + self->s.origin).Data(), action->DebugColor(), 0);
+#if 0
+	AITools_DrawColorLine( bot->Origin(), ( Vec3( 0, 0, 48 ) + bot->Origin() ).Data(), action->DebugColor(), 0 );
+#endif
 	return action;
 }
 
