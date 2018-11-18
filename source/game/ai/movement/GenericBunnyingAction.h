@@ -83,6 +83,10 @@ protected:
 													int currGroundedAreaNum,
 													int floorClusterNum );
 
+	bool CheckForActualCompletionOnGround( MovementPredictionContext *context );
+
+	inline bool WasOnGroundThisFrame( const MovementPredictionContext *context ) const;
+
 	inline void MarkForTruncation( MovementPredictionContext *context );
 public:
 	GenericRunBunnyingAction( BotMovementModule *module_, const char *name_, int debugColor_ = 0 )
