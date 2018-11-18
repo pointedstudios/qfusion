@@ -7,7 +7,7 @@ BunnyStraighteningReachChainAction::BunnyStraighteningReachChainAction( BotMovem
 	: BunnyTestingSavedLookDirsAction( module_, NAME, COLOR_RGB( 0, 192, 0 ) ) {
 	supportsObstacleAvoidance = false;
 	// The constructor cannot be defined in the header due to this bot member access
-	suggestedAction = &module->walkOrSlideInterpolatingReachChainAction;
+	suggestedAction = &module->bunnyToBestNavMeshPointAction;
 }
 
 void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context ) {

@@ -15,6 +15,7 @@
 #include "BunnyInterpolatingReachChainAction.h"
 #include "BunnyStraighteningReachChainAction.h"
 #include "BunnyToBestClusterPointAction.h"
+#include "BunnyToBestNavMeshPointAction.h"
 #include "CampASpotAction.h"
 #include "CombatDodgeToTargetAction.h"
 #include "FallbackMovementAction.h"
@@ -106,6 +107,7 @@ class BotMovementModule {
 	friend class BunnyToBestFloorClusterPointAction;
 	friend class BunnyInterpolatingChainAtStartAction;
 	friend class BunnyInterpolatingReachChainAction;
+	friend class BunnyToBestNavMeshPointAction;
 	friend class WalkOrSlideInterpolatingReachChainAction;
 	friend class CombatDodgeSemiRandomlyToTargetAction;
 	friend class ScheduleWeaponJumpAction;
@@ -151,6 +153,7 @@ class BotMovementModule {
 	BunnyToBestFloorClusterPointAction bunnyToBestFloorClusterPointAction;
 	BunnyInterpolatingChainAtStartAction bunnyInterpolatingChainAtStartAction;
 	BunnyInterpolatingReachChainAction bunnyInterpolatingReachChainAction;
+	BunnyToBestNavMeshPointAction bunnyToBestNavMeshPointAction;
 	WalkOrSlideInterpolatingReachChainAction walkOrSlideInterpolatingReachChainAction;
 	CombatDodgeSemiRandomlyToTargetAction combatDodgeSemiRandomlyToTargetAction;
 	ScheduleWeaponJumpAction scheduleWeaponJumpAction;
