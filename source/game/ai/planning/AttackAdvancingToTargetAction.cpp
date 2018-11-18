@@ -27,6 +27,13 @@ AiBaseActionRecord::Status BotAttackAdvancingToTargetActionRecord::CheckStatus( 
 		return INVALID;
 	}
 
+	const auto *const navEntity = selectedNavEntity.GetNavEntity();
+	constexpr float distanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	if( navEntity->Origin().SquareDistance2DTo( currWorldState.NavTargetOriginVar().Value() ) > distanceError ) {
+		Debug( "The nav target var value does not match selected nav entity\n" );
+		return INVALID;
+	}
+
 	const auto &selectedEnemies = self->ai->botRef->GetSelectedEnemies();
 	if( !selectedEnemies.AreValid() || selectedEnemies.InstanceId() != selectedEnemiesInstanceId ) {
 		Debug( "The currently selected enemies are not valid or have been updated\n" );
@@ -65,6 +72,21 @@ PlannerNode *BotAttackAdvancingToTargetAction::TryApply( const WorldState &world
 
 	if( worldState.NavTargetOriginVar().Ignore() ) {
 		Debug( "Nav target is ignored in the given world state\n" );
+		return nullptr;
+	}
+
+	// Check whether the nav target is based on the selected nav entity
+	// TODO: It could look much better in the planned flexible world state interface
+
+	const auto &selectedNavEntity = self->ai->botRef->GetSelectedNavEntity();
+	if( !selectedNavEntity.IsValid() || selectedNavEntity.IsEmpty() ) {
+		Debug( "The currently selected nav entity is invalid or is empty\n" );
+		return nullptr;
+	}
+
+	const auto *navEntity = selectedNavEntity.GetNavEntity();
+	if( navEntity->Origin().SquareDistance2DTo( worldState.NavTargetOriginVar().Value() ) > distanceError ) {
+		Debug( "The nav target var value does not match selected nav entity\n" );
 		return nullptr;
 	}
 
