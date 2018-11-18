@@ -4,18 +4,15 @@
 #include "../ai_manager.h"
 
 BunnyStraighteningReachChainAction::BunnyStraighteningReachChainAction( BotMovementModule *module_ )
-	: Super( module_, NAME, COLOR_RGB( 0, 192, 0 ) ) {
+	: BunnyTestingSavedLookDirsAction( module_, NAME, COLOR_RGB( 0, 192, 0 ) ) {
 	supportsObstacleAvoidance = false;
 	// The constructor cannot be defined in the header due to this bot member access
-	suggestedAction = &module->bunnyToBestShortcutAreaAction;
+	suggestedAction = &module->walkOrSlideInterpolatingReachChainAction;
 }
 
 void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context ) {
-	Assert( suggestedLookDirs.empty() );
-	Assert( dirsBaseAreas.empty() );
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	const int navTargetAasAreaNum = context->NavTargetAasAreaNum();
-	Assert( navTargetAasAreaNum );
 
 	// Do not modify look vec in this case (we assume its set to nav target)
 	if( context->IsInNavTargetArea() ) {
@@ -33,20 +30,17 @@ void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context
 		return;
 	}
 
-	// Make sure the action is dependent of this action
-	Assert( suggestedAction == &module->bunnyToBestShortcutAreaAction );
-	// * Quotas are allowed to request only once per frame,
+	// Quota are allowed to be requested only once per frame,
 	// and subsequent calls for the same client fail (return with false).
-	// Set suggested look dirs for both actions, otherwise the second one (almost) never gets a quota.
-	// * Never try to acquire a quota here if a bot is really blocked.
+	// Never try to acquire a quota here if a bot is really blocked.
 	// These predicted actions are very likely to fail again,
 	// and fallbacks do not get their quotas leading to blocking to bot suicide.
 	if( bot->MillisInBlockedState() < 100 && AiManager::Instance()->TryGetExpensiveComputationQuota( bot ) ) {
-		this->maxSuggestedLookDirs = 11;
-		module->bunnyToBestShortcutAreaAction.maxSuggestedLookDirs = 5;
+		this->maxSuggestedLookDirs = ( 2 * MAX_SUGGESTED_LOOK_DIRS ) / 3;
 	} else {
-		this->maxSuggestedLookDirs = 2;
-		module->bunnyToBestShortcutAreaAction.maxSuggestedLookDirs = 2;
+		// The value has been increased since we have removed some useless actions
+		// that mainly used just consume CPU cycles without any yield
+		this->maxSuggestedLookDirs = 3;
 	}
 
 	const AiAasWorld *aasWorld = AiAasWorld::Instance();

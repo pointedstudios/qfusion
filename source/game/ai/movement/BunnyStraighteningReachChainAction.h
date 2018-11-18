@@ -4,10 +4,6 @@
 #include "BunnyTestingMultipleLookDirsAction.h"
 
 class BunnyStraighteningReachChainAction final : public BunnyTestingSavedLookDirsAction {
-	using Super = BunnyTestingSavedLookDirsAction;
-
-	friend class BunnyToBestShortcutAreaAction;
-
 	static constexpr const char *NAME = "BunnyStraighteningReachChainAction";
 
 	// Returns candidates end iterator
@@ -20,9 +16,9 @@ public:
 	explicit BunnyStraighteningReachChainAction( BotMovementModule *module_ );
 
 	void BeforePlanning() override {
-		Super::BeforePlanning();
+		BunnyTestingSavedLookDirsAction::BeforePlanning();
 		// Reset to the action default value every frame
-		maxSuggestedLookDirs = 2;
+		maxSuggestedLookDirs = 3;
 	}
 };
 

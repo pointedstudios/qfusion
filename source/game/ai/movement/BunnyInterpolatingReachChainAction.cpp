@@ -70,7 +70,7 @@ BunnyInterpolatingChainAtStartAction::BunnyInterpolatingChainAtStartAction( BotM
 	: BunnyTestingSavedLookDirsAction( module_, NAME, COLOR_RGB( 72, 108, 0 ) ) {
 	supportsObstacleAvoidance = false;
 	// The constructor cannot be defined in the header due to this bot member access
-	suggestedAction = &module->bunnyInVelocityDirectionAction;
+	suggestedAction = &module->bunnyInterpolatingReachChainAction;
 }
 
 void BunnyInterpolatingChainAtStartAction::SaveSuggestedLookDirs( Context *context ) {

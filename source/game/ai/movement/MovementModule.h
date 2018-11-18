@@ -14,9 +14,7 @@
 #include "BunnyToStairsOrRampExitAction.h"
 #include "BunnyInterpolatingReachChainAction.h"
 #include "BunnyStraighteningReachChainAction.h"
-#include "BunnyToBestShortcutAreaAction.h"
 #include "BunnyToBestClusterPointAction.h"
-#include "BunnyInVelocityDirectionAction.h"
 #include "CampASpotAction.h"
 #include "CombatDodgeToTargetAction.h"
 #include "FallbackMovementAction.h"
@@ -105,10 +103,8 @@ class BotMovementModule {
 	friend class GenericRunBunnyingAction;
 	friend class BunnyToStairsOrRampExitAction;
 	friend class BunnyStraighteningReachChainAction;
-	friend class BunnyToBestShortcutAreaAction;
 	friend class BunnyToBestFloorClusterPointAction;
 	friend class BunnyInterpolatingChainAtStartAction;
-	friend class BunnyInVelocityDirectionAction;
 	friend class BunnyInterpolatingReachChainAction;
 	friend class WalkOrSlideInterpolatingReachChainAction;
 	friend class CombatDodgeSemiRandomlyToTargetAction;
@@ -152,10 +148,8 @@ class BotMovementModule {
 	WalkCarefullyAction walkCarefullyAction;
 	BunnyToStairsOrRampExitAction bunnyToStairsOrRampExitAction;
 	BunnyStraighteningReachChainAction bunnyStraighteningReachChainAction;
-	BunnyToBestShortcutAreaAction bunnyToBestShortcutAreaAction;
 	BunnyToBestFloorClusterPointAction bunnyToBestFloorClusterPointAction;
 	BunnyInterpolatingChainAtStartAction bunnyInterpolatingChainAtStartAction;
-	BunnyInVelocityDirectionAction bunnyInVelocityDirectionAction;
 	BunnyInterpolatingReachChainAction bunnyInterpolatingReachChainAction;
 	WalkOrSlideInterpolatingReachChainAction walkOrSlideInterpolatingReachChainAction;
 	CombatDodgeSemiRandomlyToTargetAction combatDodgeSemiRandomlyToTargetAction;
