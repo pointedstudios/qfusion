@@ -242,12 +242,11 @@ void GenericRunBunnyingAction::TrySetWalljump( Context *context ) {
 }
 
 #define TEST_TRACE_RESULT_NORMAL( traceResult )                                   \
-	do                                                                            \
-	{                                                                             \
-		if( traceResult.trace.fraction != 1.0f )                                  \
-		{                                                                         \
-			if( velocity2DDir.Dot( traceResult.trace.plane.normal ) < -0.5f ) {   \
-				return false; }                                                   \
+	do {                                                                          \
+		if( traceResult.trace.fraction != 1.0f ) {                                \
+			if( velocity2DDir.Dot( traceResult.trace.plane.normal ) < -0.3f ) {   \
+				return false;                                                     \
+			}                                                                     \
 			hasGoodWalljumpNormal = true;                                         \
 		}                                                                         \
 	} while( 0 )
