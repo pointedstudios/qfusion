@@ -27,11 +27,15 @@ class BunnyTestingSavedLookDirsAction : public BunnyTestingMultipleLookDirsActio
 protected:
 	static constexpr auto MAX_SUGGESTED_LOOK_DIRS = 16;
 
-	StaticVector<Vec3, MAX_SUGGESTED_LOOK_DIRS> suggestedLookDirs;
-	// Contains areas that were used in dirs construction.
-	// Might be useful by skipping areas already tested by other (also an descendant of this class) action.
-	// Note that 1-1 correspondence between dirs and areas (and even dirs size and areas size) is not mandatory.
-	StaticVector<int, MAX_SUGGESTED_LOOK_DIRS> dirsBaseAreas;
+	struct DirAndArea {
+		Vec3 dir;
+		int area;
+
+		DirAndArea( const Vec3 &dir_, int area_ )
+			: dir( dir_ ), area( area_ ) {}
+	};
+
+	StaticVector<DirAndArea, MAX_SUGGESTED_LOOK_DIRS> suggestedLookDirs;
 
 	unsigned maxSuggestedLookDirs { MAX_SUGGESTED_LOOK_DIRS };
 	unsigned currSuggestedLookDirNum { 0 };
@@ -40,7 +44,6 @@ protected:
 		BunnyTestingMultipleLookDirsAction::BeforePlanning();
 		currSuggestedLookDirNum = 0;
 		suggestedLookDirs.clear();
-		dirsBaseAreas.clear();
 	}
 
 	void OnApplicationSequenceStarted( MovementPredictionContext *context ) final;

@@ -8,6 +8,8 @@ BunnyToBestNavMeshPointAction::BunnyToBestNavMeshPointAction( BotMovementModule 
 }
 
 void BunnyToBestNavMeshPointAction::SaveSuggestedLookDirs( MovementPredictionContext *context ) {
+	Assert( suggestedLookDirs.empty() );
+
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	// Wait for landing.
 	// While the nav mesh query cache takes height over ground in account
@@ -25,10 +27,12 @@ void BunnyToBestNavMeshPointAction::SaveSuggestedLookDirs( MovementPredictionCon
 	int areaNum = AiAasWorld::Instance()->FindAreaNum( point );
 	// That action is executed prior to this one.
 	// Tests for these areas have failed if control flow reaches THIS action
-	const auto &failedAreaNums = module->bunnyStraighteningReachChainAction.dirsBaseAreas;
+	const auto &failedSuggestions = module->bunnyStraighteningReachChainAction.suggestedLookDirs;
 	// If we have already tested this area (and have failed)
-	if( std::find( failedAreaNums.begin(), failedAreaNums.end(), areaNum ) != failedAreaNums.end() ) {
-		return;
+	for( const DirAndArea &oldSuggestion: failedSuggestions ) {
+		if( oldSuggestion.area == areaNum ) {
+			return;
+		}
 	}
 
 	// If the suggested point is in the same area
@@ -46,8 +50,5 @@ void BunnyToBestNavMeshPointAction::SaveSuggestedLookDirs( MovementPredictionCon
 	dir -= point;
 	dir *= -1.0f / dir.Length();
 
-	suggestedLookDirs.push_back( dir );
-	if( areaNum ) {
-		dirsBaseAreas.push_back( areaNum );
-	}
+	suggestedLookDirs.emplace_back( DirAndArea( dir, areaNum ) );
 }

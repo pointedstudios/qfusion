@@ -11,16 +11,9 @@ BunnyStraighteningReachChainAction::BunnyStraighteningReachChainAction( BotMovem
 }
 
 void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context ) {
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	const int navTargetAasAreaNum = context->NavTargetAasAreaNum();
+	Assert( suggestedLookDirs.empty() );
 
-	// Do not modify look vec in this case (we assume its set to nav target)
 	if( context->IsInNavTargetArea() ) {
-		void *mem = suggestedLookDirs.unsafe_grow_back();
-		dirsBaseAreas.push_back( navTargetAasAreaNum );
-		Vec3 *toTargetDir = new(mem)Vec3( context->NavTargetOrigin() );
-		*toTargetDir -= entityPhysicsState.Origin();
-		toTargetDir->NormalizeFast();
 		return;
 	}
 
@@ -77,6 +70,7 @@ void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context
 
 	// If there is a trigger entity in the reach chain, try keep looking at it
 	if( reachStoppedAt ) {
+		const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 		int travelType = reachStoppedAt->traveltype;
 		if( travelType == TRAVEL_TELEPORT || travelType == TRAVEL_JUMPPAD || travelType == TRAVEL_ELEVATOR ) {
 			Assert( maxSuggestedLookDirs > 0 );
@@ -84,13 +78,13 @@ void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context
 			if( suggestedLookDirs.size() == maxSuggestedLookDirs ) {
 				suggestedLookDirs.pop_back();
 			}
-			dirsBaseAreas.push_back( 0 );
-			void *mem = suggestedLookDirs.unsafe_grow_back();
-			// reachStoppedAt->areanum is an area num of reach destination, not the trigger itself.
-			// Saving or restoring the trigger area num does not seem worth this minor case.
-			Vec3 *toTriggerDir = new(mem)Vec3( reachStoppedAt->start );
-			*toTriggerDir -= entityPhysicsState.Origin();
-			toTriggerDir->NormalizeFast();
+			Vec3 toTriggerDir( reachStoppedAt->start );
+			toTriggerDir -= entityPhysicsState.Origin();
+			toTriggerDir.Normalize();
+			// The target area of reachStoppedAt is the area "behind" trigger.
+			// The prediction gets always interrupted on touching trigger.
+			// Just supply a dummy value and rely on touching the trigger during prediction.
+			suggestedLookDirs.emplace_back( DirAndArea( toTriggerDir, 0 ) );
 			return;
 		}
 	}

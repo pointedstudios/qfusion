@@ -74,7 +74,7 @@ BunnyInterpolatingChainAtStartAction::BunnyInterpolatingChainAtStartAction( BotM
 }
 
 void BunnyInterpolatingChainAtStartAction::SaveSuggestedLookDirs( Context *context ) {
-	suggestedLookDirs.clear();
+	Assert( suggestedLookDirs.empty() );
 
 	ReachChainInterpolator interpolator;
 	interpolator.SetCompatibleReachTypes( COMPATIBLE_REACH_TYPES, sizeof( COMPATIBLE_REACH_TYPES ) / sizeof( int ) );
@@ -85,14 +85,13 @@ void BunnyInterpolatingChainAtStartAction::SaveSuggestedLookDirs( Context *conte
 			continue;
 		}
 		Vec3 newDir( interpolator.Result() );
-		for( const Vec3 &presentDir: suggestedLookDirs ) {
+		for( const DirAndArea &presentOne: suggestedLookDirs ) {
 			// Even slight changes in the direction matter, so avoid rejection unless there is almost exact match
-			if( newDir.Dot( presentDir ) > 0.99f ) {
+			if( newDir.Dot( presentOne.dir ) > 0.99f ) {
 				goto nextAttempt;
 			}
 		}
-		suggestedLookDirs.push_back( newDir );
-		dirsBaseAreas.push_back( GetBestConformingToDirArea( interpolator ) );
+		suggestedLookDirs.emplace_back( DirAndArea( newDir, GetBestConformingToDirArea( interpolator ) ) );
 		if( suggestedLookDirs.size() == 3 ) {
 			break;
 		}

@@ -12,11 +12,17 @@ void BunnyTestingMultipleLookDirsAction::BeforePlanning() {
 void BunnyTestingSavedLookDirsAction::OnApplicationSequenceStarted( MovementPredictionContext *context ) {
 	BunnyTestingMultipleLookDirsAction::OnApplicationSequenceStarted( context );
 	if( !currSuggestedLookDirNum ) {
+		suggestedLookDirs.clear();
 		SaveSuggestedLookDirs( context );
 	}
-	if( currSuggestedLookDirNum < suggestedLookDirs.size() ) {
-		suggestedDir = suggestedLookDirs[currSuggestedLookDirNum].Data();
-		checkStopAtAreaNums.push_back( dirsBaseAreas[currSuggestedLookDirNum] );
+	if( currSuggestedLookDirNum >= suggestedLookDirs.size() ) {
+		return;
+	}
+
+	const DirAndArea &currDirAndArea = suggestedLookDirs[currSuggestedLookDirNum];
+	suggestedDir = currDirAndArea.dir.Data();
+	if( currDirAndArea.area ) {
+		checkStopAtAreaNums.push_back( currDirAndArea.area );
 	}
 }
 
@@ -114,10 +120,10 @@ void BunnyTestingSavedLookDirsAction::SaveCandidateAreaDirs( MovementPredictionC
 	unsigned maxAreas = maxSuggestedLookDirs - suggestedLookDirs.size();
 	AreaAndScore *takenAreasEnd = TakeBestCandidateAreas( candidateAreasBegin, candidateAreasEnd, maxAreas );
 
+	suggestedLookDirs.clear();
 	for( auto iter = takenAreasBegin; iter < takenAreasEnd; ++iter ) {
 		int areaNum = ( *iter ).areaNum;
 		void *mem = suggestedLookDirs.unsafe_grow_back();
-		dirsBaseAreas.push_back( areaNum );
 		if( areaNum != navTargetAreaNum ) {
 			Vec3 *toAreaDir = new(mem)Vec3( aasAreas[areaNum].center );
 			toAreaDir->Z() = aasAreas[areaNum].mins[2] + 32.0f;
