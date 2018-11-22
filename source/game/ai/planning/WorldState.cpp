@@ -1,8 +1,47 @@
 #include "WorldState.h"
+#include "../bot.h"
+
+Bot *WorldState::Self() { return (Bot *)self; }
+const Bot *WorldState::Self() const { return (const Bot *)self; }
+
+WorldState &WorldState::operator=( const WorldState &that ) {
+	const edict_t *ent = game.edicts + Self()->EntNum();
+	if( scriptAttachment ) {
+		GENERIC_asDeleteScriptWorldStateAttachment( ent, scriptAttachment );
+	}
+	CopyFromOtherWorldState( that );
+	// We check the argument outside of the function call to avoid wasting cycles on an empty call
+	if( that.scriptAttachment ) {
+		this->scriptAttachment = GENERIC_asCopyScriptWorldStateAttachment( ent, that.scriptAttachment );
+	}
+	return *this;
+}
+
+WorldState &WorldState::operator=( WorldState &&that ) {
+	if( scriptAttachment ) {
+		GENERIC_asDeleteScriptWorldStateAttachment( game.edicts + Self()->EntNum(), scriptAttachment );
+	}
+	CopyFromOtherWorldState( that );
+	// Release the attachment ownership (if any)
+	that.scriptAttachment = nullptr;
+	return *this;
+}
+
+WorldState::~WorldState() {
+	if( scriptAttachment ) {
+		GENERIC_asDeleteScriptWorldStateAttachment( game.edicts + Self()->EntNum(), scriptAttachment );
+	}
+}
+
+void WorldState::PrepareAttachment() {
+	if( scriptAttachment ) {
+		GENERIC_asPrepareScriptWorldStateAttachment( game.edicts + Self()->EntNum(), this, scriptAttachment );
+	}
+}
 
 #ifndef PUBLIC_BUILD
 
-WorldState::WorldState( edict_t *self_ ) {
+WorldState::WorldState( Ai *self_ ) {
 	// Shut up an analyzer
 	memset( this, 0, sizeof( WorldState ) );
 
@@ -35,7 +74,14 @@ WorldState::WorldState( edict_t *self_ ) {
 		packedFields->satisfyOp = (unsigned char)SatisfyOp::EQ;
 	}
 
-	scriptAttachment = GENERIC_asNewScriptWorldStateAttachment( self_ );
+	scriptAttachment = GENERIC_asNewScriptWorldStateAttachment( game.edicts + Self()->EntNum() );
+}
+
+#else
+
+WorldState::WorldState( Ai *self_ )
+	: self( self_ ) {
+	scriptAttachment = GENERIC_asNewScriptWorldStateAttachment( game.edicts + Self()->EntNum() );
 }
 
 #endif

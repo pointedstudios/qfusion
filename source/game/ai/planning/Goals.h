@@ -20,6 +20,9 @@ public:
 protected:
 	inline PlannerNode *ApplyExtraActions( PlannerNode *firstTransition, const WorldState &worldState );
 
+	Bot *Self() { return (Bot *)self; }
+	const Bot *Self() const { return (Bot *)self; }
+
 	inline const class SelectedNavEntity &SelectedNavEntity() const;
 	inline const class SelectedEnemies &SelectedEnemies() const;
 	inline const class BotWeightConfig &WeightConfig() const;
@@ -28,7 +31,8 @@ protected:
 class BotGrabItemGoal : public BotBaseGoal
 {
 public:
-	BotGrabItemGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotGrabItemGoal", COLOR_RGB( 0, 255, 0 ), 950 ) {}
+	explicit BotGrabItemGoal( Ai *ai_ )
+		: BotBaseGoal( ai_, "BotGrabItemGoal", COLOR_RGB( 0, 255, 0 ), 950 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
@@ -38,7 +42,8 @@ public:
 class BotKillEnemyGoal : public BotBaseGoal
 {
 public:
-	BotKillEnemyGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotKillEnemyGoal", COLOR_RGB( 255, 0, 0 ), 1250 ) {}
+	explicit BotKillEnemyGoal( Ai *ai_ )
+		: BotBaseGoal( ai_, "BotKillEnemyGoal", COLOR_RGB( 255, 0, 0 ), 1250 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
@@ -48,7 +53,8 @@ public:
 class BotRunAwayGoal : public BotBaseGoal
 {
 public:
-	BotRunAwayGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotRunAwayGoal", COLOR_RGB( 0, 0, 255 ), 950 ) {}
+	explicit BotRunAwayGoal( Ai *ai_ )
+		: BotBaseGoal( ai_, "BotRunAwayGoal", COLOR_RGB( 0, 0, 255 ), 950 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
@@ -60,7 +66,7 @@ class BotAttackOutOfDespairGoal : public BotBaseGoal
 	float oldOffensiveness;
 
 public:
-	BotAttackOutOfDespairGoal( Ai *ai_ )
+	explicit BotAttackOutOfDespairGoal( Ai *ai_ )
 		: BotBaseGoal( ai_, "BotAttackOutOfDespairGoal", COLOR_RGB( 192, 192, 0 ), 750 ),
 		oldOffensiveness( 1.0f ) {}
 
@@ -75,7 +81,8 @@ public:
 class BotReactToHazardGoal : public BotBaseGoal
 {
 public:
-	BotReactToHazardGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotReactToHazardGoal", COLOR_RGB( 192, 0, 192 ), 750 ) {}
+	explicit BotReactToHazardGoal( Ai *ai_ )
+		: BotBaseGoal( ai_, "BotReactToHazardGoal", COLOR_RGB( 192, 0, 192 ), 750 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
@@ -85,7 +92,8 @@ public:
 class BotReactToThreatGoal : public BotBaseGoal
 {
 public:
-	BotReactToThreatGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotReactToThreatGoal", COLOR_RGB( 255, 0, 128 ), 350 ) {}
+	explicit BotReactToThreatGoal( Ai *ai_ )
+		: BotBaseGoal( ai_, "BotReactToThreatGoal", COLOR_RGB( 255, 0, 128 ), 350 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
@@ -95,7 +103,8 @@ public:
 class BotReactToEnemyLostGoal : public BotBaseGoal
 {
 public:
-	BotReactToEnemyLostGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotReactToEnemyLostGoal", COLOR_RGB( 0, 192, 192 ), 950 ) {}
+	explicit BotReactToEnemyLostGoal( Ai *ai_ )
+		: BotBaseGoal( ai_, "BotReactToEnemyLostGoal", COLOR_RGB( 0, 192, 192 ), 950 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
@@ -105,7 +114,8 @@ public:
 class BotRoamGoal : public BotBaseGoal
 {
 public:
-	BotRoamGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotRoamGoal", COLOR_RGB( 0, 0, 80 ), 400 ) {}
+	explicit BotRoamGoal( Ai *ai_ )
+		: BotBaseGoal( ai_, "BotRoamGoal", COLOR_RGB( 0, 0, 80 ), 400 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
@@ -118,12 +128,12 @@ class BotScriptGoal : public BotBaseGoal
 
 public:
 	// TODO: Provide ways for setting the debug color for this kind of goals
-	BotScriptGoal( Ai *ai_, const char *name_, unsigned updatePeriod_, void *scriptObject_ )
+	explicit BotScriptGoal( Ai *ai_, const char *name_, unsigned updatePeriod_, void *scriptObject_ )
 		: BotBaseGoal( ai_, name_, 0, updatePeriod_ ),
 		scriptObject( scriptObject_ ) {}
 
 	// Exposed for script API
-	inline edict_t *Self() { return self; }
+	using BotBaseGoal::Self;
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;

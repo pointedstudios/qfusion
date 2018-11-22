@@ -94,11 +94,14 @@ public:
 	};
 
 private:
-	edict_t *self;
+	Ai *self;
 	void *scriptAttachment;
 #ifndef PUBLIC_BUILD
 	bool isCopiedFromOtherWorldState;
 #endif
+
+	Bot *Self();
+	const Bot *Self() const;
 
 	// WorldState operations such as copying and testing for satisfaction must be fast,
 	// so vars components are stored in separate arrays for tight data packing.
@@ -267,29 +270,14 @@ public:
 	inline bool IsCopiedFromOtherWorldState() { return isCopiedFromOtherWorldState; }
 #endif
 
-	inline WorldState &operator=( const WorldState &that ) {
-		if( scriptAttachment ) {
-			GENERIC_asDeleteScriptWorldStateAttachment( self, scriptAttachment );
-		}
-		CopyFromOtherWorldState( that );
-		// We check the argument outside of the function call to avoid wasting cycles on an empty call
-		if( that.scriptAttachment ) {
-			this->scriptAttachment = GENERIC_asCopyScriptWorldStateAttachment( self, that.scriptAttachment );
-		}
-		return *this;
-	}
+	WorldState &operator=( const WorldState &that );
+
 	inline WorldState( const WorldState &that ) {
 		*this = that;
 	}
-	inline WorldState &operator=( WorldState &&that ) {
-		if( scriptAttachment ) {
-			GENERIC_asDeleteScriptWorldStateAttachment( self, scriptAttachment );
-		}
-		CopyFromOtherWorldState( that );
-		// Release the attachment ownership (if any)
-		that.scriptAttachment = nullptr;
-		return *this;
-	}
+
+	WorldState &operator=( WorldState &&that );
+
 	inline WorldState( WorldState &&that ) {
 		*this = std::move( that );
 	}
@@ -583,19 +571,9 @@ public:
 		return DualOriginLazyVar( this, varName, &WorldState::Get ## varName, #varName );    \
 	}
 
-#ifndef PUBLIC_BUILD
-	WorldState( edict_t *self_ );
-#else
-	inline WorldState( edict_t *self_ ) : self( self_ ) {
-		scriptAttachment = GENERIC_asNewScriptWorldStateAttachment( self_ );
-	}
-#endif
+	explicit WorldState( Ai *self_ );
 
-	inline ~WorldState() {
-		if( scriptAttachment ) {
-			GENERIC_asDeleteScriptWorldStateAttachment( self, scriptAttachment );
-		}
-	}
+	~WorldState();
 
 	bool IsSatisfiedBy( const WorldState &that ) const;
 
@@ -604,11 +582,7 @@ public:
 
 	void SetIgnoreAll( bool ignore );
 
-	inline void PrepareAttachment() {
-		if( scriptAttachment ) {
-			GENERIC_asPrepareScriptWorldStateAttachment( self, this, scriptAttachment );
-		}
-	}
+	void PrepareAttachment();
 
 	DECLARE_UNSIGNED_VAR( GoalItemWaitTime )
 	DECLARE_UNSIGNED_VAR( SimilarWorldStateInstanceId )

@@ -24,7 +24,7 @@ PlannerNode *BotStartGotoRunAwayElevatorAction::TryApply( const WorldState &worl
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self ) ) );
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -47,12 +47,12 @@ PlannerNode *BotStartGotoRunAwayElevatorAction::TryApply( const WorldState &worl
 
 void BotDoRunAwayViaElevatorActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
-	self->ai->botRef->SetNavTarget( &navSpot );
+	Self()->SetNavTarget( &navSpot );
 }
 
 void BotDoRunAwayViaElevatorActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+	Self()->ResetNavTarget();
 }
 
 AiBaseActionRecord::Status BotDoRunAwayViaElevatorActionRecord::CheckStatus( const WorldState &currWorldState ) const {
@@ -61,7 +61,8 @@ AiBaseActionRecord::Status BotDoRunAwayViaElevatorActionRecord::CheckStatus( con
 
 	// We do not want to invalidate an action due to being a bit in air above the platform, don't check self->groundentity
 	trace_t selfTrace;
-	AiGroundTraceCache::Instance()->GetGroundTrace( self, 64.0f, &selfTrace );
+	const edict_t *ent = game.edicts + Self()->EntNum();
+	AiGroundTraceCache::Instance()->GetGroundTrace( ent, 64.0f, &selfTrace );
 
 	if( selfTrace.fraction == 1.0f ) {
 		Debug( "Bot is too high above the ground (if any)\n" );
@@ -73,7 +74,7 @@ AiBaseActionRecord::Status BotDoRunAwayViaElevatorActionRecord::CheckStatus( con
 	}
 
 	// If there are no valid enemies, just keep standing on the platform
-	const auto &selectedEnemies = self->ai->botRef->GetSelectedEnemies();
+	const auto &selectedEnemies = Self()->GetSelectedEnemies();
 	if( selectedEnemies.AreValid() ) {
 		trace_t enemyTrace;
 		AiGroundTraceCache::Instance()->GetGroundTrace( selectedEnemies.Ent(), 128.0f, &enemyTrace );
@@ -122,8 +123,8 @@ PlannerNode *BotDoRunAwayViaElevatorAction::TryApply( const WorldState &worldSta
 	}
 
 	Vec3 elevatorOrigin = worldState.NavTargetOriginVar().Value();
-	unsigned selectedEnemiesInstanceId = self->ai->botRef->GetSelectedEnemies().InstanceId();
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self, elevatorOrigin, selectedEnemiesInstanceId ) ) );
+	unsigned selectedEnemiesInstanceId = Self()->GetSelectedEnemies().InstanceId();
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self(), elevatorOrigin, selectedEnemiesInstanceId ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

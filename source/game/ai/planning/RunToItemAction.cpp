@@ -4,17 +4,17 @@
 void BotGenericRunToItemActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
 	// Attack if view angles needed for movement fit aiming
-	self->ai->botRef->GetMiscTactics().PreferRunRatherThanAttack();
-	self->ai->botRef->SetNavTarget( navEntity );
+	Self()->GetMiscTactics().PreferRunRatherThanAttack();
+	Self()->SetNavTarget( navEntity );
 }
 
 void BotGenericRunToItemActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+	Self()->ResetNavTarget();
 }
 
 AiBaseActionRecord::Status BotGenericRunToItemActionRecord::CheckStatus( const WorldState &currWorldState ) const {
-	const auto &selectedNavEntity = self->ai->botRef->GetSelectedNavEntity();
+	const auto &selectedNavEntity = Self()->GetSelectedNavEntity();
 	if( !navEntity->IsBasedOnNavEntity( selectedNavEntity.GetNavEntity() ) ) {
 		Debug( "Nav target does no longer match selected nav entity\n" );
 		return INVALID;
@@ -46,14 +46,14 @@ PlannerNode *BotGenericRunToItemAction::TryApply( const WorldState &worldState )
 	}
 
 	constexpr float roundingSquareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
-	if( ( worldState.BotOriginVar().Value() - self->s.origin ).SquaredLength() > roundingSquareDistanceError ) {
+	if( ( worldState.BotOriginVar().Value() - Self()->Origin() ).SquaredLength() > roundingSquareDistanceError ) {
 		Debug( "Selected goal item is valid only for current bot origin\n" );
 		return nullptr;
 	}
 
-	const auto &itemNavEntity = self->ai->botRef->GetSelectedNavEntity();
+	const auto &itemNavEntity = Self()->GetSelectedNavEntity();
 
-	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( self, itemNavEntity.GetNavEntity() ) );
+	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( Self(), itemNavEntity.GetNavEntity() ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

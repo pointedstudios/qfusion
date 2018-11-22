@@ -28,7 +28,7 @@ PlannerNode *BotStartGotoCoverAction::TryApply( const WorldState &worldState ) {
 	}
 
 	Vec3 spotOrigin = worldState.CoverSpotVar().Value();
-	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( self ) );
+	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( Self() ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -46,7 +46,7 @@ PlannerNode *BotStartGotoCoverAction::TryApply( const WorldState &worldState ) {
 	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().PendingOriginVar().SetIgnore( false );
 
-	unsigned similarWorldStateInstanceId = self->ai->botRef->NextSimilarWorldStateInstanceId();
+	unsigned similarWorldStateInstanceId = Self()->NextSimilarWorldStateInstanceId();
 	plannerNode.WorldState().SimilarWorldStateInstanceIdVar().SetValue( similarWorldStateInstanceId ).SetIgnore( false );
 
 	return plannerNode.PrepareActionResult();

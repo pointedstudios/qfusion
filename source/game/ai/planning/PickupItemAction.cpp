@@ -3,16 +3,16 @@
 
 void BotPickupItemActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
-	self->ai->botRef->GetMiscTactics().shouldMoveCarefully = true;
-	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
-	self->ai->botRef->SetCampingSpot( AiCampingSpot( navEntity->Origin(), GOAL_PICKUP_ACTION_RADIUS, 0.5f ) );
-	self->ai->botRef->SetNavTarget( navEntity );
+	Self()->GetMiscTactics().shouldMoveCarefully = true;
+	Self()->GetMiscTactics().PreferAttackRatherThanRun();
+	Self()->SetCampingSpot( AiCampingSpot( navEntity->Origin(), GOAL_PICKUP_ACTION_RADIUS, 0.5f ) );
+	Self()->SetNavTarget( navEntity );
 }
 
 void BotPickupItemActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
-	self->ai->botRef->ResetCampingSpot();
+	Self()->ResetNavTarget();
+	Self()->ResetCampingSpot();
 }
 
 AiBaseActionRecord::Status BotPickupItemActionRecord::CheckStatus( const WorldState &currWorldState ) const {
@@ -21,7 +21,7 @@ AiBaseActionRecord::Status BotPickupItemActionRecord::CheckStatus( const WorldSt
 		return COMPLETED;
 	}
 
-	const SelectedNavEntity &currSelectedNavEntity = self->ai->botRef->GetSelectedNavEntity();
+	const SelectedNavEntity &currSelectedNavEntity = Self()->GetSelectedNavEntity();
 	if( !navEntity->IsBasedOnNavEntity( currSelectedNavEntity.GetNavEntity() ) ) {
 		Debug( "Nav entity does no longer match current selected nav entity\n" );
 		return INVALID;
@@ -75,8 +75,8 @@ PlannerNode *BotPickupItemAction::TryApply( const WorldState &worldState ) {
 		return nullptr;
 	}
 
-	const auto &itemNavEntity = self->ai->botRef->GetSelectedNavEntity();
-	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( self, itemNavEntity.GetNavEntity() ) );
+	const auto &itemNavEntity = Self()->GetSelectedNavEntity();
+	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( Self(), itemNavEntity.GetNavEntity() ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

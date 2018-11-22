@@ -507,10 +507,16 @@ static const asClassDescriptor_t asAiWorldStateClassDescriptor =
 };
 
 // These getters are redundant but convenient and save consequent native calls
-#define DEFINE_NATIVE_ENTITY_GETTERS(paramName, nativeName, scriptName)                                      \
-static edict_t *object##scriptName##_self(nativeName *paramName) { return paramName->Self(); }               \
-static gclient_t *object##scriptName##_client(nativeName *paramName) { return paramName->Self()->r.client; } \
-static ai_handle_t *object##scriptName##_bot(nativeName *paramName) { return paramName->Self()->ai; }
+#define DEFINE_NATIVE_ENTITY_GETTERS(paramName, nativeName, scriptName) \
+static edict_t *object##scriptName##_self(nativeName *paramName) { \
+    return game.edicts + paramName->Self()->EntNum(); \
+} \
+static gclient_t *object##scriptName##_client(nativeName *paramName) { \
+    return game.edicts[paramName->Self()->EntNum()].r.client; \
+} \
+static ai_handle_t *object##scriptName##_bot(nativeName *paramName) { \
+    return game.edicts[paramName->Self()->EntNum()].ai; \
+}
 
 // Use dummy format string to avoid a warning when a format string cannot be analyzed
 #define DEFINE_NATIVE_DEBUG_OUTPUT_METHOD(nativeName, scriptName)              \

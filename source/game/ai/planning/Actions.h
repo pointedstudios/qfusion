@@ -6,11 +6,15 @@
 constexpr const float GOAL_PICKUP_ACTION_RADIUS = 72.0f;
 constexpr const float TACTICAL_SPOT_RADIUS = 40.0f;
 
+class Bot;
+
 class BotBaseActionRecord : public AiBaseActionRecord
 {
+protected:
+	Bot *Self() { return (Bot *)self; }
+	const Bot *Self() const { return (const Bot *)self; }
 public:
-	BotBaseActionRecord( PoolBase *pool_, edict_t *self_, const char *name_ )
-		: AiBaseActionRecord( pool_, self_, name_ ) {}
+	BotBaseActionRecord( PoolBase *pool_, Bot *self_, const char *name_ );
 
 	void Activate() override;
 	void Deactivate() override;
@@ -18,6 +22,9 @@ public:
 
 class BotBaseAction : public AiBaseAction
 {
+protected:
+	Bot *Self() { return (Bot *)self; }
+	const Bot *Self() const { return (const Bot *)self; }
 public:
 	BotBaseAction( Ai *ai, const char *name_ )
 		: AiBaseAction( ai, name_ ) {}
@@ -30,7 +37,7 @@ class BotGenericRunToItemActionRecord : public BotBaseActionRecord
 	const NavEntity *const navEntity;
 
 public:
-	BotGenericRunToItemActionRecord( PoolBase *pool_, edict_t *self_, const NavEntity *navEntity_ )
+	BotGenericRunToItemActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
 		: BotBaseActionRecord( pool_, self_, "BotGenericRunToItemActionRecord" ), navEntity( navEntity_ ) {}
 
 	void Activate() override;
@@ -62,7 +69,7 @@ class BotPickupItemActionRecord : public BotBaseActionRecord
 {
 	const NavEntity *const navEntity;
 public:
-	BotPickupItemActionRecord( PoolBase *pool_, edict_t *self_, const NavEntity *navEntity_ )
+	BotPickupItemActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
 		: BotBaseActionRecord( pool_, self_, "BotPickupItemActionRecord" ), navEntity( navEntity_ ) {}
 
 	void Activate() override;
@@ -76,7 +83,7 @@ class BotWaitForItemActionRecord : public BotBaseActionRecord
 {
 	const NavEntity *const navEntity;
 public:
-	BotWaitForItemActionRecord( PoolBase *pool_, edict_t *self_, const NavEntity *navEntity_ )
+	BotWaitForItemActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
 		: BotBaseActionRecord( pool_, self_, "BotWaitForItemActionRecord" ), navEntity( navEntity_ ) {}
 
 	void Activate() override;
@@ -92,7 +99,7 @@ DECLARE_ACTION( BotWaitForItemAction, 3 );
 class BotDummyActionRecord : public BotBaseActionRecord
 {
 public:
-	BotDummyActionRecord( PoolBase *pool_, edict_t *self_, const char *name_ )
+	BotDummyActionRecord( PoolBase *pool_, Bot *self_, const char *name_ )
 		: BotBaseActionRecord( pool_, self_, name_ ) {}
 
 	void Activate() override { BotBaseActionRecord::Activate(); }
@@ -107,7 +114,7 @@ public:
 	class recordName : public BotDummyActionRecord                \
 	{                                                            \
 public:                                                      \
-		recordName( PoolBase * pool_, edict_t * self_ )              \
+		recordName( PoolBase * pool_, Bot *self_ )              \
 			: BotDummyActionRecord( pool_, self_, #recordName ) {} \
 	};
 
@@ -122,7 +129,7 @@ protected:
 
 	bool CheckCommonCombatConditions( const WorldState &currWorldState ) const;
 public:
-	BotCombatActionRecord( PoolBase *pool_, edict_t *self_, const char *name_,
+	BotCombatActionRecord( PoolBase *pool_, Bot *self_, const char *name_,
 						   const Vec3 &tacticalSpotOrigin,
 						   unsigned selectedEnemiesInstanceId )
 		: BotBaseActionRecord( pool_, self_, name_ )
@@ -134,7 +141,7 @@ public:
 	class recordName : public BotCombatActionRecord                                                                       \
 	{                                                                                                                    \
 public:                                                                                                              \
-		recordName( PoolBase * pool_, edict_t * self_, const Vec3 &tacticalSpotOrigin, unsigned selectedEnemiesInstanceId_ ) \
+		recordName( PoolBase * pool_, Bot *self_, const Vec3 &tacticalSpotOrigin, unsigned selectedEnemiesInstanceId_ ) \
 			: BotCombatActionRecord( pool_, self_, #recordName, tacticalSpotOrigin, selectedEnemiesInstanceId_ ) {}        \
 		void Activate() override;                                                                                        \
 		void Deactivate() override;                                                                                      \
@@ -158,9 +165,9 @@ class BotAttackAdvancingToTargetActionRecord: public BotBaseActionRecord
 	unsigned selectedEnemiesInstanceId;
 	NavSpot navSpot { Vec3( 0, 0, 0 ), 0.0f, NavTargetFlags::NONE };
 public:
-	BotAttackAdvancingToTargetActionRecord( PoolBase *pool_
-										  , edict_t *self_
-		                                  , unsigned selectedEnemiesInstanceId_ )
+	BotAttackAdvancingToTargetActionRecord( PoolBase *pool_,
+										    Bot *self_,
+										    unsigned selectedEnemiesInstanceId_ )
 		: BotBaseActionRecord( pool_, self_, "BotAttackAdvancingToTargetActionRecord" )
 		, selectedEnemiesInstanceId( selectedEnemiesInstanceId_ ) {}
 
@@ -179,7 +186,7 @@ protected:
 
 public:
 	BotRunAwayActionRecord( PoolBase *pool_,
-							edict_t *self_,
+							Bot *self_,
 							const char *name_,
 							const Vec3 &navTargetOrigin,
 							unsigned selectedEnemiesInstanceId_ )
@@ -193,7 +200,7 @@ public:
 	class recordName : public BotRunAwayActionRecord                                                                      \
 	{                                                                                                                    \
 public:                                                                                                              \
-		recordName( PoolBase * pool_, edict_t * self_, const Vec3 &tacticalSpotOrigin, unsigned selectedEnemiesInstanceId_ ) \
+		recordName( PoolBase * pool_, Bot *self_, const Vec3 &tacticalSpotOrigin, unsigned selectedEnemiesInstanceId_ ) \
 			: BotRunAwayActionRecord( pool_, self_, #recordName, tacticalSpotOrigin, selectedEnemiesInstanceId_ ) {}       \
 		void Activate() override;                                                                                        \
 		void Deactivate() override;                                                                                      \
@@ -216,7 +223,7 @@ class BotGenericRunAvoidingCombatActionRecord : public BotBaseActionRecord
 	NavSpot navSpot { NavSpot::Dummy() };
 
 public:
-	BotGenericRunAvoidingCombatActionRecord( PoolBase *pool_, edict_t *self_, const Vec3 &destination )
+	BotGenericRunAvoidingCombatActionRecord( PoolBase *pool_, Bot *self_, const Vec3 &destination )
 		: BotBaseActionRecord( pool_, self_, "BotGenericRunAvoidingCombatActionRecord" ) {
 		navSpot.Set( destination, GOAL_PICKUP_ACTION_RADIUS, NavTargetFlags::REACH_ON_RADIUS );
 	}
@@ -266,7 +273,7 @@ class BotDodgeToSpotActionRecord : public BotBaseActionRecord
 	NavSpot navSpot { NavSpot::Dummy() };
 	int64_t timeoutAt { std::numeric_limits<int>::max() };
 public:
-	BotDodgeToSpotActionRecord( PoolBase *pool_, edict_t *self_, const Vec3 &spotOrigin )
+	BotDodgeToSpotActionRecord( PoolBase *pool_, Bot *self_, const Vec3 &spotOrigin )
 		: BotBaseActionRecord( pool_, self_, "BotDodgeToSpotActionRecord" )
 		, navSpot( spotOrigin, 16.0f, NavTargetFlags::REACH_ON_RADIUS ) {}
 
@@ -282,7 +289,7 @@ class BotTurnToThreatOriginActionRecord : public BotBaseActionRecord
 	Vec3 threatPossibleOrigin;
 
 public:
-	BotTurnToThreatOriginActionRecord( PoolBase *pool_, edict_t *self_, const Vec3 &threatPossibleOrigin_ )
+	BotTurnToThreatOriginActionRecord( PoolBase *pool_, Bot *self_, const Vec3 &threatPossibleOrigin_ )
 		: BotBaseActionRecord( pool_, self_, "BotTurnToThreatOriginActionRecord" ),
 		threatPossibleOrigin( threatPossibleOrigin_ ) {}
 
@@ -298,7 +305,7 @@ class BotTurnToLostEnemyActionRecord : public BotBaseActionRecord
 	Vec3 lastSeenEnemyOrigin;
 
 public:
-	BotTurnToLostEnemyActionRecord( PoolBase *pool_, edict_t *self_, const Vec3 &lastSeenEnemyOrigin_ )
+	BotTurnToLostEnemyActionRecord( PoolBase *pool_, Bot *self_, const Vec3 &lastSeenEnemyOrigin_ )
 		: BotBaseActionRecord( pool_, self_, "BotTurnToLostEnemyActionRecord" ),
 		lastSeenEnemyOrigin( lastSeenEnemyOrigin_ ) {}
 
@@ -312,7 +319,7 @@ DECLARE_ACTION( BotTurnToLostEnemyAction, 1 );
 class BotStartLostEnemyPursuitActionRecord : public BotDummyActionRecord
 {
 public:
-	BotStartLostEnemyPursuitActionRecord( PoolBase *pool_, edict_t *self_ )
+	BotStartLostEnemyPursuitActionRecord( PoolBase *pool_, Bot *self_ )
 		: BotDummyActionRecord( pool_, self_, "BotStartLostEnemyPursuitActionRecord" ) {}
 };
 
@@ -321,7 +328,7 @@ DECLARE_ACTION( BotStartLostEnemyPursuitAction, 1 );
 class BotStopLostEnemyPursuitActionRecord : public BotDummyActionRecord
 {
 public:
-	BotStopLostEnemyPursuitActionRecord( PoolBase *pool_, edict_t *self_ )
+	BotStopLostEnemyPursuitActionRecord( PoolBase *pool_, Bot *self_ )
 		: BotDummyActionRecord( pool_, self_, "BotStopLostEnemyPursuitActionRecord" ) {}
 };
 
@@ -332,13 +339,13 @@ class BotScriptActionRecord : public BotBaseActionRecord
 	void *scriptObject;
 
 public:
-	BotScriptActionRecord( PoolBase *pool_, edict_t *self_, const char *name_, void *scriptObject_ )
+	BotScriptActionRecord( PoolBase *pool_, Bot *self_, const char *name_, void *scriptObject_ )
 		: BotBaseActionRecord( pool_, self_, name_ ),
 		scriptObject( scriptObject_ ) {}
 
 	~BotScriptActionRecord() override;
 
-	inline edict_t *Self() { return self; }
+	using BotBaseActionRecord::Self;
 	using BotBaseActionRecord::Debug;
 
 	void Activate() override;
@@ -359,12 +366,12 @@ public:
 		scriptObject( scriptObject_ ) {}
 
 	// Exposed for script API
-	inline edict_t *Self() { return self; }
+	using BotBaseAction::Self;
 	using BotBaseAction::Debug;
 
 	inline PlannerNode *NewNodeForRecord( void *scriptRecord ) {
 		// Reuse the existing method to ensure that logic and messaging is consistent
-		PlannerNodePtr plannerNodePtr( AiBaseAction::NewNodeForRecord( pool.New( self, name, scriptRecord ) ) );
+		PlannerNodePtr plannerNodePtr( AiBaseAction::NewNodeForRecord( pool.New( Self(), name, scriptRecord ) ) );
 		return plannerNodePtr.ReleaseOwnership();
 	}
 

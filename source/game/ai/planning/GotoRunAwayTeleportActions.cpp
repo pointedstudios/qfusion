@@ -23,7 +23,7 @@ PlannerNode *BotStartGotoRunAwayTeleportAction::TryApply( const WorldState &worl
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self ) ) );
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -46,12 +46,12 @@ PlannerNode *BotStartGotoRunAwayTeleportAction::TryApply( const WorldState &worl
 
 void BotDoRunAwayViaTeleportActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
-	self->ai->botRef->SetNavTarget( &navSpot );
+	Self()->SetNavTarget( &navSpot );
 }
 
 void BotDoRunAwayViaTeleportActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+	Self()->ResetNavTarget();
 }
 
 PlannerNode *BotDoRunAwayViaTeleportAction::TryApply( const WorldState &worldState ) {
@@ -86,8 +86,8 @@ PlannerNode *BotDoRunAwayViaTeleportAction::TryApply( const WorldState &worldSta
 	}
 
 	Vec3 teleportOrigin = worldState.NavTargetOriginVar().Value();
-	const auto &selectedEnemies = self->ai->botRef->GetSelectedEnemies();
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self, teleportOrigin, selectedEnemies.InstanceId() ) ) );
+	const auto &selectedEnemies = Self()->GetSelectedEnemies();
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self(), teleportOrigin, selectedEnemies.InstanceId() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -130,13 +130,13 @@ AiBaseActionRecord::Status BotDoRunAwayViaTeleportActionRecord::CheckStatus( con
 		Debug( "A threatening enemy is absent\n" );
 		return INVALID;
 	}
-	if( selectedEnemiesInstanceId != self->ai->botRef->GetSelectedEnemies().InstanceId() ) {
+	if( selectedEnemiesInstanceId != Self()->GetSelectedEnemies().InstanceId() ) {
 		Debug( "New enemies have been selected\n" );
 		return INVALID;
 	}
 	// Use the same radius as for goal items pickups
 	// (running actions for picking up an item and running away might be shared)
-	if( ( navSpot.Origin() - self->s.origin ).SquaredLength() > GOAL_PICKUP_ACTION_RADIUS * GOAL_PICKUP_ACTION_RADIUS ) {
+	if( ( navSpot.Origin() - Self()->Origin() ).SquaredLength() > GOAL_PICKUP_ACTION_RADIUS * GOAL_PICKUP_ACTION_RADIUS ) {
 		Debug( "Bot is too far from the teleport trigger\n" );
 		return INVALID;
 	}

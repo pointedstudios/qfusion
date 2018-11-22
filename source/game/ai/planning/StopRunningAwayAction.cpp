@@ -15,7 +15,7 @@ PlannerNode *BotStopRunningAwayAction::TryApply( const WorldState &worldState ) 
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self ) ) );
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -30,7 +30,7 @@ PlannerNode *BotStopRunningAwayAction::TryApply( const WorldState &worldState ) 
 	plannerNode.WorldState().IsRunningAwayVar().SetValue( false ).SetIgnore( false );
 	plannerNode.WorldState().HasRunAwayVar().SetValue( true ).SetIgnore( false );
 
-	unsigned similarWorldStateInstanceId = self->ai->botRef->NextSimilarWorldStateInstanceId();
+	unsigned similarWorldStateInstanceId = Self()->NextSimilarWorldStateInstanceId();
 	plannerNode.WorldState().SimilarWorldStateInstanceIdVar().SetValue( similarWorldStateInstanceId ).SetIgnore( false );
 
 	return plannerNode.PrepareActionResult();

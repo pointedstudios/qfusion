@@ -2,13 +2,14 @@
 #include "../ai_ground_trace_cache.h"
 #include "../teamplay/SquadBasedTeam.h"
 #include "BotPlanner.h"
+#include "PlanningLocal.h"
 #include "../combat/DodgeHazardProblemSolver.h"
 #include <algorithm>
 #include <limits>
 #include <stdarg.h>
 
 BotPlanner::BotPlanner( Bot *bot, float skillLevel_ )
-	: BasePlanner( bot->self ), cachedWorldState( bot->self ) {}
+	: BasePlanner( bot->self ), cachedWorldState( bot ) {}
 
 BotBaseGoal *BotPlanner::GetGoalByName( const char *name ) {
 	for( unsigned i = 0; i < scriptGoals.size(); ++i ) {

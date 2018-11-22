@@ -4,13 +4,13 @@
 
 void BotAttackFromCurrentPositionActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
-	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
-	self->ai->botRef->SetNavTarget( &navSpot );
+	Self()->GetMiscTactics().PreferAttackRatherThanRun();
+	Self()->SetNavTarget( &navSpot );
 }
 
 void BotAttackFromCurrentPositionActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+	Self()->ResetNavTarget();
 }
 
 AiBaseActionRecord::Status BotAttackFromCurrentPositionActionRecord::CheckStatus( const WorldState &currWorldState ) const {
@@ -18,14 +18,15 @@ AiBaseActionRecord::Status BotAttackFromCurrentPositionActionRecord::CheckStatus
 		return INVALID;
 	}
 
-	if( navSpot.Origin().SquareDistance2DTo( self->s.origin ) < 16 * 16 ) {
+	if( navSpot.Origin().SquareDistance2DTo( Self()->Origin() ) < 16 * 16 ) {
 		vec3_t spotOrigin;
-		SideStepDodgeProblemSolver::OriginParams originParams( self, 192.0f, AiAasRouteCache::Shared() );
-		const float *keepVisibleOrigin = self->ai->botRef->GetSelectedEnemies().LastSeenOrigin().Data();
+		const edict_t *ent = game.edicts + Self()->EntNum();
+		SideStepDodgeProblemSolver::OriginParams originParams( ent, 192.0f, AiAasRouteCache::Shared() );
+		const float *keepVisibleOrigin = Self()->GetSelectedEnemies().LastSeenOrigin().Data();
 		SideStepDodgeProblemSolver::ProblemParams problemParams( keepVisibleOrigin );
 		SideStepDodgeProblemSolver solver( originParams, problemParams );
 		if( solver.FindSingle( spotOrigin ) ) {
-			self->ai->botRef->SetNavTarget( Vec3( spotOrigin ), 4.0f );
+			self->SetNavTarget( Vec3( spotOrigin ), 4.0f );
 		}
 	}
 
@@ -50,7 +51,7 @@ PlannerNode *BotAttackFromCurrentPositionAction::TryApply( const WorldState &wor
 		return nullptr;
 	}
 
-	float offensiveness = self->ai->botRef->GetEffectiveOffensiveness();
+	float offensiveness = Self()->GetEffectiveOffensiveness();
 	if( offensiveness <= 0.5f && !worldState.HasThreateningEnemyVar() ) {
 		return nullptr;
 	}
@@ -101,8 +102,8 @@ PlannerNode *BotAttackFromCurrentPositionAction::TryApply( const WorldState &wor
 	}
 
 	Vec3 navTargetOrigin( worldState.BotOriginVar().Value() );
-	unsigned selectedEnemiesInstanceId = self->ai->botRef->GetSelectedEnemies().InstanceId();
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self, navTargetOrigin, selectedEnemiesInstanceId ) ) );
+	unsigned selectedEnemiesInstanceId = Self()->GetSelectedEnemies().InstanceId();
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self(), navTargetOrigin, selectedEnemiesInstanceId ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

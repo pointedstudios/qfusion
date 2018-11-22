@@ -2,26 +2,26 @@
 #include "../bot.h"
 
 void BotAttackAdvancingToTargetActionRecord::Activate() {
-	AiBaseActionRecord::Activate();
+	BotBaseActionRecord::Activate();
 	// Let's provide a spot origin that matches the nav entity
 	// (we should use spots since to conform to the rest of combat actions).
-	Vec3 origin( self->ai->botRef->GetSelectedNavEntity().GetNavEntity()->Origin() );
+	Vec3 origin( Self()->GetSelectedNavEntity().GetNavEntity()->Origin() );
 	this->navSpot.Set( origin, 16.0f, NavTargetFlags::REACH_ON_RADIUS );
-	self->ai->botRef->SetNavTarget( &this->navSpot );
-	self->ai->botRef->GetMiscTactics().Clear();
-	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
+	Self()->SetNavTarget( &this->navSpot );
+	Self()->GetMiscTactics().Clear();
+	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 	// This flag affects weapons choice. This action is very likely to behave similar to retreating.
-	self->ai->botRef->GetMiscTactics().willRetreat = true;
+	Self()->GetMiscTactics().willRetreat = true;
 }
 
 void BotAttackAdvancingToTargetActionRecord::Deactivate() {
-	self->ai->botRef->GetMiscTactics().Clear();
-	self->ai->botRef->ResetNavTarget();
-	AiBaseActionRecord::Deactivate();
+	Self()->GetMiscTactics().Clear();
+	Self()->ResetNavTarget();
+	BotBaseActionRecord::Deactivate();
 }
 
 AiBaseActionRecord::Status BotAttackAdvancingToTargetActionRecord::CheckStatus( const WorldState &currWorldState ) const {
-	const auto &selectedNavEntity = self->ai->botRef->GetSelectedNavEntity();
+	const auto &selectedNavEntity = Self()->GetSelectedNavEntity();
 	if( !selectedNavEntity.IsValid() || selectedNavEntity.IsEmpty() ) {
 		Debug( "The currently selected nav entity is invalid or is empty\n" );
 		return INVALID;
@@ -34,7 +34,7 @@ AiBaseActionRecord::Status BotAttackAdvancingToTargetActionRecord::CheckStatus( 
 		return INVALID;
 	}
 
-	const auto &selectedEnemies = self->ai->botRef->GetSelectedEnemies();
+	const auto &selectedEnemies = Self()->GetSelectedEnemies();
 	if( !selectedEnemies.AreValid() || selectedEnemies.InstanceId() != selectedEnemiesInstanceId ) {
 		Debug( "The currently selected enemies are not valid or have been updated\n" );
 		return INVALID;
@@ -56,7 +56,7 @@ PlannerNode *BotAttackAdvancingToTargetAction::TryApply( const WorldState &world
 
 	// Prevent excessive fruitless branching
 	constexpr float distanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
-	if( worldState.BotOriginVar().Value().SquareDistanceTo( self->s.origin ) > distanceError ) {
+	if( worldState.BotOriginVar().Value().SquareDistanceTo( Self()->Origin() ) > distanceError ) {
 		Debug( "This action is applicable only for the real bot origin\n" );
 		return nullptr;
 	}
@@ -78,7 +78,7 @@ PlannerNode *BotAttackAdvancingToTargetAction::TryApply( const WorldState &world
 	// Check whether the nav target is based on the selected nav entity
 	// TODO: It could look much better in the planned flexible world state interface
 
-	const auto &selectedNavEntity = self->ai->botRef->GetSelectedNavEntity();
+	const auto &selectedNavEntity = Self()->GetSelectedNavEntity();
 	if( !selectedNavEntity.IsValid() || selectedNavEntity.IsEmpty() ) {
 		Debug( "The currently selected nav entity is invalid or is empty\n" );
 		return nullptr;
@@ -99,18 +99,18 @@ PlannerNode *BotAttackAdvancingToTargetAction::TryApply( const WorldState &world
 		return nullptr;
 	}
 
-	const float offensiveness = self->ai->botRef->GetEffectiveOffensiveness();
+	const float offensiveness = Self()->GetEffectiveOffensiveness();
 	float actionPenalty = 0.5f + 1.0f * offensiveness;
 
 	const Vec3 botOrigin( worldState.BotOriginVar().Value() );
 	const Vec3 navTargetOrigin( worldState.NavTargetOriginVar().Value() );
-	int travelTimeMillis = self->ai->botRef->CheckTravelTimeMillis( botOrigin, navTargetOrigin );
+	int travelTimeMillis = Self()->CheckTravelTimeMillis( botOrigin, navTargetOrigin );
 	if( !travelTimeMillis ) {
 		Debug( "Can't find a travel time from bot origin to the nav target origin\n" );
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( self, self->ai->botRef->GetSelectedEnemies().InstanceId() ) );
+	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( Self(), Self()->GetSelectedEnemies().InstanceId() ) );
 	if( !plannerNode ) {
 		Debug( "Can't allocate planner node\n" );
 		return nullptr;
@@ -123,7 +123,7 @@ PlannerNode *BotAttackAdvancingToTargetAction::TryApply( const WorldState &world
 	// It is unlikely that bot is going to really have a positional advantage,
 	// but that's what the terminal KillEnemy action expects
 	plannerNode.WorldState().HasPositionalAdvantageVar().SetValue( true ).SetIgnore( false );
-	unsigned similarWorldStateInstanceId = self->ai->botRef->NextSimilarWorldStateInstanceId();
+	unsigned similarWorldStateInstanceId = Self()->NextSimilarWorldStateInstanceId();
 	plannerNode.WorldState().SimilarWorldStateInstanceIdVar().SetValue( similarWorldStateInstanceId ).SetIgnore( false );
 	plannerNode.WorldState().BotOriginVar().SetValue( navTargetOrigin );
 
