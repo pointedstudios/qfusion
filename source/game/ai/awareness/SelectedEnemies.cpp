@@ -514,14 +514,9 @@ bool SelectedEnemies::TestAboutToHitEBorIG( int64_t levelTime ) const {
 			continue;
 		}
 
-		// Just check and trust but do not force computations
-		if( canEnemyHitComputedAt[i] == levelTime && canEnemyHit[i] ) {
-			return true;
-		}
-
 		// Is not going to put crosshair right now
 		// TODO: Check past view dots and derive direction?
-		if( viewDots[i] < 0.7f ) {
+		if( viewDots[i] < 0.85f ) {
 			continue;
 		}
 
@@ -529,11 +524,43 @@ bool SelectedEnemies::TestAboutToHitEBorIG( int64_t levelTime ) const {
 			continue;
 		}
 
-		Vec3 traceStart( enemy->LastSeenOrigin() );
+		const Vec3 enemyOrigin( enemy->LastSeenOrigin() );
+		Vec3 traceStart( enemyOrigin );
 		traceStart.Z() += playerbox_stand_viewheight;
 		SolidWorldTrace( &trace, traceStart.Data(), self->s.origin );
-		if( trace.fraction == 1.0f ) {
+		if( trace.fraction != 1.0f ) {
+			continue;
+		}
+
+		const float squareSpeed = enemy->LastSeenVelocity().SquaredLength();
+		// Hitting at this speed is unlikely
+		if( squareSpeed > 650 * 650 ) {
+			continue;
+		}
+
+		const auto *const ent = enemy->ent;
+		if( !ent ) {
+			// Shouldn't happen?
+			continue;
+		}
+
+		const auto *const client = ent->r.client;
+		if( !client ) {
 			return true;
+		}
+
+		// If not zooming
+		if( !client->ps.stats[PM_STAT_ZOOMTIME] ) {
+			const float squareDistance = enemyOrigin.SquareDistanceTo( self->s.origin );
+			// It's unlikely to hit at this distance
+			if( squareDistance > 1250 * 1250 ) {
+				continue;
+			}
+		} else {
+			// It's hard to hit having a substantial speed while zooming
+			if( squareSpeed > 400 * 400 ) {
+				continue;
+			}
 		}
 	}
 
@@ -563,13 +590,8 @@ bool SelectedEnemies::TestAboutToHitLGorPG( int64_t levelTime ) const {
 			continue;
 		}
 
-		// Just check and trust but do not force computations
-		if( canEnemyHitComputedAt[i] == levelTime && canEnemyHit[i] ) {
-			return true;
-		}
-
 		// Is not going to put crosshair right now
-		if( viewDots[i] < 0.7f ) {
+		if( viewDots[i] < 0.85f ) {
 			continue;
 		}
 
@@ -623,11 +645,6 @@ bool SelectedEnemies::TestAboutToHitRLorSW( int64_t levelTime ) const {
 		// If the distance is close to zero 750 millis of reloading left must be used for making a dodge.
 		if( enemy->FireDelay() > 750 - ( ( 750 - 333 ) * distanceFraction ) ) {
 			continue;
-		}
-
-		// Just check and trust but do not force computations
-		if( canEnemyHitComputedAt[i] == levelTime && canEnemyHit[i] ) {
-			return true;
 		}
 
 		// Is not going to put crosshair right now
