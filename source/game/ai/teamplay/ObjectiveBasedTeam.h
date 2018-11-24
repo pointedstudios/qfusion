@@ -69,9 +69,20 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		 */
 		AiObjectiveSpot *underlying { nullptr };
 
-		std::pair<float, float> thisEntityWeightsForBot[MAX_CLIENTS];
+		enum { MAX_HELPER_ENTS = 3 };
+
+		edict_t *helperEnts[MAX_HELPER_ENTS] = { nullptr, nullptr, nullptr };
+		unsigned currHelperEnt { 0 };
+
+		std::pair<float, float> thisEntityWeightsForBot[MAX_CLIENTS][MAX_HELPER_ENTS + 1];
 
 		ObjectiveSpotImpl() = default;
+
+		~ObjectiveSpotImpl() {
+			ReleaseHelpers();
+		}
+
+		void ReleaseHelpers();
 
 		explicit ObjectiveSpotImpl( AiObjectiveSpot *underlying_ )
 			: underlying( underlying_ ) {}
@@ -83,16 +94,15 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		inline void Link( Bot *bot );
 
 		virtual ObjectiveSpotImpl *Next() = 0;
+		virtual const ObjectiveSpotImpl *Next() const = 0;
+
 		virtual ObjectiveSpotImpl *NextSorted() = 0;
 
 		/**
 		 * Clears previous assignment state (a list of bots and the weight).
 		 * Descendants must call this first and assign their desired weight.
 		 */
-		virtual void PrepareForAssignment() {
-			botsListHead = nullptr;
-			weight = 0.0f;
-		}
+		virtual void PrepareForAssignment();
 
 		/**
 		 * Sorts a raw list of spots so best (largest-weight) spots are first.
@@ -117,6 +127,31 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		virtual void UpdateBotsStatus() = 0;
 
 		inline void SetWeightsForBot( Bot *bot, float navWeight, float goalWeight = -1.0f );
+
+		/**
+		 * @note supplying the helper entity as an address instead of index
+		 * requires sequential scan in a tiny array
+		 * but helps to avoid an ambiguous and error-prone API.
+		 */
+		void SetWeightsForBot( Bot *bot, const edict_t *helperEnt, float navWeight, float goalWeight = -1.0f );
+
+		const std::pair<float, float> *FindWeightsForBot( const Bot *bot, const NavEntity *navEntity ) const;
+
+		edict_t *AllocHelperEnt( const vec3_t origin );
+
+		/**
+		 * Finds closest to the spot bot using AAS route tests.
+		 * @return the best bot. Never fails if the list of bots assigned correctly this frame.
+		 */
+		Bot *FindBestByTravelTimeBot();
+
+		/**
+		 * Finds closest to the spot bot using square euclidean distance tests.
+		 * @param squareDistances a storage for square distances addressed by client number.
+		 * Its purpose is to allow reusing square distances for further computations.
+		 * @return the closest bot. Never fails if the list of bots assigned correctly this frame.
+		 */
+		Bot *FindClosestByDistanceBot( float *squareDistances = nullptr );
 	};
 
 	/**
@@ -129,7 +164,7 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		enum { STORAGE_LIST, SORTED_LIST };
 
 		DefenceSpot *Next() override { return next[STORAGE_LIST]; }
-		const DefenceSpot *Next() const { return next[STORAGE_LIST]; }
+		const DefenceSpot *Next() const override { return next[STORAGE_LIST]; }
 
 		DefenceSpot *NextSorted() override { return next[SORTED_LIST]; }
 		const DefenceSpot *NextSorted() const { return next[SORTED_LIST]; }
@@ -176,10 +211,6 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		void UpdateBotsStatusForAlert();
 
 		bool IsVisibleForDefenders();
-		/**
-		 * Finds a nearest to the spot bot using AAS route tests.
-		 */
-		Bot *FindNearestBot();
 
 		void ComputeRawScores( Candidates &candidates ) override;
 	};
@@ -194,7 +225,7 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		enum { STORAGE_LIST, SORTED_LIST };
 
 		OffenseSpot *Next() override { return next[STORAGE_LIST]; }
-		const OffenseSpot *Next() const { return next[STORAGE_LIST]; }
+		const OffenseSpot *Next() const override { return next[STORAGE_LIST]; }
 
 		OffenseSpot *NextSorted() override { return next[SORTED_LIST]; }
 		const OffenseSpot *NextSorted() const { return next[SORTED_LIST]; }
@@ -285,6 +316,11 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 	void DisableDefenceSpotAutoAlert( DefenceSpot *defenceSpot );
 
 	void OnAlertReported( Bot *bot, int id, float alertLevel );
+
+	const std::pair<float, float> *FindWeightsForBot( const ObjectiveSpotImpl *spotsChainHead,
+													  const AiObjectiveSpot *givenSpot,
+													  const Bot *bot,
+													  const NavEntity *navEntity ) const;
 public:
 	explicit AiObjectiveBasedTeam( int team_ );
 
@@ -337,6 +373,8 @@ public:
 
 	void OnBotAdded( Bot *bot ) override;
 	void OnBotRemoved( Bot *bot ) override;
+
+	bool OverridesEntityWeights( const Bot *bot ) const override;
 
 	const std::pair<float, float> *GetEntityWeights( const Bot *bot, const NavEntity *navEntity ) const override;
 

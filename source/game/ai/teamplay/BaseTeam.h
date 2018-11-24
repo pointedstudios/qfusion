@@ -102,6 +102,14 @@ public:
 	virtual const std::pair<float, float> *GetEntityWeights( const Bot *bot, const NavEntity *navEntity ) const {
 		return nullptr;
 	}
+
+	/**
+	 * This is a hint that helps to avoid bunch of {@code GetEntityWeights()} calls in a loop
+	 * @param bot a bot that must belong to this team
+	 * @return true if {@code GetEntityWeights()} should be called.
+	 * @note a supertype method should be called first if overridden.
+	 */
+	virtual bool OverridesEntityWeights( const Bot *bot ) const { return false; }
 };
 
 #endif

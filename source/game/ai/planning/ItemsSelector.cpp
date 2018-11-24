@@ -15,29 +15,47 @@ void BotItemsSelector::UpdateInternalItemAndGoalWeights() {
 		}
 	}
 
+	const auto *const bot = self->ai->botRef;
 	const auto *const botTeam = AiBaseTeam::GetTeamForNum( self->s.team );
-
 	const auto levelTime = level.time;
-	auto *navEntitiesRegistry = NavEntitiesRegistry::Instance();
-	for( const NavEntity *goalEnt = navEntitiesRegistry->Head(); goalEnt; goalEnt = goalEnt->Next() ) {
+	auto *const navEntitiesRegistry = NavEntitiesRegistry::Instance();
+
+	// Check whether we can skip not so cheap AiBaseTeam::GetEntityWeights() calls
+	if( !botTeam->OverridesEntityWeights( bot ) ) {
+		for( const NavEntity *goalEnt = navEntitiesRegistry->Head(); goalEnt; goalEnt = goalEnt->Next()) {
+			float &navWeight = internalEntityWeights[goalEnt->Id()];
+			float &goalWeight = internalPickupGoalWeights[goalEnt->Id()];
+			if( disabledForSelectionUntil[goalEnt->Id()] >= levelTime ) {
+				continue;
+			}
+
+			if( !goalEnt->Item() ) {
+				continue;
+			}
+
+			ItemAndGoalWeights weights = ComputeItemWeights( goalEnt->Item(), onlyGotGB );
+			std::tie( navWeight, goalWeight ) = std::make_pair( weights.itemWeight, weights.goalWeight );
+		}
+		return;
+	}
+
+	for( const NavEntity *goalEnt = navEntitiesRegistry->Head(); goalEnt; goalEnt = goalEnt->Next()) {
+		float &navWeight = internalEntityWeights[goalEnt->Id()];
+		float &goalWeight = internalPickupGoalWeights[goalEnt->Id()];
 		// Do not even try to compute a weight for the disabled item
 		if( disabledForSelectionUntil[goalEnt->Id()] >= levelTime ) {
-			internalEntityWeights[goalEnt->Id()] = 0;
-			internalPickupGoalWeights[goalEnt->Id()] = 0;
 			continue;
 		}
 
 		if( goalEnt->Item() ) {
 			ItemAndGoalWeights weights = ComputeItemWeights( goalEnt->Item(), onlyGotGB );
-			internalEntityWeights[goalEnt->Id()] = weights.itemWeight;
-			internalPickupGoalWeights[goalEnt->Id()] = weights.goalWeight;
+			std::tie( navWeight, goalWeight ) = std::make_pair( weights.itemWeight, weights.goalWeight );
 			continue;
 		}
 
-		const std::pair<float, float> *const navAndGoalWeight = botTeam->GetEntityWeights( self->ai->botRef, goalEnt );
+		const auto *navAndGoalWeight = botTeam->GetEntityWeights( bot, goalEnt );
 		if( navAndGoalWeight ) {
-			internalEntityWeights[goalEnt->Id()] = navAndGoalWeight->first;
-			internalPickupGoalWeights[goalEnt->Id()] = navAndGoalWeight->second;
+			std::tie( navWeight, goalWeight ) = *navAndGoalWeight;
 			continue;
 		}
 	}

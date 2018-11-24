@@ -2,6 +2,7 @@
 #include "ObjectiveBasedTeam.h"
 #include "TeamplayLocal.h"
 #include "../navigation/AasRouteCache.h"
+#include "../combat/AdvantageProblemSolver.h"
 #include "../bot.h"
 #include "../../../qalgo/Links.h"
 
@@ -21,14 +22,17 @@ void AiObjectiveBasedTeam::SpotsContainer<Spot, N, ScriptSpot>::Clear() {
 
 	spots[0].prev[Spot::STORAGE_LIST] = nullptr;
 	spots[0].next[Spot::STORAGE_LIST] = &spots[1];
+	spots[0].ReleaseHelpers();
 
 	for( unsigned i = 1; i < N - 1; ++i ) {
 		spots[i].prev[Spot::STORAGE_LIST] = &spots[i - 1];
 		spots[i].next[Spot::STORAGE_LIST] = &spots[i + 1];
+		spots[i].ReleaseHelpers();
 	}
 
 	spots[N - 1].prev[Spot::STORAGE_LIST] = &spots[N - 2];
 	spots[N - 1].next[Spot::STORAGE_LIST] = nullptr;
+	spots[N - 1].ReleaseHelpers();
 
 	freeSpotsHead = &spots[0];
 	usedSpotsHead = nullptr;
@@ -74,6 +78,7 @@ Spot *AiObjectiveBasedTeam::SpotsContainer<Spot, N, ScriptSpot>::Remove( int id 
 		::Link( spot, &freeSpotsHead, Spot::STORAGE_LIST );
 		spotsForId[id] = nullptr;
 		size--;
+		spot->ReleaseHelpers();
 		return spot;
 	}
 
@@ -107,6 +112,29 @@ AiObjectiveBasedTeam::AiObjectiveBasedTeam( int team_ )
 	: AiSquadBasedTeam( team_ )
 	, defenceSpots( "DefenceSpot" )
 	, offenseSpots( "OffenseSpot" ) {}
+
+void AiObjectiveBasedTeam::ObjectiveSpotImpl::ReleaseHelpers() {
+	auto *registry = NavEntitiesRegistry::Instance();
+	for( auto &ent: helperEnts ) {
+		if( !ent ) {
+			continue;
+		}
+		auto *navEnt = registry->NavEntityForEntity( ent );
+		if( navEnt ) {
+			registry->RemoveNavEntity( navEnt );
+		}
+		G_FreeEdict( ent );
+		ent = nullptr;
+	}
+}
+
+void AiObjectiveBasedTeam::ObjectiveSpotImpl::PrepareForAssignment() {
+	botsListHead = nullptr;
+	weight = 0.0f;
+	currHelperEnt = 0;
+
+	memset( thisEntityWeightsForBot, 0, sizeof( thisEntityWeightsForBot ) );
+}
 
 bool AiObjectiveBasedTeam::AddDefenceSpot( const AiDefenceSpot &scriptVisibleSpot ) {
 	if( DefenceSpot *addedSpot = defenceSpots.Add( scriptVisibleSpot ) ) {
@@ -282,31 +310,60 @@ void AiObjectiveBasedTeam::OnBotRemoved( Bot *bot ) {
 	}
 }
 
-const std::pair<float, float> *AiObjectiveBasedTeam::GetEntityWeights( const Bot *bot, const NavEntity *navEntity ) const {
+bool AiObjectiveBasedTeam::OverridesEntityWeights( const Bot *bot ) const {
+	if( AiSquadBasedTeam::OverridesEntityWeights( bot ) ) {
+		return true;
+	}
+	return bot->ObjectiveSpot();
+}
+
+using WeightsPair = const std::pair<float, float>;
+
+WeightsPair *AiObjectiveBasedTeam::GetEntityWeights( const Bot *bot, const NavEntity *navEntity ) const {
 	const AiObjectiveSpot *givenSpot = bot->ObjectiveSpot();
 	if( !givenSpot ) {
 		return nullptr;
 	}
 
-	if( !navEntity->IsBasedOnEntity( givenSpot->entity ) ) {
-		return nullptr;
+	if( const auto *weights = FindWeightsForBot( defenceSpots.Head(), givenSpot, bot, navEntity ) ) {
+		return weights;
 	}
 
-	// This is not that bad as the spots count never exceeds 2 for vanilla gametypes
+	if( const auto *weights = FindWeightsForBot( offenseSpots.Head(), givenSpot, bot, navEntity ) ) {
+		return weights;
+	}
 
-	for( const DefenceSpot *spot = defenceSpots.Head(); spot; spot = spot->Next() ) {
+	// This is perfectly reachable as arbitrary nav entities can be supplied
+	return nullptr;
+}
+
+WeightsPair *AiObjectiveBasedTeam::FindWeightsForBot( const ObjectiveSpotImpl *spotsChainHead,
+													  const AiObjectiveSpot *givenSpot,
+													  const Bot *bot,
+													  const NavEntity *navEntity ) const {
+	for( const ObjectiveSpotImpl *spot = spotsChainHead; spot; spot = spot->Next() ) {
 		if( static_cast<const AiObjectiveSpot *>( spot->underlying ) == givenSpot ) {
-			return &spot->thisEntityWeightsForBot[bot->ClientNum()];
+			if( const auto *weights = spot->FindWeightsForBot( bot, navEntity ) ) {
+				return weights;
+			}
 		}
 	}
 
-	for( const OffenseSpot *spot = offenseSpots.Head(); spot; spot = spot->Next() ) {
-		if( static_cast<const AiObjectiveSpot *>( spot->underlying ) == givenSpot ) {
-			return &spot->thisEntityWeightsForBot[bot->ClientNum()];
+	return nullptr;
+}
+
+WeightsPair *AiObjectiveBasedTeam::ObjectiveSpotImpl::FindWeightsForBot( const Bot *bot, const NavEntity *nav ) const {
+	if( nav->IsBasedOnEntity( underlying->entity ) ) {
+		return &thisEntityWeightsForBot[bot->ClientNum()][0];
+	}
+
+	for( int i = 0; i < MAX_HELPER_ENTS; ++i ) {
+		if( nav->IsBasedOnEntity( helperEnts[i] ) ) {
+			return &thisEntityWeightsForBot[bot->ClientNum()][i + 1];
 		}
 	}
 
-	AI_FailWith( "AiObjectiveBasedTeam::GetEntityWeights()", "Unreachable" );
+	return nullptr;
 }
 
 void AiObjectiveBasedTeam::Think() {
@@ -519,24 +576,48 @@ void AiObjectiveBasedTeam::OffenseSpot::ComputeRawScores( Candidates &candidates
 }
 
 void AiObjectiveBasedTeam::DefenceSpot::UpdateBotsStatusForAlert() {
+	int numRequestedSpots = 0;
+
+	// Try finding tactical spots around target
+	AdvantageProblemSolver::OriginParams originParams( underlying->entity, this->radius, AiAasRouteCache::Shared() );
+	AdvantageProblemSolver::ProblemParams problemParams( underlying->entity );
+	problemParams.SetHeightOverEntityInfluence( 0.75f );
+	problemParams.SetHeightOverOriginInfluence( 0.75f );
+	problemParams.SetSpotProximityThreshold( 128.0f );
+	problemParams.SetTravelTimeInfluence( 0.25f );
+	problemParams.SetEntityDistanceInfluence( 0.25f );
+
+	vec3_t spots[MAX_HELPER_ENTS];
+	AdvantageProblemSolver solver( originParams, problemParams );
+	const int numSpots = solver.FindMany( spots, std::min( (int)MAX_HELPER_ENTS, numRequestedSpots ) );
+
+	int spotNum = 0;
 	const float *const spotOrigin = this->entity->s.origin;
 	const float squareSpotRadius = this->radius * this->radius;
 	for( Bot *bot = botsListHead; bot; bot = bot->NextInObjective() ) {
 		const float squareDistanceToSpot = DistanceSquared( bot->Origin(), spotOrigin );
-		// By default, assume the bot being outside of the spot radius
-		// Set very high weight and lowest offensiveness.
-		float overriddenWeight = 15.0f;
-		float overriddenOffensiveness = 0.0f;
-		if( squareDistanceToSpot < squareSpotRadius ) {
-			// Make bots extremely aggressive
-			overriddenOffensiveness = 1.0f;
-			// Stop moving to the spot
-			if( squareDistanceToSpot < 128.0f * 128.0f ) {
-				overriddenWeight = 0.0f;
+		if( squareDistanceToSpot > squareSpotRadius ) {
+			SetWeightsForBot( bot, 12.0f );
+			bot->SetBaseOffensiveness( 0.25f );
+			continue;
+		}
+
+		if( spotNum < numSpots ) {
+			if( auto *ent = AllocHelperEnt( spots[spotNum] ) ) {
+				SetWeightsForBot( bot, ent, 3.0f );
+				bot->SetBaseOffensiveness( 1.0f );
+				spotNum++;
+				continue;
 			}
 		}
-		SetWeightsForBot( bot, overriddenWeight );
-		bot->SetBaseOffensiveness( overriddenOffensiveness );
+
+		bot->SetBaseOffensiveness( 1.0f );
+		if( squareDistanceToSpot < 72.0f * 72.0f ) {
+			bot->SetObjectiveSpot( nullptr );
+			continue;
+		}
+
+		SetWeightsForBot( bot, 9.0f );
 	}
 }
 
@@ -573,8 +654,8 @@ bool AiObjectiveBasedTeam::DefenceSpot::IsVisibleForDefenders() {
 	return false;
 }
 
-Bot *AiObjectiveBasedTeam::DefenceSpot::FindNearestBot() {
-	const int spotAreaNum = AiAasWorld::Instance()->FindAreaNum( this->entity );
+Bot *AiObjectiveBasedTeam::ObjectiveSpotImpl::FindBestByTravelTimeBot() {
+	const int spotAreaNum = AiAasWorld::Instance()->FindAreaNum( underlying->entity );
 	int bestTravelTime = std::numeric_limits<int>::max();
 	Bot *bestBot = nullptr;
 	for( Bot *bot = botsListHead; bot; bot = bot->NextInObjective() ) {
@@ -589,6 +670,29 @@ Bot *AiObjectiveBasedTeam::DefenceSpot::FindNearestBot() {
 	return bestBot;
 }
 
+Bot *AiObjectiveBasedTeam::ObjectiveSpotImpl::FindClosestByDistanceBot( float *squareDistances ) {
+	const float *const __restrict spotOrigin = underlying->entity->s.origin;
+
+	float scratchpad[MAX_CLIENTS];
+	if( !squareDistances ) {
+		squareDistances = scratchpad;
+	}
+
+	Bot *bot = botsListHead;
+	Bot *bestBot = bot;
+	float bestDistance = DistanceSquared( bot->Origin(), spotOrigin );
+	squareDistances[bot->ClientNum()] = bestDistance;
+	for( bot = bot->NextInObjective(); bot; bot = bot->NextInObjective() ) {
+		float distance = DistanceSquared( bot->Origin(), spotOrigin );
+		squareDistances[bot->ClientNum()] = distance;
+		if( distance < bestDistance ) {
+			bestBot = bot;
+			bestDistance = distance;
+		}
+	}
+	return bestBot;
+}
+
 void AiObjectiveBasedTeam::DefenceSpot::UpdateBotsStatus() {
 	if( this->alertLevel ) {
 		UpdateBotsStatusForAlert();
@@ -597,7 +701,7 @@ void AiObjectiveBasedTeam::DefenceSpot::UpdateBotsStatus() {
 
 	Bot *alreadyAssignedBot = nullptr;
 	if( !IsVisibleForDefenders() ) {
-		if( ( alreadyAssignedBot = FindNearestBot() ) ) {
+		if( ( alreadyAssignedBot = FindBestByTravelTimeBot() ) ) {
 			// Force the bot to check the spot status
 			alreadyAssignedBot->SetBaseOffensiveness( 0.5f );
 			SetWeightsForBot( alreadyAssignedBot, 15.0f );
@@ -662,7 +766,29 @@ inline void AiObjectiveBasedTeam::ObjectiveSpotImpl::SetWeightsForBot( Bot *bot,
 		goalWeight = navWeight;
 	}
 
-	thisEntityWeightsForBot[bot->ClientNum()] = std::make_pair( navWeight, goalWeight );
+	thisEntityWeightsForBot[bot->ClientNum()][0] = std::make_pair( navWeight, goalWeight );
+	bot->SetObjectiveSpot( underlying );
+}
+
+void AiObjectiveBasedTeam::ObjectiveSpotImpl::SetWeightsForBot( Bot *bot, const edict_t *helperEnt,
+																float navWeight, float goalWeight ) {
+	if( navWeight <= 0.0f ) {
+		bot->SetObjectiveSpot( nullptr );
+		return;
+	}
+
+	// Set the goal weight to nav weight if not specified
+	if( goalWeight <= 0.0f ) {
+		goalWeight = navWeight;
+	}
+
+	for( int i = 0; i < MAX_HELPER_ENTS; ++i ) {
+		if( helperEnt == helperEnts[i] ) {
+			thisEntityWeightsForBot[bot->ClientNum()][i + 1] = std::make_pair( navWeight, goalWeight );
+			break;
+		}
+	}
+
 	bot->SetObjectiveSpot( underlying );
 }
 
@@ -680,13 +806,6 @@ void AiObjectiveBasedTeam::OffenseSpot::UpdateBotsStatus() {
 		return;
 	}
 
-	// If these conditions are met:
-	// 1) The nav target should not be "reached in group"
-	// 2) All bots are in the same floor cluster
-	// 3) The closest to the target bot has almost reached it
-	// let only the closest bot actually try to stay on the spot,
-	// other nearby bots should just support this bot (e.g. by attacking enemies).
-
 	if( const auto *navEntity = NavEntitiesRegistry::Instance()->NavEntityForEntity( underlying->entity ) ) {
 		if( navEntity->ShouldBeReachedInGroup() ) {
 			// Everybody should stay on the spot.
@@ -696,48 +815,50 @@ void AiObjectiveBasedTeam::OffenseSpot::UpdateBotsStatus() {
 		}
 	}
 
-	const auto *const aasWorld = AiAasWorld::Instance();
-	const auto *const aasAreaClusterNums = aasWorld->AreaFloorClusterNums();
-	const auto firstBotClusterNum = aasAreaClusterNums[botsListHead->EntityPhysicsState()->DroppedToFloorAasAreaNum()];
-	if( !firstBotClusterNum ) {
-		SetDefaultSpotWeightsForBots();
-		return;
-	}
-
-	bool areInTheSameFloorCluster = true;
-	for( Bot *bot = botsListHead->NextInObjective(); bot; bot = bot->NextInObjective() ) {
-		auto clusterNum = aasAreaClusterNums[bot->EntityPhysicsState()->DroppedToFloorAasAreaNum()];
-		if( clusterNum != firstBotClusterNum ) {
-			areInTheSameFloorCluster = false;
-			break;
-		}
-	}
-
-	if( !areInTheSameFloorCluster ) {
-		SetDefaultSpotWeightsForBots();
-		return;
-	}
-
 	float squareDistances[MAX_CLIENTS];
-	Bot *closestBot = nullptr;
-	float bestDistance = std::numeric_limits<float>::max();
-	const float *const spotOrigin = this->Origin();
-	for( Bot *bot = botsListHead; bot; bot = bot->NextInObjective() ) {
-		const float distance = squareDistances[bot->ClientNum()] = DistanceSquared( bot->Origin(), spotOrigin );
-		if( distance >= bestDistance ) {
+	Bot *closestBot = FindClosestByDistanceBot( squareDistances );
+
+	// If even the closest bot is not sufficiently close to target
+	if( squareDistances[closestBot->ClientNum()] > 72.0f * 72.0f ) {
+		SetDefaultSpotWeightsForBots();
+		return;
+	}
+
+	// Find how many spots do we need.
+	// There's no point to fuse this with FindClosestByDistanceBot()
+	constexpr float rushDistanceThreshold = 768.0f;
+	int numRequestedSpots = 0;
+	for( Bot *bot = botsListHead->NextInObjective(); bot; bot = bot->NextInObjective() ) {
+		if( bot == closestBot ) {
 			continue;
 		}
-		closestBot = bot;
-		bestDistance = distance;
+		if( squareDistances[bot->ClientNum()] > rushDistanceThreshold * rushDistanceThreshold ) {
+			continue;
+		}
+		numRequestedSpots++;
 	}
 
-	assert( closestBot );
-	// If even the closest bot is not sufficiently close to target
-	if( squareDistances[closestBot->ClientNum()] > 64.0f * 64.0f ) {
+	// Nobody else is at least "rush distance threshold" close to the target
+	if( !numRequestedSpots ) {
 		SetDefaultSpotWeightsForBots();
 		return;
 	}
 
+	// Try finding tactical spots around target
+	AdvantageProblemSolver::OriginParams originParams( underlying->entity, 768.0f, AiAasRouteCache::Shared() );
+	AdvantageProblemSolver::ProblemParams problemParams( underlying->entity );
+	problemParams.SetHeightOverEntityInfluence( 0.75f );
+	problemParams.SetHeightOverOriginInfluence( 0.75f );
+	problemParams.SetSpotProximityThreshold( 96.0f );
+	// Make sure other bots can reach the target quickly if the closest bot gets fragged
+	problemParams.SetTravelTimeInfluence( 0.75f );
+	problemParams.SetEntityDistanceInfluence( 0.5f );
+
+	vec3_t spots[MAX_HELPER_ENTS];
+	AdvantageProblemSolver solver( originParams, problemParams );
+	const int numSpots = solver.FindMany( spots, std::min( (int)MAX_HELPER_ENTS, numRequestedSpots ) );
+
+	int spotNum = 0;
 	for( Bot *bot = botsListHead; bot; bot = bot->NextInObjective() ) {
 		if( bot == closestBot ) {
 			// Keep staying here
@@ -746,17 +867,69 @@ void AiObjectiveBasedTeam::OffenseSpot::UpdateBotsStatus() {
 			continue;
 		}
 
-		float distance = squareDistances[bot->ClientNum()];
-		if( distance < 144.0f * 144.0f ) {
-			// Skip this nav target, just assist the closest bot.
-			// TODO: We should set these bots as supporters for the closest bot
-			// this requires modification of the squad supporters assignation logic
-			bot->SetBaseOffensiveness( 0.75f );
+		if( squareDistances[bot->ClientNum()] > rushDistanceThreshold * rushDistanceThreshold ) {
+			// Rush to the spot
+			SetWeightsForBot( bot, 9.0f );
+			bot->SetBaseOffensiveness( 0.0f );
 			continue;
 		}
 
-		// Advance to the spot
+		// Go to an advantage spot if possible
+		if( spotNum < numSpots ) {
+			if( edict_t *ent = AllocHelperEnt( spots[spotNum] ) ) {
+				SetWeightsForBot( bot, ent, 9.0f );
+				bot->SetBaseOffensiveness( 0.5f );
+				spotNum++;
+				continue;
+			}
+		}
+
+		// If the bot can see the target from this origin, just attack enemies while teammates are completing objective
+		if( !EntitiesPvsCache::Instance()->AreInPvs( game.edicts + bot->EntNum(), underlying->entity ) ) {
+			// Keep advancing to the spot
+			SetWeightsForBot( bot, 9.0f );
+			bot->SetBaseOffensiveness( 0.25f );
+			continue;
+		}
+
+		trace_t trace;
+		// TODO: Use raycast in a floor cluster if possible
+		// TODO: Check against entities like wbomb1 explosion target
+		SolidWorldTrace( &trace, bot->Origin(), underlying->entity->s.origin );
+		if( trace.fraction == 1.0f ) {
+			bot->SetObjectiveSpot( nullptr );
+			bot->SetBaseOffensiveness( 1.0f );
+			continue;
+		}
+
+		// Keep advancing to the spot
 		SetWeightsForBot( bot, 9.0f );
-		bot->SetBaseOffensiveness( 0.0f );
+		bot->SetBaseOffensiveness( 0.25f );
 	}
+}
+
+edict_t *AiObjectiveBasedTeam::ObjectiveSpotImpl::AllocHelperEnt( const vec3_t origin ) {
+	if( currHelperEnt == MAX_HELPER_ENTS ) {
+		return nullptr;
+	}
+
+	edict_t *ent = helperEnts[currHelperEnt];
+	if( ent ) {
+		VectorCopy( origin, ent->s.origin );
+		currHelperEnt++;
+		return ent;
+	}
+
+	ent = helperEnts[currHelperEnt] = G_Spawn();
+	ent->classname = "objective_helper_ent";
+	VectorCopy( origin, ent->s.origin );
+	// Hack! We try to avoid Add/RemoveNavEntity() calls and reuse existing nav entities instead.
+	// Use MOVABLE flag so the area num gets updated automatically.
+	auto flags = NavEntityFlags::REACH_AT_RADIUS | NavEntityFlags::MOVABLE;
+	// Provide actual area num at spawn (even if its going to be checked next frame)
+	int areaNum = AiAasWorld::Instance()->FindAreaNum( origin );
+	NavEntitiesRegistry::Instance()->AddNavEntity( ent, areaNum, flags );
+
+	currHelperEnt++;
+	return ent;
 }
