@@ -282,23 +282,31 @@ void AiObjectiveBasedTeam::OnBotRemoved( Bot *bot ) {
 	}
 }
 
-const edict_t *AiObjectiveBasedTeam::GetAssignedEntity( const Bot *, const AiObjectiveSpot *spot ) const {
-	// Currently just check the type.
-	// No additional entities are assigned to bots except the spot underlying one.
-	// Assume that the spot points to our implementation type (ObjectiveSpotImpl).
-	if( dynamic_cast<const DefenceSpot *>( spot ) ) {
-		if( defenceSpots.GetById( spot->id, true ) ) {
-			return spot->entity;
-		}
+const std::pair<float, float> *AiObjectiveBasedTeam::GetEntityWeights( const Bot *bot, const NavEntity *navEntity ) const {
+	const AiObjectiveSpot *givenSpot = bot->ObjectiveSpot();
+	if( !givenSpot ) {
 		return nullptr;
 	}
-	if( dynamic_cast<const OffenseSpot *>( spot ) ) {
-		if( offenseSpots.GetById( spot->id, true ) ) {
-			return spot->entity;
-		}
+
+	if( !navEntity->IsBasedOnEntity( givenSpot->entity ) ) {
 		return nullptr;
 	}
-	return nullptr;
+
+	// This is not that bad as the spots count never exceeds 2 for vanilla gametypes
+
+	for( const DefenceSpot *spot = defenceSpots.Head(); spot; spot = spot->Next() ) {
+		if( static_cast<const AiObjectiveSpot *>( spot->underlying ) == givenSpot ) {
+			return &spot->thisEntityWeightsForBot[bot->ClientNum()];
+		}
+	}
+
+	for( const OffenseSpot *spot = offenseSpots.Head(); spot; spot = spot->Next() ) {
+		if( static_cast<const AiObjectiveSpot *>( spot->underlying ) == givenSpot ) {
+			return &spot->thisEntityWeightsForBot[bot->ClientNum()];
+		}
+	}
+
+	AI_FailWith( "AiObjectiveBasedTeam::GetEntityWeights()", "Unreachable" );
 }
 
 void AiObjectiveBasedTeam::Think() {
@@ -319,7 +327,7 @@ void AiObjectiveBasedTeam::Think() {
 }
 
 void AiObjectiveBasedTeam::ResetBotOrders( Bot *bot ) {
-	bot->ClearDefenceAndOffenceSpots();
+	bot->SetObjectiveSpot( nullptr );
 	// We modify base offensiveness. Set it to default
 	bot->SetBaseOffensiveness( 0.5f );
 }
@@ -527,7 +535,7 @@ void AiObjectiveBasedTeam::DefenceSpot::UpdateBotsStatusForAlert() {
 				overriddenWeight = 0.0f;
 			}
 		}
-		bot->SetDefenceSpot( this, overriddenWeight );
+		SetWeightsForBot( bot, overriddenWeight );
 		bot->SetBaseOffensiveness( overriddenOffensiveness );
 	}
 }
@@ -592,7 +600,7 @@ void AiObjectiveBasedTeam::DefenceSpot::UpdateBotsStatus() {
 		if( ( alreadyAssignedBot = FindNearestBot() ) ) {
 			// Force the bot to check the spot status
 			alreadyAssignedBot->SetBaseOffensiveness( 0.5f );
-			alreadyAssignedBot->SetDefenceSpot( this, 15.0f );
+			SetWeightsForBot( alreadyAssignedBot, 15.0f );
 		}
 	}
 
@@ -609,7 +617,7 @@ void AiObjectiveBasedTeam::DefenceSpot::UpdateBotsStatus() {
 
 		// If the bot is fairly close to the spot, stop running to it and enrage bots to attack everybody
 		if( squareDistanceToSpot < ( 0.33f * this->radius ) * ( 0.33f * this->radius ) ) {
-			bot->SetDefenceSpot( this, 0.0f );
+			SetWeightsForBot( bot, 0.0f );
 			bot->SetBaseOffensiveness( 1.0f );
 			continue;
 		}
@@ -617,7 +625,7 @@ void AiObjectiveBasedTeam::DefenceSpot::UpdateBotsStatus() {
 		// If the bot is farther than 2/3 of the spot radius
 		// return to the spot with high priority and regular offensiveness
 		if( squareDistanceToSpot < ( 0.66f * this->radius ) * ( 0.66f * this->radius ) ) {
-			bot->SetDefenceSpot( this, 3.0f );
+			SetWeightsForBot( bot, 3.0f );
 			bot->SetBaseOffensiveness( 0.5f );
 			continue;
 		}
@@ -628,7 +636,7 @@ void AiObjectiveBasedTeam::DefenceSpot::UpdateBotsStatus() {
 		if( spotFloorClusterNum && botFloorClusterNum && botFloorClusterNum == spotFloorClusterNum ) {
 			// Set the spot as a nav target but with a low weight
 			// (the bot should be able to return to it quickly being in the same floor cluster)
-			bot->SetDefenceSpot( this, 0.5f );
+			SetWeightsForBot( bot, 0.5f );
 			// Raise offensiveness compared to default.
 			// As the bot is in the same cluster, the bot can prefer attacking enemies
 			// more than return to the spot for the same reasons.
@@ -637,17 +645,32 @@ void AiObjectiveBasedTeam::DefenceSpot::UpdateBotsStatus() {
 		}
 
 		// Return to the spot having middle interest
-		bot->SetDefenceSpot( this, 1.0f );
+		SetWeightsForBot( bot, 1.0f );
 		// Raise offensiveness
 		bot->SetBaseOffensiveness( 0.70f );
 	}
+}
+
+inline void AiObjectiveBasedTeam::ObjectiveSpotImpl::SetWeightsForBot( Bot *bot, float navWeight, float goalWeight ) {
+	if( navWeight <= 0.0f ) {
+		bot->SetObjectiveSpot( nullptr );
+		return;
+	}
+
+	// Set the goal weight to nav weight if not specified
+	if( goalWeight <= 0.0f ) {
+		goalWeight = navWeight;
+	}
+
+	thisEntityWeightsForBot[bot->ClientNum()] = std::make_pair( navWeight, goalWeight );
+	bot->SetObjectiveSpot( underlying );
 }
 
 void AiObjectiveBasedTeam::OffenseSpot::SetDefaultSpotWeightsForBots() {
 	for( Bot *bot = botsListHead; bot; bot = bot->NextInObjective() ) {
 		// If bot is not in squad, set an offence spot weight to a value of an ordinary valuable item.
 		// Thus bots will not attack alone and will grab some items instead in order to prepare to attack.
-		bot->SetOffenseSpot( this, bot->IsInSquad() ? 9.0f : 3.0f );
+		SetWeightsForBot( bot, bot->IsInSquad() ? 9.0f : 3.0f );
 		bot->SetBaseOffensiveness( 0.0f );
 	}
 }
@@ -718,7 +741,7 @@ void AiObjectiveBasedTeam::OffenseSpot::UpdateBotsStatus() {
 	for( Bot *bot = botsListHead; bot; bot = bot->NextInObjective() ) {
 		if( bot == closestBot ) {
 			// Keep staying here
-			bot->SetOffenseSpot( this, 12.0f, 12.0f );
+			SetWeightsForBot( bot, 12.0f );
 			bot->SetBaseOffensiveness( 0.0f );
 			continue;
 		}
@@ -733,7 +756,7 @@ void AiObjectiveBasedTeam::OffenseSpot::UpdateBotsStatus() {
 		}
 
 		// Advance to the spot
-		bot->SetOffenseSpot( this, 9.0f );
+		SetWeightsForBot( bot, 9.0f );
 		bot->SetBaseOffensiveness( 0.0f );
 	}
 }

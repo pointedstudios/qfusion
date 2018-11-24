@@ -5,6 +5,8 @@
 
 #include <typeinfo>
 
+class NavEntity;
+
 class AiBaseTeam : public AiFrameAwareUpdatable {
 	friend class Bot;  // Bots should be able to notify its team in destructor when they get dropped immediately
 	friend class AiManager;
@@ -88,6 +90,18 @@ public:
 	 * (if some script syscalls that assume a feature-reach AI team are executed).
 	 */
 	static AiBaseTeam *GetTeamForNum( int teamNum, const std::type_info &desiredType );
+
+	/**
+	 * Allows to override entity weights for bot items selection.
+	 * @param bot a bot that must belong to this team.
+	 * @param ent an entity that could have an overridden weight.
+	 * @return a pair of nav item weight and pickup item planning goal weight, null if not overridden.
+	 * @note for optimization purposes this does not get called for items.
+	 * @note assume that the returned value is invalidated on next call.
+	 */
+	virtual const std::pair<float, float> *GetEntityWeights( const Bot *bot, const NavEntity *navEntity ) const {
+		return nullptr;
+	}
 };
 
 #endif

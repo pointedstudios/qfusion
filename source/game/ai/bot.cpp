@@ -84,40 +84,20 @@ Bot::~Bot() {
 	}
 }
 
-int Bot::ObjectiveSpotDef::DefenceSpotId() const {
-	if( IsActive() && isDefenceSpot ) {
-		return spot->id;
+int Bot::DefenceSpotId() const {
+	// This call is used only for scripts compatibility so this is not that bad
+	if( dynamic_cast<AiDefenceSpot *>( objectiveSpot ) ) {
+		return objectiveSpot->id;
 	}
 	return -1;
 }
 
-int Bot::ObjectiveSpotDef::OffenseSpotId() const {
-	if( IsActive() && !isDefenceSpot ) {
-		return spot->id;
+int Bot::OffenseSpotId() const {
+	// This call is used only for scripts compatibility so this is not that bad
+	if( dynamic_cast<AiOffenseSpot *>( objectiveSpot ) ) {
+		return objectiveSpot->id;
 	}
 	return -1;
-}
-
-void Bot::SetDefenceSpot( AiDefenceSpot *spot, float navWeight, float goalWeight ) {
-	assert( navWeight >= 0 );
-	if( goalWeight < 0 ) {
-		goalWeight = navWeight;
-	}
-	objectiveSpotDef.spot = spot;
-	objectiveSpotDef.navWeight = navWeight;
-	objectiveSpotDef.goalWeight = goalWeight;
-	objectiveSpotDef.isDefenceSpot = true;
-}
-
-void Bot::SetOffenseSpot( AiOffenseSpot *spot, float navWeight, float goalWeight ) {
-	assert( navWeight >= 0 );
-	if( goalWeight < 0 ) {
-		goalWeight = navWeight;
-	}
-	objectiveSpotDef.spot = spot;
-	objectiveSpotDef.navWeight = navWeight;
-	objectiveSpotDef.goalWeight = goalWeight;
-	objectiveSpotDef.isDefenceSpot = false;
 }
 
 void Bot::TouchedOtherEntity( const edict_t *entity ) {

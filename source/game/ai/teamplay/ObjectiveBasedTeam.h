@@ -69,6 +69,8 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		 */
 		AiObjectiveSpot *underlying { nullptr };
 
+		std::pair<float, float> thisEntityWeightsForBot[MAX_CLIENTS];
+
 		ObjectiveSpotImpl() = default;
 
 		explicit ObjectiveSpotImpl( AiObjectiveSpot *underlying_ )
@@ -113,6 +115,8 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		 * Assigns bot orders as it is appropriate for the concrete type of spot.
 		 */
 		virtual void UpdateBotsStatus() = 0;
+
+		inline void SetWeightsForBot( Bot *bot, float navWeight, float goalWeight = -1.0f );
 	};
 
 	/**
@@ -267,6 +271,7 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		const Spot *Head() const { return usedSpotsHead; }
 	};
 
+
 	SpotsContainer<DefenceSpot, MAX_DEFENCE_SPOTS, AiDefenceSpot> defenceSpots;
 	SpotsContainer<OffenseSpot, MAX_OFFENSE_SPOTS, AiOffenseSpot> offenseSpots;
 
@@ -333,13 +338,7 @@ public:
 	void OnBotAdded( Bot *bot ) override;
 	void OnBotRemoved( Bot *bot ) override;
 
-	/**
-	 * Returns an entity that is assigned for the bot on the spot.
-	 * @note the entity does not mandatory match the entity the spot is based on
-	 * (we can implement more sophisticated logic for a proper bots positioning).
-	 * @return an underlying entity that should be a nav target for a bot or null.
-	 */
-	const edict_t *GetAssignedEntity( const Bot *bot, const AiObjectiveSpot *spot ) const;
+	const std::pair<float, float> *GetEntityWeights( const Bot *bot, const NavEntity *navEntity ) const override;
 
 	void Think() override;
 };

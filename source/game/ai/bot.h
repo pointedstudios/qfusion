@@ -276,38 +276,16 @@ public:
 		return GT_asPlayerOffensiveAbilitiesRating( self->r.client );
 	}
 
-	/**
-	 * Tracks record of what objective spot a bot is assigned to.
-	 */
-	struct ObjectiveSpotDef {
-		AiObjectiveSpot *spot;
-		/**
-		 * A weight of a spot as a nav entity for selection of a best nav entity.
-		 */
-		float navWeight { 0.0f };
-		/**
-		 * A weight of a planning goal if this spot is selected as a nav entity.
-		 */
-		float goalWeight { 0.0f };
-
-		bool isDefenceSpot { false };
-
-		void Invalidate() { spot = nullptr; }
-		bool IsActive() const { return spot != nullptr; }
-		int DefenceSpotId() const;
-		int OffenseSpotId() const;
-	};
-
-	ObjectiveSpotDef &GetObjectiveSpot() {
-		return objectiveSpotDef;
+	const AiObjectiveSpot *ObjectiveSpot() const {
+		return objectiveSpot;
 	}
 
-	inline void ClearDefenceAndOffenceSpots() {
-		objectiveSpotDef.Invalidate();
+	void SetObjectiveSpot( AiObjectiveSpot *spot ) {
+		objectiveSpot = spot;
 	}
 
-	void SetDefenceSpot( AiDefenceSpot *spot, float navWeight, float goalWeight = -1.0f );
-	void SetOffenseSpot( AiOffenseSpot *spot, float navWeight, float goalWeight = -1.0f );
+	int DefenceSpotId() const;
+	int OffenseSpotId() const;
 
 	/**
 	 * Returns a field of view of the bot in degrees (dependent of skill level).
@@ -448,7 +426,7 @@ private:
 	Bot *NextInObjective() { return next[OBJECTIVE_LINKS]; }
 	const Bot *NextInObjective() const { return next[OBJECTIVE_LINKS]; }
 
-	ObjectiveSpotDef objectiveSpotDef;
+	AiObjectiveSpot *objectiveSpot;
 
 	int64_t lastTouchedTeleportAt { 0 };
 	int64_t lastTouchedJumppadAt { 0 };

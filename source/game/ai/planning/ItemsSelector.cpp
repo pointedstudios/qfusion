@@ -15,23 +15,11 @@ void BotItemsSelector::UpdateInternalItemAndGoalWeights() {
 		}
 	}
 
-	const edict_t *objectiveSpotEntity = nullptr;
-	const auto &spotDef = self->ai->botRef->objectiveSpotDef;
-	if( spotDef.IsActive() ) {
-		const auto *team = AiBaseTeam::GetTeamForNum( self->s.team );
-		if( const auto *objectiveBasedTeam = dynamic_cast<const AiObjectiveBasedTeam *>( team ) ) {
-			objectiveSpotEntity = objectiveBasedTeam->GetAssignedEntity( self->ai->botRef, spotDef.spot );
-		}
-	}
+	const auto *const botTeam = AiBaseTeam::GetTeamForNum( self->s.team );
 
 	const auto levelTime = level.time;
 	auto *navEntitiesRegistry = NavEntitiesRegistry::Instance();
 	for( const NavEntity *goalEnt = navEntitiesRegistry->Head(); goalEnt; goalEnt = goalEnt->Next() ) {
-		// Picking clients as goal entities is currently disabled
-		if( goalEnt->IsClient() ) {
-			continue;
-		}
-
 		// Do not even try to compute a weight for the disabled item
 		if( disabledForSelectionUntil[goalEnt->Id()] >= levelTime ) {
 			internalEntityWeights[goalEnt->Id()] = 0;
@@ -46,9 +34,10 @@ void BotItemsSelector::UpdateInternalItemAndGoalWeights() {
 			continue;
 		}
 
-		if( goalEnt->IsBasedOnEntity( objectiveSpotEntity ) ) {
-			internalEntityWeights[goalEnt->Id()] = spotDef.navWeight;
-			internalPickupGoalWeights[goalEnt->Id()] = spotDef.goalWeight;
+		const std::pair<float, float> *const navAndGoalWeight = botTeam->GetEntityWeights( self->ai->botRef, goalEnt );
+		if( navAndGoalWeight ) {
+			internalEntityWeights[goalEnt->Id()] = navAndGoalWeight->first;
+			internalPickupGoalWeights[goalEnt->Id()] = navAndGoalWeight->second;
 			continue;
 		}
 	}
