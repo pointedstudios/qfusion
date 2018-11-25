@@ -6,6 +6,10 @@
 #include "MovementPredictionContext.h"
 #include "EnvironmentTraceCache.h"
 
+// For macOS Clang
+#include <cmath>
+#include <cstdlib>
+
 #ifndef PUBLIC_BUILD
 #define CHECK_ACTION_SUGGESTION_LOOPS
 #define ENABLE_MOVEMENT_ASSERTIONS

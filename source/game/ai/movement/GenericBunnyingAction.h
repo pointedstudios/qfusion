@@ -13,6 +13,7 @@ protected:
 	int travelTimeAtSequenceStart { 0 };
 	int reachAtSequenceStart { 0 };
 	int groundedAreaAtSequenceStart { 0 };
+	float groundZAtSequenceStart { 0.0f };
 	// Best results so far achieved in the action application sequence
 	int minTravelTimeToNavTargetSoFar { 0 };
 	int minTravelTimeAreaNumSoFar { 0 };
@@ -86,6 +87,8 @@ protected:
 	bool CheckForActualCompletionOnGround( MovementPredictionContext *context );
 
 	inline bool WasOnGroundThisFrame( const MovementPredictionContext *context ) const;
+
+	inline bool HasSubstantiallyChangedZ( const AiEntityPhysicsState &entityPhysicsState ) const;
 
 	inline void MarkForTruncation( MovementPredictionContext *context );
 public:

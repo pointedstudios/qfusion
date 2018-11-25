@@ -343,6 +343,13 @@ bool GenericRunBunnyingAction::CheckStepSpeedGainOrLoss( Context *context ) {
 		}
 	}
 
+	// Skip any further tests if the bot has changed Z substantially
+	if( HasSubstantiallyChangedZ( newEntityPhysicsState ) ) {
+		if( originAtSequenceStart.SquareDistance2DTo( newEntityPhysicsState.Origin() ) > SQUARE( 72.0f ) ) {
+			return true;
+		}
+	}
+
 	// Avoid bumping into walls.
 	// Note: the lower speed limit is raised to actually trigger this check.
 	if( newSquare2DSpeed < 50 * 50 && oldSquare2DSpeed > 100 * 100 ) {
@@ -386,6 +393,18 @@ bool GenericRunBunnyingAction::CheckStepSpeedGainOrLoss( Context *context ) {
 
 inline bool GenericRunBunnyingAction::WasOnGroundThisFrame( const Context *context ) const {
 	return context->movementState->entityPhysicsState.GroundEntity() || context->frameEvents.hasJumped;
+}
+
+inline bool GenericRunBunnyingAction::HasSubstantiallyChangedZ( const AiEntityPhysicsState &state ) const {
+	if( !std::isfinite( groundZAtSequenceStart ) ) {
+		return false;
+	}
+	const float heightOverGround = state.HeightOverGround();
+	if( !std::isfinite( heightOverGround ) ) {
+		return false;
+	}
+	const float newGroundZ = state.Origin()[2] - heightOverGround + playerbox_stand_mins[2];
+	return std::fabs( groundZAtSequenceStart - newGroundZ ) > 48.0f;
 }
 
 bool GenericRunBunnyingAction::CheckForActualCompletionOnGround( MovementPredictionContext *context ) {
@@ -634,6 +653,12 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 		if( iter != checkStopAtAreaNums.end() ) {
 			// Stop prediction having touched the ground this frame in this kind of area
 			if( WasOnGroundThisFrame( context ) ) {
+				// Ignore bumping into walls if we are very likely in stairs-like environment.
+				// Bots have significant movement troubles in this case.
+				if( HasSubstantiallyChangedZ( newEntityPhysicsState ) ) {
+					context->isCompleted = true;
+					return;
+				}
 				if( CheckForActualCompletionOnGround( context ) ) {
 					context->isCompleted = true;
 					return;
@@ -682,6 +707,8 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 			// and we have a substantial distance for further trajectory correction
 			// (if the distance to the trajectory truncation origin is above the threshold)
 			if( mayStopAtAreaNum && Distance2DSquared( mayStopAtOrigin, newEntityPhysicsState.Origin() ) > SQUARE( 40 ) ) {
+				mayComplete = true;
+			} else if( HasSubstantiallyChangedZ( newEntityPhysicsState ) ) {
 				mayComplete = true;
 			} else if( CheckForActualCompletionOnGround( context ) ) {
 				mayComplete = true;
@@ -917,7 +944,14 @@ void GenericRunBunnyingAction::OnApplicationSequenceStarted( Context *context ) 
 		}
 	}
 
-	originAtSequenceStart.Set( context->movementState->entityPhysicsState.Origin() );
+	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
+	originAtSequenceStart.Set( entityPhysicsState.Origin() );
+	const float heightOverGround = entityPhysicsState.HeightOverGround();
+	if( std::isfinite( heightOverGround ) ) {
+		groundZAtSequenceStart = originAtSequenceStart.Z() - heightOverGround + playerbox_stand_mins[2];
+	} else {
+		groundZAtSequenceStart = std::numeric_limits<float>::infinity();
+	}
 
 	currentSpeedLossSequentialMillis = 0;
 	currentUnreachableTargetSequentialMillis = 0;
