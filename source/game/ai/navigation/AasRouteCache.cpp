@@ -214,7 +214,8 @@ void AiAasRouteCache::FreeRoutingCache( AreaOrPortalCacheTable *cache ) {
 
 void AiAasRouteCache::SetDisabledZones( DisableZoneRequest **requests, int numRequests ) {
 	// Copy the reference to a local var for faster access
-	AreaPathFindingData *areaPathFindingData = this->areaPathFindingData;
+	AreaPathFindingData *const __restrict areaPathFindingData = this->areaPathFindingData;
+	int *const __restrict disabledAreaNumsBuffer = this->currDisabledAreaNums;
 
 	// First, save old area statuses and set new ones as non-blocked
 	for( int i = 0, end = aasWorld.NumAreas(); i < end; ++i ) {
@@ -232,26 +233,28 @@ void AiAasRouteCache::SetDisabledZones( DisableZoneRequest **requests, int numRe
 			}
 			continue;
 		}
-		numAreas = requests[i]->FillProvidedAreasBuffer( currDisabledAreaNums + numDisabledAreas, capacityLeft );
+		numAreas = requests[i]->FillProvidedAreasBuffer( disabledAreaNumsBuffer + numDisabledAreas, capacityLeft );
 		numDisabledAreas += numAreas;
 		capacityLeft -= numAreas;
 	}
 
 	// For each selected area mark area as disabled
 	for( int i = 0; i < numDisabledAreas; ++i ) {
-		areaPathFindingData[currDisabledAreaNums[i]].disabledStatus.SetCurrStatus( true );
+		areaPathFindingData[disabledAreaNumsBuffer[i]].disabledStatus.SetCurrStatus( true );
 	}
 
 	// For each area compare its old and new status
-	int totalClearCacheAreas = 0;
+	bool shouldClearCache = false;
 	for( int i = 0, end = aasWorld.NumAreas(); i < end; ++i ) {
 		const auto &status = areaPathFindingData[i].disabledStatus;
+		// TODO: We can test multiple statuses using SIMD
 		if( status.OldStatus() != status.CurrStatus() ) {
-			cleanCacheAreaNums[totalClearCacheAreas++] = i;
+			shouldClearCache = true;
+			break;
 		}
 	}
 
-	if( !totalClearCacheAreas ) {
+	if( !shouldClearCache ) {
 		return;
 	}
 

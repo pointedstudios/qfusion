@@ -1126,8 +1126,8 @@ AiAasWorld::~AiAasWorld() {
 		G_LevelFree( floorClustersVisTable );
 	}
 
-	if( groundedAreas ) {
-		G_LevelFree( groundedAreas );
+	if( usefulGroundedAreas ) {
+		G_LevelFree( usefulGroundedAreas );
 	}
 	if( jumppadReachPassThroughAreas ) {
 		G_LevelFree( jumppadReachPassThroughAreas );
@@ -1880,14 +1880,15 @@ void AiAasWorld::BuildSpecificAreaTypesLists() {
 	// Add a placeholder for actual size
 	groundedAreasBuilder.Add( 0 );
 	for( int i = 1, end = this->NumAreas(); i < end; ++i ) {
-		if( areasettings[i].areaflags & AREA_GROUNDED ) {
+		const int areaFlags = areasettings[i].areaflags;
+		if( ( areaFlags & AREA_GROUNDED ) && !( areaFlags & AREA_JUNK ) ) {
 			groundedAreasBuilder.Add( (uint16_t)i );
 		}
 	}
 
-	this->groundedAreas = groundedAreasBuilder.FlattenResult();
+	this->usefulGroundedAreas = groundedAreasBuilder.FlattenResult();
 	// There was a placeholder for the size added, so the actual list size is lesser by one
-	this->groundedAreas[0] = (uint16_t)( groundedAreasBuilder.Size() - 1 );
+	this->usefulGroundedAreas[0] = (uint16_t)( groundedAreasBuilder.Size() - 1 );
 	groundedAreasBuilder.Clear();
 
 	ReachPassThroughAreasListBuilder<AcceptAnyArea> acceptAnyAreaBuilder( this, AasElementsMask::AreasMask() );

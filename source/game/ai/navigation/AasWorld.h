@@ -275,7 +275,7 @@ class AiAasWorld
 
 	bool *floorClustersVisTable { nullptr };
 
-	uint16_t *groundedAreas { nullptr };
+	uint16_t *usefulGroundedAreas { nullptr };
 	uint16_t *jumppadReachPassThroughAreas { nullptr };
 	uint16_t *ladderReachPassThroughAreas { nullptr };
 	uint16_t *elevatorReachPassThroughAreas { nullptr };
@@ -509,7 +509,10 @@ public:
 		return areaMapLeafsData + areaMapLeafListOffsets[areaNum];
 	}
 
-	const uint16_t *GroundedAreas() const { return groundedAreas; }
+	/**
+	 * Gets a list of all grounded areas in the world except "junk" ones.
+	 */
+	const uint16_t *UsefulGroundedAreas() const { return usefulGroundedAreas; }
 	const uint16_t *JumppadReachPassThroughAreas() const { return jumppadReachPassThroughAreas; }
 	const uint16_t *LadderReachPassThroughAreas() const { return ladderReachPassThroughAreas; }
 	const uint16_t *ElevatorReachPassThroughAreas() const { return elevatorReachPassThroughAreas; }
