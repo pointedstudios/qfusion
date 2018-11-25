@@ -172,8 +172,9 @@ void AiManager::UnlinkAi( ai_handle_t *aiHandle ) {
 
 	// All links related to the unlinked AI become invalid.
 	// Reset CPU quota cycling state to prevent use-after-free.
-	if( aiHandle == cpuQuotaOwner ) {
-		cpuQuotaOwner = nullptr;
+	globalCpuQuota.OnRemoved( aiHandle );
+	for( int i = 0; i < 4; ++i ) {
+		thinkQuota->OnRemoved( aiHandle );
 	}
 }
 
@@ -532,7 +533,8 @@ void AiManager::SetupBotGoalsAndActions( edict_t *ent ) {
 }
 
 void AiManager::Frame() {
-	UpdateCpuQuotaOwner();
+	globalCpuQuota.Update( aiHandlesListHead );
+	thinkQuota[level.framenum % 4].Update( aiHandlesListHead );
 
 	if( !GS_TeamBasedGametype() ) {
 		AiBaseTeam::GetTeamForNum( TEAM_PLAYERS )->Update();
@@ -644,40 +646,55 @@ bool AiManager::IsAreaReachableFromHubAreas( int targetArea, float *score ) cons
 	return numReach > 0;
 }
 
-void AiManager::UpdateCpuQuotaOwner() {
-	if( !cpuQuotaOwner ) {
-		cpuQuotaOwner = aiHandlesListHead;
+bool AiManager::GlobalQuota::Fits( const ai_handle_t *ai ) const {
+	return !ai->aiRef->IsGhosting();
+}
+
+bool AiManager::ThinkQuota::Fits( const ai_handle_t *ai ) const {
+	if( !ai->aiRef->IsGhosting() ) {
+		return false;
+	}
+	// Only bots that have the same frame affinity fit
+	return ai->botRef && ai->botRef->frameAffinityOffset == affinityOffset;
+}
+
+void AiManager::Quota::Update( const ai_handle_t *aiHandlesHead ) {
+	if( !owner ) {
+		owner = aiHandlesHead;
+		while( owner && !Fits( owner ) ) {
+			owner = owner->Next();
+		}
 		return;
 	}
 
-	const auto *const oldQuotaOwner = cpuQuotaOwner;
+	const auto *const oldOwner = owner;
 	// Start from the next AI in list
-	cpuQuotaOwner = cpuQuotaOwner->Next();
+	owner = owner->Next();
 	// Scan all bots that are after the current owner in the list
-	while( cpuQuotaOwner ) {
-		// Stop on the first bot that is in-game
-		if( !cpuQuotaOwner->aiRef->IsGhosting() ) {
+	while( owner ) {
+		// Stop on the first bot that fits this
+		if( !Fits( owner ) ) {
 			break;
 		}
-		cpuQuotaOwner = cpuQuotaOwner->Next();
+		owner = owner->Next();
 	}
 
 	// If the scan has not reached the list end
-	if( cpuQuotaOwner ) {
+	if( owner ) {
 		return;
 	}
 
 	// Rewind to the list head
-	cpuQuotaOwner = aiHandlesListHead;
+	owner = aiHandlesHead;
 
 	// Scan all bots that is before the current owner in the list
 	// Keep the current owner if there is no in-game bots before
-	while( cpuQuotaOwner && cpuQuotaOwner != oldQuotaOwner ) {
-		// Stop of the first bot that is in game
-		if( !cpuQuotaOwner->aiRef->IsGhosting() ) {
+	while( owner && owner != oldOwner ) {
+		// Stop on the first bot that fits this
+		if( !Fits( owner ) ) {
 			break;
 		}
-		cpuQuotaOwner = cpuQuotaOwner->Next();
+		owner = owner->Next();
 	}
 
 	// If the loop execution has not been interrupted by break,
@@ -687,17 +704,26 @@ void AiManager::UpdateCpuQuotaOwner() {
 
 bool AiManager::TryGetExpensiveComputationQuota( const Bot *bot ) {
 	const edict_t *ent = game.edicts + bot->EntNum();
+	return globalCpuQuota.TryAcquire( ent->ai );
+}
 
-	if( ent->ai != cpuQuotaOwner ) {
+bool AiManager::TryGetExpensiveThinkCallQuota( const Bot *bot ) {
+	const edict_t *ent = game.edicts + bot->EntNum();
+	return thinkQuota[level.framenum % 4].TryAcquire( ent->ai );
+}
+
+bool AiManager::Quota::TryAcquire( const ai_handle_t *ai ) {
+	if( ai != owner ) {
 		return false;
 	}
 
+	auto levelTime = level.time;
 	// Allow expensive computations only once per frame
-	if( cpuQuotaGivenAt == level.time ) {
+	if( givenAt == levelTime ) {
 		return false;
 	}
 
 	// Mark it
-	cpuQuotaGivenAt = level.time;
+	givenAt = levelTime;
 	return true;
 }

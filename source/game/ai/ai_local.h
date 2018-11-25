@@ -147,6 +147,7 @@ typedef struct ai_handle_s {
 	ai_handle_t *prev[1], *next[1];
 
 	ai_handle_t *Next() { return next[0]; }
+	const ai_handle_t *Next() const { return next[0]; }
 
 	class Ai * aiRef;
 	class Bot * botRef;

@@ -1,4 +1,5 @@
 #include "AwarenessModule.h"
+#include "../ai_manager.h"
 #include "../teamplay/SquadBasedTeam.h"
 #include "../bot.h"
 
@@ -85,13 +86,16 @@ void BotAwarenessModule::Think() {
 	if( selectedEnemies.AreValid() ) {
 		if( level.time - selectedEnemies.LastSeenAt() > std::min( 64u, reactionTime ) ) {
 			selectedEnemies.Invalidate();
-			UpdateSelectedEnemies();
-			UpdateBlockedAreasStatus();
 		}
-	} else {
-		UpdateSelectedEnemies();
-		UpdateBlockedAreasStatus();
 	}
+
+	if( !selectedEnemies.AreValid() ) {
+		UpdateSelectedEnemies();
+		shouldUpdateBlockedAreasStatus = true;
+	}
+
+	// Calling this also makes sense if the "update" flag has been retained from previous frames
+	UpdateBlockedAreasStatus();
 
 	keptInFovPointTracker.Update();
 
@@ -235,11 +239,16 @@ void BotAwarenessModule::OnEnemyRemoved( const TrackedEnemy *enemy ) {
 }
 
 void BotAwarenessModule::UpdateBlockedAreasStatus() {
-	// The "old-new" blocking style is enabled again.
-	// The algorithm borrows ideas both from "old"
-	// (check whether an individual area can be really hit by enemy)
-	// and "new" (handle blocking at router level by setting area flags) ways of blocking paths.
+	if( !shouldUpdateBlockedAreasStatus ) {
+		return;
+	}
+
+	if( !AiManager::Instance()->TryGetExpensiveThinkCallQuota( self->ai->botRef ) ) {
+		return;
+	}
+
 	pathBlockingTracker.Update();
+	shouldUpdateBlockedAreasStatus = false;
 }
 
 static bool IsEnemyVisible( const edict_t *self, const edict_t *enemyEnt ) {

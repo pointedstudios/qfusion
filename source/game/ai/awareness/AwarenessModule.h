@@ -24,6 +24,8 @@ class BotAwarenessModule: public AiFrameAwareUpdatable {
 	const unsigned targetChoicePeriod;
 	const unsigned reactionTime;
 
+	bool shouldUpdateBlockedAreasStatus { false };
+
 	AlertTracker alertTracker;
 	HazardsDetector hazardsDetector;
 	HazardsSelector hazardsSelector;

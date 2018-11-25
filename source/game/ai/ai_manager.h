@@ -18,8 +18,37 @@ protected:
 
 	int teams[MAX_CLIENTS];
 	ai_handle_t *aiHandlesListHead { nullptr };
-	ai_handle_t *cpuQuotaOwner { nullptr };
-	int64_t cpuQuotaGivenAt { 0 };
+
+	struct Quota {
+		int64_t givenAt { 0 };
+		const ai_handle_t *owner { nullptr };
+
+		virtual bool Fits( const ai_handle_t *ai ) const = 0;
+
+		bool TryAcquire( const ai_handle_t *ai );
+		void Update( const ai_handle_t *aiHandlesHead );
+
+		void OnRemoved( const ai_handle_t *ai ) {
+			if( ai == owner ) {
+				owner = nullptr;
+			}
+		}
+	};
+
+	struct GlobalQuota final : public Quota {
+		bool Fits( const ai_handle_t *ai ) const override;
+	};
+
+	struct ThinkQuota final : public Quota {
+		const unsigned affinityOffset;
+		explicit ThinkQuota( unsigned affinityOffset_ ): affinityOffset( affinityOffset_ ) {}
+		bool Fits( const ai_handle_t *ai ) const override;
+	};
+
+	GlobalQuota globalCpuQuota;
+	ThinkQuota thinkQuota[4] = {
+		ThinkQuota( 0 ), ThinkQuota( 1 ), ThinkQuota( 2 ), ThinkQuota( 3 )
+	};
 
 	int hubAreas[16];
 	int numHubAreas { 0 };
@@ -170,8 +199,6 @@ public:
 	void SetupBotGoalsAndActions( edict_t *ent );
 
 	void FindHubAreas();
-
-	void UpdateCpuQuotaOwner();
 public:
 	void LinkAi( ai_handle_t *aiHandle );
 	void UnlinkAi( ai_handle_t *aiHandle );
@@ -218,6 +245,13 @@ public:
 	 * (only a single expensive operation is allowed per frame globally).
 	 */
 	bool TryGetExpensiveComputationQuota( const Bot *bot );
+
+	/**
+	 * Similar to {@code TryGetExpensiveComputationQuota()}
+	 * but tracks bots that have different think frame offset separately.
+	 * @note This quota is independent from the global one.
+	 */
+	bool TryGetExpensiveThinkCallQuota( const Bot *bot );
 };
 
 #endif
