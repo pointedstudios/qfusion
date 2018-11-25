@@ -202,57 +202,41 @@ int SameFloorClusterAreasCache::FindClosestToTargetPoint( Context *context, int 
 	return 0;
 }
 
-void FloorClusterAreasCache::BuildCandidateAreasHeap( MovementPredictionContext *context,
-													  int maxTravelTimeThreshold,
-													  const uint16_t *clusterAreaNums,
-													  int numClusterAreas,
-													  CandidateAreasHeap &result ) const {
-	result.clear();
+void FloorClusterAreasCache::PrepareAreasForSmallCluster( MovementPredictionContext *__restrict context,
+														  const Hazard *__restrict hazardToEvade,
+														  int maxTravelTimeThreshold,
+														  const uint16_t *__restrict clusterAreaNums,
+														  int numClusterAreas,
+														  CandidateAreasHeap &__restrict result ) const {
+	// Prevent misusing
+	assert( result.empty() && result.capacity() >= numClusterAreas );
 
-	const auto *hazardToEvade = bot->PrimaryHazard();
-	// Reduce branching in the loop below
-	if( bot->ShouldRushHeadless() || ( hazardToEvade && !hazardToEvade->SupportsImpactTests() ) ) {
-		hazardToEvade = nullptr;
-	}
-
-	const auto *aasAreas = aasWorld->Areas();
-	const auto *routeCache = bot->RouteCache();
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	const int currAreaNum = context->CurrAasAreaNum();
+	const auto *__restrict aasAreas = aasWorld->Areas();
+	const auto *__restrict routeCache = bot->RouteCache();
+	const float *__restrict botOrigin = context->movementState->entityPhysicsState.Origin();
 	const int toAreaNum = context->NavTargetAasAreaNum();
+	const float zOffset = 1.0f - playerbox_stand_mins[2];
 
 	const float squareNearThreshold = areaSelectionNearThreshold * areaSelectionNearThreshold;
 	const float squareFarThreshold = areaSelectionFarThreshold * areaSelectionFarThreshold;
 
-	bool actuallyUsesHeap = false;
 	for( int i = 0; i < numClusterAreas; ++i ) {
 		const int areaNum = clusterAreaNums[i];
 
 		const auto &area = aasAreas[areaNum];
 		Vec3 areaPoint( area.center );
-		areaPoint.Z() = area.mins[2] + 1 + ( -playerbox_stand_mins[2] );
+		areaPoint.Z() = area.mins[2] + zOffset;
 
-		const float squareDistance = areaPoint.SquareDistanceTo( entityPhysicsState.Origin() );
-		if( squareDistance < squareNearThreshold ) {
+		const float squareDistance = areaPoint.SquareDistanceTo( botOrigin );
+		if( squareDistance < squareNearThreshold || squareDistance > squareFarThreshold ) {
 			continue;
 		}
 
-		// Cut off very far points as it leads to looping in some cases on vast open areas
-		if( squareDistance > squareFarThreshold ) {
-			continue;
-		}
-
-		if( hazardToEvade && hazardToEvade->HasImpactOnPoint( areaPoint ) ) {
-			continue;
-		}
-
-		// Skip routing calls for areas that are not in PVS.
-		// Area-to-area PVS test is quite cheap.
-		// We eliminate necessity in having a large heap of candidates
-		// by rejecting a-priori not visible areas this early.
-		// That's why the heap vector size has been reduced.
-		if( !aasWorld->AreAreasInPvs( currAreaNum, areaNum ) ) {
-			continue;
+		// Putting this in loop is not that expensive as it's remains the same and the branch gets predicted well
+		if( hazardToEvade ) {
+			if( hazardToEvade->HasImpactOnPoint( areaPoint ) ) {
+				continue;
+			}
 		}
 
 		const int areaTime = routeCache->FastestRouteToGoalArea( areaNum, toAreaNum );
@@ -260,34 +244,104 @@ void FloorClusterAreasCache::BuildCandidateAreasHeap( MovementPredictionContext 
 			continue;
 		}
 
-		// If we still have some room for new areas, just push an element back.
-		if( result.size() < result.capacity() ) {
-			new ( result.unsafe_grow_back() )AreaAndScore( areaNum, areaTime );
+		assert( result.size() < result.capacity() );
+		// Note: negate the travel time here so closest to target areas are evicted first from the max heap
+		new( result.unsafe_grow_back() )AreaAndScore( areaNum, -areaTime );
+	}
+}
+
+void FloorClusterAreasCache::PrepareAreasForLargeCluster( MovementPredictionContext *__restrict context,
+														  const Hazard *__restrict hazardToEvade,
+														  int maxTravelTimeThreshold,
+														  const uint16_t *__restrict clusterAreaNums,
+														  int numClusterAreas,
+														  CandidateAreasHeap &__restrict result ) const {
+	// Prevent misusing
+	assert( result.empty() && result.capacity() < numClusterAreas );
+
+	const auto *__restrict aasAreas = aasWorld->Areas();
+	const auto *__restrict routeCache = bot->RouteCache();
+	const float *__restrict botOrigin = context->movementState->entityPhysicsState.Origin();
+	const float zOffset = 1.0f - playerbox_stand_mins[2];
+
+	const float squareNearThreshold = areaSelectionNearThreshold * areaSelectionNearThreshold;
+	const float squareFarThreshold = areaSelectionFarThreshold * areaSelectionFarThreshold;
+
+	// First cut off as many areas as possible.
+	// AreAreasInPVS() call is not that cheap as we expected.
+	CandidateAreasHeap distanceHeap;
+	for( int i = 0; i < numClusterAreas; ++i ) {
+		const int areaNum = clusterAreaNums[i];
+
+		const auto &area = aasAreas[areaNum];
+		Vec3 areaPoint( area.center );
+		areaPoint.Z() = area.mins[2] + zOffset;
+
+		const float squareDistance = areaPoint.SquareDistanceTo( botOrigin );
+		if( squareDistance < squareNearThreshold || squareDistance > squareFarThreshold ) {
 			continue;
 		}
 
-		if( actuallyUsesHeap ) {
-			std::pop_heap( result.begin(), result.end() );
-			result.pop_back();
-		} else {
-			// Convert plain vector to a heap on demand
-			std::make_heap( result.begin(), result.end() );
-			std::pop_heap( result.begin(), result.end() );
-			result.pop_back();
-			actuallyUsesHeap = true;
+		// Putting this in loop is not that expensive as it's remains the same and the branch gets predicted well
+		if( hazardToEvade ) {
+			if( hazardToEvade->HasImpactOnPoint( areaPoint ) ) {
+				continue;
+			}
 		}
 
-		new( result.unsafe_grow_back() )AreaAndScore( areaNum, areaTime );
-		std::push_heap( result.begin(), result.end() );
+		// Usually best areas are farther from the bot.
+		// Unfortunately worst areas are too.
+		// As we have to cut off areas, let closest areas retain in the max-heap.
+		const float score = squareDistance;
+
+		if( distanceHeap.size() < distanceHeap.capacity() ) {
+			new( distanceHeap.unsafe_grow_back() )AreaAndScore( areaNum, score );
+			std::push_heap( distanceHeap.begin(), distanceHeap.end() );
+			continue;
+		}
+
+		// Evict the farthest area
+		std::pop_heap( distanceHeap.begin(), distanceHeap.end() );
+		distanceHeap.pop_back();
+
+		new( distanceHeap.unsafe_grow_back() )AreaAndScore( areaNum, score );
+		std::push_heap( distanceHeap.begin(), distanceHeap.end() );
 	}
 
-	// We have set scores so worst area got evicted first, invert scores now so the best area is retrieved first
-	for( auto &areaAndScore: result ) {
-		areaAndScore.score = -areaAndScore.score;
+	const int toAreaNum = context->NavTargetAasAreaNum();
+	for( const auto &areaAndScore: distanceHeap ) {
+		const auto areaNum = areaAndScore.areaNum;
+		const int areaTime = routeCache->FastestRouteToGoalArea( areaNum, toAreaNum );
+		if( !areaTime || areaTime >= maxTravelTimeThreshold ) {
+			continue;
+		}
+
+		assert( result.size() < result.capacity() );
+		// Note: negate the travel time here so closest to target areas are evicted first from the max heap
+		new( result.unsafe_grow_back() )AreaAndScore( areaNum, -areaTime );
+	}
+}
+
+void FloorClusterAreasCache::BuildCandidateAreasHeap( MovementPredictionContext *context,
+													  int maxTravelTimeThreshold,
+													  const uint16_t *clusterAreaNums,
+													  int numClusterAreas,
+													  CandidateAreasHeap &result ) const {
+	result.clear();
+
+	const auto *hazard = bot->PrimaryHazard();
+	// Reduce branching in the loop below
+	if( bot->ShouldRushHeadless() || ( hazard && !hazard->SupportsImpactTests() ) ) {
+		hazard = nullptr;
 	}
 
-	// TODO: If it is already a heap we could use a cheaper conversion
-	// but it's unlikely that a heap is actually used for an overwhelming majority of floor clusters
+	if( numClusterAreas <= HEAP_SIZE ) {
+		PrepareAreasForSmallCluster( context, hazard, maxTravelTimeThreshold, clusterAreaNums, numClusterAreas, result );
+	} else {
+		PrepareAreasForLargeCluster( context, hazard, maxTravelTimeThreshold, clusterAreaNums, numClusterAreas, result );
+	}
+
+	// Candidates written in `result` are not arranged in a heap (but must have feasible scores)
 	std::make_heap( result.begin(), result.end() );
 }
 

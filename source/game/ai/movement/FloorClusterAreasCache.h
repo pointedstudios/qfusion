@@ -5,11 +5,14 @@
 #include "../static_vector.h"
 
 class Bot;
+struct Hazard;
 class MovementPredictionContext;
 
 class FloorClusterAreasCache {
 protected:
-	using CandidateAreasHeap = StaticVector<AreaAndScore, 24>;
+	static constexpr unsigned HEAP_SIZE = 20;
+
+	using CandidateAreasHeap = StaticVector<AreaAndScore, HEAP_SIZE>;
 
 	/**
 	 * If a bot remains in the same area candidates computation might be skipped
@@ -54,6 +57,40 @@ protected:
 								  const uint16_t *clusterAreaNums,
 								  int numClusterAreas,
 								  CandidateAreasHeap &result ) const;
+
+	/**
+	 * Selects candidate areas without actually making a heap.
+	 * The number of areas in the cluster must not be greater than the heap capacity.
+	 * @param context a movement prediction context
+	 * @param hazardToEvade a hazard that may have impact on areas, nullable
+	 * @param maxTravelTimeThreshold skip areas if the travel time from area to target is not better than this
+	 * @param clusterAreaNums an array of area numbers of the floor cluster
+	 * @param numClusterAreas a number of areas in the floor cluster
+	 * @param result selected candidate areas
+	 */
+	void PrepareAreasForSmallCluster( MovementPredictionContext *__restrict context,
+									  const Hazard *__restrict hazardToEvade,
+									  int maxTravelTimeThreshold,
+								      const uint16_t *__restrict clusterAreaNums,
+								      int numClusterAreas,
+								      CandidateAreasHeap &__restrict result ) const;
+
+	/**
+	 * Selects candidate areas without actually making a heap.
+	 * The number of areas in the cluster is assumed to be greater than the heap capacity.
+	 * @param context a movement prediction context
+	 * @param hazardToEvade a hazard that may have impact on areas, nullable
+	 * @param maxTravelTimeThreshold skip areas if the travel time from area to target is not better than this
+	 * @param clusterAreaNums an array of area numbers of the floor cluster
+	 * @param numClusterAreas a number of areas in the floor cluster
+	 * @param result selected candidate areas
+	 */
+	void PrepareAreasForLargeCluster( MovementPredictionContext *__restrict context,
+		                              const Hazard *__restrict hazardToEvade,
+		                              int maxTravelTimeThreshold,
+		                              const uint16_t *__restrict clusterAreaNums,
+		                              int numClusterAreas,
+		                              CandidateAreasHeap &__restrict result ) const;
 
 	virtual bool NeedsToBeComputed( MovementPredictionContext *context ) const = 0;
 
