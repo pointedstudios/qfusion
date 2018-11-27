@@ -320,6 +320,10 @@ bool AiObjectiveBasedTeam::OverridesEntityWeights( const Bot *bot ) const {
 using WeightsPair = const std::pair<float, float>;
 
 WeightsPair *AiObjectiveBasedTeam::GetEntityWeights( const Bot *bot, const NavEntity *navEntity ) const {
+	return ChooseWeights( GetOwnWeights( bot, navEntity ), AiSquadBasedTeam::GetEntityWeights( bot, navEntity ) );
+}
+
+inline WeightsPair *AiObjectiveBasedTeam::GetOwnWeights( const Bot *bot, const NavEntity *navEntity ) const {
 	const AiObjectiveSpot *givenSpot = bot->ObjectiveSpot();
 	if( !givenSpot ) {
 		return nullptr;

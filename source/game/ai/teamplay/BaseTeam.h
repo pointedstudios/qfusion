@@ -80,6 +80,24 @@ protected:
 	static AiBaseTeam **TeamRefForNum( int teamNum );
 	static void Init();
 	static void Shutdown();
+
+	/**
+	 * Selects a preferred pair given two pairs of weights (each is nullable).
+	 * @param weights1 a first pair of nav weight and planning goal weight.
+	 * @param weights2 a second pair of nav weight and planning goal weight.
+	 * @return a preferred pair (null if both pairs are null).
+	 */
+	inline static const std::pair<float, float> *ChooseWeights( const std::pair<float, float> *weights1,
+		                                                        const std::pair<float, float> *weights2 ) {
+		if( !weights1 ) {
+			return weights2;
+		}
+		if( !weights2 ) {
+			return weights1;
+		}
+		// What to do is not obvious... lets favour planner goal weight over nav weight
+		return weights1->second > weights2->second ? weights1 : weights2;
+	}
 public:
 	static AiBaseTeam *GetTeamForNum( int teamNum );
 

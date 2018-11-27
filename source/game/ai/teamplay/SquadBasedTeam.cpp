@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <limits>
+#include <cmath>
+#include <cstdlib>
 
 /**
  * While {@code AiAasRouteCache} is fairly efficient at retrieval of cached results,
@@ -1153,7 +1155,7 @@ bool AiSquad::MayAttachBot( const Bot *bot ) const {
 }
 
 AiSquadBasedTeam::AiSquadBasedTeam( int team_ )
-	: AiBaseTeam( team_ ) {
+	: AiBaseTeam( team_ ), assistanceTracker( this ) {
 	// We have to construct squads explicitly since they do not have a default/trivial constructor
 	// Note: avoid getting an address of next (non-existent yet) element that is harmless but triggers a debug assertion
 
@@ -1280,6 +1282,8 @@ void AiSquadBasedTeam::TransferStateFrom( AiBaseTeam *that ) {
 void AiSquadBasedTeam::Think() {
 	// Call super method first, this call must not be omitted
 	AiBaseTeam::Think();
+
+	assistanceTracker.Think();
 
 	// Try setting up squads for orphan bots
 	if( orphanBotsHead ) {
@@ -1608,4 +1612,231 @@ AiSquadBasedTeam *AiSquadBasedTeam::InstantiateTeam( int teamNum, const std::typ
 
 	void *mem = G_Malloc( sizeof( AiObjectiveBasedTeam ) );
 	return new( mem )AiObjectiveBasedTeam( teamNum );
+}
+
+AiSquadBasedTeam::PlayerAssistanceTracker::PlayerAssistanceTracker( const AiSquadBasedTeam *parent_ )
+	: parent( parent_ ) {
+	influenceScores = (int8_t *)G_Malloc( MAX_CLIENTS * MAX_CLIENTS * sizeof( int8_t ) );
+	std::fill_n( assistanceMillisLeft, 0, MAX_CLIENTS );
+	std::fill_n( assistedClientNum, -1, MAX_CLIENTS );
+}
+
+bool AiSquadBasedTeam::OverridesEntityWeights( const Bot *bot ) const {
+	// Call the super method as it is expected
+	if( AiBaseTeam::OverridesEntityWeights( bot ) ) {
+		return true;
+	}
+	return assistanceTracker.OverridesEntityWeights( bot );
+}
+
+inline bool AiSquadBasedTeam::PlayerAssistanceTracker::OverridesEntityWeights( const Bot *bot ) const {
+	return assistedClientNum[bot->ClientNum()] >= 0;
+}
+
+using WeightsPair = const std::pair<float, float>;
+
+WeightsPair *AiSquadBasedTeam::GetEntityWeights( const Bot *bot, const NavEntity *navEntity ) const {
+	WeightsPair *superWeights = AiBaseTeam::GetEntityWeights( bot, navEntity );
+	WeightsPair *thisWeights = assistanceTracker.GetEntityWeights( bot, navEntity );
+	return ChooseWeights( superWeights, thisWeights );
+}
+
+WeightsPair *AiSquadBasedTeam::PlayerAssistanceTracker::GetEntityWeights( const Bot *bot, const NavEntity *nav ) const {
+	if( !nav->IsClient() ) {
+		return nullptr;
+	}
+
+	// That's who is currently being assisted
+	const int assistedNum = assistedClientNum[bot->ClientNum()];
+	// That's the number of nav entity client
+	const int entNum = nav->EntityId();
+	const int entClientNum = entNum - 1;
+	if( assistedNum != entClientNum ) {
+		return nullptr;
+	}
+
+	const edict_t *ent = game.edicts + entNum;
+	// Make sure everything is right even if some of these checks are redundant
+	if( G_ISGHOSTING( ent ) || ent->s.team != parent->teamNum ) {
+		return nullptr;
+	}
+
+	// Stop trying to hug the assisted player
+	if( DistanceSquared( bot->Origin(), ent->s.origin ) < 72.0f * 72.0f ) {
+		return nullptr;
+	}
+
+	// Give the client a high nav weight and an extremely high planning goal weight
+	tmpWeights = std::make_pair( 9.0f, 999.0f );
+	return &tmpWeights;
+}
+
+
+static constexpr int REFILL_SCORE = 2;
+
+void AiSquadBasedTeam::PlayerAssistanceTracker::UpdateInfluence() {
+	const auto &__restrict teamList = ::teamlist[parent->teamNum];
+	const auto *const __restrict playerIndices = teamList.playerIndices;
+	auto *const __restrict gameEdicts = game.edicts;
+	const auto *const __restrict pvsCache = EntitiesPvsCache::Instance();
+	auto *const __restrict scores_ = this->influenceScores;
+
+	trace_t trace;
+	// Iterate over all teammates in the outer loop to reuse some checks
+	for( int i = 0; i < teamList.numplayers; ++i ) {
+		const auto playerEntNum = playerIndices[i];
+		edict_t *const __restrict ent = gameEdicts + playerEntNum;
+		// Skip other AI beings
+		if( ent->ai ) {
+			continue;
+		}
+		if( G_ISGHOSTING( ent ) ) {
+			continue;
+		}
+
+		vec3_t mateForwardDir;
+		AngleVectors( ent->s.angles, mateForwardDir, nullptr, nullptr );
+
+		const bool isZooming = ent->r.client->ps.stats[PM_STAT_ZOOMTIME] > 0;
+		// Avoid excessive branching on `isZooming` in the loop below
+		const float squareDistanceThreshold = isZooming ? std::numeric_limits<float>::max() : 1250.0f * 1250.0f;
+		const float dotThreshold = isZooming ? 0.95f : 0.85f;
+
+		// Pick faster if the mate is crouching. "slice" suggested this.
+		const int refillScore = ent->r.client->ps.stats[PM_STAT_CROUCHTIME] ? 2 * REFILL_SCORE : REFILL_SCORE;
+
+		for( Bot *bot = parent->teamBotsHead; bot; bot = bot->NextInBotsTeam() ) {
+			const auto botClientNum = bot->ClientNum();
+			edict_t *const __restrict botEnt = gameEdicts + botClientNum + 1;
+			if( G_ISGHOSTING( botEnt ) ) {
+				continue;
+			}
+
+			// TODO: Start prefetching now &botScoresRow[playerClientNum]
+			auto *const __restrict botScoresRow = scores_ + botClientNum * MAX_CLIENTS;
+
+			Vec3 toBotVec( bot->Origin() );
+			toBotVec -= ent->s.origin;
+			const float squareDistance = toBotVec.SquaredLength();
+			// Check whether the teammate is zooming
+			// Skip far bots unless a teammate tries to highlight the bot while zooming.
+			// (`squareDistanceThreshold` depends of zooming).
+			if( squareDistance > squareDistanceThreshold ) {
+				continue;
+			}
+
+			// Check whether the teammate is looking at the bot
+			float dot = toBotVec.Dot( mateForwardDir );
+			// Check dot sign before normalization
+			if( dot < 0 ) {
+				continue;
+			}
+			dot *= 1.0f / std::sqrt( squareDistance + 1.0f );
+			if( dot < dotThreshold ) {
+				continue;
+			}
+
+			if( !pvsCache->AreInPvs( ent, botEnt ) ) {
+				continue;
+			}
+
+			// TODO: Use raycast in a floor cluster for quick rejection?
+
+			Vec3 traceStart( ent->s.origin );
+			traceStart.Z() += ent->viewheight;
+			Vec3 traceEnd( botEnt->s.origin );
+			traceEnd.Z() += botEnt->viewheight;
+
+			G_Trace( &trace, traceStart.Data(), nullptr, nullptr, traceEnd.Data(), ent, MASK_PLAYERSOLID );
+			if( gameEdicts + trace.ent != botEnt ) {
+				// We can do another call since control flow rarely reaches actual ray-casting.
+				// The first trace was at "chest" level of the model. Check trace at the "legs".
+				traceEnd.Z() -= botEnt->viewheight - 0.5f * playerbox_stand_mins[2];
+				G_Trace( &trace, traceStart.Data(), nullptr, nullptr, traceEnd.Data(), ent, MASK_PLAYERSOLID );
+				if( game.edicts + trace.ent != botEnt ) {
+					continue;
+				}
+			}
+
+			assert( playerEntNum > 0 );
+			const auto playerClientNum = playerEntNum - 1;
+			botScoresRow[playerClientNum] += refillScore;
+		}
+	}
+}
+
+void AiSquadBasedTeam::PlayerAssistanceTracker::DrainAndPick() {
+	auto *const __restrict gameEdicts = game.edicts;
+	auto *const __restrict scores_ = this->influenceScores;
+	auto *const __restrict assistanceMillisLeft_ = this->assistanceMillisLeft;
+	auto *const __restrict assistedClientNum_ = this->assistedClientNum;
+
+	// For every bot in this team
+	for( Bot *bot = parent->teamBotsHead; bot; bot = bot->NextInBotsTeam() ) {
+		const auto botClientNum = bot->ClientNum();
+		edict_t *const __restrict botEnt = gameEdicts + botClientNum + 1;
+		auto *const __restrict botScoresRow = scores_ + botClientNum * MAX_CLIENTS;
+		// Check whether the previous assistance order has expired
+
+		// TODO: Drop assumptions on default frame time
+		// Note that we do not have to track the time exactly.
+		// Just let the assistance expire in few seconds.
+		constexpr auto thinkInterval = 16 * 4;
+		// Assume that it requires tracking a bot perfectly for a second
+		constexpr int maxScore = ( REFILL_SCORE * 1000 ) / thinkInterval;
+		// Avoid score overflow
+		static_assert( maxScore < std::numeric_limits<int8_t>::max() - REFILL_SCORE, "" );
+
+		auto &__restrict millisLeft = assistanceMillisLeft_[botClientNum];
+		auto &__restrict assistedNum = assistedClientNum_[botClientNum];
+		millisLeft -= thinkInterval;
+		if( millisLeft <= 0 ) {
+			millisLeft = 0;
+			assistedNum = -1;
+		} else {
+			// Check whether the assisted player is no longer valid
+			const auto oldAssistedNum = assistedNum;
+			const edict_t *assisted = gameEdicts + oldAssistedNum + 1;
+			if( G_ISGHOSTING( assisted ) || assisted->s.team != parent->teamNum ) {
+				millisLeft = 0;
+				assistedNum = -1;
+				// Reset tracking score as well
+				botScoresRow[oldAssistedNum] = 0;
+			}
+		}
+
+		// If still assisting somebody
+		if( assistedNum >= 0 ) {
+			// Just drain/clamp scores
+			for( int i = 0; i < MAX_CLIENTS; ++i ) {
+				static_assert( REFILL_SCORE > 1, "" );
+				botScoresRow[i] -= ( REFILL_SCORE - 1 );
+				clamp( botScoresRow[i], 0, maxScore );
+			}
+			continue;
+		}
+
+		// Pick somebody to assist while draining/clamping scores
+		int goodClientNum = -1;
+		for( int i = 0; i < MAX_CLIENTS; ++i ) {
+			static_assert( REFILL_SCORE > 1, "" );
+			botScoresRow[i] -= ( REFILL_SCORE - 1 );
+			clamp( botScoresRow[i], 0, maxScore );
+			// If the score is the maximal score after draining
+			if( botScoresRow[i] >= maxScore - ( REFILL_SCORE - 1 ) ) {
+				goodClientNum = i;
+			}
+		}
+
+		if( goodClientNum < 0 ) {
+			continue;
+		}
+
+		millisLeft = 7500;
+		assistedNum = goodClientNum;
+
+		const auto goodEntNum = goodClientNum + 1;
+		const char *nickName = gameEdicts[goodEntNum].r.client->netname;
+		G_Say_Team( botEnt, va( "Roger! I've got your back %s\n", nickName ), false );
+	}
 }

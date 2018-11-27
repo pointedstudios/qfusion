@@ -321,6 +321,8 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 													  const AiObjectiveSpot *givenSpot,
 													  const Bot *bot,
 													  const NavEntity *navEntity ) const;
+
+	inline const std::pair<float, float> *GetOwnWeights( const Bot *bot, const NavEntity *navEntity ) const;
 public:
 	explicit AiObjectiveBasedTeam( int team_ );
 

@@ -249,6 +249,38 @@ class AiSquadBasedTeam : public AiBaseTeam {
 	 * A list of bots that are not in squad.
 	 */
 	Bot *orphanBotsHead { nullptr };
+
+	class PlayerAssistanceTracker {
+		friend class AiSquadBasedTeam;
+
+		const AiSquadBasedTeam *const parent;
+
+		int8_t *influenceScores;
+		mutable std::pair<float, float> tmpWeights;
+
+		int assistedClientNum[MAX_CLIENTS];
+		int assistanceMillisLeft[MAX_CLIENTS];
+
+		explicit PlayerAssistanceTracker( const AiSquadBasedTeam *parent_ );
+
+		~PlayerAssistanceTracker() {
+			G_Free( influenceScores );
+		}
+
+		void Think() {
+			UpdateInfluence();
+			DrainAndPick();
+		}
+
+		void UpdateInfluence();
+		void DrainAndPick();
+
+		inline bool OverridesEntityWeights( const Bot *bot ) const;
+
+		const std::pair<float, float> *GetEntityWeights( const Bot *bot, const NavEntity *navEntity ) const;
+	};
+
+	PlayerAssistanceTracker assistanceTracker;
 protected:
 	void OnBotAdded( Bot *bot ) override;
 	void OnBotRemoved( Bot *bot ) override;
@@ -274,6 +306,9 @@ public:
 
 	void Frame() override;
 	void Think() override;
+
+	bool OverridesEntityWeights( const Bot *bot ) const override;
+	const std::pair<float, float> *GetEntityWeights( const Bot *bot, const NavEntity *navEntity ) const override;
 };
 
 #endif
