@@ -64,11 +64,15 @@ public:
 	enum { MAX_ENEMIES = 8 };
 private:
 	const AiAasWorld *const aasWorld;
+	vec3_t botOrigin;
+	int botAreaNum;
 
 	// Lets put it last even if it has the largest alignment requirements
 	// Last elements of this array are unlikely to be accessed.
 	// Let the array head be closer to the memory hot spot
 	StaticVector<EnemyComputationalProxy, MAX_ENEMIES> enemyProxies;
+
+	inline bool LooksLikeANearbyArea( const aas_area_t *__restrict areas, int areaNum ) const;
 
 	void AddAreas( const uint16_t *__restrict areasList, bool *__restrict blockedAreasTable );
 
@@ -81,7 +85,8 @@ private:
 public:
 	void FillBlockedAreasTable( bool *__restrict blockedAreasTable ) override;
 
-	DisableMapAreasRequest( const TrackedEnemy **begin, const TrackedEnemy **end, float damageToKillBot_ );
+	DisableMapAreasRequest( const TrackedEnemy **begin, const TrackedEnemy **end,
+							const float *botOrigin_, float damageToKillBot_ );
 };
 
 inline void PathBlockingTracker::ClearBlockedAreas() {
@@ -131,7 +136,7 @@ void PathBlockingTracker::Update() {
 		return;
 	}
 
-	DisableMapAreasRequest request( potentialBlockers.begin(), potentialBlockers.end(), damageToKillBot );
+	DisableMapAreasRequest request( potentialBlockers.begin(), potentialBlockers.end(), bot->Origin(), damageToKillBot );
 	// SetDisabledZones() interface expects array of polymorphic objects
 	// that should consequently be referred via pointers
 	DisableMapAreasRequest *requests[1] = { &request };
@@ -207,8 +212,11 @@ bool PathBlockingTracker::IsAPotentialBlocker( const TrackedEnemy *enemy,
 
 DisableMapAreasRequest::DisableMapAreasRequest( const TrackedEnemy **begin,
 												const TrackedEnemy **end,
+												const float *botOrigin_,
 												float damageToKillBot_ )
 	: aasWorld( AiAasWorld::Instance() ){
+	VectorCopy( botOrigin_, this->botOrigin );
+	botAreaNum = aasWorld->FindAreaNum( botOrigin_ );
 	assert( end - begin > 0 && end - begin <= MAX_ENEMIES );
 	for( const TrackedEnemy **iter = begin; iter != end; ++iter ) {
 		const TrackedEnemy *enemy = *iter;
@@ -259,14 +267,26 @@ struct MayBlockOtherArea {
 	}
 };
 
+inline bool DisableMapAreasRequest::LooksLikeANearbyArea( const aas_area_t *areas, int areaNum ) const {
+	// These are coarse tests that are however sufficient to prevent blocking nearby areas around bot in most cases.
+	// Note that the additional area test is performed to prevent blocking of the current area
+	// if its huge and the bot is far from its center.  We could have used multiple areas
+	// (AiEntityPhysicsState::PrepareRoutingStartAreas()) but this is dropped for performance reasons.
+	return DistanceSquared( areas[areaNum].center, botOrigin ) < 192.0f * 192.0f || areaNum == botAreaNum;
+}
+
 void DisableMapAreasRequest::AddAreas( const uint16_t *__restrict areasList,
 									   bool *__restrict blockedAreasTable ) {
 	const auto hitFlagsMask = (int)TrackedEnemy::HitFlags::ALL;
+	const auto *const __restrict aasAreas = aasWorld->Areas();
 
 	// Skip the list size
 	const auto listSize = *areasList++;
 	for( int i = 0; i < listSize; ++i ) {
 		const auto areaNum = areasList[i];
+		if( LooksLikeANearbyArea( aasAreas, areaNum ) ) {
+			continue;
+		}
 		if( TryAddEnemiesImpactOnArea<MayBlockOtherArea>( areasList[i], hitFlagsMask ) ) {
 			blockedAreasTable[areaNum] = true;
 		}
@@ -279,8 +299,12 @@ void DisableMapAreasRequest::AddGroundedAreas( bool *__restrict blockedAreasTabl
 	// Do not take "rail" hit flags into account while testing grounded areas for blocking.
 	// A bot can easily dodge rail-like weapons using regular movement on ground.
 	const auto *const __restrict groundedAreaNums = aasWorld->UsefulGroundedAreas() + 1;
+	const auto *const __restrict aasAreas = aasWorld->Areas();
 	for( int i = 0; i < groundedAreaNums[-1]; ++i ) {
 		const int areaNum = groundedAreaNums[i];
+		if( LooksLikeANearbyArea( aasAreas, areaNum ) ) {
+			continue;
+		}
 		if( TryAddEnemiesImpactOnArea<MayBlockGroundedArea>( areaNum, hitFlagsMask ) ) {
 			blockedAreasTable[areaNum] = true;
 		}
@@ -291,6 +315,7 @@ void DisableMapAreasRequest::AddNonGroundedAreas( const uint16_t *__restrict are
 												  bool *__restrict blockedAreasTable ) {
 	const int hitFlagsMask = (int)TrackedEnemy::HitFlags::ALL;
 	const auto *const __restrict aasAreaSettings = aasWorld->AreaSettings();
+	const auto *const __restrict aasAreas = aasWorld->Areas();
 	// Skip the list size
 	for( int i = 0; i < areasList[-1]; ++i ) {
 		const auto areaNum = areasList[i];
@@ -299,6 +324,9 @@ void DisableMapAreasRequest::AddNonGroundedAreas( const uint16_t *__restrict are
 		// This is not an expensive operation as the number of such areas is very limited.
 		// Still fetching only area flags from a tightly packed flags array would have been better.
 		if( aasAreaSettings[areaNum].areaflags & AREA_GROUNDED ) {
+			continue;
+		}
+		if( LooksLikeANearbyArea( aasAreas, areaNum ) ) {
 			continue;
 		}
 		if( TryAddEnemiesImpactOnArea<MayBlockOtherArea>( areaNum, hitFlagsMask ) ) {
