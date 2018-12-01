@@ -42,11 +42,11 @@ Ported over from Quake 1 and Quake 3.
 #define ZONEID      0x1d4a11
 #define MINFRAGMENT 64
 
-typedef struct memblock_s
+typedef struct alignas( 16 )memblock_s
 {
+	struct memblock_s       *next, *prev;
 	int size;               // including the header and possibly tiny fragments
 	int tag;                // a tag of 0 is a free block
-	struct memblock_s       *next, *prev;
 	int id;                 // should be ZONEID
 } memblock_t;
 
@@ -155,7 +155,7 @@ static void *G_Z_TagMalloc( int size, int tag, const char *filename, int filelin
 	//
 	size += sizeof( memblock_t ); // account for size of block header
 	size += 4;                  // space for memory trash tester
-	size = ( size + 3 ) & ~3;     // align to 32-bit boundary
+	size = ( size + 15 ) & ~15;     // align to 16-byte boundary
 
 	zone = levelzone;
 	base = rover = zone->rover;
