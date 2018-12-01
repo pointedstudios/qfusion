@@ -9,7 +9,14 @@
  * required for determining blocking status of map areas in bulk fashion.
  */
 class EnemyComputationalProxy {
-	enum { MAX_LEAFS = 8 };
+	friend class DisableMapAreasRequest;
+
+	/**
+	 * Use only two areas to prevent computational explosion.
+	 * Moreover scanning areas vis list for small areas count could be optimized.
+	 * Try to select most important areas.
+	 */
+	enum { MAX_AREAS = 2 };
 
 	const AiAasWorld *const __restrict aasWorld;
 	const gclient_t *const __restrict client;
@@ -17,20 +24,20 @@ class EnemyComputationalProxy {
 	vec3_t lookDir;
 	float squareBaseBlockingRadius;
 	int floorClusterNum;
-	int numLeafs;
-	int leafNums[MAX_LEAFS];
+	int areaNums[MAX_AREAS];
+	int numAreas;
 	TrackedEnemy::HitFlags hitFlags;
 
-	void ComputeBoxLeafNums();
-
-	inline bool IsAreaInPvs( int areaNum ) const;
+	void ComputeAreaNums();
 
 	bool CutOffForFlags( const aas_area_t &area, float squareDistance, int hitFlagsMask ) const;
 public:
 	EnemyComputationalProxy( const TrackedEnemy *enemy, float damageToKillBot );
 
-	bool MayBlockArea( int hitFlagsMask, int areaNum ) const;
-	bool MayBlockGroundedArea( int hitFlagsMask, int areaNum, int areaFloorClusterNum ) const;
+	inline bool IsInVis( const uint16_t *__restrict visList ) const;
+
+	bool MayBlockOtherArea( int areaNum, int hitFlagsMask ) const;
+	bool MayBlockGroundedArea( int areaNum, int hitFlagsMask ) const;
 };
 
 EnemyComputationalProxy::EnemyComputationalProxy( const TrackedEnemy *enemy, float damageToKillBot )
@@ -44,7 +51,7 @@ EnemyComputationalProxy::EnemyComputationalProxy( const TrackedEnemy *enemy, flo
 	enemy->LastSeenOrigin().CopyTo( origin );
 	floorClusterNum = aasWorld->FloorClusterNum( aasWorld->FindAreaNum( origin ) );
 	enemy->LookDir().CopyTo( lookDir );
-	ComputeBoxLeafNums();
+	ComputeAreaNums();
 }
 
 /**
@@ -52,7 +59,7 @@ EnemyComputationalProxy::EnemyComputationalProxy( const TrackedEnemy *enemy, flo
  * for blocking areas by potential blockers in a bulk fashion.
  * Bulk computations are required for optimization as this code is very performance-demanding.
  */
-struct DisableMapAreasRequest: public AiAasRouteCache::DisableZoneRequest {
+class DisableMapAreasRequest: public AiAasRouteCache::DisableZoneRequest {
 public:
 	enum { MAX_ENEMIES = 8 };
 private:
@@ -70,8 +77,9 @@ private:
 	void TryAddGroundedAreas( int hitFlagsMask );
 	void TryAddNonGroundedAreasFromList( const uint16_t *areasList, int hitFlagsMask );
 
+	template <typename MayBlockFn>
 	bool TryAddEnemiesImpactOnArea( int areaNum, int hitFlagsMask );
-	bool TryAddEnemiesImpactOnGroundedArea( int areaNum, int hitFlagsMask );
+
 	inline bool IsBufferFull() const { return bufferOffset == bufferCapacity; }
 public:
 	int FillProvidedAreasBuffer( int *areasBuffer_, int bufferCapacity_ ) override;
@@ -264,11 +272,24 @@ int DisableMapAreasRequest::FillProvidedAreasBuffer( int *areasBuffer_, int buff
 	return bufferOffset;
 }
 
-void DisableMapAreasRequest::TryAddAreasFromList( const uint16_t *areasList, int hitFlagsMask ) {
+struct MayBlockGroundedArea {
+	bool operator()( const EnemyComputationalProxy &__restrict enemy, int areaNum, int hitFlagsMask ) const {
+		return enemy.MayBlockGroundedArea( areaNum, hitFlagsMask );
+	}
+};
+
+struct MayBlockOtherArea {
+	bool operator()( const EnemyComputationalProxy &__restrict enemy, int areaNum, int hitFlagsMask ) const {
+		return enemy.MayBlockOtherArea( areaNum, hitFlagsMask );
+	}
+};
+
+void DisableMapAreasRequest::TryAddAreasFromList( const uint16_t *__restrict areasList, int hitFlagsMask ) {
 	// Skip the list size
 	const auto listSize = *areasList++;
 	for( int i = 0; i < listSize; ++i ) {
-		if( TryAddEnemiesImpactOnArea( areasList[i], hitFlagsMask ) ) {
+		if( TryAddEnemiesImpactOnArea<MayBlockOtherArea>( areasList[i], hitFlagsMask ) ) {
+			areasBuffer[bufferOffset++] = areasList[i];
 			if( IsBufferFull() ) {
 				break;
 			}
@@ -279,7 +300,8 @@ void DisableMapAreasRequest::TryAddAreasFromList( const uint16_t *areasList, int
 void DisableMapAreasRequest::TryAddGroundedAreas( int hitFlagsMask ) {
 	const auto *const __restrict groundedAreaNums = aasWorld->UsefulGroundedAreas() + 1;
 	for( int i = 0; i < groundedAreaNums[-1]; ++i ) {
-		if( TryAddEnemiesImpactOnGroundedArea( groundedAreaNums[i], hitFlagsMask ) ) {
+		if( TryAddEnemiesImpactOnArea<MayBlockGroundedArea>( groundedAreaNums[i], hitFlagsMask ) ) {
+			areasBuffer[bufferOffset++] = groundedAreaNums[i];
 			if( IsBufferFull() ) {
 				break;
 			}
@@ -295,7 +317,8 @@ void DisableMapAreasRequest::TryAddNonGroundedAreasFromList( const uint16_t *__r
 		if( aasAreaSettings[areaNum].areaflags & AREA_GROUNDED ) {
 			continue;
 		}
-		if( TryAddEnemiesImpactOnArea( areaNum, hitFlagsMask ) ) {
+		if( TryAddEnemiesImpactOnArea<MayBlockOtherArea>( areaNum, hitFlagsMask ) ) {
+			areasBuffer[bufferOffset++] = areaNum;
 			if( IsBufferFull() ) {
 				break;
 			}
@@ -303,24 +326,32 @@ void DisableMapAreasRequest::TryAddNonGroundedAreasFromList( const uint16_t *__r
 	}
 }
 
+template <typename MayBlockFn>
 bool DisableMapAreasRequest::TryAddEnemiesImpactOnArea( int areaNum, int hitFlagsMask ) {
-	for( const auto &enemy: enemyProxies ) {
-		if( enemy.MayBlockArea( hitFlagsMask, areaNum ) ) {
-			areasBuffer[bufferOffset++] = areaNum;
-			return true;
+	const auto *const __restrict visList = aasWorld->AreaVisList( areaNum );
+
+	MayBlockFn mayBlockFn;
+	if( const int floorClusterNum = aasWorld->FloorClusterNum( areaNum ) ) {
+		for( const auto &__restrict enemy: enemyProxies ) {
+			if( enemy.floorClusterNum ) {
+				if( !aasWorld->AreFloorClustersCertainlyVisible( enemy.floorClusterNum, floorClusterNum ) ) {
+					continue;
+				}
+			}
+			if( mayBlockFn( enemy, hitFlagsMask, areaNum ) ) {
+				if( enemy.IsInVis( visList ) ) {
+					return true;
+				}
+			}
 		}
+		return false;
 	}
 
-	return false;
-}
-
-bool DisableMapAreasRequest::TryAddEnemiesImpactOnGroundedArea( int areaNum, int hitFlagsMask ) {
-	// Fetch once for all MayBlockGroundedArea() calls
-	int areaFloorClusterNum = aasWorld->FloorClusterNum( areaNum );
-	for( const auto &enemy: enemyProxies ) {
-		if( enemy.MayBlockGroundedArea( hitFlagsMask, areaNum, areaFloorClusterNum ) ) {
-			areasBuffer[bufferOffset++] = areaNum;
-			return true;
+	for( const auto &__restrict enemy: enemyProxies ) {
+		if( mayBlockFn( enemy, hitFlagsMask, areaNum ) ) {
+			if( enemy.IsInVis( visList ) ) {
+				return true;
+			}
 		}
 	}
 
@@ -371,7 +402,14 @@ bool EnemyComputationalProxy::CutOffForFlags( const aas_area_t &area, const floa
 	return dot < 0.7f;
 }
 
-bool EnemyComputationalProxy::MayBlockArea( int hitFlagsMask, int areaNum ) const {
+inline bool EnemyComputationalProxy::IsInVis( const uint16_t *__restrict visList ) const {
+	if( this->numAreas < 2 ) {
+		return aasWorld->FindInVisList( visList, areaNums[0] );
+	}
+	return aasWorld->FindInVisList( visList, areaNums[0], areaNums[1] );
+}
+
+bool EnemyComputationalProxy::MayBlockOtherArea( int areaNum, int hitFlagsMask ) const {
 	const auto &area = aasWorld->Areas()[areaNum];
 	float squareDistance = DistanceSquared( origin, area.center );
 	if( squareDistance > squareBaseBlockingRadius ) {
@@ -380,28 +418,10 @@ bool EnemyComputationalProxy::MayBlockArea( int hitFlagsMask, int areaNum ) cons
 		}
 	}
 
-	if( !IsAreaInPvs( areaNum ) ) {
-		return false;
-	}
-
-	trace_t trace;
-	// TODO: Use a cheaper raycast test that stops on a first hit brush
-	SolidWorldTrace( &trace, area.center, origin );
-	return trace.fraction == 1.0f;
+	return true;
 }
 
-bool EnemyComputationalProxy::MayBlockGroundedArea( int hitFlagsMask, int areaNum, int areaFloorClusterNum ) const {
-	// Make a hint for a compiler (there are no aliases for this value)
-	// so it can optimize conditions at the method end better.
-	const int thisClusterNum = this->floorClusterNum;
-	if( thisClusterNum && areaFloorClusterNum ) {
-		// Utilize a cheap lookup in floor clusters vis table.
-		// Trust negative results (including false negatives).
-		if( !aasWorld->AreFloorClustersCertainlyVisible( floorClusterNum, areaFloorClusterNum ) ) {
-			return false;
-		}
-	}
-
+bool EnemyComputationalProxy::MayBlockGroundedArea( int areaNum, int hitFlagsMask ) const {
 	const auto &__restrict area = aasWorld->Areas()[areaNum];
 	const float squareDistance = DistanceSquared( origin, area.center );
 	// Skip far grounded areas.
@@ -434,48 +454,68 @@ bool EnemyComputationalProxy::MayBlockGroundedArea( int hitFlagsMask, int areaNu
 		}
 	}
 
-	if( thisClusterNum ) {
-		if( areaFloorClusterNum == thisClusterNum ) {
-			return aasWorld->IsAreaWalkableInFloorCluster( thisClusterNum, areaNum );
-		}
-		// We have already tested PVS for the entire cluster
-		trace_t trace;
-		SolidWorldTrace( &trace, area.center, origin );
-		return trace.fraction == 1.0f;
-	}
-
-	if( !IsAreaInPvs( areaNum ) ) {
-		return false;
-	}
-
-	trace_t trace;
-	// TODO: Use a cheaper raycast test that stops on a first hit brush
-	SolidWorldTrace( &trace, area.center, origin );
-	return trace.fraction == 1.0f;
+	return true;
 }
 
-void EnemyComputationalProxy::ComputeBoxLeafNums() {
-	// We can't reuse entity leaf nums that were set on linking it to area grid since the origin differs
+void EnemyComputationalProxy::ComputeAreaNums() {
+	// We can't reuse entity area nums the origin differs (its the last seen origin)
 	Vec3 enemyBoxMins( playerbox_stand_mins );
 	Vec3 enemyBoxMaxs( playerbox_stand_maxs );
 	enemyBoxMins += origin;
 	enemyBoxMaxs += origin;
 
-	int topNode;
-	numLeafs = trap_CM_BoxLeafnums( enemyBoxMins.Data(), enemyBoxMaxs.Data(), leafNums, 8, &topNode );
-	clamp_high( numLeafs, 8 );
-}
+	static_assert( MAX_AREAS == 2, "The entire logic assumes only two areas to select" );
 
-bool EnemyComputationalProxy::IsAreaInPvs( int areaNum ) const {
-	const auto *const __restrict areaLeafNums = aasWorld->AreaMapLeafsList( areaNum ) + 1;
-	const auto *const __restrict thisLeafNums = this->leafNums;
-	for( int i = 0, end = numLeafs; i < end; ++i ) {
-		for( int j = 0; j < areaLeafNums[-1]; ++j ) {
-			if( trap_CM_LeafsInPVS( thisLeafNums[i], areaLeafNums[j] ) ) {
-				return true;
+	numAreas = 0;
+	areaNums[0] = 0;
+	areaNums[1] = 0;
+
+	// We should select most important areas to store.
+	// Find some areas in the box.
+
+	int rawAreaNums[8];
+	int numRawAreas = aasWorld->BBoxAreas( enemyBoxMins, enemyBoxMaxs, rawAreaNums, 8 );
+
+	int areaFlags[8];
+	const auto *const __restrict areaSettings = aasWorld->AreaSettings();
+	for( int i = 0; i < numRawAreas; ++i ) {
+		// TODO: an AAS world should supply a list of area flags (without other data that wastes bandwidth)
+		areaFlags[i] = areaSettings[rawAreaNums[i]].areaflags;
+	}
+
+	// Try to select non-junk grounded areas first
+	for( int i = 0; i < numRawAreas; ++i ) {
+		if( !( areaFlags[i] & AREA_JUNK ) ) {
+			if( areaFlags[i] & AREA_GROUNDED ) {
+				areaNums[numAreas++] = rawAreaNums[i];
+				if( numAreas == MAX_AREAS ) {
+					return;
+				}
 			}
 		}
 	}
 
-	return false;
+	// Compare area numbers to the (maybe) added first area
+
+	// Try adding non-junk arbitrary areas
+	for( int i = 0; i < numRawAreas; ++i ) {
+		if( !( areaFlags[i] & AREA_JUNK ) ) {
+			if( areaNums[0] != rawAreaNums[i] ) {
+				areaNums[numAreas++] = rawAreaNums[i];
+				if( numAreas == MAX_AREAS ) {
+					return;
+				}
+			}
+		}
+	}
+
+	// Try adding any area left
+	for( int i = 0; i < numRawAreas; ++i ) {
+		if( areaNums[0] != rawAreaNums[i] ) {
+			areaNums[numAreas++] = rawAreaNums[i];
+			if( numAreas == MAX_AREAS ) {
+				return;
+			}
+		}
+	}
 }

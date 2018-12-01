@@ -192,6 +192,8 @@ typedef struct aas_node_s {
 	//when a child is zero it's a solid leaf
 } aas_node_t;
 
+template <typename T> class ArrayRange;
+
 class AiAasWorld
 {
 	bool loaded = false;
@@ -275,6 +277,9 @@ class AiAasWorld
 
 	bool *floorClustersVisTable { nullptr };
 
+	uint16_t *areaVisData { nullptr };
+	int32_t *areaVisDataOffsets { nullptr };
+
 	uint16_t *usefulGroundedAreas { nullptr };
 	uint16_t *jumppadReachPassThroughAreas { nullptr };
 	uint16_t *ladderReachPassThroughAreas { nullptr };
@@ -306,9 +311,16 @@ class AiAasWorld
 	// Builds lists of specific area types
 	void BuildSpecificAreaTypesLists();
 
-	void LoadFloorClustersVisibility( const char *mapName );
+	static const ArrayRange<char> StripMapName( const char *rawMapName, char buffer[MAX_QPATH] );
+	static const char *MakeFileName( const ArrayRange<char> &strippedName, const char *extension, char buffer[MAX_QPATH] );
+
+	void LoadAreaVisibility( const ArrayRange<char> &strippedMapName );
+	void ComputeAreasVisibility( uint32_t *offsetsDataSize, uint32_t *listsDataSize );
+
+	void LoadFloorClustersVisibility( const ArrayRange<char> &strippedMapName );
 	// Returns the actual data size in bytes
 	uint32_t ComputeFloorClustersVisibility();
+
 	bool ComputeVisibilityForClustersPair( int floorClusterNum1, int floorClusterNum2 );
 
 	void TrySetAreaLedgeFlags( int areaNum );
@@ -540,8 +552,62 @@ public:
 	 * @param areaNum1 a number of the first area
 	 * @param areaNum2 a number of another area
 	 * @return true if areas are in PVS.This test is precise (no false positives/negatives are produced).
+	 * @note this is not that cheap to call. Prefer using {@code AreaVisList()} where possible.
 	 */
 	bool AreAreasInPvs( int areaNum1, int areaNum2 ) const;
+
+	/**
+	 * Returns a list of all areas that are certainly visible from the area.
+	 * There could be false negatives but no false positives (in regard to a solid world).
+	 * @param areaNum an area number
+	 * @return a list of area numbers certainly visible from the area. The first element is the list length.
+	 */
+	const uint16_t *AreaVisList( int areaNum ) const {
+		assert( (unsigned)areaNum < (unsigned)numareas );
+		return areaVisData + areaVisDataOffsets[areaNum];
+	}
+
+	/**
+	 * @see DecompressAreaVis(const uint16_t *__resrict, bool *__restrict)
+	 * @param areaNum an number of an area
+	 * @param row a buffer for a decompressed row
+	 * @return an address of the supplied buffer.
+	 */
+	const bool *DecompressAreaVis( int areaNum, bool *__restrict row ) const {
+		return DecompressAreaVis( AreaVisList( areaNum ), row );
+	}
+
+	/**
+	 * Converts a dense list of areas (certainly) visible from the area to a sparse row addressed by area numbers.
+	 * @param visList a list of areas (a result of {@code AreaVisList()} call)
+	 * @param row a buffer for a decompressed row
+	 * @return an address of the supplied buffer
+	 * @warning using this in a loop is not cheap. Consider using {@code FindInVisList()} in this case.
+	 */
+	const bool *DecompressAreaVis( const uint16_t *__restrict visList, bool *__restrict row ) const;
+
+	constexpr bool ScansVisFast() const { return false; }
+
+	/**
+	 * Scans the supplied list of areas trying to find an area.
+	 * The implementation may use platform-dependent optimizations
+	 * so calling this method should be preferred to manual naive scanning.
+	 * @param visList a list of areas (a result of {@code AreaVisList()} call.
+	 * @param areaNum a number of area to find
+	 * @return true if the supplied area has been found.
+	 */
+	bool FindInVisList( const uint16_t *__restrict visList, int areaNum ) const;
+
+	/**
+	 * Scans the supplied list of areas trying to find some of supplied areas.
+	 * The implementation may use platform-dependent optimizations
+	 * so calling this method should be preferred to manual naive scanning.
+	 * @param visList a list of areas (a result of {@code AreaVisList()} call.
+	 * @param areaNum1 a number of an area to find
+	 * @param areaNum2 a number of another area to find
+	 * @return true if some of supplied areas has been found.
+	 */
+	bool FindInVisList( const uint16_t *__restrict visList, int areaNum1, int areaNum2 ) const;
 };
 
 #endif

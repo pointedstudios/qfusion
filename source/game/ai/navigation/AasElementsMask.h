@@ -75,6 +75,8 @@ class AasElementsMask {
 	static BitVector *areasMask;
 	static BitVector *facesMask;
 
+	static bool *tmpAreasVisRow;
+
 	/**
  	 * Managed by {@code AiAasWorld} as its initialization requires these masks.
    	 */
@@ -86,6 +88,8 @@ class AasElementsMask {
 public:
 	static BitVector *AreasMask() { return areasMask; }
 	static BitVector *FacesMask() { return facesMask; }
+
+	static bool *TmpAreasVisRow() { return tmpAreasVisRow; }
 };
 
 #endif

@@ -481,8 +481,13 @@ void AiAasWorld::ComputeExtraAreaData() {
 	ComputeFace2DProjVertices();
 	ComputeAreasLeafsLists();
 
+	char strippedNameBuffer[MAX_QPATH];
+	const ArrayRange<char> strippedMapName( StripMapName( trap_GetConfigString( CS_WORLDMODEL ), strippedNameBuffer ) );
+
 	// Assumes clusters and area leaves to be already computed
-	LoadFloorClustersVisibility( trap_GetConfigString( CS_WORLDMODEL ) );
+	LoadAreaVisibility( strippedMapName );
+	// Depends of area visibility
+	LoadFloorClustersVisibility( strippedMapName );
 
 	// These computations expect (are going to expect) that logical clusters are valid
 	for( int areaNum = 1; areaNum < numareas; ++areaNum ) {
@@ -1120,6 +1125,13 @@ AiAasWorld::~AiAasWorld() {
 	}
 	if( areaMapLeafsData ) {
 		G_LevelFree( areaMapLeafsData );
+	}
+
+	if( areaVisDataOffsets ) {
+		G_LevelFree( areaVisDataOffsets );
+	}
+	if( areaVisData ) {
+		G_LevelFree( areaVisData );
 	}
 
 	if( floorClustersVisTable ) {
@@ -2039,38 +2051,62 @@ nextArea:;
 	return true;
 }
 
-static constexpr uint32_t FLOOR_CLUSTERS_VIS_VERSION = 1337;
+const ArrayRange<char> AiAasWorld::StripMapName( const char *rawMapName, char buffer[MAX_QPATH] ) {
+	Q_strncpyz( buffer, rawMapName, MAX_QPATH );
+	const char *oldPrefix = "maps/";
+	const auto oldPrefixLen = strlen( oldPrefix );
+	const char *rangeBegin = buffer;
+	if( !memcmp( oldPrefix, buffer, oldPrefixLen ) ) {
+		rangeBegin += oldPrefixLen;
+	}
+	const char *rangeEnd = strchr( rangeBegin, '.' );
+	if( rangeEnd ) {
+		buffer[rangeEnd - buffer] = '\0';
+	} else {
+		rangeEnd = buffer + strlen( rangeBegin );
+		if( rangeBegin != buffer ) {
+			rangeEnd += oldPrefixLen;
+		}
+	}
+	return ArrayRange<char>( rangeBegin, rangeEnd );
+}
 
-void AiAasWorld::LoadFloorClustersVisibility( const char *mapName ) {
+const char *AiAasWorld::MakeFileName( const ArrayRange<char> &strippedName, const char *extension, char buffer[MAX_QPATH] ) {
+	buffer[0] = buffer[MAX_QPATH - 1] = '\0';
+	const char *newPrefix = "ai/";
+	const auto newPrefixLen = strlen( newPrefix );
+	char *p = buffer;
+	if( newPrefixLen > MAX_QPATH - ( p - buffer ) ) {
+		return buffer;
+	}
+	memcpy( p, newPrefix, newPrefixLen );
+	p += newPrefixLen;
+	if( strippedName.size() > MAX_QPATH - ( p  - buffer ) ) {
+		return buffer;
+	}
+	memcpy( p, strippedName.begin(), strippedName.size() );
+	p += strippedName.size();
+	const auto extensionLen = strlen( extension );
+	if( extensionLen + 1 > MAX_QPATH - ( p - buffer ) ) {
+		return buffer;
+	}
+	memcpy( p, extension, extensionLen + 1 );
+	assert( p[extensionLen] == '\0' );
+	return buffer;
+}
+
+static constexpr uint32_t FLOOR_CLUSTERS_VIS_VERSION = 1337;
+static const char *FLOOR_CLUSTERS_VIS_TAG = "FloorClustersVis";
+static const char *FLOOR_CLUSTERS_VIS_EXT = ".floorvis";
+
+void AiAasWorld::LoadFloorClustersVisibility( const ArrayRange<char> &strippedMapName ) {
 	if( !numFloorClusters ) {
 		return;
 	}
 
-	AiPrecomputedFileReader reader( "FloorClustersVisReader", FLOOR_CLUSTERS_VIS_VERSION );
-
-	char buffer[MAX_QPATH];
-	Q_strncpyz( buffer, mapName, sizeof( buffer ) );
-	char *filePath = buffer;
-	const char *oldPrefix = "maps/";
-	const char *newPrefix = "ai/";
-	const char *newExtension = ".floorvis";
-	// Skip "maps/" prefix
-	const auto oldPrefixLen = strlen( oldPrefix );
-	assert( oldPrefixLen < sizeof( buffer ) );
-	if( !memcmp( oldPrefix, filePath, oldPrefixLen ) ) {
-		auto newPrefixLen = strlen( newPrefix );
-		assert( newPrefixLen <= oldPrefixLen );
-		filePath += oldPrefixLen - newPrefixLen;
-		memcpy( filePath, newPrefix, newPrefixLen );
-	}
-	char *extension = strstr( filePath, ".bsp" );
-	if( !extension ) {
-		extension = filePath + strlen( filePath );
-	}
-	// Prevent buffer overflow. The name just is not going to be FS-correct in worst case.
-	if( extension + strlen( newExtension ) < buffer + sizeof( buffer ) ) {
-		memcpy( extension, newExtension, strlen( newExtension ) + 1 );
-	}
+	AiPrecomputedFileReader reader( va( "%sReader", FLOOR_CLUSTERS_VIS_TAG ), FLOOR_CLUSTERS_VIS_VERSION );
+	char filePath[MAX_QPATH];
+	MakeFileName( strippedMapName, FLOOR_CLUSTERS_VIS_EXT, filePath );
 
 	const auto expectedSize = (uint32_t)( ( numFloorClusters - 1 ) * ( numFloorClusters - 1 ) * sizeof( bool ) );
 	if( reader.BeginReading( filePath ) == AiPrecomputedFileReader::SUCCESS ) {
@@ -2090,7 +2126,7 @@ void AiAasWorld::LoadFloorClustersVisibility( const char *mapName ) {
 	// Make sure we are not going to write junk bytes
 	assert( floorClustersVisTable && expectedSize == actualSize );
 
-	AiPrecomputedFileWriter writer( "FloorClustersVisWriter", FLOOR_CLUSTERS_VIS_VERSION );
+	AiPrecomputedFileWriter writer( va( "%sWriter", FLOOR_CLUSTERS_VIS_TAG ), FLOOR_CLUSTERS_VIS_VERSION );
 	if( !writer.BeginWriting( filePath ) ) {
 		return;
 	}
@@ -2125,25 +2161,31 @@ uint32_t AiAasWorld::ComputeFloorClustersVisibility() {
 
 bool AiAasWorld::ComputeVisibilityForClustersPair( int floorClusterNum1, int floorClusterNum2 ) {
 	assert( floorClusterNum1 != floorClusterNum2 );
-	const auto *const thisAreaNums = FloorClusterData( floorClusterNum1 ) + 1;
-	const auto *const thatAreaNums = FloorClusterData( floorClusterNum2 ) + 1;
 
-	trace_t trace;
+	const auto *const __restrict areaNums1 = FloorClusterData( floorClusterNum1 ) + 1;
+	const auto *const __restrict areaNums2 = FloorClusterData( floorClusterNum2 ) + 1;
+	// The larger list should be iterated in the outer loop
+	const auto *const __restrict outerAreaNums = ( areaNums1[-1] > areaNums2[-1] ) ? areaNums1 : areaNums2;
+	const auto *const __restrict innerAreaNums = ( outerAreaNums == areaNums1 ) ? areaNums2 : areaNums1;
 
-	// We have to compute visibility for every pair of areas (these sets do not intersect).
-	// Fortunately the number of floor clusters is fairly small
-	// and PVS cuts off lots of computations as well.
-	for( int i = 0; i < thisAreaNums[-1]; ++i ) {
-		const int areaNum1 = thisAreaNums[i];
-		const float *const areaCenter1 = areas[areaNum1].center;
-		for( int j = 0; j < thatAreaNums[-1]; ++j ) {
-			const int areaNum2 = thatAreaNums[j];
-			if( !AreAreasInPvs( areaNum1, areaNum2 ) ) {
-				continue;
+	for( int i = 0; i < outerAreaNums[-1]; ++i ) {
+		// Get compressed vis list for the area in the outer list
+		const auto *const __restrict visList = AreaVisList( outerAreaNums[i] ) + 1;
+		// Use a sequential scan for short lists
+		if( visList[-1] < 24 && innerAreaNums[-1] < 24 ) {
+			// For every inner area try finding an inner area num in the vis list
+			for( int j = 0; j < innerAreaNums[-1]; ++j ) {
+				if( std::find( visList, visList + visList[-1], innerAreaNums[j] ) != visList + visList[-1] ) {
+					return true;
+				}
 			}
+			continue;
+		}
 
-			StaticWorldTrace( &trace, areaCenter1, areas[areaNum2].center, CONTENTS_SOLID | CONTENTS_WATER );
-			if( trace.fraction == 1.0f ) {
+		const bool *__restrict visRow = DecompressAreaVis( outerAreaNums[i], AasElementsMask::TmpAreasVisRow() );
+		// For every area in inner areas check whether it's set in the row
+		for( int j = 0; j < innerAreaNums[-1]; ++j ) {
+			if( visRow[innerAreaNums[j]] ) {
 				return true;
 			}
 		}
@@ -2178,5 +2220,221 @@ bool AiAasWorld::AreAreasInPvs( int areaNum1, int areaNum2 ) const {
 		}
 	}
 
+	return false;
+}
+
+static constexpr uint32_t AREA_VIS_VERSION = 1337;
+static constexpr const char *AREA_VIS_TAG = "AasAreaVis";
+static constexpr const char *AREA_VIS_EXT = ".areavis";
+
+void AiAasWorld::LoadAreaVisibility( const ArrayRange<char> &strippedMapName ) {
+	if( !numFloorClusters ) {
+		return;
+	}
+
+	AiPrecomputedFileReader reader( va( "%sReader", AREA_VIS_TAG ), AREA_VIS_VERSION );
+	char filePath[MAX_QPATH];
+	MakeFileName( strippedMapName, AREA_VIS_EXT, filePath );
+
+	uint8_t *data;
+	uint32_t dataLength;
+	const uint32_t expectedOffsetsDataSize = sizeof( int32_t ) * numareas;
+	if( reader.BeginReading( filePath ) == AiPrecomputedFileReader::SUCCESS ) {
+		if( reader.ReadLengthAndData( &data, &dataLength ) ) {
+			// Sanity check. The number of offsets should match the number of areas
+			if( expectedOffsetsDataSize == dataLength ) {
+				assert( ( (uintptr_t)data ) % 4 == 0 );
+				areaVisDataOffsets = (int32_t *)data;
+				if( reader.ReadLengthAndData( &data, &dataLength ) ) {
+					assert( ( (uintptr_t)data ) % 2 == 0 );
+					areaVisData = (uint16_t *)data;
+					return;
+				}
+			}
+		}
+	}
+
+	G_Printf( "About to compute AAS areas mutual visibility...\n" );
+
+	uint32_t offsetsDataSize, listsDataSize;
+	ComputeAreasVisibility( &offsetsDataSize, &listsDataSize );
+	assert( expectedOffsetsDataSize == offsetsDataSize );
+
+	AiPrecomputedFileWriter writer( va( "%sWriter", AREA_VIS_TAG ), AREA_VIS_VERSION );
+	if( !writer.BeginWriting( filePath ) ) {
+		return;
+	}
+
+	if( writer.WriteLengthAndData( (uint8_t *)this->areaVisDataOffsets, offsetsDataSize ) ) {
+		writer.WriteLengthAndData( (uint8_t *)this->areaVisData, listsDataSize );
+	}
+}
+
+void AiAasWorld::ComputeAreasVisibility( uint32_t *offsetsDataSize, uint32_t *listsDataSize ) {
+	const int numAreas = numareas;
+	assert( numAreas && numAreas <= std::numeric_limits<uint16_t>::max() );
+	const auto rowSize = (size_t)( numAreas - 1 );
+
+	struct CallGFree {
+		void operator()( void *p ) {
+			G_Free( p );
+		}
+	};
+
+	const size_t tableMemSize = ( rowSize * rowSize * sizeof( uint8_t ) );
+	// We could have used bit sets here but it complicates the code very much.
+	// This should not be that bad as vis for vanilla maps should be prebuilt in dev mode
+	// and there are no compatible AAS files for custom maps (unless being built intentionally).
+	auto *const __restrict table = (bool *)G_Malloc( tableMemSize );
+	std::unique_ptr<bool, CallGFree> tableGuard( table );
+	memset( table, 0, tableMemSize );
+
+	auto *const __restrict listSizes = (int32_t *)G_Malloc( numAreas * sizeof( int32_t ) );
+	std::unique_ptr<int32_t, CallGFree> listSizesGuard( listSizes );
+	memset( listSizes, 0, numAreas * sizeof( int32_t ) );
+
+	trace_t trace;
+	const auto *const __restrict aasAreas = areas;
+	size_t numVisElems = 0;
+	size_t numPadElems = 7;
+	for( int i = 1; i < numAreas; ++i ) {
+		for( int j = i + 1; j < numAreas; ++j ) {
+			if( !AreAreasInPvs( i, j ) ) {
+				continue;
+			}
+
+			// TODO: Add and use an optimized version that uses an early exit
+			SolidWorldTrace( &trace, aasAreas[i].center, aasAreas[j].center );
+			if( trace.fraction != 1.0f ) {
+				continue;
+			}
+
+			// We avoid wasting memory for zero row/columns
+			table[( i - 1 ) * rowSize + j - 1] = true;
+			table[( j - 1 ) * rowSize + i - 1] = true;
+
+			numVisElems += 2;
+			listSizes[i]++;
+			listSizes[j]++;
+		}
+
+		// We store lists in SIMD-friendly format from the very beginning.
+		// List data should start from 16-byte boundaries.
+		// Thus list length should be 2 bytes before 16-byte boundaries.
+		// A gap between last element of a list and length of a next list must be zero-filled.
+		// Assuming that lists data starts from 16-byte-aligned address
+		// the gap size in elements is 8 - 1 - (list length in elements) % 8
+		numPadElems += 2 * ( 8 - 1 - ( numVisElems / 2 ) % 8 );
+	}
+
+	// Now build lists from the table
+
+	// Put 7 additional elements so the length of the first list (for area #1) is just before 16-byte boundaries.
+	*listsDataSize = (uint32_t)( ( numVisElems + numAreas + numPadElems ) * sizeof( uint16_t ) );
+	auto *const __restrict listsData = (uint16_t *)G_LevelMalloc( *listsDataSize );
+	if( ( (uintptr_t)listsData ) % 16 ) {
+		AI_FailWith( "AiAasWorld::ComputeAreasVisibility()", "G_LevelMalloc() should return 16-byte-aligned results" );
+	}
+
+	*offsetsDataSize = (uint32_t)( numAreas * sizeof( int32_t ) );
+	auto *const __restrict listOffsets = (int *)G_LevelMalloc( *offsetsDataSize );
+
+	// Let the list for the dummy area follow common alignment contract.
+	listOffsets[0] = 7;
+	auto *__restrict listPtr = listsData;
+	// The length of the first real list should start just before 16-byte boundaries.
+	std::fill_n( listPtr, 0, 15 );
+	listPtr += 15;
+
+	for( int i = 1; i < numAreas; ++i ) {
+		const ptrdiff_t offset = listPtr - listsData;
+		assert( offset > 0 && offset <= std::numeric_limits<int32_t>::max() );
+		listOffsets[i] = (int32_t)offset;
+
+		const int size = listSizes[i];
+		assert( size >= 0 && size <= std::numeric_limits<uint16_t>::max() );
+		*listPtr++ = (uint16_t)size;
+
+		// Make sure the list data is going to start from 16-byte boundaries
+		assert( !( ( (uintptr_t)listPtr ) % 16 ) );
+
+		// Scan the table row
+		const bool *__restrict tableRow = &table[( i - 1 ) * rowSize];
+		for( int j = 1; j < numAreas; ++j ) {
+			if( tableRow[j - 1] ) {
+				*listPtr++ = (uint16_t)j;
+			}
+		}
+
+		// Fill the gap between lists (while the list ptr is not just before 16-byte boundaries)
+		while ( !( ( (uintptr_t)listPtr ) + 2 ) % 16 ) {
+			*listPtr++ = 0;
+		}
+	}
+
+	// Make sure we've matched the expected data size
+	assert( ( sizeof( uint16_t ) * ( listPtr - listsData ) ) == *listsDataSize );
+
+#if 1
+	// Validate. Useful for testing whether we have brake something. Test a list of every area.
+
+	// Make sure the list for the dummy area follows the alignment contract
+	assert( listOffsets[0] == 7 );
+	// The list for the dummy area should have zero size
+	assert( !listsData[listOffsets[0]] );
+	for( int i = 1; i < numAreas; ++i ) {
+		const uint16_t *list = listsData + listOffsets[i];
+		assert( list[0] == listSizes[i] );
+		const int size = *list++;
+		// Check list data alignment once again
+		assert( !( ( (uintptr_t)list ) % 16 ) );
+		const ptrdiff_t iOffset = ( i - 1 ) * rowSize;
+		// For every area in list the a table bit must be set
+		for( int j = 0; j < size; ++j ) {
+			int areaNum = list[j];
+			assert( table[iOffset + areaNum - 1] );
+		}
+		// For every area not in the list a table bit must be zero
+		for( int areaNum = 1; areaNum < numAreas; ++areaNum ) {
+			if( std::find( list, list + size, areaNum ) != list + size ) {
+				continue;
+			}
+			assert( !table[iOffset + areaNum - 1] );
+		}
+		// Make sure all areas in the list are valid
+		assert( std::find( list, list + size, 0 ) == list + size );
+	}
+#endif
+
+	this->areaVisData = listsData;
+	this->areaVisDataOffsets = listOffsets;
+}
+
+const bool *AiAasWorld::DecompressAreaVis( const uint16_t *__restrict visList, bool *__restrict buffer ) const {
+	memset( buffer, 0, numareas * sizeof( bool ) );
+	const int size = *visList++;
+	for( int i = 0; i < size; ++i ) {
+		buffer[visList[i]] = true;
+	}
+	return buffer;
+}
+
+bool AiAasWorld::FindInVisList( const uint16_t *__restrict visList, int areaNum ) const {
+	// Just the most generic portable version
+	for( int i = 0; i < visList[0]; ++i ) {
+		if( visList[i + 1] == areaNum ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AiAasWorld::FindInVisList( const uint16_t *__restrict visList, int areaNum1, int areaNum2 ) const {
+	// Just the most generic portable version
+	for( int i = 0; i < visList[0]; ++i ) {
+		if( visList[i + 1] == areaNum1 || visList[i + 1] == areaNum2 ) {
+			return true;
+		}
+	}
 	return false;
 }
