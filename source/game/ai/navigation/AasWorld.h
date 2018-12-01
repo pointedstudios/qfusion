@@ -586,7 +586,12 @@ public:
 	 */
 	const bool *DecompressAreaVis( const uint16_t *__restrict visList, bool *__restrict row ) const;
 
-	constexpr bool ScansVisFast() const { return false; }
+	// Consider SSE2 instruction set always available for x86 targets
+#if !( defined ( __i386__ ) || defined ( __x86_64__ ) || defined( _M_IX86 ) || defined( _M_AMD64 ) || defined( _M_X64 ) )
+	static constexpr bool ScansVisFast() { return false; }
+#else
+	static constexpr bool ScansVisFast() { return true; }
+#endif
 
 	/**
 	 * Scans the supplied list of areas trying to find an area.

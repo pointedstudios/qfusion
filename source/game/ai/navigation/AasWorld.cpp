@@ -2419,6 +2419,8 @@ const bool *AiAasWorld::DecompressAreaVis( const uint16_t *__restrict visList, b
 	return buffer;
 }
 
+#if !( defined ( __i386__ ) || defined ( __x86_64__ ) || defined( _M_IX86 ) || defined( _M_AMD64 ) || defined( _M_X64 ) )
+
 bool AiAasWorld::FindInVisList( const uint16_t *__restrict visList, int areaNum ) const {
 	// Just the most generic portable version
 	for( int i = 0; i < visList[0]; ++i ) {
@@ -2438,3 +2440,85 @@ bool AiAasWorld::FindInVisList( const uint16_t *__restrict visList, int areaNum1
 	}
 	return false;
 }
+
+#else
+
+#include <xmmintrin.h>
+
+bool AiAasWorld::FindInVisList( const uint16_t *__restrict visList, int areaNum ) const {
+	assert( (unsigned)areaNum <= std::numeric_limits<uint16_t>::max() );
+	__m128i xmmMask = _mm_set1_epi16( (int16_t)areaNum );
+
+	const auto *__restrict p = (__m128i *)( visList + 1 );
+	// We ensure that the list data always starts at 16-byte boundaries
+	assert( !( ( (uintptr_t)p ) % 8 ) );
+
+	const int listSize = visList[0];
+	for( int i = 0; i < listSize / 8; ++i ) {
+		// Just load a single vector.
+		// Agner Fog says that an OOE architecture itself acts as unrolling
+		__m128i xmmVal = _mm_load_si128( p );
+		// Limit ourselves to SSE2 instruction set.
+		__m128i xmmCmp = _mm_cmpeq_epi16( xmmVal, xmmMask );
+		// If there was a non-zero comparison result for some component
+		if( _mm_movemask_epi8( xmmCmp ) != 0x0 ) {
+			return true;
+		}
+		p++;
+	}
+
+	if( listSize % 8 ) {
+		// If there is a gap between the list and the next list it's filled by zeroes during lists building.
+		// The next list starts 2 bytes below the next 16-byte boundary.
+		// Just shift the data so we get another zero instead of next list length (that could match an area occasionally)
+		// Mask:             | AN | AN | AN | AN | AN | AN | AN | AN | <- area to find
+		// Val before shift: | 10 | 23 | 49 | 44 | 0  | 0  | 0  | 23 | <- next list length
+		// Val after shift:  |  0 | 10 | 23 | 49 | 44 | 0  | 0  | 0  |
+		// Note: don't be confused by s*L*li instruction as the order or components starts from W (last one first).
+		// Correctness of this has been tested separately.
+		__m128i xmmVal = _mm_slli_si128( _mm_load_si128( p ), 2 );
+		if( _mm_movemask_epi8( _mm_cmpeq_epi16( xmmVal, xmmMask ) ) != 0x0 ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool AiAasWorld::FindInVisList( const uint16_t *__restrict visList, int areaNum1, int areaNum2 ) const {
+	assert( (unsigned)areaNum1 <= std::numeric_limits<uint16_t>::max() );
+	assert( (unsigned)areaNum2 <= std::numeric_limits<uint16_t>::max() );
+	__m128i xmmMask1 = _mm_set1_epi16( (int16_t)areaNum1 );
+	__m128i xmmMask2 = _mm_set1_epi16( (int16_t)areaNum2 );
+
+	auto *__restrict p = (__m128i *)( visList + 1 );
+	// We ensure that the list data always starts at 16-byte boundaries
+	assert( !( ( (uintptr_t)p ) % 8 ) );
+
+	const int listSize = visList[0];
+	for( int i = 0; i < listSize / 8; ++i ) {
+		__m128i xmmVal = _mm_load_si128( p );
+		// Limit ourselves to SSE2 instruction set.
+		__m128i xmmCmp1 = _mm_cmpeq_epi16( xmmVal, xmmMask1 );
+		__m128i xmmCmp2 = _mm_cmpeq_epi16( xmmVal, xmmMask2 );
+		__m128i xmmCmpOr = _mm_or_si128( xmmCmp1, xmmCmp2 );
+		// If some of vector components has matched areaNum1 or areaNum2
+		if( _mm_movemask_epi8( xmmCmpOr ) != 0x0 ) {
+			return true;
+		}
+		p++;
+	}
+
+	if( listSize % 8 ) {
+		__m128i xmmVal = _mm_slli_si128( _mm_load_si128( p ), 2 );
+		__m128i xmmCmp1 = _mm_cmpeq_epi16( xmmVal, xmmMask1 );
+		__m128i xmmCmp2 = _mm_cmpeq_epi16( xmmVal, xmmMask2 );
+		if( _mm_movemask_epi8( _mm_or_si128( xmmCmp1, xmmCmp2 ) ) != 0x0 ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+#endif
