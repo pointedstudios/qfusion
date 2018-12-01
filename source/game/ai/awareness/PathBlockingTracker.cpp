@@ -19,7 +19,6 @@ class EnemyComputationalProxy {
 	enum { MAX_AREAS = 2 };
 
 	const AiAasWorld *const __restrict aasWorld;
-	const gclient_t *const __restrict client;
 	vec3_t origin;
 	vec3_t lookDir;
 	float squareBaseBlockingRadius;
@@ -27,6 +26,7 @@ class EnemyComputationalProxy {
 	int areaNums[MAX_AREAS];
 	int numAreas;
 	TrackedEnemy::HitFlags hitFlags;
+	bool isZooming;
 
 	void ComputeAreaNums();
 
@@ -42,7 +42,7 @@ public:
 
 EnemyComputationalProxy::EnemyComputationalProxy( const TrackedEnemy *enemy, float damageToKillBot )
 	: aasWorld( AiAasWorld::Instance() )
-	, client( enemy->ent->r.client ? enemy->ent->r.client : nullptr ) {
+	, isZooming( enemy->ent->r.client ? enemy->ent->r.client->ps.stats[PM_STAT_ZOOMTIME] : false ) {
 	hitFlags = enemy->GetCheckForWeaponHitFlags( damageToKillBot );
 	// Lets use fairly low blocking radii that are still sufficient for narrow hallways.
 	// Otherwise bot behaviour is pretty poor as they think every path is blocked.
@@ -365,14 +365,12 @@ bool EnemyComputationalProxy::CutOffForFlags( const aas_area_t &area, const floa
 		return true;
 	}
 
-	// Can't tell more for non-clients
-	if( !client ) {
-		return false;
-	}
+	// These dot tests have limited utility for non-client enemies
+	// but its unlikely we ever meet ones in vanilla gametypes.
 
 	// Normalize on demand
 	dot *= 1.0f / std::sqrt( squareDistance + 1.0f );
-	if( !client->ps.stats[PM_STAT_ZOOMTIME] ) {
+	if( !isZooming ) {
 		// If not zooming but the client is not really looking at the area
 		if( dot < 0.3f ) {
 			return true;
