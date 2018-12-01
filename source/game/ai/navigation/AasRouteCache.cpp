@@ -1,4 +1,5 @@
 #include "AasRouteCache.h"
+#include "AasElementsMask.h"
 #include "../static_vector.h"
 #include "../ai_local.h"
 #include "../bot.h"
@@ -106,8 +107,6 @@ AiAasRouteCache::AiAasRouteCache( AiAasRouteCache *parent, const int *newTravelF
 
 	// These items share the buffer as well, refer to the explanation above
 	reachPathFindingData = AddRef( parent->reachPathFindingData );
-	currDisabledAreaNums = parent->currDisabledAreaNums;
-	cleanCacheAreaNums = parent->cleanCacheAreaNums;
 
 	InitClusterAreaCache();
 	InitPortalCache();
@@ -215,37 +214,31 @@ void AiAasRouteCache::FreeRoutingCache( AreaOrPortalCacheTable *cache ) {
 void AiAasRouteCache::SetDisabledZones( DisableZoneRequest **requests, int numRequests ) {
 	// Copy the reference to a local var for faster access
 	AreaPathFindingData *const __restrict areaPathFindingData = this->areaPathFindingData;
-	int *const __restrict disabledAreaNumsBuffer = this->currDisabledAreaNums;
+
+	const auto numAreas = aasWorld.NumAreas();
 
 	// First, save old area statuses and set new ones as non-blocked
-	for( int i = 0, end = aasWorld.NumAreas(); i < end; ++i ) {
+	for( int i = 0; i < numAreas; ++i ) {
 		areaPathFindingData[i].disabledStatus.ShiftCurrToOldStatus();
 	}
 
-	// Select all disabled area nums
-	int numDisabledAreas = 0;
-	int capacityLeft = aasWorld.NumAreas();
+	auto *const __restrict blockedAreasTable = AasElementsMask::BlockedAreasTable();
+	memset( blockedAreasTable, 0, numAreas * sizeof( bool ) );
+
 	for( int i = 0; i < numRequests; ++i ) {
-		int numAreas;
-		if( const auto *areaNums = requests[i]->GetSelfManagedAreasBuffer( &numAreas ) ) {
-			for( int j = 0; j < numAreas; ++j ) {
-				areaPathFindingData[areaNums[j]].disabledStatus.SetCurrStatus( true );
-			}
-			continue;
-		}
-		numAreas = requests[i]->FillProvidedAreasBuffer( disabledAreaNumsBuffer + numDisabledAreas, capacityLeft );
-		numDisabledAreas += numAreas;
-		capacityLeft -= numAreas;
+		requests[i]->FillBlockedAreasTable( blockedAreasTable );
 	}
 
 	// For each selected area mark area as disabled
-	for( int i = 0; i < numDisabledAreas; ++i ) {
-		areaPathFindingData[disabledAreaNumsBuffer[i]].disabledStatus.SetCurrStatus( true );
+	for( int i = 0; i < numAreas; ++i ) {
+		if( blockedAreasTable[i] ) {
+			areaPathFindingData[i].disabledStatus.SetCurrStatus( true );
+		}
 	}
 
 	// For each area compare its old and new status
 	bool shouldClearCache = false;
-	for( int i = 0, end = aasWorld.NumAreas(); i < end; ++i ) {
+	for( int i = 0; i < numAreas; ++i ) {
 		const auto &status = areaPathFindingData[i].disabledStatus;
 		// TODO: We can test multiple statuses using SIMD
 		if( status.OldStatus() != status.CurrStatus() ) {
@@ -276,20 +269,10 @@ void AiAasRouteCache::InitCompactReachDataAreaDataAndHelpers() {
 	static_assert( sizeof( int ) == sizeof( int32_t ), "Assumptions on int being 32 bit are broken" );
 
 	size_t reachDataSize = numReach * sizeof( ReachPathFindingData );
-	if( reachDataSize % alignof( int ) ) {
-		reachDataSize += alignof( int ) - reachDataSize % alignof( int );
-	}
+	reachPathFindingData = (ReachPathFindingData *)GetClearedRefCountedMemory( reachDataSize );
 
-	size_t sharedDataSize = reachDataSize + 2 * numAreas * sizeof( int );
-	auto *ptr = (uint8_t *)GetClearedRefCountedMemory( sharedDataSize );
-
-	reachPathFindingData = CastCheckingAlignment<ReachPathFindingData>( ptr );
-	ptr += reachDataSize;
-	currDisabledAreaNums = CastCheckingAlignment<int>( ptr );
-	ptr += sizeof( int ) * numAreas;
-	cleanCacheAreaNums = CastCheckingAlignment<int>( ptr );
-
-	areaPathFindingData = (AreaPathFindingData *)GetClearedMemory( numAreas * sizeof( AreaPathFindingData ) );
+	size_t areaDataSize = numAreas * sizeof( AreaPathFindingData );
+	areaPathFindingData = (AreaPathFindingData *)GetClearedMemory( areaDataSize );
 
 	const auto *const aasAreaSettings = aasWorld.AreaSettings();
 	const auto *const aasPortals = aasWorld.Portals();

@@ -215,17 +215,6 @@ class AiAasRouteCache {
 	 */
 	ReachPathFindingData *reachPathFindingData;
 
-	/**
-	 * A scratchpad for {@code SetDisabledRegions()} that is capable to store {@code AiAasWorld::NumAreas()} values.
-	 * It is allocated within the shared {code reachPathFindingData} buffer.
-	 */
-	int *currDisabledAreaNums;
-	/**
-	 * A scratchpad for {@code SetDisabledRegions()} that is capable to store {@code AiAasWorld::NumAreas()} values.
-	 * It is allocated withing the shared {@code reachPathFindingData} buffer.
-	 */
-	int *cleanCacheAreaNums;
-
 	PathFinderNode *areaPathFindingNodes;
 	PathFinderNode *portalPathFindingNodes;
 
@@ -505,27 +494,13 @@ public:
 
 	struct DisableZoneRequest {
 		virtual ~DisableZoneRequest() = default;
-		/**
-		 * This method is called first and provides optimization opportunities
-		 * if there is already an own list (buffer) of areas to disable for routing.
-		 * @note this call is expected to be cheap and produce idempotent results
-		 * on repeated invocations during the same update of blocked areas status.
-		 * @param bufferSize an actual size of the own-managed buffer.
-		 * @return a non-null buffer that has {@code *bufferSize} accessible int elements
-		 * if there is an own-managed buffer or null otherwise.
-		 */
-		virtual const int *GetSelfManagedAreasBuffer( int *bufferSize ) {
-			return nullptr;
-		}
 
 		/**
-		 * This method is called second if {@code GetOwnManagedAreasBuffer()} returned null
-		 * @param areasBuffer a buffer for areas that is expected to be filled by
-		 * requested areas numbers that should be disabled for routing
-		 * @param bufferCapacity a capacity of the provided buffer
-		 * @return a number of areas that are actually requested.
+		 * Should mark all areas that considered to be blocked in the supplied buffer.
+		 * @warning results are accumulated for multiple requests. Don't clear the buffer.
+		 * @param table a buffer that is addressed by area numbers.
 		 */
-		virtual int FillProvidedAreasBuffer( int *areasBuffer, int bufferCapacity ) = 0;
+		virtual void FillBlockedAreasTable( bool *__restrict table ) = 0;
 	};
 
 	inline void ClearDisabledZones() {

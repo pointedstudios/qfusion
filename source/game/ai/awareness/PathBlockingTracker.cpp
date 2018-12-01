@@ -64,25 +64,22 @@ public:
 	enum { MAX_ENEMIES = 8 };
 private:
 	const AiAasWorld *const aasWorld;
-	int *areasBuffer;
-	int bufferOffset;
-	int bufferCapacity;
 
 	// Lets put it last even if it has the largest alignment requirements
 	// Last elements of this array are unlikely to be accessed.
 	// Let the array head be closer to the memory hot spot
 	StaticVector<EnemyComputationalProxy, MAX_ENEMIES> enemyProxies;
 
-	void TryAddAreasFromList( const uint16_t *areasList, int hitFlagsMask );
-	void TryAddGroundedAreas( int hitFlagsMask );
-	void TryAddNonGroundedAreasFromList( const uint16_t *areasList, int hitFlagsMask );
+	void AddAreas( const uint16_t *__restrict areasList, bool *__restrict blockedAreasTable );
+
+	void AddGroundedAreas( bool *__restrict blockedAreasTable );
+
+	void AddNonGroundedAreas( const uint16_t *__restrict areasList, bool *__restrict blockedAreasTable );
 
 	template <typename MayBlockFn>
 	bool TryAddEnemiesImpactOnArea( int areaNum, int hitFlagsMask );
-
-	inline bool IsBufferFull() const { return bufferOffset == bufferCapacity; }
 public:
-	int FillProvidedAreasBuffer( int *areasBuffer_, int bufferCapacity_ ) override;
+	void FillBlockedAreasTable( bool *__restrict blockedAreasTable ) override;
 
 	DisableMapAreasRequest( const TrackedEnemy **begin, const TrackedEnemy **end, float damageToKillBot_ );
 };
@@ -219,29 +216,10 @@ DisableMapAreasRequest::DisableMapAreasRequest( const TrackedEnemy **begin,
 	}
 }
 
-int DisableMapAreasRequest::FillProvidedAreasBuffer( int *areasBuffer_, int bufferCapacity_ ) {
-	if( !bufferCapacity_ ) {
-		return 0;
-	}
+void DisableMapAreasRequest::FillBlockedAreasTable( bool *__restrict blockedAreasTable ) {
+	AddGroundedAreas( blockedAreasTable );
 
-	this->areasBuffer = areasBuffer_;
-	this->bufferOffset = 0;
-	this->bufferCapacity = bufferCapacity_;
-
-	const int allHitFlagsMask = (int)TrackedEnemy::HitFlags::ALL;
-	// Do not take "rail" hit flags into account while testing grounded areas for blocking.
-	// A bot can easily dodge rail-like weapons using regular movement on ground.
-	const int groundedHitFlagsMask = allHitFlagsMask & ~(int)TrackedEnemy::HitFlags::RAIL;
-
-	TryAddGroundedAreas( groundedHitFlagsMask );
-	if( IsBufferFull() ) {
-		return bufferOffset;
-	}
-
-	TryAddAreasFromList( aasWorld->WalkOffLedgePassThroughAirAreas(), allHitFlagsMask );
-	if( IsBufferFull() ) {
-		return bufferOffset;
-	}
+	AddAreas( aasWorld->WalkOffLedgePassThroughAirAreas(), blockedAreasTable );
 
 	// For every area in these list we use "all hit flags" mask
 	// as the a is extremely vulnerable while moving through these areas
@@ -257,19 +235,16 @@ int DisableMapAreasRequest::FillProvidedAreasBuffer( int *areasBuffer_, int buff
 	};
 
 	for( const auto *areasList: skipGroundedAreasLists ) {
-		TryAddNonGroundedAreasFromList( areasList, allHitFlagsMask );
-		if( IsBufferFull() ) {
-			break;
-		}
+		AddNonGroundedAreas( areasList, blockedAreasTable );
 	}
 
 	// Requires sv_pps 62, a simple map and and a single bot
-	//for( int i = 0; i < bufferOffset; ++i ) {
-	//	const auto &area = aasWorld->Areas()[areasBuffer[i]];
-	//	AITools_DrawColorLine( area.mins, area.maxs, COLOR_RGB( 192, 0, 0 ), 0 );
+	//for( int i = 1; i < aasWorld->NumAreas(); ++i ) {
+	//	if( blockedAreasTable[i] ) {
+	//		const auto &area = aasWorld->Areas()[i];
+	//		AITools_DrawColorLine( area.mins, area.maxs, COLOR_RGB( 192, 0, 0 ), 0 );
+	//	}
 	//}
-
-	return bufferOffset;
 }
 
 struct MayBlockGroundedArea {
@@ -284,44 +259,50 @@ struct MayBlockOtherArea {
 	}
 };
 
-void DisableMapAreasRequest::TryAddAreasFromList( const uint16_t *__restrict areasList, int hitFlagsMask ) {
+void DisableMapAreasRequest::AddAreas( const uint16_t *__restrict areasList,
+									   bool *__restrict blockedAreasTable ) {
+	const auto hitFlagsMask = (int)TrackedEnemy::HitFlags::ALL;
+
 	// Skip the list size
 	const auto listSize = *areasList++;
 	for( int i = 0; i < listSize; ++i ) {
+		const auto areaNum = areasList[i];
 		if( TryAddEnemiesImpactOnArea<MayBlockOtherArea>( areasList[i], hitFlagsMask ) ) {
-			areasBuffer[bufferOffset++] = areasList[i];
-			if( IsBufferFull() ) {
-				break;
-			}
+			blockedAreasTable[areaNum] = true;
 		}
 	}
 }
 
-void DisableMapAreasRequest::TryAddGroundedAreas( int hitFlagsMask ) {
+void DisableMapAreasRequest::AddGroundedAreas( bool *__restrict blockedAreasTable ) {
+	// TODO: We already ignore RAIL hit flags mask in the actual test fn., do we?
+	const auto hitFlagsMask = (int)TrackedEnemy::HitFlags::ALL & ~(int)( TrackedEnemy::HitFlags::RAIL );
+	// Do not take "rail" hit flags into account while testing grounded areas for blocking.
+	// A bot can easily dodge rail-like weapons using regular movement on ground.
 	const auto *const __restrict groundedAreaNums = aasWorld->UsefulGroundedAreas() + 1;
 	for( int i = 0; i < groundedAreaNums[-1]; ++i ) {
-		if( TryAddEnemiesImpactOnArea<MayBlockGroundedArea>( groundedAreaNums[i], hitFlagsMask ) ) {
-			areasBuffer[bufferOffset++] = groundedAreaNums[i];
-			if( IsBufferFull() ) {
-				break;
-			}
+		const int areaNum = groundedAreaNums[i];
+		if( TryAddEnemiesImpactOnArea<MayBlockGroundedArea>( areaNum, hitFlagsMask ) ) {
+			blockedAreasTable[areaNum] = true;
 		}
 	}
 }
 
-void DisableMapAreasRequest::TryAddNonGroundedAreasFromList( const uint16_t *__restrict areasList, int hitFlagsMask ) {
-	const auto *const __restrict aasAreaSettings = aasWorld->AreaSettings() + 1;
+void DisableMapAreasRequest::AddNonGroundedAreas( const uint16_t *__restrict areasList,
+												  bool *__restrict blockedAreasTable ) {
+	const int hitFlagsMask = (int)TrackedEnemy::HitFlags::ALL;
+	const auto *const __restrict aasAreaSettings = aasWorld->AreaSettings();
 	// Skip the list size
 	for( int i = 0; i < areasList[-1]; ++i ) {
 		const auto areaNum = areasList[i];
+		// We actually test this instead of skipping during list building
+		// as AiAasWorld() getter signatures would have look awkward otherwise...
+		// This is not an expensive operation as the number of such areas is very limited.
+		// Still fetching only area flags from a tightly packed flags array would have been better.
 		if( aasAreaSettings[areaNum].areaflags & AREA_GROUNDED ) {
 			continue;
 		}
 		if( TryAddEnemiesImpactOnArea<MayBlockOtherArea>( areaNum, hitFlagsMask ) ) {
-			areasBuffer[bufferOffset++] = areaNum;
-			if( IsBufferFull() ) {
-				break;
-			}
+			blockedAreasTable[areaNum] = true;
 		}
 	}
 }
