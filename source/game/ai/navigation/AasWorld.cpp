@@ -2223,7 +2223,7 @@ bool AiAasWorld::AreAreasInPvs( int areaNum1, int areaNum2 ) const {
 	return false;
 }
 
-static constexpr uint32_t AREA_VIS_VERSION = 1337;
+static constexpr uint32_t AREA_VIS_VERSION = 1338;
 static constexpr const char *AREA_VIS_TAG = "AasAreaVis";
 static constexpr const char *AREA_VIS_EXT = ".areavis";
 
@@ -2243,11 +2243,19 @@ void AiAasWorld::LoadAreaVisibility( const ArrayRange<char> &strippedMapName ) {
 		if( reader.ReadLengthAndData( &data, &dataLength ) ) {
 			// Sanity check. The number of offsets should match the number of areas
 			if( expectedOffsetsDataSize == dataLength ) {
-				assert( ( (uintptr_t)data ) % 4 == 0 );
 				areaVisDataOffsets = (int32_t *)data;
+				const char *tag = "AiAasWorld::LoadVisibility()/AiPrecomputedFileReader::ReadLengthAndData()";
+				constexpr const char *message = "G_LevelMalloc() should return 16-byte aligned blocks";
+				// Just to give vars above another usage so lifting it is required not only for fitting line limit.
+				if( ( (uintptr_t)areaVisDataOffsets ) % 16 ) {
+					AI_FailWith( tag, message );
+				}
 				if( reader.ReadLengthAndData( &data, &dataLength ) ) {
-					assert( ( (uintptr_t)data ) % 2 == 0 );
 					areaVisData = (uint16_t *)data;
+					// Having a proper alignment for area vis data is vital. Keep this assertion.
+					if( ( (uintptr_t)areaVisDataOffsets ) % 16 ) {
+						AI_FailWith( tag, message );
+					}
 					return;
 				}
 			}
@@ -2270,112 +2278,200 @@ void AiAasWorld::LoadAreaVisibility( const ArrayRange<char> &strippedMapName ) {
 	}
 }
 
-void AiAasWorld::ComputeAreasVisibility( uint32_t *offsetsDataSize, uint32_t *listsDataSize ) {
-	const int numAreas = numareas;
-	assert( numAreas && numAreas <= std::numeric_limits<uint16_t>::max() );
-	const auto rowSize = (size_t)( numAreas - 1 );
+/**
+ * Reduce the code complexity by extracting this helper.
+ */
+class SparseVisTable {
+	bool *table;
+	int32_t *listSizes;
+	// We avoid wasting memory for zero row/columns
+	static constexpr int elemOffset { -1 };
+public:
+	const int rowSize;
 
-	struct CallGFree {
-		void operator()( void *p ) {
-			G_Free( p );
-		}
-	};
+	static int AreaRowOffset( int area ) {
+		return area + elemOffset;
+	}
 
-	const size_t tableMemSize = ( rowSize * rowSize * sizeof( uint8_t ) );
-	// We could have used bit sets here but it complicates the code very much.
-	// This should not be that bad as vis for vanilla maps should be prebuilt in dev mode
-	// and there are no compatible AAS files for custom maps (unless being built intentionally).
-	auto *const __restrict table = (bool *)G_Malloc( tableMemSize );
-	std::unique_ptr<bool, CallGFree> tableGuard( table );
-	memset( table, 0, tableMemSize );
+	static int AreaForOffset( int rowOffset ) {
+		return rowOffset - elemOffset;
+	}
 
-	auto *const __restrict listSizes = (int32_t *)G_Malloc( numAreas * sizeof( int32_t ) );
-	std::unique_ptr<int32_t, CallGFree> listSizesGuard( listSizes );
-	memset( listSizes, 0, numAreas * sizeof( int32_t ) );
+	explicit SparseVisTable( int numAreas )
+		: rowSize( numAreas + elemOffset ) {
+		size_t tableMemSize = sizeof( bool ) * rowSize * rowSize;
+		// Never returns on failure
+		table = (bool *)G_Malloc( tableMemSize );
+		memset( table, 0, tableMemSize );
+		listSizes = (int32_t *)G_Malloc( numAreas * sizeof( int32_t ) );
+		memset( listSizes, 0, numAreas * sizeof( int32_t ) );
+	}
 
-	trace_t trace;
-	const auto *const __restrict aasAreas = areas;
-	size_t numVisElems = 0;
-	size_t numPadElems = 7;
-	for( int i = 1; i < numAreas; ++i ) {
-		for( int j = i + 1; j < numAreas; ++j ) {
-			if( !AreAreasInPvs( i, j ) ) {
-				continue;
-			}
+	~SparseVisTable() {
+		G_Free( table );
+		G_Free( listSizes );
+	}
 
-			// TODO: Add and use an optimized version that uses an early exit
-			SolidWorldTrace( &trace, aasAreas[i].center, aasAreas[j].center );
-			if( trace.fraction != 1.0f ) {
-				continue;
-			}
+	void MarkAsVisible( int area1, int area2 ) {
+		// The caller code is so expensive that we don't care about these scattered writes
+		table[AreaRowOffset( area1 ) * rowSize + AreaRowOffset( area2 )] = true;
+		table[AreaRowOffset( area2 ) * rowSize + AreaRowOffset( area1 )] = true;
+		listSizes[area1]++;
+		listSizes[area2]++;
+	}
 
-			// We avoid wasting memory for zero row/columns
-			table[( i - 1 ) * rowSize + j - 1] = true;
-			table[( j - 1 ) * rowSize + i - 1] = true;
-
-			numVisElems += 2;
-			listSizes[i]++;
-			listSizes[j]++;
-		}
-
+	uint32_t ComputeDataSize() const {
+		// We need 15 elements for zero (dummy) area list and for padding of the first feasible list (described below)
+		size_t result = 15;
 		// We store lists in SIMD-friendly format from the very beginning.
 		// List data should start from 16-byte boundaries.
 		// Thus list length should be 2 bytes before 16-byte boundaries.
 		// A gap between last element of a list and length of a next list must be zero-filled.
 		// Assuming that lists data starts from 16-byte-aligned address
 		// the gap size in elements is 8 - 1 - (list length in elements) % 8
-		numPadElems += 2 * ( 8 - 1 - ( numVisElems / 2 ) % 8 );
+		for( int i = -elemOffset; i < rowSize - elemOffset; ++i ) {
+			size_t numListElems = (unsigned)listSizes[i];
+			result += numListElems;
+			size_t tail = 8 - 1 - ( numListElems % 8 );
+			assert( tail < 8 );
+			result += tail;
+			// We need a space for the list size as well
+			result += 1;
+		}
+		// Convert to size in bytes
+		result *= sizeof( uint16_t );
+		// Check whether we do not run out of sane storage limits (should not happen even for huge maps)
+		assert( result < std::numeric_limits<int32_t>::max() / 8 );
+		return (uint32_t)result;
 	}
 
-	// Now build lists from the table
+	const bool *Row( int areaNum ) const {
+		assert( (unsigned)( areaNum + elemOffset ) < rowSize );
+		return &table[rowSize * ( areaNum + elemOffset )];
+	}
 
-	// Put 7 additional elements so the length of the first list (for area #1) is just before 16-byte boundaries.
-	*listsDataSize = (uint32_t)( ( numVisElems + numAreas + numPadElems ) * sizeof( uint16_t ) );
+	int ListSize( int areaNum ) const {
+		assert( (unsigned)areaNum < rowSize - elemOffset );
+		return listSizes[areaNum];
+	};
+};
+
+/**
+ * Reduce the code complexity by extracting this helper.
+ */
+class ListsBuilder {
+	const uint16_t *const listsData;
+	uint16_t *__restrict listsPtr;
+	int32_t *__restrict offsetsPtr;
+public:
+	ListsBuilder( uint16_t *listsData_, int32_t *offsetsData_ )
+		: listsData( listsData_ ), listsPtr( listsData_ ), offsetsPtr( offsetsData_ ) {
+		// The lists data must already have initial 16-byte alignment
+		assert( !( ( (uintptr_t)listsData_ ) % 16 ) );
+		// We should start writing lists data at 16-bytes boundary
+		assert( !( ( (uintptr_t)listsData ) % 16 ) );
+		// Let the list for the dummy area follow common list alignment contract.
+		// (a short element after the a length should start from 16-byte boundaries).
+		// The length of the first real list should start just before 16-byte boundaries as well.
+		std::fill_n( listsPtr, 0, 15 );
+		listsPtr += 15;
+		*offsetsPtr++ = 7;
+	}
+
+	void BeginList( int size ) {
+		ptrdiff_t offset = listsPtr - listsData;
+		assert( offset > 0 && offset < std::numeric_limits<int32_t>::max() );
+		assert( (unsigned)size <= std::numeric_limits<uint16_t>::max() );
+		*offsetsPtr++ = (int32_t)offset;
+		*listsPtr++ = (uint16_t)size;
+	}
+
+	void AddToList( int item ) {
+		assert( (unsigned)( item - 1 ) < std::numeric_limits<uint16_t>::max() );
+		*listsPtr++ = (uint16_t)item;
+	}
+
+	void EndList() {
+		// Fill the gap between the list end and the next list length by zeroes
+		for(;; ) {
+			auto address = (uintptr_t)listsPtr;
+			// Stop at the address 2 bytes before the 16-byte boundary
+			if( !( ( address + 2 ) % 16 ) ) {
+				break;
+			}
+			*listsPtr++ = 0;
+		}
+	}
+
+	void MarkEnd() {
+		// Even if the element that was reserved for a list length is unused
+		// for the last list it still contributes to a checksum.
+		*listsPtr = 0;
+	}
+
+	ptrdiff_t Offset() const { return listsPtr - listsData; }
+};
+
+void AiAasWorld::ComputeAreasVisibility( uint32_t *offsetsDataSize, uint32_t *listsDataSize ) {
+	const int numAreas = numareas;
+	assert( numAreas && numAreas <= std::numeric_limits<uint16_t>::max() );
+	SparseVisTable table( numAreas );
+
+	const auto *const __restrict aasAreas = areas;
+	for( int i = 1; i < numAreas; ++i ) {
+		for( int j = i + 1; j < numAreas; ++j ) {
+			if( !AreAreasInPvs( i, j ) ) {
+				continue;
+			}
+
+			trace_t trace;
+			// TODO: Add and use an optimized version that uses an early exit
+			SolidWorldTrace( &trace, aasAreas[i].center, aasAreas[j].center );
+			if( trace.fraction != 1.0f ) {
+				continue;
+			}
+
+			table.MarkAsVisible( i, j );
+		}
+	}
+
+	*listsDataSize = table.ComputeDataSize();
 	auto *const __restrict listsData = (uint16_t *)G_LevelMalloc( *listsDataSize );
+
+	// Let's keep these assertions in release mode for various reasons
+	constexpr const char *tag = "AiAasWorld::ComputeAreasVisibility()";
+	if( ( (uintptr_t)listsData ) % 8 ) {
+		AI_FailWith( tag, "G_LevelMalloc() violates ::malloc() contract (8-byte alignment)" );
+	}
 	if( ( (uintptr_t)listsData ) % 16 ) {
-		AI_FailWith( "AiAasWorld::ComputeAreasVisibility()", "G_LevelMalloc() should return 16-byte-aligned results" );
+		AI_FailWith( tag, "G_LevelMalloc() should return 16-byte aligned results" );
 	}
 
 	*offsetsDataSize = (uint32_t)( numAreas * sizeof( int32_t ) );
-	auto *const __restrict listOffsets = (int *)G_LevelMalloc( *offsetsDataSize );
+	auto *const listOffsets = (int *)G_LevelMalloc( *offsetsDataSize );
 
-	// Let the list for the dummy area follow common alignment contract.
-	listOffsets[0] = 7;
-	auto *__restrict listPtr = listsData;
-	// The length of the first real list should start just before 16-byte boundaries.
-	std::fill_n( listPtr, 0, 15 );
-	listPtr += 15;
-
+	ListsBuilder builder( listsData, listOffsets );
+	const auto rowSize = table.rowSize;
 	for( int i = 1; i < numAreas; ++i ) {
-		const ptrdiff_t offset = listPtr - listsData;
-		assert( offset > 0 && offset <= std::numeric_limits<int32_t>::max() );
-		listOffsets[i] = (int32_t)offset;
-
-		const int size = listSizes[i];
-		assert( size >= 0 && size <= std::numeric_limits<uint16_t>::max() );
-		*listPtr++ = (uint16_t)size;
-
-		// Make sure the list data is going to start from 16-byte boundaries
-		assert( !( ( (uintptr_t)listPtr ) % 16 ) );
+		builder.BeginList( table.ListSize( i ) );
 
 		// Scan the table row
-		const bool *__restrict tableRow = &table[( i - 1 ) * rowSize];
-		for( int j = 1; j < numAreas; ++j ) {
-			if( tableRow[j - 1] ) {
-				*listPtr++ = (uint16_t)j;
+		const bool *__restrict tableRow = table.Row( i );
+		for( int j = 0; j < rowSize; ++j ) {
+			if( tableRow[j] ) {
+				builder.AddToList( SparseVisTable::AreaForOffset( j ) );
 			}
 		}
 
-		// Fill the gap between lists (while the list ptr is not just before 16-byte boundaries)
-		while ( !( ( (uintptr_t)listPtr ) + 2 ) % 16 ) {
-			*listPtr++ = 0;
-		}
+		builder.EndList();
 	}
 
-	// Make sure we've matched the expected data size
-	assert( ( sizeof( uint16_t ) * ( listPtr - listsData ) ) == *listsDataSize );
+	builder.MarkEnd();
 
-#if 1
+	// Make sure we've matched the expected data size
+	assert( builder.Offset() * sizeof( int16_t ) == *listsDataSize );
+
+#ifdef _DEBUG
 	// Validate. Useful for testing whether we have brake something. Test a list of every area.
 
 	// Make sure the list for the dummy area follows the alignment contract
@@ -2384,22 +2480,21 @@ void AiAasWorld::ComputeAreasVisibility( uint32_t *offsetsDataSize, uint32_t *li
 	assert( !listsData[listOffsets[0]] );
 	for( int i = 1; i < numAreas; ++i ) {
 		const uint16_t *list = listsData + listOffsets[i];
-		assert( list[0] == listSizes[i] );
+		assert( list[0] == table.ListSize( i ) );
 		const int size = *list++;
 		// Check list data alignment once again
 		assert( !( ( (uintptr_t)list ) % 16 ) );
-		const ptrdiff_t iOffset = ( i - 1 ) * rowSize;
 		// For every area in list the a table bit must be set
+		const auto *const __restrict row = table.Row( i );
 		for( int j = 0; j < size; ++j ) {
-			int areaNum = list[j];
-			assert( table[iOffset + areaNum - 1] );
+			assert( row[SparseVisTable::AreaRowOffset( list[j] )] );
 		}
 		// For every area not in the list a table bit must be zero
 		for( int areaNum = 1; areaNum < numAreas; ++areaNum ) {
 			if( std::find( list, list + size, areaNum ) != list + size ) {
 				continue;
 			}
-			assert( !table[iOffset + areaNum - 1] );
+			assert( !row[SparseVisTable::AreaRowOffset( areaNum )] );
 		}
 		// Make sure all areas in the list are valid
 		assert( std::find( list, list + size, 0 ) == list + size );
