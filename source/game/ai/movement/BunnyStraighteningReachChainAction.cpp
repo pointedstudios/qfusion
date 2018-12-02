@@ -1,29 +1,19 @@
 #include "BunnyStraighteningReachChainAction.h"
 #include "MovementLocal.h"
-#include "SameFloorClusterAreasCache.h"
+#include "FloorClusterAreasCache.h"
 #include "../ai_manager.h"
 
 BunnyStraighteningReachChainAction::BunnyStraighteningReachChainAction( BotMovementModule *module_ )
-	: BunnyTestingMultipleLookDirsAction( module_, NAME, COLOR_RGB( 0, 192, 0 ) ) {
+	: BunnyTestingSavedLookDirsAction( module_, NAME, COLOR_RGB( 0, 192, 0 ) ) {
 	supportsObstacleAvoidance = false;
 	// The constructor cannot be defined in the header due to this bot member access
-	suggestedAction = &module->bunnyToBestShortcutAreaAction;
+	suggestedAction = &module->bunnyToBestNavMeshPointAction;
 }
 
 void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context ) {
 	Assert( suggestedLookDirs.empty() );
-	Assert( dirsBaseAreas.empty() );
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	const int navTargetAasAreaNum = context->NavTargetAasAreaNum();
-	Assert( navTargetAasAreaNum );
 
-	// Do not modify look vec in this case (we assume its set to nav target)
 	if( context->IsInNavTargetArea() ) {
-		void *mem = suggestedLookDirs.unsafe_grow_back();
-		dirsBaseAreas.push_back( navTargetAasAreaNum );
-		Vec3 *toTargetDir = new(mem)Vec3( context->NavTargetOrigin() );
-		*toTargetDir -= entityPhysicsState.Origin();
-		toTargetDir->NormalizeFast();
 		return;
 	}
 
@@ -33,20 +23,17 @@ void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context
 		return;
 	}
 
-	// Make sure the action is dependent of this action
-	Assert( suggestedAction == &module->bunnyToBestShortcutAreaAction );
-	// * Quotas are allowed to request only once per frame,
+	// Quota are allowed to be requested only once per frame,
 	// and subsequent calls for the same client fail (return with false).
-	// Set suggested look dirs for both actions, otherwise the second one (almost) never gets a quota.
-	// * Never try to acquire a quota here if a bot is really blocked.
+	// Never try to acquire a quota here if a bot is really blocked.
 	// These predicted actions are very likely to fail again,
 	// and fallbacks do not get their quotas leading to blocking to bot suicide.
 	if( bot->MillisInBlockedState() < 100 && AiManager::Instance()->TryGetExpensiveComputationQuota( bot ) ) {
-		this->maxSuggestedLookDirs = 11;
-		module->bunnyToBestShortcutAreaAction.maxSuggestedLookDirs = 5;
+		this->maxSuggestedLookDirs = ( 2 * MAX_SUGGESTED_LOOK_DIRS ) / 3;
 	} else {
-		this->maxSuggestedLookDirs = 2;
-		module->bunnyToBestShortcutAreaAction.maxSuggestedLookDirs = 2;
+		// The value has been increased since we have removed some useless actions
+		// that mainly used just consume CPU cycles without any yield
+		this->maxSuggestedLookDirs = 3;
 	}
 
 	const AiAasWorld *aasWorld = AiAasWorld::Instance();
@@ -83,6 +70,7 @@ void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context
 
 	// If there is a trigger entity in the reach chain, try keep looking at it
 	if( reachStoppedAt ) {
+		const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 		int travelType = reachStoppedAt->traveltype;
 		if( travelType == TRAVEL_TELEPORT || travelType == TRAVEL_JUMPPAD || travelType == TRAVEL_ELEVATOR ) {
 			Assert( maxSuggestedLookDirs > 0 );
@@ -90,13 +78,13 @@ void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context
 			if( suggestedLookDirs.size() == maxSuggestedLookDirs ) {
 				suggestedLookDirs.pop_back();
 			}
-			dirsBaseAreas.push_back( 0 );
-			void *mem = suggestedLookDirs.unsafe_grow_back();
-			// reachStoppedAt->areanum is an area num of reach destination, not the trigger itself.
-			// Saving or restoring the trigger area num does not seem worth this minor case.
-			Vec3 *toTriggerDir = new(mem)Vec3( reachStoppedAt->start );
-			*toTriggerDir -= entityPhysicsState.Origin();
-			toTriggerDir->NormalizeFast();
+			Vec3 toTriggerDir( reachStoppedAt->start );
+			toTriggerDir -= entityPhysicsState.Origin();
+			toTriggerDir.Normalize();
+			// The target area of reachStoppedAt is the area "behind" trigger.
+			// The prediction gets always interrupted on touching trigger.
+			// Just supply a dummy value and rely on touching the trigger during prediction.
+			suggestedLookDirs.emplace_back( DirAndArea( toTriggerDir, 0 ) );
 			return;
 		}
 	}
@@ -200,7 +188,7 @@ AreaAndScore *BunnyStraighteningReachChainAction::SelectCandidateAreas( Context 
 		// Make sure the bot can see the ground
 		// On failure, restore minScore (it might have been set to the value of the rejected area score on this loop step)
 		if( floorClusterNum && floorClusterNum == aasAreaFloorClusterNums[areaNum] ) {
-			if( !IsAreaWalkableInFloorCluster( currAreaNum, areaNum ) ) {
+			if( !aasWorld->IsAreaWalkableInFloorCluster( currAreaNum, areaNum ) ) {
 				continue;
 			}
 		} else {

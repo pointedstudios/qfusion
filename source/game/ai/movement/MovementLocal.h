@@ -6,6 +6,10 @@
 #include "MovementPredictionContext.h"
 #include "EnvironmentTraceCache.h"
 
+// For macOS Clang
+#include <cmath>
+#include <cstdlib>
+
 #ifndef PUBLIC_BUILD
 #define CHECK_ACTION_SUGGESTION_LOOPS
 #define ENABLE_MOVEMENT_ASSERTIONS
@@ -158,18 +162,54 @@ inline void MovementPredictionContext::SaveActionOnStack( BaseMovementAction *ac
 	// Make sure the angles can always be modified for input interpolation or aiming
 	topOfStack->record.botInput.hasAlreadyComputedAngles = false;
 	topOfStack->timestamp = level.time + this->totalMillisAhead;
-	// Check the value for sanity, huge values are a product of negative values wrapping in unsigned context
-	Assert( this->predictionStepMillis < 100 );
-	Assert( this->predictionStepMillis % 16 == 0 );
+
+#ifdef ENABLE_MOVEMENT_ASSERTIONS
+	constexpr auto *tag = "MovementPredictionContext::SaveActionOnStack()";
+	if( !action ) {
+		AI_FailWith( tag, "The action is null\n" );
+	}
+	if( this->predictionStepMillis > 100 ) {
+		const char *format =
+			"%s: The prediction step millis value %u is way too large. "
+			"Is it a result of wrapping of negative values in unsigned context?\n";
+		AI_FailWith( tag, format, action->Name() );
+	}
+	if( this->predictionStepMillis % DefaultFrameTime() ) {
+		const char *format = "%s: The prediction step millis value %u is no a multiple of %u\n";
+		AI_FailWith( tag, format, action->Name(), this->predictionStepMillis, DefaultFrameTime() );
+	}
+#endif
+
 	topOfStack->stepMillis = this->predictionStepMillis;
 	this->topOfStackIndex++;
 }
 
-inline void MovementPredictionContext::MarkSavepoint( BaseMovementAction *markedBy, unsigned frameIndex ) {
-	Assert( !this->cannotApplyAction );
-	Assert( !this->shouldRollback );
+inline const char *MovementPredictionContext::ActiveActionName() const {
+	return activeAction ? activeAction->Name() : nullptr;
+}
 
-	Assert( frameIndex == this->topOfStackIndex || frameIndex == this->topOfStackIndex + 1 );
+inline void MovementPredictionContext::MarkSavepoint( BaseMovementAction *markedBy, unsigned frameIndex ) {
+#ifdef ENABLE_MOVEMENT_ASSERTIONS
+	constexpr auto *tag = "MovementPredictionContext::MarkSavepoint()";
+	if( !markedBy ) {
+		AI_FailWith( tag, "`markedBy` action is null\n" );
+	}
+	if( this->cannotApplyAction ) {
+		constexpr auto *format = "%s: Attempt to mark a savepoint while `cannotApplyAction` context flag is set\n";
+		AI_FailWith( tag, format, markedBy->Name() );
+	}
+	if( this->shouldRollback ) {
+		constexpr auto *format = "%s: Attempt to mark a savepoint while `shouldRollback` context flag is set\n";
+		AI_FailWith( tag, format, markedBy->Name() );
+	}
+	if( frameIndex != this->topOfStackIndex && frameIndex != this->topOfStackIndex + 1 ) {
+		constexpr auto *format =
+			"%s: Attempt to mark a savepoint at index %d while ToS index is %d:"
+			" the savepoint index must be the same or be a first next index\n";
+		AI_FailWith( tag, format, markedBy->Name(), frameIndex, this->topOfStackIndex );
+	}
+#endif
+
 	this->savepointTopOfStackIndex = frameIndex;
 	Debug( "%s has marked frame %d as a savepoint\n", markedBy->Name(), frameIndex );
 }
@@ -180,20 +220,29 @@ inline void MovementPredictionContext::SetPendingRollback() {
 }
 
 inline void MovementPredictionContext::RollbackToSavepoint() {
-	Assert( !this->isCompleted );
-	Assert( this->shouldRollback );
-	Assert( this->cannotApplyAction );
+#ifdef ENABLE_MOVEMENT_ASSERTIONS
+	constexpr auto *tag = "MovementPredictionContext::RollbackToSavepoint()";
+	if( this->isCompleted ) {
+		constexpr auto *format = "%s: Attempt to rollback while the context is in completed state\n";
+		AI_FailWith( tag, format, ActiveActionName() );
+	}
+	if( !this->shouldRollback ) {
+		constexpr auto *format = "%s: Attempt to rollback while `shouldRollback` context flag is not set\n";
+		AI_FailWith( tag, format, ActiveActionName() );
+	}
+	if( !this->cannotApplyAction ) {
+		constexpr auto *format = "%s: Attempt to rollback while `cannotApplyAction` context flag is not set\n";
+		AI_FailWith( tag, format, ActiveActionName() );
+	}
+	if( this->savepointTopOfStackIndex > this->topOfStackIndex ) {
+		constexpr auto *format = "The savepoint index %u is greater than the current ToS index %u\n";
+		AI_FailWith( tag, format, this->savepointTopOfStackIndex, this->topOfStackIndex );
+	}
+#endif
 
 	constexpr const char *format = "Rolling back to savepoint frame %d from ToS frame %d\n";
 	Debug( format, this->savepointTopOfStackIndex, this->topOfStackIndex );
-	Assert( this->topOfStackIndex >= this->savepointTopOfStackIndex );
 	this->topOfStackIndex = this->savepointTopOfStackIndex;
-}
-
-inline void MovementPredictionContext::SetPendingWeapon( int weapon ) {
-	Assert( weapon >= WEAP_NONE && weapon < WEAP_TOTAL );
-	record->pendingWeapon = ( decltype( record->pendingWeapon ) )weapon;
-	pendingWeaponsStack.back() = record->pendingWeapon;
 }
 
 inline void MovementPredictionContext::SaveSuggestedActionForNextFrame( BaseMovementAction *action ) {
@@ -202,14 +251,18 @@ inline void MovementPredictionContext::SaveSuggestedActionForNextFrame( BaseMove
 }
 
 inline unsigned MovementPredictionContext::MillisAheadForFrameStart( unsigned frameIndex ) const {
-	Assert( frameIndex <= topOfStackIndex );
+#ifdef ENABLE_MOVEMENT_ASSERTIONS
+	constexpr auto *tag = "MovementPredictionContext::MillisAheadForFrameStart()";
+	constexpr auto *format = "The frame index %u must not be greater than the current ToS index %u\n";
+	if( frameIndex > topOfStackIndex ) {
+		AI_FailWith( tag, format, frameIndex, topOfStackIndex );
+	}
+#endif
 	if( frameIndex < topOfStackIndex ) {
 		return (unsigned)( predictedMovementActions[frameIndex].timestamp - level.time );
 	}
 	return totalMillisAhead;
 }
-
-typedef EnvironmentTraceCache::ObstacleAvoidanceResult ObstacleAvoidanceResult;
 
 inline ObstacleAvoidanceResult MovementPredictionContext::TryAvoidFullHeightObstacles( float correctionFraction ) {
 	// Make a modifiable copy of the intended look dir
@@ -376,5 +429,13 @@ public:
 extern TriggerAreaNumsCache triggerAreaNumsCache;
 
 int TravelTimeWalkingOrFallingShort( const AiAasRouteCache *routeCache, int fromAreaNum, int toAreaNum );
+
+/**
+ * Serves for candidate spots selection.
+ * Tracing a straight line between two points fails in stairs-like environment way too often.
+ * This routine uses extremely coarse arc approximation which still should be sufficient
+ * to avoid the mentioned failure in some environment kinds.
+ */
+bool TraceArcInSolidWorld( const AiEntityPhysicsState &startPhysicsState, const vec3_t from, const vec3_t to );
 
 #endif

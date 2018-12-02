@@ -3,28 +3,30 @@
 
 void BotTurnToThreatOriginActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
-	self->ai->botRef->SetPendingLookAtPoint( AiPendingLookAtPoint( threatPossibleOrigin, 3.0f ), 350 );
-	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
+	Self()->SetPendingLookAtPoint( AiPendingLookAtPoint( threatPossibleOrigin, 3.0f ), 350 );
+	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 }
 
 void BotTurnToThreatOriginActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetPendingLookAtPoint();
+	Self()->ResetPendingLookAtPoint();
 }
 
 AiBaseActionRecord::Status BotTurnToThreatOriginActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+	const edict_t *ent = game.edicts + Self()->EntNum();
+
 	vec3_t lookDir;
-	AngleVectors( self->s.angles, lookDir, nullptr, nullptr );
+	AngleVectors( ent->s.angles, lookDir, nullptr, nullptr );
 
 	Vec3 toThreatDir( threatPossibleOrigin );
-	toThreatDir -= self->s.origin;
+	toThreatDir -= ent->s.origin;
 	toThreatDir.NormalizeFast();
 
-	if( toThreatDir.Dot( lookDir ) > self->ai->botRef->FovDotFactor() ) {
+	if( toThreatDir.Dot( lookDir ) > Self()->FovDotFactor() ) {
 		return COMPLETED;
 	}
 
-	return self->ai->botRef->HasPendingLookAtPoint() ? VALID : INVALID;
+	return Self()->HasPendingLookAtPoint() ? VALID : INVALID;
 }
 
 PlannerNode *BotTurnToThreatOriginAction::TryApply( const WorldState &worldState ) {
@@ -38,12 +40,12 @@ PlannerNode *BotTurnToThreatOriginAction::TryApply( const WorldState &worldState
 	}
 
 	constexpr float squareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
-	if( ( worldState.BotOriginVar().Value() - self->s.origin ).SquaredLength() > squareDistanceError ) {
+	if( ( worldState.BotOriginVar().Value() - Self()->Origin() ).SquaredLength() > squareDistanceError ) {
 		Debug( "The action can be applied only to the current bot origin\n" );
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self, worldState.ThreatPossibleOriginVar().Value() ) ) );
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self(), worldState.ThreatPossibleOriginVar().Value() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

@@ -27,7 +27,7 @@ PlannerNode *BotKillEnemyAction::TryApply( const WorldState &worldState ) {
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( self ) );
+	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( Self() ) );
 	if( !plannerNode ) {
 		Debug( "Can't allocate planner node\n" );
 		return nullptr;
@@ -40,7 +40,7 @@ PlannerNode *BotKillEnemyAction::TryApply( const WorldState &worldState ) {
 
 	plannerNode.WorldState().HasJustKilledEnemyVar().SetValue( true ).SetIgnore( false );
 
-	unsigned similarWorldStateInstanceId = self->ai->botRef->NextSimilarWorldStateInstanceId();
+	unsigned similarWorldStateInstanceId = Self()->NextSimilarWorldStateInstanceId();
 	plannerNode.WorldState().SimilarWorldStateInstanceIdVar().SetValue( similarWorldStateInstanceId ).SetIgnore( false );
 
 	return plannerNode.PrepareActionResult();

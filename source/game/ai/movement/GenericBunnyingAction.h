@@ -10,12 +10,13 @@ protected:
 	// If the current grounded area matches one of these areas, we can mark mayStopAtAreaNum
 	StaticVector<int, 8> checkStopAtAreaNums;
 
-	int travelTimeAtSequenceStart;
-	int reachAtSequenceStart;
-	int groundedAreaAtSequenceStart;
+	int travelTimeAtSequenceStart { 0 };
+	int reachAtSequenceStart { 0 };
+	int groundedAreaAtSequenceStart { 0 };
+	float groundZAtSequenceStart { 0.0f };
 	// Best results so far achieved in the action application sequence
-	int minTravelTimeToNavTargetSoFar;
-	int minTravelTimeAreaNumSoFar;
+	int minTravelTimeToNavTargetSoFar { 0 };
+	int minTravelTimeAreaNumSoFar { 0 };
 
 	// If this is not a valid area num, try set it to a current grounded area if several conditions are met.
 	// If this area is set, we can truncate the built path later at mayStopAtStackFrame
@@ -24,40 +25,40 @@ protected:
 	// This is a workaround for strict results tests and imperfect input suggested by various movement actions.
 	// We still have to continue prediction until the bot hits ground
 	// to ensure the bot is not going to land in a "bad" area in all possible cases.
-	int mayStopAtAreaNum;
-	int mayStopAtTravelTime;
-	int mayStopAtStackFrame;
-	vec3_t mayStopAtOrigin;
+	int mayStopAtAreaNum { 0 };
+	int mayStopAtTravelTime { 0 };
+	int mayStopAtStackFrame { -1 };
+	vec3_t mayStopAtOrigin { 0, 0, 0 };
 
 	// A fraction of speed gain per frame time.
 	// Might be negative, in this case it limits allowed speed loss
-	float minDesiredSpeedGainPerSecond;
-	unsigned currentSpeedLossSequentialMillis;
-	unsigned tolerableSpeedLossSequentialMillis;
+	float minDesiredSpeedGainPerSecond { 0.0f };
+	unsigned currentSpeedLossSequentialMillis { 0 };
+	unsigned tolerableSpeedLossSequentialMillis { 300 };
 
 	// When bot bunnies over a gap, its target either becomes unreachable
 	// or travel time is calculated from the bottom of the pit.
 	// These timers allow to temporarily skip targer reachability/travel time tests.
-	unsigned currentUnreachableTargetSequentialMillis;
-	unsigned tolerableUnreachableTargetSequentialMillis;
+	unsigned currentUnreachableTargetSequentialMillis { 0 };
+	unsigned tolerableUnreachableTargetSequentialMillis { 700 };
 
 	// Allow increased final travel time if the min travel time area is reachable by walking
 	// from the final area and walking travel time is lower than this limit.
 	// It allows to follow the reachability chain less strictly while still being close to it.
-	unsigned tolerableWalkableIncreasedTravelTimeMillis;
+	unsigned tolerableWalkableIncreasedTravelTimeMillis { 2000 };
 
 	// There is a mechanism for completely disabling an action for further planning by setting isDisabledForPlanning flag.
 	// However we need a more flexible way of disabling an action after an failed application sequence.
 	// A sequence started from different frame that the failed one might succeed.
 	// An application sequence will not start at the frame indexed by this value.
-	unsigned disabledForApplicationFrameIndex;
+	unsigned disabledForApplicationFrameIndex { std::numeric_limits<unsigned>::max() };
 
-	bool hasEnteredNavTargetArea;
-	bool hasTouchedNavTarget;
+	bool hasEnteredNavTargetArea { false };
+	bool hasTouchedNavTarget { false };
 
-	bool supportsObstacleAvoidance;
-	bool shouldTryObstacleAvoidance;
-	bool isTryingObstacleAvoidance;
+	bool supportsObstacleAvoidance { false };
+	bool shouldTryObstacleAvoidance { false };
+	bool isTryingObstacleAvoidance { false };
 
 	inline void ResetObstacleAvoidanceState() {
 		shouldTryObstacleAvoidance = false;
@@ -78,31 +79,24 @@ protected:
 	// Can be overridden for finer control over tests
 	virtual bool CheckStepSpeedGainOrLoss( MovementPredictionContext *context );
 
-	bool CastRayForPrematureCompletion( MovementPredictionContext *context );
+	bool GenericCheckForPrematureCompletion( MovementPredictionContext *context );
+	bool CheckForPrematureCompletionInFloorCluster( MovementPredictionContext *context,
+													int currGroundedAreaNum,
+													int floorClusterNum );
+
+	bool CheckForActualCompletionOnGround( MovementPredictionContext *context );
+
+	inline bool WasOnGroundThisFrame( const MovementPredictionContext *context ) const;
+
+	inline bool HasSubstantiallyChangedZ( const AiEntityPhysicsState &entityPhysicsState ) const;
 
 	inline void MarkForTruncation( MovementPredictionContext *context );
 public:
 	GenericRunBunnyingAction( BotMovementModule *module_, const char *name_, int debugColor_ = 0 )
-		: BaseMovementAction( module_, name_, debugColor_ )
-		, travelTimeAtSequenceStart( 0 )
-		, reachAtSequenceStart( 0 )
-		, groundedAreaAtSequenceStart( 0 )
-		, minTravelTimeToNavTargetSoFar( 0 )
-		, minTravelTimeAreaNumSoFar( 0 )
-		, mayStopAtAreaNum( 0 )
-		, mayStopAtTravelTime( 0 )
-		, mayStopAtStackFrame( -1 )
-		, minDesiredSpeedGainPerSecond( 0.0f )
-		, currentSpeedLossSequentialMillis( 0 )
-		, tolerableSpeedLossSequentialMillis( 300 )
-		, currentUnreachableTargetSequentialMillis( 0 )
-		, tolerableUnreachableTargetSequentialMillis( 700 )
-		, tolerableWalkableIncreasedTravelTimeMillis( 2000 )
-		, disabledForApplicationFrameIndex( std::numeric_limits<unsigned>::max() )
-		, supportsObstacleAvoidance( false ) {
+		: BaseMovementAction( module_, name_, debugColor_ ) {
 		ResetObstacleAvoidanceState();
 		// Do NOT stop prediction on this! We have to check where the bot is going to land!
-		stopPredictionOnTouchingNavEntity = false;
+		BaseMovementAction::stopPredictionOnTouchingNavEntity = false;
 	}
 
 	void CheckPredictionStepResults( MovementPredictionContext *context ) override;

@@ -33,14 +33,6 @@ class ScheduleWeaponJumpAction: public BaseMovementAction {
 	inline bool IsAreaInPvs( const int *areaLeafsList ) const;
 	inline void PrecacheBotLeafs( MovementPredictionContext *context );
 
-	// A bit set for marking already tested areas to prevent redundant tests for "direct" and "reach chain" calls.
-	// TODO: Allocate on demand, use a single global instance for the entire AI code?
-	static uint32_t areasMask[(1 << 16) / 8];
-
-	inline void ClearAreasMask();
-	// Similar to compare-and-swap "get and set"
-	inline bool TryMarkAreaInMask( int areaNum );
-
 	// Monotonically increasing dummy travel times (1, 2, ...).
 	// Used for providing travel times for reach chain shortcut.
 	// Areas in a reach chain are already ordered.

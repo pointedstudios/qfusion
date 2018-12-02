@@ -251,35 +251,34 @@ class Ai : public AiFrameAwareUpdatable
 
 protected:
 	edict_t *const self;
-	// Must be set in a subclass constructor. A subclass manages memory for its brain
+	// Must be set in a subclass constructor. A subclass manages memory for its planner
 	// (it either has it as an intrusive member of allocates it on heap)
 	// and provides a reference to it to this base class via this pointer.
-	class BasePlanner *basePlanner;
+	class BasePlanner *basePlanner { nullptr };
 	// Must be set in a subclass constructor.
 	// A subclass should decide whether a shared or separated route cache should be used.
 	// A subclass should destroy the cache instance if necessary.
-	AiAasRouteCache *routeCache;
+	AiAasRouteCache *routeCache { nullptr };
 	// A cached reference to an AAS world, set by this class
 	AiAasWorld *aasWorld;
 	// Must be set in a subclass constructor. Can be arbitrary changed later.
 	// Can point to external (predicted) entity physics state during movement planning.
-	AiEntityPhysicsState *entityPhysicsState;
+	AiEntityPhysicsState *entityPhysicsState { nullptr };
 
 	// Preferred and allowed travel flags
 	int travelFlags[2];
 	ArrayRange<int> travelFlagsRange;
 
 	int64_t blockedTimeoutAt;
-	int64_t prevThinkAt;
-	int64_t lastNavTargetReachedAt;
+	int64_t prevThinkAt { 0 };
+	int64_t lastNavTargetReachedAt { 0 };
 
 	vec3_t angularViewSpeed;
 
 	// An actually used nav target, be it a nav entity or a spot
-	NavTarget *navTarget;
-	const NavTarget *lastReachedNavTarget;
-	// A storage navTarget might point to in case when it is just a spot and not a nav entity
-	NavTarget localNavTargetStorage;
+	const NavTarget *navTarget { nullptr };
+	const NavTarget *lastReachedNavTarget { nullptr };
+	NavSpot localNavSpotStorage { NavSpot::Dummy() };
 
 	// Negative  = enemy
 	// Zero      = ignore (don't attack)
@@ -332,14 +331,17 @@ public:
 
 	typedef StaticVector<ReachAndTravelTime, MAX_REACH_CACHED> ReachChainVector;
 
+	static constexpr float DEFAULT_YAW_SPEED = 330.0f;
+	static constexpr float DEFAULT_PITCH_SPEED = 170.0f;
+
 	Ai( edict_t *self_
 	  , BasePlanner *planner_
 	  , AiAasRouteCache *routeCache_
 	  , AiEntityPhysicsState *entityPhysicsState_
 	  , int preferredAasTravelFlags_
 	  , int allowedAasTravelFlags_
-	  , float yawSpeed = 330.0f
-	  , float pitchSpeed = 170.0f );
+	  , float yawSpeed = DEFAULT_YAW_SPEED
+	  , float pitchSpeed = DEFAULT_PITCH_SPEED );
 
 	inline bool IsGhosting() const { return G_ISGHOSTING( self ); }
 
@@ -385,13 +387,14 @@ public:
 
 	void ResetNavigation();
 
-	inline void SetNavTarget( NavTarget *navTarget_ ) {
+	inline void SetNavTarget( const NavTarget *navTarget_ ) {
 		this->navTarget = navTarget_;
 		OnNavTargetSet();
 	}
 
 	inline void SetNavTarget( const Vec3 &navTargetOrigin, float reachRadius ) {
-		localNavTargetStorage.SetToTacticalSpot( navTargetOrigin, reachRadius );
+		localNavSpotStorage.Set( navTargetOrigin, reachRadius, NavTargetFlags::REACH_ON_RADIUS );
+		this->navTarget = &localNavSpotStorage;
 		OnNavTargetSet();
 	}
 

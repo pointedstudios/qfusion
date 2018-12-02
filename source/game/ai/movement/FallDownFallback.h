@@ -5,9 +5,9 @@
 
 class FallDownFallback: public MovementFallback
 {
-	vec3_t targetOrigin;
-	unsigned timeout;
-	float reachRadius;
+	vec3_t targetOrigin { 0, 0, 0 };
+	unsigned timeout { 0 };
+	float reachRadius { 0.0f };
 public:
 	explicit FallDownFallback( const Bot *bot_, BotMovementModule *module_ )
 		: MovementFallback( bot_, module_, COLOR_RGB( 128, 0, 0 ) ) {}

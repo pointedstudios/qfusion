@@ -7,6 +7,26 @@
 #include "../static_vector.h"
 #include "../../../gameshared/q_collision.h"
 
+PlannerNode::PlannerNode( PoolBase *pool, Ai *self )
+	: PoolItem( pool ),	worldState( self ) {}
+
+AiBaseAction::PlannerNodePtr AiBaseAction::NewNodeForRecord( AiBaseActionRecord *record ) {
+	if( !record ) {
+		Debug( "Can't allocate an action record\n" );
+		return PlannerNodePtr( nullptr );
+	}
+
+	PlannerNode *node = self->basePlanner->plannerNodesPool.New( self );
+	if( !node ) {
+		Debug( "Can't allocate a planner node\n" );
+		record->DeleteSelf();
+		return PlannerNodePtr( nullptr );
+	}
+
+	node->actionRecord = record;
+	return PlannerNodePtr( node );
+}
+
 inline void PoolBase::Link( int16_t itemIndex, int16_t listIndex ) {
 #ifdef _DEBUG
 	Debug( "Link(): About to link item at index %d in %s list\n", (int)itemIndex, ListName( listIndex ) );
@@ -71,12 +91,10 @@ void PoolBase::Free( PoolItem *item ) {
 }
 
 PoolBase::PoolBase( char *basePtr_, const char *tag_, uint16_t itemSize, uint16_t itemsCount )
-	: basePtr( basePtr_ ),
-	tag( tag_ ),
-	linksOffset( LinksOffset( itemSize ) ),
-	alignedChunkSize( AlignedChunkSize( itemSize ) ) {
-	listFirst[FREE_LIST] = 0;
-	listFirst[USED_LIST] = -1;
+	: basePtr( basePtr_ )
+	, tag( tag_ )
+	, linksOffset( LinksOffset( itemSize ) )
+	, alignedChunkSize( AlignedChunkSize( itemSize ) ) {
 
 	// Link all items to the free list
 	int16_t lastIndex = (int16_t)( itemsCount - 1 );
@@ -99,13 +117,6 @@ void PoolBase::Clear() {
 		item.DeleteSelf();
 	}
 }
-
-BasePlanner::BasePlanner( edict_t *self_ )
-	: self( self_ )
-	, planHead( nullptr )
-	, activeGoal( nullptr )
-	, nextActiveGoalUpdateAt( 0 )
-	, plannerNodesPool( "PlannerNodesPool" ) {}
 
 struct GoalRef {
 	AiBaseGoal *goal;
@@ -464,7 +475,7 @@ public:
 AiBaseActionRecord *BasePlanner::BuildPlan( AiBaseGoal *goal, const WorldState &currWorldState ) {
 	goal->OnPlanBuildingStarted();
 
-	PlannerNode *startNode = plannerNodesPool.New( self );
+	PlannerNode *startNode = plannerNodesPool.New( self->ai->aiRef );
 	startNode->worldState = currWorldState;
 	startNode->worldStateHash = startNode->worldState.Hash();
 	startNode->transitionCost = 0.0f;
@@ -474,7 +485,7 @@ AiBaseActionRecord *BasePlanner::BuildPlan( AiBaseGoal *goal, const WorldState &
 	startNode->nextTransition = nullptr;
 	startNode->actionRecord = nullptr;
 
-	WorldState goalWorldState( self );
+	WorldState goalWorldState( self->ai->aiRef );
 	goal->GetDesiredWorldState( &goalWorldState );
 
 	// Use prime numbers as hash bins count parameters
@@ -628,7 +639,7 @@ void BasePlanner::Think() {
 	}
 
 	// Prepare current world state for planner
-	WorldState currWorldState( self );
+	WorldState currWorldState( self->ai->aiRef );
 	PrepareCurrWorldState( &currWorldState );
 
 	// If there is no active plan (the active plan was not assigned or has been completed in previous think frame)

@@ -20,7 +20,7 @@ bool BotRunAwayAction::CheckCommonRunAwayPreconditions( const WorldState &worldS
 		return false;
 	}
 
-	float offensiveness = self->ai->botRef->GetEffectiveOffensiveness();
+	float offensiveness = Self()->GetEffectiveOffensiveness();
 	if( offensiveness == 1.0f ) {
 		return false;
 	}
@@ -53,7 +53,7 @@ bool BotRunAwayAction::CheckCommonRunAwayPreconditions( const WorldState &worldS
 }
 
 bool BotRunAwayAction::CheckMiddleRangeKDDamageRatio( const WorldState &worldState ) const {
-	float offensiveness = self->ai->botRef->GetEffectiveOffensiveness();
+	float offensiveness = Self()->GetEffectiveOffensiveness();
 	if( worldState.HasThreateningEnemyVar() ) {
 		if( worldState.HasGoodMiddleRangeWeaponsVar() ) {
 			if( worldState.KillToBeKilledDamageRatio() < 1.0f + 1.0f * offensiveness ) {
@@ -77,7 +77,7 @@ bool BotRunAwayAction::CheckMiddleRangeKDDamageRatio( const WorldState &worldSta
 }
 
 bool BotRunAwayAction::CheckCloseRangeKDDamageRatio( const WorldState &worldState ) const {
-	float offensiveness = self->ai->botRef->GetEffectiveOffensiveness();
+	float offensiveness = Self()->GetEffectiveOffensiveness();
 	if( worldState.HasThreateningEnemyVar() ) {
 		if( worldState.HasGoodCloseRangeWeaponsVar() ) {
 			if( worldState.KillToBeKilledDamageRatio() < 1.0f + 1.0f * offensiveness ) {

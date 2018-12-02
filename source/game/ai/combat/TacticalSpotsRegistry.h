@@ -100,12 +100,13 @@ private:
 
 		struct SpotsAndScoreCacheEntry {
 			SpotsAndScoreCacheEntry *next { nullptr };
-			// TODO: Should we just use a standard alginment for StaticVector?
+			SpotsAndScoreCacheEntry *prev { nullptr };
 			SpotsAndScoreVector data;
 		};
 
 		SpotsAndScoreCacheEntry *freeHead { nullptr };
 		SpotsAndScoreCacheEntry *usedHead { nullptr };
+		SpotsAndScoreCacheEntry *usedTail { nullptr };
 	public:
 		// TODO: We do not require explicit releasing of query vector, this is error-prone...
 		SpotsQueryVector &GetCleanQueryVector() {

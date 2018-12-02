@@ -3,28 +3,30 @@
 
 void BotTurnToLostEnemyActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
-	self->ai->botRef->SetPendingLookAtPoint( AiPendingLookAtPoint( lastSeenEnemyOrigin, 3.0f ), 400 );
-	self->ai->botRef->GetMiscTactics().PreferRunRatherThanAttack();
+	Self()->SetPendingLookAtPoint( AiPendingLookAtPoint( lastSeenEnemyOrigin, 3.0f ), 400 );
+	Self()->GetMiscTactics().PreferRunRatherThanAttack();
 }
 
 void BotTurnToLostEnemyActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetPendingLookAtPoint();
+	Self()->ResetPendingLookAtPoint();
 }
 
 AiBaseActionRecord::Status BotTurnToLostEnemyActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+	const edict_t *ent = game.edicts + Self()->EntNum();
+
 	vec3_t lookDir;
-	AngleVectors( self->s.angles, lookDir, nullptr, nullptr );
+	AngleVectors( ent->s.angles, lookDir, nullptr, nullptr );
 
 	Vec3 toEnemyDir( lastSeenEnemyOrigin );
-	toEnemyDir -= self->s.origin;
+	toEnemyDir -= ent->s.origin;
 	toEnemyDir.NormalizeFast();
 
-	if( toEnemyDir.Dot( lookDir ) >= self->ai->botRef->FovDotFactor() ) {
+	if( toEnemyDir.Dot( lookDir ) >= Self()->FovDotFactor() ) {
 		return COMPLETED;
 	}
 
-	return self->ai->botRef->HasPendingLookAtPoint() ? VALID : INVALID;
+	return Self()->HasPendingLookAtPoint() ? VALID : INVALID;
 }
 
 PlannerNode *BotTurnToLostEnemyAction::TryApply( const WorldState &worldState ) {
@@ -50,7 +52,7 @@ PlannerNode *BotTurnToLostEnemyAction::TryApply( const WorldState &worldState ) 
 	}
 
 	constexpr float squareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
-	if( ( worldState.BotOriginVar().Value() - self->s.origin ).SquaredLength() > squareDistanceError ) {
+	if( ( worldState.BotOriginVar().Value() - Self()->Origin() ).SquaredLength() > squareDistanceError ) {
 		Debug( "The action can be applied only to the current bot origin\n" );
 		return nullptr;
 	}
@@ -63,7 +65,7 @@ PlannerNode *BotTurnToLostEnemyAction::TryApply( const WorldState &worldState ) 
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self, worldState.LostEnemyLastSeenOriginVar().Value() ) ) );
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self(), worldState.LostEnemyLastSeenOriginVar().Value() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

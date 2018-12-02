@@ -1,6 +1,6 @@
 #include "bot.h"
-#include "ai_shutdown_hooks_holder.h"
 #include "ai_manager.h"
+#include "ai_ground_trace_cache.h"
 #include "navigation/NavMeshManager.h"
 #include "teamplay/ObjectiveBasedTeam.h"
 #include "combat/TacticalSpotsRegistry.h"
@@ -12,7 +12,11 @@ ai_weapon_aim_type BuiltinWeaponAimType( int builtinWeapon, int fireMode ) {
 	assert( fireMode == FIRE_MODE_STRONG || fireMode == FIRE_MODE_WEAK );
 	switch( builtinWeapon ) {
 		case WEAP_GUNBLADE:
+			// This is not logically correct but produces better behaviour
+			// than using AI_WEAPON_AIM_TYPE_PREDICTION_EXPLOSIVE.
+			// Otherwise bots carrying only GB are an easy prey losing many chances for attacking.
 			// TODO: Introduce "melee" aim type for GB blade attack
+			return AI_WEAPON_AIM_TYPE_PREDICTION;
 		case WEAP_ROCKETLAUNCHER:
 			return AI_WEAPON_AIM_TYPE_PREDICTION_EXPLOSIVE;
 		case WEAP_GRENADELAUNCHER:
@@ -195,18 +199,18 @@ void AI_InitLevel( void ) {
 	AiAasRouteCache::Init( *AiAasWorld::Instance() );
 	AiNavMeshManager::Init( level.mapname );
 	TacticalSpotsRegistry::Init( level.mapname );
+	AiGroundTraceCache::Init();
+	HazardsSelectorCache::Init();
 
 	AiManager::Init( g_gametype->string, level.mapname );
 
-	NavEntitiesRegistry::Instance()->Init();
+	NavEntitiesRegistry::Init();
 }
 
 void AI_Shutdown( void ) {
 	hubAreas.clear();
 
 	AI_AfterLevelScriptShutdown();
-
-	AiShutdownHooksHolder::Instance()->InvokeHooks();
 }
 
 void AI_BeforeLevelLevelScriptShutdown() {
@@ -221,6 +225,9 @@ void AI_AfterLevelScriptShutdown() {
 		AiManager::Shutdown();
 	}
 
+	NavEntitiesRegistry::Shutdown();
+	HazardsSelectorCache::Shutdown();
+	AiGroundTraceCache::Shutdown();
 	TacticalSpotsRegistry::Shutdown();
 	AiNavMeshManager::Shutdown();
 	AiAasRouteCache::Shutdown();
@@ -345,16 +352,21 @@ void AI_AddNavEntity( edict_t *ent, ai_nav_entity_flags flags ) {
 }
 
 void AI_RemoveNavEntity( edict_t *ent ) {
-	NavEntity *navEntity = NavEntitiesRegistry::Instance()->NavEntityForEntity( ent );
+	auto *const navEntitiesRegistry = NavEntitiesRegistry::Instance();
+	if( !navEntitiesRegistry ) {
+		return;
+	}
+
+	NavEntity *const navEntity = navEntitiesRegistry->NavEntityForEntity( ent );
 	// (An nav. item absence is not an error, this function is called for each entity in game)
 	if( !navEntity ) {
 		return;
 	}
 
-	if( AiManager::Instance() ) {
-		AiManager::Instance()->NavEntityReachedBy( navEntity, nullptr );
+	if( auto *const aiManager = AiManager::Instance() ) {
+		aiManager->NavEntityReachedBy( navEntity, nullptr );
 	}
-	NavEntitiesRegistry::Instance()->RemoveNavEntity( navEntity );
+	navEntitiesRegistry->RemoveNavEntity( navEntity );
 }
 
 void AI_NavEntityReached( edict_t *ent ) {
@@ -377,33 +389,6 @@ void G_FreeAI( edict_t *ent ) {
 
 	G_Free( ent->ai );
 	ent->ai = nullptr;
-}
-
-void G_SpawnAI( edict_t *ent, float skillLevel ) {
-	if( ent->ai ) {
-		AI_FailWith( "G_SpawnAI()", "Entity AI has been already initialized\n" );
-	}
-
-	if( !( ent->r.svflags & SVF_FAKECLIENT ) ) {
-		AI_FailWith( "G_SpawnAI()", "Only fake clients are supported\n" );
-	}
-
-	size_t memSize = sizeof( ai_handle_t ) + sizeof( Bot );
-	size_t alignmentBytes = 0;
-	if( sizeof( ai_handle_t ) % 16 ) {
-		alignmentBytes = 16 - sizeof( ai_handle_t ) % 16;
-	}
-	memSize += alignmentBytes;
-
-	char *mem = (char *)G_Malloc( memSize );
-	ent->ai = (ai_handle_t *)mem;
-	ent->ai->type = AI_ISBOT;
-
-	char *botMem = mem + sizeof( ai_handle_t ) + alignmentBytes;
-	ent->ai->botRef = new(botMem) Bot( ent, skillLevel );
-	ent->ai->aiRef = ent->ai->botRef;
-
-	AiManager::Instance()->LinkAi( ent->ai );
 }
 
 //==========================================

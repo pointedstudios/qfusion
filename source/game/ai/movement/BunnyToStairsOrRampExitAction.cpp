@@ -12,7 +12,7 @@ void BunnyToStairsOrRampExitAction::PlanPredictionStep( MovementPredictionContex
 		return;
 	}
 
-	if( !context->topOfStackIndex ) {
+	if( !intendedLookDir ) {
 		if( !TryFindAndSaveLookDir( context ) ) {
 			this->isDisabledForPlanning = true;
 			context->SetPendingRollback();
@@ -20,7 +20,6 @@ void BunnyToStairsOrRampExitAction::PlanPredictionStep( MovementPredictionContex
 		}
 	}
 
-	Assert( intendedLookDir );
 	if( !SetupBunnying( Vec3( intendedLookDir ), context ) ) {
 		return;
 	}
@@ -46,10 +45,8 @@ bool BunnyToStairsOrRampExitAction::TryFindAndSaveLookDir( MovementPredictionCon
 		lookDirStorage -= context->movementState->entityPhysicsState.Origin();
 		lookDirStorage.Normalize();
 		intendedLookDir = lookDirStorage.Data();
-		if( int clusterNum = aasWorld->FloorClusterNum( *exitAreaNum ) ) {
-			targetFloorCluster = clusterNum;
-		}
 
+		TrySaveExitFloorCluster( context, *exitAreaNum );
 		return true;
 	}
 
@@ -72,40 +69,49 @@ bool BunnyToStairsOrRampExitAction::TryFindAndSaveLookDir( MovementPredictionCon
 	intendedLookDir = lookDirStorage.Data();
 
 	// Try find an area that is a boundary area of the exit area and is in a floor cluster
-	TrySaveStairsExitFloorCluster( context, *exitAreaNum );
-
+	TrySaveExitFloorCluster( context, *exitAreaNum );
 	return true;
 }
 
-void BunnyToStairsOrRampExitAction::TrySaveStairsExitFloorCluster( MovementPredictionContext *context, int exitAreaNum ) {
-	const auto *aasWorld = AiAasWorld::Instance();
-	const auto *routeCache = context->RouteCache();
+void BunnyToStairsOrRampExitAction::TrySaveExitFloorCluster( MovementPredictionContext *context, int exitAreaNum ) {
+	const auto *const aasWorld = AiAasWorld::Instance();
+	const auto *const aasReach = aasWorld->Reachabilities();
+	const auto *const aasFloorClusterNums = aasWorld->AreaFloorClusterNums();
+	const auto *const routeCache = context->RouteCache();
+
+	// Check whether exit area is already in cluster
+	targetFloorCluster = aasFloorClusterNums[exitAreaNum];
+	if( targetFloorCluster ) {
+		return;
+	}
 
 	const int targetAreaNum = context->NavTargetAasAreaNum();
-	const int exitAreaTravelTime = routeCache->PreferredRouteToGoalArea( exitAreaNum, targetAreaNum );
 
-	const auto &area = aasWorld->AreaSettings()[exitAreaNum];
-	const int endReachNum = area.firstreachablearea + area.numreachableareas;
-	for( int reachNum = area.firstreachablearea; reachNum < endReachNum; ++reachNum ) {
-		const auto &reach = aasWorld->Reachabilities()[reachNum];
-		if( ( reach.traveltype & TRAVELTYPE_MASK ) != TRAVEL_WALK ) {
-			continue;
+	int areaNum = exitAreaNum;
+	while( areaNum != targetAreaNum ) {
+		int reachNum;
+		if( !routeCache->PreferredRouteToGoalArea( areaNum, targetAreaNum, &reachNum ) ) {
+			break;
 		}
-		int clusterNum = aasWorld->FloorClusterNum( reach.areanum );
-		if( !clusterNum ) {
-			continue;
+		const auto &reach = aasReach[reachNum];
+		const int travelType = reach.traveltype & TRAVELTYPE_MASK;
+		if( travelType != TRAVEL_WALK ) {
+			break;
 		}
-		int travelTime = routeCache->PreferredRouteToGoalArea( reach.areanum, targetAreaNum );
-		if( !travelTime || travelTime > exitAreaTravelTime ) {
-			continue;
+		const int nextAreaNum = reach.areanum;
+		targetFloorCluster = aasFloorClusterNums[nextAreaNum];
+		if( targetFloorCluster ) {
+			break;
 		}
-		this->targetFloorCluster = clusterNum;
-		return;
+		areaNum = nextAreaNum;
 	}
 }
 
 void BunnyToStairsOrRampExitAction::CheckPredictionStepResults( MovementPredictionContext *context ) {
-	GenericRunBunnyingAction::CheckPredictionStepResults( context );
+	// We skip the direct superclass method call!
+	// Much more lenient checks are used for this specialized action.
+	// Only generic checks for all movement actions should be performed in addition.
+	BaseMovementAction::CheckPredictionStepResults( context );
 	if( context->cannotApplyAction || context->isCompleted ) {
 		return;
 	}
@@ -127,12 +133,10 @@ void BunnyToStairsOrRampExitAction::CheckPredictionStepResults( MovementPredicti
 		return;
 	}
 
-	const auto *aasWorld = AiAasWorld::Instance();
-	if( int currFloorCluster = aasWorld->FloorClusterNum( context->CurrGroundedAasAreaNum() ) ) {
-		if( currFloorCluster == targetFloorCluster ) {
-			Debug( "The prediction step has lead to touching a ground in the target floor cluster" );
-			context->isCompleted = true;
-			return;
-		}
+	if( AiAasWorld::Instance()->FloorClusterNum( context->CurrGroundedAasAreaNum() ) != targetFloorCluster ) {
+		return;
 	}
+
+	Debug( "The prediction step has lead to touching a ground in the target floor cluster" );
+	context->isCompleted = true;
 }

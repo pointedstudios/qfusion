@@ -156,6 +156,7 @@ float SelectedEnemies::GetThreatFactor( int enemyNum ) const {
 }
 
 float SelectedEnemies::ComputeThreatFactor( int enemyNum ) const {
+	assert( enemyNum >= 0 );
 	const auto *enemy = activeEnemies[enemyNum];
 	float entFactor = ComputeThreatFactor( enemy->ent, enemyNum );
 	if( level.time - activeEnemies[enemyNum]->LastAttackedByTime() < 1000 ) {
@@ -183,20 +184,26 @@ float SelectedEnemies::ComputeThreatFactor( const edict_t *ent, int enemyNum ) c
 	enemyToBotDir.NormalizeFast();
 
 	float dot;
-
-	if( ent->ai && ent->ai->botRef ) {
-		dot = enemyToBotDir.Dot( ent->ai->botRef->EntityPhysicsState()->ForwardDir() );
-		if( dot < self->ai->botRef->FovDotFactor() ) {
-			return 0.0f;
-		}
+	if( enemyNum >= 0 ) {
+		// Try reusing this value that is very likely to be cached
+		dot = GetEnemyViewDirDotToBotDirValues()[enemyNum];
 	} else {
 		vec3_t enemyLookDir;
 		AngleVectors( ent->s.angles, enemyLookDir, nullptr, nullptr );
 		dot = enemyToBotDir.Dot( enemyLookDir );
-		// There is no threat if the bot is not in fov for a client (but not for a turret for example)
-		if ( ent->r.client && dot < 0.2f ) {
+	}
+
+	// Check whether the enemy is itself a bot.
+	// Check whether the bot is an tracked/selected enemy of other bot?
+	// This however would make other bots way too special.
+	// The code should work fine for all kind of enemies.
+	if( ent->ai && ent->ai->botRef ) {
+		if( dot < ent->ai->botRef->FovDotFactor() ) {
 			return 0.0f;
 		}
+	} else if( ent->r.client && dot < 0.2f ) {
+		// There is no threat if the bot is not in fov for a client (but not for a turret for example)
+		return 0.0f;
 	}
 
 	if( !EntitiesPvsCache::Instance()->AreInPvs( ent, self ) ) {
@@ -218,15 +225,18 @@ float SelectedEnemies::ComputeThreatFactor( const edict_t *ent, int enemyNum ) c
 		return 0.5f * dot;
 	}
 
+	float result = dot;
+	// If the enemy belongs to these "selected enemies", try using a probably cached value of the "can hit" test.
+	// Otherwise perform a computation (there is no cache for enemies not belonging to this selection)
 	if( enemyNum >= 0 ) {
-		if( !GetCanHit( enemyNum, GetEnemyViewDirDotToBotDirValues()[enemyNum] ) ) {
-			dot *= 0.5f;
+		if( !GetCanHit( enemyNum, dot ) ) {
+			result *= 0.5f;
 		}
-	} else if( !TestCanHit( ent, GetEnemyViewDirDotToBotDirValues()[enemyNum] ) ) {
-		dot *= 0.5f;
+	} else if( !TestCanHit( ent, self, dot ) ) {
+		result *= 0.5f;
 	}
 
-	return sqrtf( dot );
+	return sqrtf( result );
 }
 
 float SelectedEnemies::TotalInflictedDamage() const {
@@ -305,12 +315,12 @@ bool SelectedEnemies::GetCanHit( int enemyNum, float viewDot ) const {
 	}
 
 	canEnemyHitComputedAt[enemyNum] = level.time;
-	canEnemyHit[enemyNum] = TestCanHit( activeEnemies[enemyNum]->ent, viewDot );
+	canEnemyHit[enemyNum] = TestCanHit( activeEnemies[enemyNum]->ent, self, viewDot );
 	return canEnemyHit[enemyNum];
 }
 
-bool SelectedEnemies::TestCanHit( const edict_t *enemy, float viewDot ) const {
-	if( !enemy ) {
+bool SelectedEnemies::TestCanHit( const edict_t *attacker, const edict_t *victim, float viewDot ) const {
+	if( !( attacker && victim ) ) {
 		return false;
 	}
 
@@ -318,13 +328,13 @@ bool SelectedEnemies::TestCanHit( const edict_t *enemy, float viewDot ) const {
 		return false;
 	}
 
-	if( !EntitiesPvsCache::Instance()->AreInPvs( enemy, self ) ) {
+	if( !EntitiesPvsCache::Instance()->AreInPvs( attacker, victim ) ) {
 		return false;
 	}
 
-	auto *targetEnt = const_cast<edict_t *>( self );
+	auto *targetEnt = const_cast<edict_t *>( attacker );
 	trace_t trace;
-	auto *enemyEnt = const_cast<edict_t *>( enemy );
+	auto *enemyEnt = const_cast<edict_t *>( victim );
 	Vec3 traceStart( enemyEnt->s.origin );
 	traceStart.Z() += enemyEnt->viewheight;
 
@@ -347,6 +357,25 @@ bool SelectedEnemies::TestCanHit( const edict_t *enemy, float viewDot ) const {
 	// This test is for getting a coarse info anyway.
 
 	return false;
+}
+
+bool SelectedEnemies::CouldBeHitIfBotTurns() const {
+	CheckValid( __FUNCTION__ );
+
+	if( couldHitIfTurnsComputedAt == level.time ) {
+		return couldHitIfTurns;
+	}
+
+	// Lets take into account only primary enemy
+	assert( primaryEnemy == activeEnemies.front() );
+	couldHitIfTurns = TestCanHit( self, primaryEnemy->ent, 1.0f );
+	couldHitIfTurnsComputedAt = level.time;
+	return couldHitIfTurns;
+}
+
+bool SelectedEnemies::CanBeHit() const {
+	// Check whether it could be possibly hit from bot origin and the bot is looking at it
+	return CouldBeHitIfBotTurns() && GetBotViewDirDotToEnemyDirValues()[0] > self->ai->botRef->FovDotFactor();
 }
 
 bool SelectedEnemies::HaveGoodSniperRangeWeapons() const {
@@ -485,14 +514,9 @@ bool SelectedEnemies::TestAboutToHitEBorIG( int64_t levelTime ) const {
 			continue;
 		}
 
-		// Just check and trust but do not force computations
-		if( canEnemyHitComputedAt[i] == levelTime && canEnemyHit[i] ) {
-			return true;
-		}
-
 		// Is not going to put crosshair right now
 		// TODO: Check past view dots and derive direction?
-		if( viewDots[i] < 0.7f ) {
+		if( viewDots[i] < 0.85f ) {
 			continue;
 		}
 
@@ -500,11 +524,43 @@ bool SelectedEnemies::TestAboutToHitEBorIG( int64_t levelTime ) const {
 			continue;
 		}
 
-		Vec3 traceStart( enemy->LastSeenOrigin() );
+		const Vec3 enemyOrigin( enemy->LastSeenOrigin() );
+		Vec3 traceStart( enemyOrigin );
 		traceStart.Z() += playerbox_stand_viewheight;
 		SolidWorldTrace( &trace, traceStart.Data(), self->s.origin );
-		if( trace.fraction == 1.0f ) {
+		if( trace.fraction != 1.0f ) {
+			continue;
+		}
+
+		const float squareSpeed = enemy->LastSeenVelocity().SquaredLength();
+		// Hitting at this speed is unlikely
+		if( squareSpeed > 650 * 650 ) {
+			continue;
+		}
+
+		const auto *const ent = enemy->ent;
+		if( !ent ) {
+			// Shouldn't happen?
+			continue;
+		}
+
+		const auto *const client = ent->r.client;
+		if( !client ) {
 			return true;
+		}
+
+		// If not zooming
+		if( !client->ps.stats[PM_STAT_ZOOMTIME] ) {
+			const float squareDistance = enemyOrigin.SquareDistanceTo( self->s.origin );
+			// It's unlikely to hit at this distance
+			if( squareDistance > 1250 * 1250 ) {
+				continue;
+			}
+		} else {
+			// It's hard to hit having a substantial speed while zooming
+			if( squareSpeed > 400 * 400 ) {
+				continue;
+			}
 		}
 	}
 
@@ -534,13 +590,8 @@ bool SelectedEnemies::TestAboutToHitLGorPG( int64_t levelTime ) const {
 			continue;
 		}
 
-		// Just check and trust but do not force computations
-		if( canEnemyHitComputedAt[i] == levelTime && canEnemyHit[i] ) {
-			return true;
-		}
-
 		// Is not going to put crosshair right now
-		if( viewDots[i] < 0.7f ) {
+		if( viewDots[i] < 0.85f ) {
 			continue;
 		}
 
@@ -594,11 +645,6 @@ bool SelectedEnemies::TestAboutToHitRLorSW( int64_t levelTime ) const {
 		// If the distance is close to zero 750 millis of reloading left must be used for making a dodge.
 		if( enemy->FireDelay() > 750 - ( ( 750 - 333 ) * distanceFraction ) ) {
 			continue;
-		}
-
-		// Just check and trust but do not force computations
-		if( canEnemyHitComputedAt[i] == levelTime && canEnemyHit[i] ) {
-			return true;
 		}
 
 		// Is not going to put crosshair right now

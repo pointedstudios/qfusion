@@ -3,6 +3,10 @@
 
 #include "TacticalSpotsProblemSolver.h"
 
+// For macOS Clang
+#include <cmath>
+#include <cstdlib>
+
 typedef TacticalSpotsProblemSolver::SpotsAndScoreVector SpotsAndScoreVector;
 
 inline float ComputeDistanceFactor( float distance, float weightFalloffDistanceRatio, float searchRadius ) {

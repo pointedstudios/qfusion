@@ -32,6 +32,10 @@ protected:
 		VectorCopy( area.center, target );
 		target[2] = area.mins[2] + 1.0f - playerbox_stand_mins[2];
 	}
+
+	bool SetupForKeptPointInFov( MovementPredictionContext *context,
+								 const float *steeringTarget,
+								 const float *keptInFovPoint );
 public:
 	static constexpr auto TRAVEL_FLAGS = TFL_WALK | TFL_AIR | TFL_WALKOFFLEDGE;
 

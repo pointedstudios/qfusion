@@ -39,6 +39,7 @@ protected:
 
 	// May be overridden if some actions should be performed when a frame affinity is set
 	virtual void SetFrameAffinity( unsigned modulo, unsigned offset ) {
+		assert( modulo && offset < modulo );
 		frameAffinityModulo = modulo;
 		frameAffinityOffset = offset;
 	}

@@ -2,9 +2,9 @@
 #include "planning/BasePlanner.h"
 #include "teamplay/BaseTeam.h"
 #include "bot_evolution_manager.h"
-#include "ai_shutdown_hooks_holder.h"
 #include "bot.h"
 #include "combat/TacticalSpotsRegistry.h"
+#include "../../qalgo/Links.h"
 
 // Class static variable declaration
 AiManager *AiManager::instance = nullptr;
@@ -69,8 +69,7 @@ bool AiManager::StringValueMap<T, N>::Insert( const char *key, T &&value ) {
 #define REGISTER_BUILTIN_GOAL( goal ) this->RegisterBuiltinGoal(#goal )
 #define REGISTER_BUILTIN_ACTION( action ) this->RegisterBuiltinAction(#action )
 
-AiManager::AiManager( const char *gametype, const char *mapname )
-	: last( nullptr ), cpuQuotaOwner( nullptr ), cpuQuotaGivenAt( 0 ) {
+AiManager::AiManager( const char *gametype, const char *mapname ) {
 	std::fill_n( teams, MAX_CLIENTS, TEAM_SPECTATOR );
 
 	REGISTER_BUILTIN_GOAL( BotGrabItemGoal );
@@ -92,7 +91,6 @@ AiManager::AiManager( const char *gametype, const char *mapname )
 	REGISTER_BUILTIN_ACTION( BotKillEnemyAction );
 	REGISTER_BUILTIN_ACTION( BotAdvanceToGoodPositionAction );
 	REGISTER_BUILTIN_ACTION( BotRetreatToGoodPositionAction );
-	REGISTER_BUILTIN_ACTION( BotSteadyCombatAction );
 	REGISTER_BUILTIN_ACTION( BotGotoAvailableGoodPositionAction );
 	REGISTER_BUILTIN_ACTION( BotAttackFromCurrentPositionAction );
 	REGISTER_BUILTIN_ACTION( BotAttackAdvancingToTargetAction );
@@ -126,27 +124,19 @@ void AiManager::NavEntityReachedBy( const NavEntity *navEntity, const Ai *grabbe
 	}
 
 	// find all bots which have this node as goal and tell them their goal is reached
-	for( ai_handle_t *ai = last; ai; ai = ai->prev ) {
-		if( ai->type == AI_INACTIVE ) {
-			continue;
-		}
-
-		ai->aiRef->OnNavEntityReachedBy( navEntity, grabber );
+	for( auto *aiHandle = aiHandlesListHead; aiHandle; aiHandle = aiHandle->Next() ) {
+		aiHandle->aiRef->OnNavEntityReachedBy( navEntity, grabber );
 	}
 }
 
 void AiManager::NavEntityReachedSignal( const edict_t *ent ) {
-	if( !last ) {
+	if( !aiHandlesListHead ) {
 		return;
 	}
 
 	// find all bots which have this node as goal and tell them their goal is reached
-	for( ai_handle_t *ai = last; ai; ai = ai->prev ) {
-		if( ai->type == AI_INACTIVE ) {
-			continue;
-		}
-
-		ai->aiRef->OnEntityReachedSignal( ent );
+	for( auto *aiHandle = aiHandlesListHead; aiHandle; aiHandle = aiHandle->Next() ) {
+		aiHandle->aiRef->OnEntityReachedSignal( ent );
 	}
 }
 
@@ -173,50 +163,25 @@ void AiManager::OnBotDropped( edict_t *ent ) {
 	teams[entNum] = TEAM_SPECTATOR;
 }
 
-void AiManager::LinkAi( ai_handle_t *ai ) {
-	ai->next = nullptr;
-	if( last != nullptr ) {
-		ai->prev = last;
-		last->next = ai;
-	} else {
-		ai->prev = nullptr;
-	}
-	last = ai;
+void AiManager::LinkAi( ai_handle_t *aiHandle ) {
+	Link( aiHandle, &aiHandlesListHead, 0 );
 }
 
-void AiManager::UnlinkAi( ai_handle_t *ai ) {
-	ai_handle_t *next = ai->next;
-	ai_handle_t *prev = ai->prev;
-
-	ai->next = nullptr;
-	ai->prev = nullptr;
-	// If the cell is not the last in chain
-	if( next ) {
-		next->prev = prev;
-		if( prev ) {
-			prev->next = next;
-		}
-	} else {
-		// A cell before the last in chain should become the last one
-		if( prev ) {
-			prev->next = nullptr;
-			last = prev;
-		} else {
-			last = nullptr;
-		}
-	}
+void AiManager::UnlinkAi( ai_handle_t *aiHandle ) {
+	Unlink( aiHandle, &aiHandlesListHead, 0 );
 
 	// All links related to the unlinked AI become invalid.
 	// Reset CPU quota cycling state to prevent use-after-free.
-	if( ai == cpuQuotaOwner ) {
-		cpuQuotaOwner = nullptr;
+	globalCpuQuota.OnRemoved( aiHandle );
+	for( int i = 0; i < 4; ++i ) {
+		thinkQuota->OnRemoved( aiHandle );
 	}
 }
 
 void AiManager::RegisterEvent( const edict_t *ent, int event, int parm ) {
-	for( ai_handle_t *ai = last; ai; ai = ai->prev ) {
-		if( ai->botRef ) {
-			ai->botRef->RegisterEvent( ent, event, parm );
+	for( auto *aiHandle = aiHandlesListHead; aiHandle; aiHandle = aiHandle->Next() ) {
+		if( auto *bot = aiHandle->botRef ) {
+			bot->RegisterEvent( ent, event, parm );
 		}
 	}
 }
@@ -275,11 +240,12 @@ edict_t * AiManager::ConnectFakeClient() {
 	static char fakeIP[] = "127.0.0.1";
 	CreateUserInfo( userInfo, sizeof( userInfo ) );
 	int entNum = trap_FakeClientConnect( userInfo, fakeSocketType, fakeIP );
-	if( entNum < 1 ) {
-		Com_Printf( "AI: Can't spawn the fake client\n" );
-		return nullptr;
+	if( entNum >= 1 ) {
+		return game.edicts + entNum;
 	}
-	return game.edicts + entNum;
+
+	G_Printf( "AI: Can't spawn the fake client\n" );
+	return nullptr;
 }
 
 void AiManager::RespawnBot( edict_t *self ) {
@@ -290,21 +256,6 @@ void AiManager::RespawnBot( edict_t *self ) {
 	BotEvolutionManager::Instance()->OnBotRespawned( self );
 
 	self->ai->botRef->OnRespawn();
-
-	VectorClear( self->r.client->ps.pmove.delta_angles );
-	self->r.client->level.last_activity = level.time;
-}
-
-static float MakeRandomBotSkillByServerSkillLevel() {
-	float skillLevel = trap_Cvar_Value( "sv_skilllevel" ); // 0 = easy, 2 = hard
-	skillLevel += random(); // so we have a float between 0 and 3 meaning the server skill
-	skillLevel /= 3.0f;
-	if( skillLevel < 0.1f ) {
-		skillLevel = 0.1f;
-	} else if( skillLevel > 1.0f ) { // Won't happen?
-		skillLevel = 1.0f;
-	}
-	return skillLevel;
 }
 
 static void BOT_JoinPlayers( edict_t *self ) {
@@ -317,65 +268,97 @@ bool AiManager::CheckCanSpawnBots() {
 		return false;
 	}
 
-	if( !AiAasWorld::Instance()->IsLoaded() || !TacticalSpotsRegistry::Instance()->IsLoaded() ) {
-		Com_Printf( "AI: Can't spawn bots without a valid navigation file\n" );
-		if( g_numbots->integer ) {
-			trap_Cvar_Set( "g_numbots", "0" );
-		}
-
-		return false;
+	if( AiAasWorld::Instance()->IsLoaded() && TacticalSpotsRegistry::Instance()->IsLoaded() ) {
+		return true;
 	}
 
-	return true;
+	Com_Printf( "AI: Can't spawn bots without a valid navigation file\n" );
+	if( g_numbots->integer ) {
+		trap_Cvar_Set( "g_numbots", "0" );
+	}
+
+	return false;
 }
 
-void AiManager::SetupClientBot( edict_t *ent ) {
-	// We have to determine skill level early, since G_SpawnAI calls Bot constructor that requires it as a constant
+float AiManager::MakeSkillForNewBot( const gclient_t *client ) const {
 	float skillLevel;
 
 	// Always use the same skill for bots that are subject of evolution
 	if( ai_evolution->integer ) {
 		skillLevel = 0.75f;
 	} else {
-		skillLevel = MakeRandomBotSkillByServerSkillLevel();
+		skillLevel = ( trap_Cvar_Value( "sv_skilllevel" ) + random() ) / 3.0f;
+		// Let the skill be not less than 10, so we can have nice-looking
+		// two-digit skills (not talking about formatting here)
+		clamp( skillLevel, 0.10f, 0.99f );
 	}
 
-	// This also does an increment of game.numBots
-	G_SpawnAI( ent, skillLevel );
-
-	//init this bot
-	ent->think = nullptr;
-	ent->nextThink = level.time + 1;
-	ent->ai->type = AI_ISBOT;
-	ent->classname = "bot";
-	ent->die = player_die;
-
-	G_Printf( "%s skill %i\n", ent->r.client->netname, (int) ( skillLevel * 100 ) );
+	G_Printf( "%s skill %i\n", client->netname, (int)( skillLevel * 100 ) );
+	return skillLevel;
 }
 
-void AiManager::SetupBotTeam( edict_t *ent, const char *teamName ) {
+void AiManager::SetupBotForEntity( edict_t *ent ) {
+	if( ent->ai ) {
+		AI_FailWith( "G_SpawnAI()", "Entity AI has been already initialized\n" );
+	}
+
+	if( !( ent->r.svflags & SVF_FAKECLIENT ) ) {
+		AI_FailWith( "G_SpawnAI()", "Only fake clients are supported\n" );
+	}
+
+	size_t memSize = sizeof( ai_handle_t ) + sizeof( Bot );
+	size_t alignmentBytes = 0;
+	if( sizeof( ai_handle_t ) % 16 ) {
+		alignmentBytes = 16 - sizeof( ai_handle_t ) % 16;
+	}
+	memSize += alignmentBytes;
+
+	auto *handleMem = (uint8_t *)G_Malloc( memSize );
+	ent->ai = (ai_handle_t *)handleMem;
+	ent->ai->type = AI_ISBOT;
+
+	auto *botMem = handleMem + sizeof( ai_handle_t ) + alignmentBytes;
+	ent->ai->botRef = new( botMem )Bot( ent, MakeSkillForNewBot( ent->r.client ) );
+	ent->ai->aiRef = ent->ai->botRef;
+
+	LinkAi( ent->ai );
+
+	ent->think = nullptr;
+	ent->nextThink = level.time + 1;
+	ent->classname = "bot";
+	ent->die = player_die;
+}
+
+void AiManager::TryJoiningTeam( edict_t *ent, const char *teamName ) {
 	int team = GS_Teams_TeamFromName( teamName );
-	if( team != -1 && team > TEAM_PLAYERS ) {
+	if( team >= TEAM_PLAYERS && team <= TEAM_BETA ) {
 		// Join specified team immediately
 		G_Teams_JoinTeam( ent, team );
-	} else {
-		//stay as spectator, give random time for joining
-		ent->think = BOT_JoinPlayers;
-		ent->nextThink = level.time + 500 + (unsigned)( random() * 2000 );
+		return;
 	}
+
+	// Stay as spectator, give random time for joining
+	ent->think = BOT_JoinPlayers;
+	ent->nextThink = level.time + 500 + (unsigned)( random() * 2000 );
 }
 
 void AiManager::SpawnBot( const char *teamName ) {
-	if( CheckCanSpawnBots() ) {
-		if( edict_t *ent = ConnectFakeClient() ) {
-			SetupClientBot( ent );
-			RespawnBot( ent );
-			SetupBotTeam( ent, teamName );
-			SetupBotGoalsAndActions( ent );
-			BotEvolutionManager::Instance()->OnBotConnected( ent );
-			game.numBots++;
-		}
+	if( !CheckCanSpawnBots() ) {
+		return;
 	}
+
+	edict_t *const ent = ConnectFakeClient();
+	if( !ent ) {
+		return;
+	}
+
+	SetupBotForEntity( ent );
+	RespawnBot( ent );
+	TryJoiningTeam( ent, teamName );
+	SetupBotGoalsAndActions( ent );
+	BotEvolutionManager::Instance()->OnBotConnected( ent );
+
+	game.numBots++;
 }
 
 void AiManager::RemoveBot( const char *name ) {
@@ -493,16 +476,18 @@ void AiManager::RegisterBuiltinAction( const char *actionName ) {
 }
 
 void AiManager::SetupBotGoalsAndActions( edict_t *ent ) {
+	Bot *const bot = ent->ai->botRef;
+
 #ifdef _DEBUG
 	// Make sure all builtin goals and actions have been registered
 	bool wereErrors = false;
-	for( const auto *goal: ent->ai->botRef->botPlanner.goals ) {
+	for( const auto *goal: bot->planningModule.Goals() ) {
 		if( !registeredGoals.Get( goal->Name() ) ) {
 			Debug( S_COLOR_RED "Builtin goal %s has not been registered\n", goal->Name() );
 			wereErrors = true;
 		}
 	}
-	for( const auto *action: ent->ai->botRef->botPlanner.actions ) {
+	for( const auto *action: bot->planningModule.Actions() ) {
 		if( !registeredActions.Get( action->Name() ) ) {
 			Debug( S_COLOR_RED "Builtin action %s has not been registered\n", action->Name() );
 			wereErrors = true;
@@ -518,17 +503,9 @@ void AiManager::SetupBotGoalsAndActions( edict_t *ent ) {
 		// If the goal is builtin
 		BotBaseGoal *goal;
 		if( !goalProps.factoryObject ) {
-			goal = ent->ai->botRef->GetGoalByName( goalProps.name );
+			goal = bot->GetGoalByName( goalProps.name );
 		} else {
-			// Allocate a persistent memory chunk but not initialize it.
-			// GENERIC_asInstantiateGoal() expects a persistent memory address for a native object reference.
-			// BotScriptGoal constructor expects a persistent script object address too.
-			// We defer BotScriptGoal constructor call to break this loop.
-			// GENERIC_asInstantiateGoal() script counterpart be aware that the native object is not constructed yet.
-			// That's why an additional entity argument is provided to access the owner instead of using scriptGoal fields.
-			BotScriptGoal *scriptGoal = ent->ai->botRef->AllocScriptGoal();
-			void *goalObject = GENERIC_asInstantiateGoal( goalProps.factoryObject, ent, scriptGoal );
-			goal = new(scriptGoal)BotScriptGoal( ent->ai->aiRef, goalProps.name, goalProps.updatePeriod, goalObject );
+			goal = bot->InstantiateScriptGoal( goalProps.factoryObject, goalProps.name, goalProps.updatePeriod );
 		}
 
 		for( unsigned i = 0; i < goalProps.numApplicableActions; ++i ) {
@@ -537,12 +514,9 @@ void AiManager::SetupBotGoalsAndActions( edict_t *ent ) {
 			BotBaseAction *action;
 			// If the action is builtin
 			if( !actionProps->factoryObject ) {
-				action = ent->ai->botRef->GetActionByName( actionProps->name );
+				action = bot->GetActionByName( actionProps->name );
 			} else {
-				// See the explanation above related to a script goal, this is a similar case
-				BotScriptAction *scriptAction = ent->ai->botRef->AllocScriptAction();
-				void *actionObject = GENERIC_asInstantiateAction( actionProps->factoryObject, ent, scriptAction );
-				action = new(scriptAction)BotScriptAction( ent->ai->aiRef, goalProps.name, actionObject );
+				action = bot->InstantiateScriptAction( actionProps->factoryObject, actionProps->name );
 			}
 			goal->AddExtraApplicableAction( action );
 		}
@@ -550,7 +524,8 @@ void AiManager::SetupBotGoalsAndActions( edict_t *ent ) {
 }
 
 void AiManager::Frame() {
-	UpdateCpuQuotaOwner();
+	globalCpuQuota.Update( aiHandlesListHead );
+	thinkQuota[level.framenum % 4].Update( aiHandlesListHead );
 
 	if( !GS_TeamBasedGametype() ) {
 		AiBaseTeam::GetTeamForNum( TEAM_PLAYERS )->Update();
@@ -662,40 +637,55 @@ bool AiManager::IsAreaReachableFromHubAreas( int targetArea, float *score ) cons
 	return numReach > 0;
 }
 
-void AiManager::UpdateCpuQuotaOwner() {
-	if( !cpuQuotaOwner ) {
-		cpuQuotaOwner = last;
+bool AiManager::GlobalQuota::Fits( const ai_handle_t *ai ) const {
+	return !ai->aiRef->IsGhosting();
+}
+
+bool AiManager::ThinkQuota::Fits( const ai_handle_t *ai ) const {
+	if( !ai->aiRef->IsGhosting() ) {
+		return false;
+	}
+	// Only bots that have the same frame affinity fit
+	return ai->botRef && ai->botRef->frameAffinityOffset == affinityOffset;
+}
+
+void AiManager::Quota::Update( const ai_handle_t *aiHandlesHead ) {
+	if( !owner ) {
+		owner = aiHandlesHead;
+		while( owner && !Fits( owner ) ) {
+			owner = owner->Next();
+		}
 		return;
 	}
 
-	const auto *const oldQuotaOwner = cpuQuotaOwner;
+	const auto *const oldOwner = owner;
 	// Start from the next AI in list
-	cpuQuotaOwner = cpuQuotaOwner->prev;
+	owner = owner->Next();
 	// Scan all bots that are after the current owner in the list
-	while( cpuQuotaOwner ) {
-		// Stop on the first bot that is in-game
-		if( !cpuQuotaOwner->aiRef->IsGhosting() ) {
+	while( owner ) {
+		// Stop on the first bot that fits this
+		if( !Fits( owner ) ) {
 			break;
 		}
-		cpuQuotaOwner = cpuQuotaOwner->prev;
+		owner = owner->Next();
 	}
 
 	// If the scan has not reached the list end
-	if( cpuQuotaOwner ) {
+	if( owner ) {
 		return;
 	}
 
 	// Rewind to the list head
-	cpuQuotaOwner = last;
+	owner = aiHandlesHead;
 
 	// Scan all bots that is before the current owner in the list
 	// Keep the current owner if there is no in-game bots before
-	while( cpuQuotaOwner && cpuQuotaOwner != oldQuotaOwner ) {
-		// Stop of the first bot that is in game
-		if( !cpuQuotaOwner->aiRef->IsGhosting() ) {
+	while( owner && owner != oldOwner ) {
+		// Stop on the first bot that fits this
+		if( !Fits( owner ) ) {
 			break;
 		}
-		cpuQuotaOwner = cpuQuotaOwner->prev;
+		owner = owner->Next();
 	}
 
 	// If the loop execution has not been interrupted by break,
@@ -705,17 +695,26 @@ void AiManager::UpdateCpuQuotaOwner() {
 
 bool AiManager::TryGetExpensiveComputationQuota( const Bot *bot ) {
 	const edict_t *ent = game.edicts + bot->EntNum();
+	return globalCpuQuota.TryAcquire( ent->ai );
+}
 
-	if( ent->ai != cpuQuotaOwner ) {
+bool AiManager::TryGetExpensiveThinkCallQuota( const Bot *bot ) {
+	const edict_t *ent = game.edicts + bot->EntNum();
+	return thinkQuota[level.framenum % 4].TryAcquire( ent->ai );
+}
+
+bool AiManager::Quota::TryAcquire( const ai_handle_t *ai ) {
+	if( ai != owner ) {
 		return false;
 	}
 
+	auto levelTime = level.time;
 	// Allow expensive computations only once per frame
-	if( cpuQuotaGivenAt == level.time ) {
+	if( givenAt == levelTime ) {
 		return false;
 	}
 
 	// Mark it
-	cpuQuotaGivenAt = level.time;
+	givenAt = levelTime;
 	return true;
 }

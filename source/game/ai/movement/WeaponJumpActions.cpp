@@ -1,16 +1,17 @@
 #include "WeaponJumpActions.h"
 #include "BestJumpableSpotDetector.h"
 #include "MovementLocal.h"
+#include "../navigation/AasElementsMask.h"
 #include "../ai_manager.h"
 
 class WeaponJumpableSpotDetector: public BestJumpableSpotDetector {
 public:
-	SpotAndScore *spots;
+	SpotAndScore *spots { nullptr };
 	// Addressed by spot tags
-	const float *zOffsets;
-	int numSpots;
-	float push;
-	vec3_t origin;
+	const float *zOffsets { nullptr };
+	int numSpots { 0 };
+	float push { 0.0f };
+	vec3_t origin { 0, 0, 0 };
 
 	void GetCandidateSpots( SpotAndScore **begin, SpotAndScore **end ) override;
 	void GetVelocityForJumpingToSpot( vec3_t velocity, const SpotAndScore *spot ) override;
@@ -24,13 +25,13 @@ class WeaponJumpWeaponsTester {
 
 	float zOffsets[64];
 
-	const int *suggestedWeapons;
-	int numWeapons;
+	const int *suggestedWeapons { nullptr };
+	int numWeapons { 0 };
 
-	const int *areaNums;
-	const int *travelTimes;
-	const vec3_t *targets;
-	int numAreas;
+	const int *areaNums { nullptr };
+	const int *travelTimes { nullptr };
+	const vec3_t *targets { nullptr };
+	int numAreas { 0 };
 
 	void SetupForWeapon( int weaponNum );
 public:
@@ -70,11 +71,13 @@ static void PrepareAnglesAndWeapon( Context *context ) {
 
 	context->record->botInput.SetIntendedLookDir( lookDir );
 	context->record->botInput.SetTurnSpeedMultiplier( 15.0f );
+	assert( context->record->botInput.isLookDirSet );
 	context->record->botInput.isUcmdSet = true;
+	context->record->botInput.canOverrideLookVec = false;
+	context->record->botInput.canOverrideUcmd = false;
 	context->record->pendingWeapon = weaponJumpState.weapon;
 }
 
-uint32_t ScheduleWeaponJumpAction::areasMask[( 1 << 16 ) / 8];
 int ScheduleWeaponJumpAction::dummyTravelTimes[ScheduleWeaponJumpAction::MAX_AREAS];
 
 void ScheduleWeaponJumpAction::PlanPredictionStep( Context *context ) {
@@ -84,36 +87,40 @@ void ScheduleWeaponJumpAction::PlanPredictionStep( Context *context ) {
 
 	Assert( context->topOfStackIndex == 0, "This action can be applied only for the current state" );
 
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	// Isn't this very restrictive?
-	if( !entityPhysicsState.GroundEntity() ) {
-		Debug( "The bot is not on ground\n" );
-		this->DisableWithAlternative( context, &DefaultWalkAction() );
+	if( GS_ShootingDisabled() ) {
+		this->SwitchOrRollback( context, &DefaultWalkAction() );
 		return;
 	}
 
-	if( entityPhysicsState.Speed2D() > 2 * context->GetDashSpeed() ) {
-		Debug( "Weapon-jumps from ground while having a significant speed are not allowed\n" );
-		this->DisableWithAlternative( context, &DefaultWalkAction() );
-		return;
+	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
+	if( !entityPhysicsState.GroundEntity() ) {
+		int groundedAreaNum = context->CurrGroundedAasAreaNum();
+		if( !groundedAreaNum || entityPhysicsState.HeightOverGround() > 8.0f ) {
+			Debug( "The bot is far from the ground\n" );
+			this->SwitchOrRollback( context, &DefaultWalkAction() );
+			return;
+		}
 	}
+
+	// Lets do not put an upper velocity threshold.
+	// If a bot moves on a high speed, its unlikely the bot is able to hit well, so give movement a priority.
 
 	// Disallow rocketjumps for easy bots and also prevent holding cpu quota all the time
 	if( bot->Skill() <= 0.33f ) {
 		Debug( "The action has been rejected by a bot skill test\n" );
-		this->DisableWithAlternative( context, &DefaultWalkAction() );
+		this->SwitchOrRollback( context, &DefaultWalkAction() );
 		return;
 	}
 
 	if( context->IsInNavTargetArea() ) {
 		Debug( "The bot is already in the target area\n" );
-		this->DisableWithAlternative( context, &DefaultWalkAction() );
+		this->SwitchOrRollback( context, &DefaultWalkAction() );
 		return;
 	}
 
-	if( !module->weaponJumpAttemptsRateLimiter.TryAcquire() ) {
+	if( !module->weaponJumpAttemptsRateLimiter.TryAcquire( level.time ) ) {
 		Debug( "A weapon jumping attempt is disallowed by the rate limiter\n" );
-		this->DisableWithAlternative( context, &DefaultWalkAction() );
+		this->SwitchOrRollback( context, &DefaultWalkAction() );
 		return;
 	}
 
@@ -126,7 +133,7 @@ void ScheduleWeaponJumpAction::PlanPredictionStep( Context *context ) {
 				if( targetClusterNum == currClusterNum ) {
 					if( context->NavTargetOrigin().SquareDistanceTo( entityPhysicsState.Origin() ) < SQUARE( 144 ) ) {
 						Debug( "The bot is in the target floor cluster and is fairly close to target\n" );
-						this->DisableWithAlternative( context, &DefaultWalkAction() );
+						this->SwitchOrRollback( context, &DefaultWalkAction() );
 						return;
 					}
 				}
@@ -135,18 +142,20 @@ void ScheduleWeaponJumpAction::PlanPredictionStep( Context *context ) {
 	}
 
 	const bool worthWeaponJumping = bot->NavTargetWorthWeaponJumping();
-	const bool worthRushing = bot->NavTargetWorthRushing();
+	// Recent failures should affect rushing attempts (but not shortcuts to target)
+	const bool failedRecently = level.time - module->lastWeaponJumpTriggeringFailedAt < 1250;
+	const bool worthRushing = !failedRecently && bot->NavTargetWorthRushing();
 
 	int suitableWeapons[WEAP_TOTAL];
 	int numSuitableWeapons = bot->GetWeaponsForWeaponJumping( suitableWeapons );
 	if( !numSuitableWeapons ) {
 		Debug( "There is no suitable weapon-jump weapons for the current bot state\n" );
-		this->DisableWithAlternative( context, &DefaultWalkAction() );
+		this->SwitchOrRollback( context, &DefaultWalkAction() );
 		return;
 	}
 
 	if( !( context->CurrGroundedAasAreaNum() && context->NavTargetAasAreaNum() ) ) {
-		this->DisableWithAlternative( context, &DefaultWalkAction() );
+		this->SwitchOrRollback( context, &DefaultWalkAction() );
 		return;
 	}
 
@@ -154,11 +163,11 @@ void ScheduleWeaponJumpAction::PlanPredictionStep( Context *context ) {
 	// Otherwise the bot would often lock the quotum fruitlessly.
 	if( !AiManager::Instance()->TryGetExpensiveComputationQuota( bot ) ) {
 		Debug( "Cannot acquire an expensive computations CPU quota\n" );
-		this->DisableWithAlternative( context, &DefaultWalkAction() );
+		this->SwitchOrRollback( context, &DefaultWalkAction() );
 		return;
 	}
 
-	ClearAreasMask();
+	AasElementsMask::AreasMask()->Clear();
 	PrecacheBotLeafs( context );
 
 	if( worthWeaponJumping && TryJumpDirectlyToTarget( context, suitableWeapons, numSuitableWeapons ) ) {
@@ -172,20 +181,7 @@ void ScheduleWeaponJumpAction::PlanPredictionStep( Context *context ) {
 	}
 
 	Debug( "No method/target was suitable for weapon-jumping, disabling the action for further planning\n" );
-	this->DisableWithAlternative( context, &DefaultWalkAction() );
-}
-
-inline void ScheduleWeaponJumpAction::ClearAreasMask() {
-	memset( areasMask, 0, sizeof( areasMask ) );
-}
-
-inline bool ScheduleWeaponJumpAction::TryMarkAreaInMask( int areaNum ) {
-	int wordNum = areaNum / 32;
-	uint32_t bitMask = 1u << ( areaNum % 32 );
-	// True if was not marked
-	bool result = ( areasMask[wordNum] & bitMask ) == 0;
-	areasMask[wordNum] |= bitMask;
-	return result;
+	this->SwitchOrRollback( context, &DefaultWalkAction() );
 }
 
 inline void ScheduleWeaponJumpAction::PrecacheBotLeafs( Context *context ) {
@@ -214,6 +210,7 @@ int ScheduleWeaponJumpAction::GetCandidatesForReachChainShortcut( Context *conte
 	const auto *aasReach = aasWorld->Reachabilities();
 	const auto *aasAreas = aasWorld->Areas();
 	const auto *routeCache = bot->RouteCache();
+	auto *const areasMask = AasElementsMask::AreasMask();
 	const float *botOrigin = context->movementState->entityPhysicsState.Origin();
 	const int targetAreaNum = context->NavTargetAasAreaNum();
 	int currAreaNum = context->CurrGroundedAasAreaNum();
@@ -243,7 +240,7 @@ int ScheduleWeaponJumpAction::GetCandidatesForReachChainShortcut( Context *conte
 		int nextAreaNum = nextReach.areanum;
 		currAreaNum = nextAreaNum;
 		// If an area has been already marked (by the "jump to target" call)
-		if( !TryMarkAreaInMask( nextAreaNum ) ) {
+		if( !areasMask->TrySet( nextAreaNum ) ) {
 			continue;
 		}
 
@@ -284,7 +281,17 @@ bool ScheduleWeaponJumpAction::TryJumpDirectlyToTarget( Context *context, const 
 
 	::weaponJumpWeaponsTester.SetSpotData( areaNums, travelTimes, jumpTargets, numPassedReachTestAreas );
 	::weaponJumpWeaponsTester.SetWeapons( suitableWeapons, numWeapons );
-	return ::weaponJumpWeaponsTester.Exec( context, this );
+	if( ::weaponJumpWeaponsTester.Exec( context, this ) ) {
+		return true;
+	}
+
+	auto *const areasMask = AasElementsMask::AreasMask();
+	// All these areas are not reachable by weapon jumping and should be excluded from further testing
+	for( int i = 0; i < numPassedReachTestAreas; ++i ) {
+		areasMask->Set( areaNums[i], true );
+	}
+
+	return false;
 }
 
 int ScheduleWeaponJumpAction::GetCandidatesForJumpingToTarget( Context *context, int *areaNums ) {
@@ -401,7 +408,10 @@ int ScheduleWeaponJumpAction::ReachTestNearbyTargetAreas( Context *context, int 
 	int *const passedTestAreas = areaNums;
 	int numPassedTestAreas = 0;
 
-	int botAreaNums[2];
+	// Make sure we can always access a "last" cell even if there is no areas
+	int areaNumBuffer[3] = { 0, 0, 0 };
+	int *const botAreaNums = areaNumBuffer + 1;
+
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	const int numBotAreas = entityPhysicsState.PrepareRoutingStartAreas( botAreaNums );
 	const auto *routeCache = bot->RouteCache();
@@ -460,8 +470,8 @@ int ScheduleWeaponJumpAction::ReachTestNearbyTargetAreas( Context *context, int 
 
 		// The most expensive part, left the last (this route is unlikely to be cached).
 		// Check the travel time back from spot to the bot origin.
-		reverseTravelTime = TravelTimeWalkingOrFallingShort( routeCache, testedAreaNum, botAreaNums[numBotAreas] );
-		// Its very likely there is a falling involve
+		reverseTravelTime = TravelTimeWalkingOrFallingShort( routeCache, testedAreaNum, botAreaNums[numBotAreas - 1] );
+		// Its very likely there is a falling involved
 		if( !reverseTravelTime ) {
 			goto testPassed;
 		}
@@ -493,20 +503,28 @@ bool ScheduleWeaponJumpAction::TryShortcutReachChain( Context *context, const in
 }
 
 void TryTriggerWeaponJumpAction::PlanPredictionStep( Context *context ) {
+	auto *weaponJumpState = &context->movementState->weaponJumpMovementState;
 	if( !GenericCheckIsActionEnabled( context, &DefaultWalkAction() ) ) {
+		module->ResetFailedWeaponJumpAttempt( context );
+		return;
+	}
+
+	// If shooting has been disabled after we have scheduled the weaponjump
+	if( GS_ShootingDisabled() ) {
+		module->ResetFailedWeaponJumpAttempt( context );
+		SwitchOrRollback( context, &DefaultWalkAction() );
 		return;
 	}
 
 	Assert( context->topOfStackIndex == 0, "This action can be applied only for the current state" );
 
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	auto *weaponJumpState = &context->movementState->weaponJumpMovementState;
 
 	PrepareAnglesAndWeapon( context );
 
-	if( weaponJumpState->OriginAtStart().SquareDistanceTo( entityPhysicsState.Origin() ) > SQUARE( 8 ) ) {
+	if( weaponJumpState->OriginAtStart().SquareDistanceTo( entityPhysicsState.Origin() ) > SQUARE( 24 ) ) {
 		Debug( "The bot origin has been changed. Deactivating the weapon jump state (should be replanned next frame)." );
-		weaponJumpState->Deactivate();
+		module->ResetFailedWeaponJumpAttempt( context );
 		// Keep the applied input, its very likely that the action will be activated again next frame.
 		context->isCompleted = true;
 		return;
@@ -515,9 +533,11 @@ void TryTriggerWeaponJumpAction::PlanPredictionStep( Context *context ) {
 	if( entityPhysicsState.GroundEntity() ) {
 		if( entityPhysicsState.ForwardDir().Z() < -0.8f ) {
 			if( context->oldPlayerState->stats[STAT_WEAPON] == weaponJumpState->weapon ) {
-				context->record->botInput.SetAttackButton( true );
-				context->record->botInput.SetUpMovement( 1 );
-				weaponJumpState->hasTriggeredWeaponJump = true;
+				if( !context->oldPlayerState->stats[STAT_WEAPON_TIME] ) {
+					context->record->botInput.SetAttackButton( true );
+					context->record->botInput.SetUpMovement( 1 );
+					weaponJumpState->hasTriggeredWeaponJump = true;
+				}
 			}
 		}
 	}
@@ -526,14 +546,22 @@ void TryTriggerWeaponJumpAction::PlanPredictionStep( Context *context ) {
 }
 
 void CorrectWeaponJumpAction::PlanPredictionStep( Context *context ) {
+	auto *const weaponJumpState = &context->movementState->weaponJumpMovementState;
 	if( !GenericCheckIsActionEnabled( context, &DefaultWalkAction() ) ) {
+		module->ResetFailedWeaponJumpAttempt( context );
+		return;
+	}
+
+	// If shooting has been disabled after we have scheduled the weaponjump
+	if( GS_ShootingDisabled() ) {
+		module->ResetFailedWeaponJumpAttempt( context );
+		SwitchOrRollback( context, &DefaultWalkAction() );
 		return;
 	}
 
 	Assert( context->topOfStackIndex == 0, "This action can be applied only for the current state" );
 
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	auto *const weaponJumpState = &context->movementState->weaponJumpMovementState;
 	auto *const record = context->record;
 
 	Vec3 velocity( entityPhysicsState.Velocity() );
@@ -543,16 +571,24 @@ void CorrectWeaponJumpAction::PlanPredictionStep( Context *context ) {
 	newVelocity.NormalizeFast();
 
 	bool weaponJumpFailed = false;
-	if( level.time - bot->lastOwnKnockbackAt > 16 || bot->lastOwnKnockbackKick < 25 ) {
+	if( level.time - bot->lastOwnKnockbackAt > context->DefaultFrameTime() ) {
+		Debug( "The own knockback was not accepted during the last frame\n" );
 		weaponJumpFailed = true;
-	} else if( speed < context->GetDashSpeed() || velocity.Dot( newVelocity ) < 0.3 ) {
+	} else if(  bot->lastOwnKnockbackKick < 25 ) {
+		Debug( "The own knockback was insufficient\n" );
+		weaponJumpFailed = true;
+	} else if( speed < context->GetDashSpeed() ) {
+		Debug( "The current speed is even less than the dash speed\n" );
+		weaponJumpFailed = true;
+	} else if ( velocity.Dot( newVelocity ) < 0.3f ) {
+		Debug( "The gained velocity diverges too much from the required direction\n" );
 		weaponJumpFailed = true;
 	}
 
 	if( weaponJumpFailed ) {
 		Debug( "The weapon jump attempt has failed, deactivating weapon jump state\n" );
-		weaponJumpState->Deactivate();
-		this->DisableWithAlternative( context, &DefaultWalkAction() );
+		module->ResetFailedWeaponJumpAttempt( context );
+		this->SwitchOrRollback( context, &DefaultWalkAction() );
 		return;
 	}
 
@@ -562,7 +598,12 @@ void CorrectWeaponJumpAction::PlanPredictionStep( Context *context ) {
 	record->botInput.SetIntendedLookDir( newVelocity );
 	record->botInput.SetTurnSpeedMultiplier( 15.0f );
 	record->botInput.isUcmdSet = true;
+
 	weaponJumpState->hasCorrectedWeaponJump = true;
+
+	// Make sure the bot will fly relaxed until landing
+	context->movementState->flyUntilLandingMovementState.Activate( weaponJumpState->JumpTarget(), 64.0f );
+
 	context->isCompleted = true;
 }
 
@@ -672,8 +713,7 @@ bool WeaponJumpWeaponsTester::Exec( MovementPredictionContext *context, Schedule
 		const int weaponNum = suggestedWeapons[i];
 		SetupForWeapon( weaponNum );
 
-		unsigned millis;
-		const auto *spot = detector.Exec( botOrigin, &millis );
+		const auto *spot = detector.Exec( botOrigin );
 		if( !spot ) {
 			continue;
 		}
@@ -682,7 +722,7 @@ bool WeaponJumpWeaponsTester::Exec( MovementPredictionContext *context, Schedule
 		fireTarget.Z() += zOffsets[spot->tag];
 		Vec3 jumpTarget( spot->origin );
 		Vec3 originAtStart( botOrigin );
-		weaponJumpState->Activate( jumpTarget, fireTarget, originAtStart, millis, weaponNum );
+		weaponJumpState->Activate( jumpTarget, fireTarget, originAtStart, weaponNum );
 
 		PrepareAnglesAndWeapon( context );
 		action->SaveLandingAreas( context, spot->areaNum );

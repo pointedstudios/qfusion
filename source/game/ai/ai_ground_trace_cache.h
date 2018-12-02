@@ -3,21 +3,26 @@
 
 #include "../../gameshared/q_collision.h"
 
-class AiGroundTraceCache
-{
-	// In order to prevent inclusion of g_local.h declare an untyped pointer
+class AiGroundTraceCache {
+	/**
+	 * Declare an untyped pointer in order to prevent inclusion of g_local.h
+	 */
 	void *data;
-	AiGroundTraceCache();
-	AiGroundTraceCache( const AiGroundTraceCache &that ) = delete;
-	AiGroundTraceCache &operator=( const AiGroundTraceCache &that ) = delete;
 
-public:
-	AiGroundTraceCache( AiGroundTraceCache &&that ) {
-		data = that.data;
-		that.data = nullptr;
-	}
+	template <typename, unsigned> friend class StaticVector;
+
+	AiGroundTraceCache();
 	~AiGroundTraceCache();
-	static AiGroundTraceCache *Instance();
+
+	static AiGroundTraceCache *instance;
+public:
+	static void Init();
+	static void Shutdown();
+
+	static AiGroundTraceCache *Instance() {
+		assert( instance );
+		return instance;
+	}
 
 	void GetGroundTrace( const struct edict_s *ent, float depth, trace_t *trace, uint64_t maxMillisAgo = 0 );
 	bool TryDropToFloor( const struct edict_s *ent, float depth, vec3_t result, uint64_t maxMillisAgo = 0 );

@@ -143,14 +143,16 @@ bool GT_asFireScriptWeapon( gclient_t *client, int scriptWeaponNum );
 #include "vec3.h"
 
 typedef struct ai_handle_s {
-	ai_type type;
+	// Links for generic Link()/Unlink() utilities
+	ai_handle_t *prev[1], *next[1];
 
-	int asFactored, asRefCount;
-
-	ai_handle_t *prev, *next;
+	ai_handle_t *Next() { return next[0]; }
+	const ai_handle_t *Next() const { return next[0]; }
 
 	class Ai * aiRef;
 	class Bot * botRef;
+
+	ai_type type;
 } ai_handle_t;
 
 #ifndef _MSC_VER
@@ -288,6 +290,7 @@ public:
 	}
 	const T *begin() const { return begin_; }
 	const T *end() const { return end_; }
+	const size_t size() const { return (size_t)( end_ - begin_ ); }
 };
 
 // This is a compact storage for 64-bit values.
@@ -313,6 +316,31 @@ public:
 	Int64Align4() {}
 
 	Int64Align4( int64_t value ) {
+		SetParts( value );
+	}
+};
+
+class alignas( 2 )Int32Align2 {
+	uint16_t parts[2];
+
+	inline void SetParts( int32_t value ) {
+		uint32_t u = (uint32_t)value;
+		parts[0] = (uint16_t)( ( u >> 16u ) & 0xFFFFu );
+		parts[1] = (uint16_t)( u & 0xFFFFu );
+	}
+public:
+	operator int32_t() const {
+		return (int32_t)( ( (uint32_t)parts[0] ) << 16u | parts[1] );
+	}
+
+	Int32Align2 operator=( int32_t value ) {
+		SetParts( value );
+		return *this;
+	}
+
+	Int32Align2() {}
+
+	Int32Align2( int32_t value ) {
 		SetParts( value );
 	}
 };

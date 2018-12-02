@@ -2,8 +2,9 @@
 #define QFUSION_SELECTEDENEMIES_H
 
 #include "EnemiesTracker.h"
+#include "../Selection.h"
 
-class SelectedEnemies {
+class SelectedEnemies: public Selection {
 	friend class Bot;
 	friend class BotThreatTracker;
 
@@ -18,6 +19,7 @@ class SelectedEnemies {
 	mutable int64_t canEnemyHitComputedAt[MAX_ACTIVE_ENEMIES];
 	mutable int64_t maxThreatFactorComputedAt { 0 };
 	mutable int64_t canEnemiesHitComputedAt { 0 };
+	mutable int64_t couldHitIfTurnsComputedAt { 0 };
 	mutable int64_t botViewDirDotToEnemyDirComputedAt { 0 };
 	mutable int64_t enemyViewDirDotToBotDirComputedAt { 0 };
 	mutable int64_t aboutToHitEBorIGComputedAt { 0 };
@@ -29,6 +31,7 @@ class SelectedEnemies {
 	mutable float enemyViewDirDotToBotDir[MAX_ACTIVE_ENEMIES];
 	mutable bool canEnemyHit[MAX_ACTIVE_ENEMIES];
 	mutable bool canEnemiesHit { false };
+	mutable bool couldHitIfTurns { false };
 	mutable bool aboutToHitEBorIG { false };
 	mutable bool aboutToHitLGorPG { false };
 	mutable bool aboutToHitRLorSW { false };
@@ -71,6 +74,8 @@ class SelectedEnemies {
 public:
 	bool AreValid() const;
 
+	bool ValidAsSelection() const override { return AreValid(); }
+
 	inline void Invalidate() {
 		timeoutAt = 0;
 		maxThreatFactorComputedAt = 0;
@@ -90,7 +95,7 @@ public:
 			  unsigned timeoutPeriod,
 			  const TrackedEnemy *firstActiveEnemy );
 
-	inline unsigned InstanceId() const { return instanceId; }
+	unsigned InstanceId() const override { return instanceId; }
 
 	bool IsPrimaryEnemy( const edict_t *ent ) const {
 		return primaryEnemy && primaryEnemy->ent == ent;
@@ -213,7 +218,10 @@ public:
 
 	bool CanHit() const;
 	bool GetCanHit( int enemyNum, float viewDot ) const;
-	bool TestCanHit( const edict_t *enemy, float viewDot ) const;
+	bool TestCanHit( const edict_t *attacker, const edict_t *victim, float viewDot ) const;
+
+	bool CanBeHit() const;
+	bool CouldBeHitIfBotTurns() const;
 
 	bool HaveGoodSniperRangeWeapons() const;
 	bool HaveGoodFarRangeWeapons() const;

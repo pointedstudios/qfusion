@@ -92,8 +92,9 @@ void GenericRunBunnyingAction::SetupCommonBunnyingInput( Context *context ) {
 		if( entityPhysicsState.Speed() < context->GetDashSpeed() && entityPhysicsState.GroundEntity() ) {
 			// Prevent dashing into obstacles
 			auto &traceCache = context->TraceCache();
-			traceCache.TestForResultsMask( context, traceCache.FullHeightMask( traceCache.FRONT ) );
-			if( traceCache.FullHeightFrontTrace().trace.fraction == 1.0f ) {
+			auto query( EnvironmentTraceCache::Query::Front() );
+			traceCache.TestForQuery( context, query );
+			if( traceCache.ResultForQuery( query ).trace.fraction == 1.0f ) {
 				shouldDash = true;
 			}
 		}
@@ -241,12 +242,11 @@ void GenericRunBunnyingAction::TrySetWalljump( Context *context ) {
 }
 
 #define TEST_TRACE_RESULT_NORMAL( traceResult )                                   \
-	do                                                                            \
-	{                                                                             \
-		if( traceResult.trace.fraction != 1.0f )                                  \
-		{                                                                         \
-			if( velocity2DDir.Dot( traceResult.trace.plane.normal ) < -0.5f ) {   \
-				return false; }                                                   \
+	do {                                                                          \
+		if( traceResult.trace.fraction != 1.0f ) {                                \
+			if( velocity2DDir.Dot( traceResult.trace.plane.normal ) < -0.3f ) {   \
+				return false;                                                     \
+			}                                                                     \
 			hasGoodWalljumpNormal = true;                                         \
 		}                                                                         \
 	} while( 0 )
@@ -284,8 +284,9 @@ bool GenericRunBunnyingAction::CanSetWalljump( Context *context ) const {
 	velocity2DDir *= 1.0f / speed2D;
 
 	auto &traceCache = context->TraceCache();
-	traceCache.TestForResultsMask( context, traceCache.FullHeightMask( traceCache.FRONT ) );
-	const auto &frontResult = traceCache.FullHeightFrontTrace();
+	auto query( EnvironmentTraceCache::Query::Front() );
+	traceCache.TestForQuery( context, query );
+	const auto &frontResult = traceCache.ResultForQuery( query );
 	if( velocity2DDir.Dot( frontResult.traceDir ) < 0.7f ) {
 		return false;
 	}
@@ -296,13 +297,19 @@ bool GenericRunBunnyingAction::CanSetWalljump( Context *context ) const {
 	// Do not force full-height traces for sides to be computed.
 	// Walljump height rules are complicated, and full simulation of these rules seems to be excessive.
 	// In worst case a potential walljump might be skipped.
-	auto sidesMask = traceCache.FULL_SIDES_MASK & ~( traceCache.BACK | traceCache.BACK_LEFT | traceCache.BACK_RIGHT );
-	traceCache.TestForResultsMask( context, traceCache.JumpableHeightMask( sidesMask ) );
 
-	TEST_TRACE_RESULT_NORMAL( traceCache.JumpableHeightLeftTrace() );
-	TEST_TRACE_RESULT_NORMAL( traceCache.JumpableHeightRightTrace() );
-	TEST_TRACE_RESULT_NORMAL( traceCache.JumpableHeightFrontLeftTrace() );
-	TEST_TRACE_RESULT_NORMAL( traceCache.JumpableHeightFrontLeftTrace() );
+	const auto leftQuery( EnvironmentTraceCache::Query::Left().JumpableHeight() );
+	const auto rightQuery( EnvironmentTraceCache::Query::Right().JumpableHeight() );
+	const auto frontLeftQuery( EnvironmentTraceCache::Query::FrontLeft().JumpableHeight() );
+	const auto frontRightQuery( EnvironmentTraceCache::Query::FrontRight().JumpableHeight() );
+
+	const unsigned mask = leftQuery.mask | rightQuery.mask | frontLeftQuery.mask | frontRightQuery.mask;
+	traceCache.TestForResultsMask( context, mask );
+
+	TEST_TRACE_RESULT_NORMAL( traceCache.ResultForQuery( leftQuery ) );
+	TEST_TRACE_RESULT_NORMAL( traceCache.ResultForQuery( rightQuery ) );
+	TEST_TRACE_RESULT_NORMAL( traceCache.ResultForQuery( frontLeftQuery ) );
+	TEST_TRACE_RESULT_NORMAL( traceCache.ResultForQuery( frontRightQuery ) );
 
 	return hasGoodWalljumpNormal;
 }
@@ -336,14 +343,16 @@ bool GenericRunBunnyingAction::CheckStepSpeedGainOrLoss( Context *context ) {
 		}
 	}
 
-	// Ignore bumping into a wall/speed loss if it happens far from a marked for path truncation origin
-	// as there will be later planning next frames and the path will be for sure corrected
-	if ( mayStopAtAreaNum && DistanceSquared( mayStopAtOrigin, newPMove->origin ) > SQUARE( 56 ) ) {
-		return true;
+	// Skip any further tests if the bot has changed Z substantially
+	if( HasSubstantiallyChangedZ( newEntityPhysicsState ) ) {
+		if( originAtSequenceStart.SquareDistance2DTo( newEntityPhysicsState.Origin() ) > SQUARE( 72.0f ) ) {
+			return true;
+		}
 	}
 
-	// Avoid bumping into walls
-	if( newSquare2DSpeed < 10 * 10 && oldSquare2DSpeed > 100 * 100 ) {
+	// Avoid bumping into walls.
+	// Note: the lower speed limit is raised to actually trigger this check.
+	if( newSquare2DSpeed < 50 * 50 && oldSquare2DSpeed > 100 * 100 ) {
 		Debug( "A prediction step has lead to close to zero 2D speed while it was significant\n" );
 		this->shouldTryObstacleAvoidance = true;
 		return false;
@@ -367,13 +376,69 @@ bool GenericRunBunnyingAction::CheckStepSpeedGainOrLoss( Context *context ) {
 
 	currentSpeedLossSequentialMillis += context->predictionStepMillis;
 	if( tolerableSpeedLossSequentialMillis < currentSpeedLossSequentialMillis ) {
-		const char *format_ = "A sequential speed loss interval of %d millis exceeds the tolerable one of %d millis\n";
-		Debug( format_, currentSpeedLossSequentialMillis, tolerableSpeedLossSequentialMillis );
-		this->shouldTryObstacleAvoidance = true;
-		return false;
+		// Let actually interrupt it if the new speed is less than this threshold.
+		// Otherwise many trajectories that look feasible get rejected.
+		// We should not however completely eliminate this interruption
+		// as sometimes it prevents bumping in obstacles pretty well.
+		if( newEntityPhysicsState.Speed2D() < 0.5f * ( context->GetRunSpeed() + context->GetDashSpeed() ) ) {
+			const char *format_ = "A sequential speed loss interval of %d millis exceeds the tolerable one of %d millis\n";
+			Debug( format_, currentSpeedLossSequentialMillis, tolerableSpeedLossSequentialMillis );
+			this->shouldTryObstacleAvoidance = true;
+			return false;
+		}
 	}
 
 	return true;
+}
+
+inline bool GenericRunBunnyingAction::WasOnGroundThisFrame( const Context *context ) const {
+	return context->movementState->entityPhysicsState.GroundEntity() || context->frameEvents.hasJumped;
+}
+
+inline bool GenericRunBunnyingAction::HasSubstantiallyChangedZ( const AiEntityPhysicsState &state ) const {
+	if( !std::isfinite( groundZAtSequenceStart ) ) {
+		return false;
+	}
+	const float heightOverGround = state.HeightOverGround();
+	if( !std::isfinite( heightOverGround ) ) {
+		return false;
+	}
+	const float newGroundZ = state.Origin()[2] - heightOverGround + playerbox_stand_mins[2];
+	return std::fabs( groundZAtSequenceStart - newGroundZ ) > 48.0f;
+}
+
+bool GenericRunBunnyingAction::CheckForActualCompletionOnGround( MovementPredictionContext *context ) {
+	// TODO: provide wrappers that eliminate this awkward invocation
+	if( context->TraceCache().CanSkipPMoveCollision( context ) ) {
+		return true;
+	}
+
+	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
+	// We should not end up landing having speed 2D this low
+	if( entityPhysicsState.Speed2D() < 100.0f ) {
+		return false;
+	}
+
+	// Make sure we do not land/jump just in front of an obstacle (12 units ahead of the bot origin).
+	// Using a zero-width (ray) test is intentional (otherwise handling of sliding along a wall is complicated).
+	// Also a Z-offset is applied so the ray is at the "head" height to prevent producing false negatives on stairs/ramps
+
+	Vec3 velocityDir( entityPhysicsState.Velocity() );
+	velocityDir *= 1.0f / entityPhysicsState.Speed();
+
+	Vec3 xerpOrigin( velocityDir );
+	xerpOrigin *= playerbox_stand_maxs[0] + 12.0f;
+	xerpOrigin += entityPhysicsState.Origin();
+	xerpOrigin.Z() += playerbox_stand_maxs[2] - 1.0f;
+
+	trace_t trace;
+	StaticWorldTrace( &trace, entityPhysicsState.Origin(), xerpOrigin.Data(), MASK_SOLID | MASK_WATER );
+	if( trace.fraction == 1.0f ) {
+		return true;
+	}
+
+	// Check bumping angle. Otherwise this test is way too restrictive in practice.
+	return velocityDir.Dot( trace.plane.normal ) > -0.3f;
 }
 
 inline void GenericRunBunnyingAction::MarkForTruncation( Context *context ) {
@@ -522,7 +587,7 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 			if( trySet ) {
 				if( newEntityPhysicsState.Velocity()[2] / newEntityPhysicsState.Speed() < -0.1f ) {
 					MarkForTruncation( context );
-				} else if( newEntityPhysicsState.GroundEntity() || context->frameEvents.hasJumped ) {
+				} else if( WasOnGroundThisFrame( context ) ) {
 					MarkForTruncation( context );
 				}
 			}
@@ -570,14 +635,14 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 		}
 	}
 
-	if( squareDistanceFromStart < SQUARE( 80 ) ) {
-		if( SequenceDuration( context ) < 512 ) {
+	if( squareDistanceFromStart < SQUARE( 64 ) ) {
+		if( SequenceDuration( context ) < 384 ) {
 			context->SaveSuggestedActionForNextFrame( this );
 			return;
 		}
 
 		// Prevent wasting CPU cycles on further prediction
-		Debug( "The bot still has not covered 80 units yet in 512 millis\n" );
+		Debug( "The bot still has not covered 64 units yet in 384 millis\n" );
 		context->SetPendingRollback();
 		return;
 	}
@@ -587,53 +652,77 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 		// We have reached an area that is was a "pivot" area at application sequence start.
 		if( iter != checkStopAtAreaNums.end() ) {
 			// Stop prediction having touched the ground this frame in this kind of area
-			if( newEntityPhysicsState.GroundEntity() || context->frameEvents.hasJumped ) {
-				context->isCompleted = true;
-				return;
-			}
-
-			if( aasWorld->AreaSettings()[groundedAreaNum].areaflags & AREA_NOFALL ) {
-				// We have decided still perform additional checks in this case.
-				// (the bot is in a "check stop at area num" area and is in a "no-fall" area but is in air).
-				// Bumping into walls on high speed is the most painful issue.
-				if( CastRayForPrematureCompletion( context ) ) {
+			if( WasOnGroundThisFrame( context ) ) {
+				// Ignore bumping into walls if we are very likely in stairs-like environment.
+				// Bots have significant movement troubles in this case.
+				if( HasSubstantiallyChangedZ( newEntityPhysicsState ) ) {
 					context->isCompleted = true;
 					return;
 				}
-				// Can't say much, lets continue prediction
-			}
+				if( CheckForActualCompletionOnGround( context ) ) {
+					context->isCompleted = true;
+					return;
+				}
+			} else {
+				const auto *const aasAreaFloorClusterNums = aasWorld->AreaFloorClusterNums();
+				// If the area is in a floor cluster, we can perform a cheap and robust 2D raycasting test
+				// that should be preferred for AREA_NOFALL areas as well.
+				if( const int floorClusterNum = aasAreaFloorClusterNums[groundedAreaNum] ) {
+					if( CheckForPrematureCompletionInFloorCluster( context, groundedAreaNum, floorClusterNum )) {
+						context->isCompleted = true;
+						return;
+					}
+				} else if( aasWorld->AreaSettings()[groundedAreaNum].areaflags & AREA_NOFALL) {
+					// We have decided still perform additional checks in this case.
+					// (the bot is in a "check stop at area num" area and is in a "no-fall" area but is in air).
+					// Bumping into walls on high speed is the most painful issue.
+					if( GenericCheckForPrematureCompletion( context )) {
+						context->isCompleted = true;
+						return;
+					}
+					// Can't say much, lets continue prediction
+				}
 
-			if( !mayStopAtAreaNum ) {
-				mayStopAtAreaNum = groundedAreaNum;
-				mayStopAtStackFrame = (int)context->topOfStackIndex;
-				mayStopAtTravelTime = currTravelTimeToNavTarget;
+				if( !mayStopAtAreaNum ) {
+					mayStopAtAreaNum = groundedAreaNum;
+					mayStopAtStackFrame = (int) context->topOfStackIndex;
+					mayStopAtTravelTime = currTravelTimeToNavTarget;
+				}
 			}
 		}
 	}
 
-	// Consider that the bot has touched a ground if the bot is on ground
-	// or has jumped (again) this frame (its uneasy to catch being on ground here)
-	// If the bot has not touched ground this frame...
-	if( !newEntityPhysicsState.GroundEntity() && !context->frameEvents.hasJumped ) {
-		context->SaveSuggestedActionForNextFrame( this );
-		return;
-	}
-
-	// Do not stop prediction if the bot has
-	if( !mayStopAtAreaNum && newEntityPhysicsState.Speed2D() < context->GetRunSpeed() ) {
+	// If the bot has not touched ground this frame
+	if( !WasOnGroundThisFrame( context ) ) {
 		context->SaveSuggestedActionForNextFrame( this );
 		return;
 	}
 
 	// If we're at the best reached position currently
-	if( currTravelTimeToNavTarget == minTravelTimeToNavTargetSoFar ) {
-		// Chop the last frame to prevent jumping if the predicted path will be fully utilized
-		if( context->frameEvents.hasJumped && context->topOfStackIndex ) {
-			context->StopTruncatingStackAt( context->topOfStackIndex - 1 );
-		} else {
-			context->isCompleted = true;
+	if( travelTimeAtSequenceStart && travelTimeAtSequenceStart > currTravelTimeToNavTarget ) {
+		if( currTravelTimeToNavTarget == minTravelTimeToNavTargetSoFar ) {
+			bool mayComplete = false;
+			// Skip way too restrictive CheckForActualCompletionOnGround() call
+			// if we are going to truncate trajectory at mayStopAtStackFrame
+			// and we have a substantial distance for further trajectory correction
+			// (if the distance to the trajectory truncation origin is above the threshold)
+			if( mayStopAtAreaNum && Distance2DSquared( mayStopAtOrigin, newEntityPhysicsState.Origin() ) > SQUARE( 40 ) ) {
+				mayComplete = true;
+			} else if( HasSubstantiallyChangedZ( newEntityPhysicsState ) ) {
+				mayComplete = true;
+			} else if( CheckForActualCompletionOnGround( context ) ) {
+				mayComplete = true;
+			}
+			if( mayComplete ) {
+				// Chop the last frame to prevent jumping if the predicted path will be fully utilized
+				if( context->frameEvents.hasJumped && context->topOfStackIndex ) {
+					context->StopTruncatingStackAt( context->topOfStackIndex - 1 );
+				} else {
+					context->isCompleted = true;
+				}
+				return;
+			}
 		}
-		return;
 	}
 
 	// If we have reached here, we are sure we have not:
@@ -643,8 +732,23 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 
 	// If there were no area (and consequently, frame) marked as suitable for path truncation
 	if( !mayStopAtAreaNum ) {
-		if( squareDistanceFromStart > SQUARE( 144 ) ) {
-			Debug( "The action still have not managed to mark \"may stop\" area, do not waste cycles anymore\n" );
+		constexpr unsigned maxStepsLimit = ( 7 * Context::MAX_PREDICTED_STATES ) / 8;
+		static_assert( maxStepsLimit + 1 < Context::MAX_PREDICTED_STATES, "" );
+		// If we have reached prediction limits
+		if( squareDistanceFromStart > SQUARE( 192 ) || context->topOfStackIndex > maxStepsLimit ) {
+			// Try considering this as a success if these conditions are met:
+			// 1) The current travel time is not worse than 250 millis relative to the best one during prediction
+			// 2) The current travel time is at least 750 millis better than the travel time at start
+			// 3) We have landed in some floor cluster (not stairs/ramp/obstacle).
+			if( minTravelTimeToNavTargetSoFar && currTravelTimeToNavTarget < minTravelTimeToNavTargetSoFar + 25 ) {
+				if( travelTimeAtSequenceStart && currTravelTimeToNavTarget + 75 < travelTimeAtSequenceStart ) {
+					if( aasWorld->FloorClusterNum( groundedAreaNum ) ) {
+						context->isCompleted = true;
+						return;
+					}
+				}
+			}
+
 			context->SetPendingRollback();
 			return;
 		}
@@ -652,10 +756,20 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 		return;
 	}
 
+	// See notes for "if we are at the best reached position currently" branch
+	if( Distance2DSquared( mayStopAtOrigin, newEntityPhysicsState.Origin() ) < SQUARE( 40 ) ) {
+		if( !CheckForActualCompletionOnGround( context ) ) {
+			// Looks like the bot is going to bump into a wall
+			// without a substantial distance for trajectory correction
+			context->SaveSuggestedActionForNextFrame( this );
+			return;
+		}
+	}
+
 	// Consider an attempt successful if we've landed in the same floor cluster and there is no gap to the best position
 	if( const int clusterNum = aasWorld->FloorClusterNum( mayStopAtAreaNum ) ) {
 		if( clusterNum == aasWorld->FloorClusterNum( groundedAreaNum ) ) {
-			if( IsAreaWalkableInFloorCluster( groundedAreaNum, mayStopAtStackFrame ) ) {
+			if( aasWorld->IsAreaWalkableInFloorCluster( groundedAreaNum, mayStopAtAreaNum ) ) {
 				context->StopTruncatingStackAt( (unsigned)mayStopAtStackFrame );
 				return;
 			}
@@ -676,15 +790,15 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 	context->StopTruncatingStackAt( (unsigned)mayStopAtStackFrame );
 }
 
-bool GenericRunBunnyingAction::CastRayForPrematureCompletion( MovementPredictionContext *context ) {
+bool GenericRunBunnyingAction::GenericCheckForPrematureCompletion( Context *context ) {
 	const auto &newEntityPhysicsState = context->movementState->entityPhysicsState;
 
 	// Interpolate origin using full (non-2D) velocity
 	Vec3 velocityDir( newEntityPhysicsState.Velocity() );
 	velocityDir *= 1.0f / newEntityPhysicsState.Speed();
 	Vec3 xerpPoint( velocityDir );
-	float checkDistanceLimit = 40.0f + 40.0f * BoundedFraction( newEntityPhysicsState.Speed2D(), 750.0f );
-	xerpPoint *= 256.0f;
+	float checkDistanceLimit = 48.0f + 72.0f * BoundedFraction( newEntityPhysicsState.Speed2D(), 750.0f );
+	xerpPoint *= 2.0f * checkDistanceLimit;
 	float timeSeconds = sqrtf( Distance2DSquared( xerpPoint.Data(), vec3_origin ) );
 	timeSeconds /= newEntityPhysicsState.Speed2D();
 	xerpPoint += newEntityPhysicsState.Origin();
@@ -730,7 +844,79 @@ bool GenericRunBunnyingAction::CastRayForPrematureCompletion( MovementPrediction
 		return true;
 	}
 
-	return firstHitNormal.Dot( velocityDir ) < 0.3f;
+	return firstHitNormal.Dot( velocityDir ) > -0.3f;
+}
+
+bool GenericRunBunnyingAction::CheckForPrematureCompletionInFloorCluster( Context *context,
+																		  int currGroundedAreaNum,
+																		  int floorClusterNum ) {
+	const auto &newEntityPhysicsState = context->movementState->entityPhysicsState;
+	const Vec3 currVelocity( newEntityPhysicsState.Velocity() );
+
+	const float heightOverGround = newEntityPhysicsState.HeightOverGround();
+	if( !std::isfinite( heightOverGround ) ) {
+		return false;
+	}
+	// Almost landed in the "good" area
+	if( heightOverGround < 1.0f ) {
+		return true;
+	}
+	// The bot is going to land in the target area
+	const float speed2D = newEntityPhysicsState.Speed2D();
+	if( speed2D < 1.0f ) {
+		return true;
+	}
+
+	const float gravity = level.gravity;
+	const float currVelocityZ = currVelocity.Z();
+	// Assuming the 2D velocity remains the same (this is not true but is an acceptable approximation)
+	// the quadratic equation is
+	// (0.5 * gravity) * timeTillLanding^2 - currVelocityZ * timeTillLanding - heightOverGround = 0
+	// A = 0.5 * gravity (the gravity conforms to the landing direction)
+	// B = -currVelocityZ (the current Z velocity contradicts the landing direction if positive)
+	// C = -heightOverGround
+	const float d = currVelocityZ * currVelocityZ + 4.0f * ( 0.5f * gravity ) * heightOverGround;
+	// The bot must always land on the floor cluster plane
+	assert( d >= 0 );
+
+	const float sqd = std::sqrt( d );
+	float timeTillLanding = ( currVelocityZ - sqd ) / ( 2 * ( 0.5f * gravity ) );
+	if( timeTillLanding < 0 ) {
+		timeTillLanding = ( currVelocityZ + sqd ) / ( 2 * ( 0.5f * gravity ) );
+	}
+	assert( timeTillLanding >= 0 );
+	// Don't extrapolate more than for 1 second
+	if( timeTillLanding > 1.0f ) {
+		return false;
+	}
+
+	Vec3 landingPoint( currVelocity );
+	landingPoint.Z() = 0;
+	// Now "landing point" contains a 2D velocity.
+	// Scale it by the time to get the shift.
+	landingPoint *= timeTillLanding;
+	// Convert the spatial shift to an absolute origin.
+	landingPoint += newEntityPhysicsState.Origin();
+	// The heightOverGround is a height of bot feet over ground
+	// Lower the landing point to the ground
+	landingPoint.Z() += playerbox_stand_mins[2];
+	// Add few units above the ground plane for AAS sampling
+	landingPoint.Z() += 4.0f;
+
+	const auto *aasWorld = AiAasWorld::Instance();
+	const int landingAreaNum = aasWorld->PointAreaNum( landingPoint.Data() );
+	// If it's the same area
+	if( landingAreaNum == currGroundedAreaNum ) {
+		return true;
+	}
+
+	// If the extrapolated origin is in another floor cluster (this condition cuts off being in solid too)
+	if( aasWorld->AreaFloorClusterNums()[landingAreaNum] != floorClusterNum ) {
+		return false;
+	}
+
+	// Perform 2D raycast in a cluster to make sure we don't leave it/hit solid (a cluster is not a convex poly)
+	return aasWorld->IsAreaWalkableInFloorCluster( currGroundedAreaNum, landingAreaNum );
 }
 
 void GenericRunBunnyingAction::OnApplicationSequenceStarted( Context *context ) {
@@ -758,7 +944,14 @@ void GenericRunBunnyingAction::OnApplicationSequenceStarted( Context *context ) 
 		}
 	}
 
-	originAtSequenceStart.Set( context->movementState->entityPhysicsState.Origin() );
+	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
+	originAtSequenceStart.Set( entityPhysicsState.Origin() );
+	const float heightOverGround = entityPhysicsState.HeightOverGround();
+	if( std::isfinite( heightOverGround ) ) {
+		groundZAtSequenceStart = originAtSequenceStart.Z() - heightOverGround + playerbox_stand_mins[2];
+	} else {
+		groundZAtSequenceStart = std::numeric_limits<float>::infinity();
+	}
 
 	currentSpeedLossSequentialMillis = 0;
 	currentUnreachableTargetSequentialMillis = 0;

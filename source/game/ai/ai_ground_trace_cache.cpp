@@ -1,10 +1,8 @@
-#include "ai_shutdown_hooks_holder.h"
 #include "ai_ground_trace_cache.h"
 #include "static_vector.h"
 #include "ai_local.h"
 
-struct CachedTrace
-{
+struct CachedTrace {
 	trace_t trace;
 	int64_t computedAt;
 	float depth;
@@ -21,14 +19,19 @@ AiGroundTraceCache::~AiGroundTraceCache() {
 	}
 }
 
+AiGroundTraceCache *AiGroundTraceCache::instance = nullptr;
 static StaticVector<AiGroundTraceCache, 1> instanceHolder;
 
-AiGroundTraceCache* AiGroundTraceCache::Instance() {
-	if( instanceHolder.empty() ) {
-		instanceHolder.emplace_back( AiGroundTraceCache() );
-		AiShutdownHooksHolder::Instance()->RegisterHook([&] { instanceHolder.clear(); } );
+void AiGroundTraceCache::Init() {
+	assert( instanceHolder.empty() );
+	instance = new( instanceHolder.unsafe_grow_back() )AiGroundTraceCache;
+}
+
+void AiGroundTraceCache::Shutdown() {
+	if( instance ) {
+		instance = nullptr;
+		instanceHolder.clear();
 	}
-	return &instanceHolder.front();
 }
 
 void AiGroundTraceCache::GetGroundTrace( const edict_s *ent, float depth, trace_t *trace, uint64_t maxMillisAgo ) {

@@ -19,7 +19,7 @@ PlannerNode *BotStartGotoRunAwayJumppadAction::TryApply( const WorldState &world
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self ) ) );
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -42,12 +42,12 @@ PlannerNode *BotStartGotoRunAwayJumppadAction::TryApply( const WorldState &world
 
 void BotDoRunAwayViaJumppadActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
-	self->ai->botRef->SetNavTarget( &navTarget );
+	Self()->SetNavTarget( &navSpot );
 }
 
 void BotDoRunAwayViaJumppadActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+	Self()->ResetNavTarget();
 }
 
 AiBaseActionRecord::Status BotDoRunAwayViaJumppadActionRecord::CheckStatus( const WorldState &currWorldState ) const {
@@ -67,13 +67,13 @@ AiBaseActionRecord::Status BotDoRunAwayViaJumppadActionRecord::CheckStatus( cons
 		Debug( "A threatening enemy is absent\n" );
 		return INVALID;
 	}
-	if( selectedEnemiesInstanceId != self->ai->botRef->GetSelectedEnemies().InstanceId() ) {
+	if( selectedEnemiesInstanceId != Self()->GetSelectedEnemies().InstanceId() ) {
 		Debug( "New enemies have been selected\n" );
 		return INVALID;
 	}
 	// Use the same radius as for goal items pickups
 	// (running actions for picking up an item and running away might be shared)
-	if( ( navTarget.Origin() - self->s.origin ).SquaredLength() > GOAL_PICKUP_ACTION_RADIUS * GOAL_PICKUP_ACTION_RADIUS ) {
+	if( ( navSpot.Origin() - Self()->Origin() ).SquaredLength() > GOAL_PICKUP_ACTION_RADIUS * GOAL_PICKUP_ACTION_RADIUS ) {
 		Debug( "Bot is too far from the jumppad trigger\n" );
 		return INVALID;
 	}
@@ -113,8 +113,8 @@ PlannerNode *BotDoRunAwayViaJumppadAction::TryApply( const WorldState &worldStat
 	}
 
 	Vec3 jumppadOrigin = worldState.NavTargetOriginVar().Value();
-	unsigned selectedEnemiesInstanceId = self->ai->botRef->GetSelectedEnemies().InstanceId();
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self, jumppadOrigin, selectedEnemiesInstanceId ) ) );
+	unsigned selectedEnemiesInstanceId = Self()->GetSelectedEnemies().InstanceId();
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self(), jumppadOrigin, selectedEnemiesInstanceId ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

@@ -1,16 +1,23 @@
 #include "Goals.h"
 #include "../bot.h"
+#include <cmath>
+#include <cstdlib>
+
+BotBaseGoal::BotBaseGoal( BotPlanningModule *module_, const char *name_, int debugColor_, unsigned updatePeriod_ )
+	: AiBaseGoal( module_->bot, name_, updatePeriod_ ), module( module_ ) {
+	this->debugColor = debugColor_;
+}
 
 inline const SelectedNavEntity &BotBaseGoal::SelectedNavEntity() const {
-	return self->ai->botRef->GetSelectedNavEntity();
+	return Self()->GetSelectedNavEntity();
 }
 
 inline const SelectedEnemies &BotBaseGoal::SelectedEnemies() const {
-	return self->ai->botRef->GetSelectedEnemies();
+	return Self()->GetSelectedEnemies();
 }
 
 inline const BotWeightConfig &BotBaseGoal::WeightConfig() const {
-	return self->ai->botRef->WeightConfig();
+	return Self()->WeightConfig();
 }
 
 inline PlannerNode *BotBaseGoal::ApplyExtraActions( PlannerNode *firstTransition, const WorldState &worldState ) {
@@ -44,11 +51,9 @@ void BotGrabItemGoal::GetDesiredWorldState( WorldState *worldState ) {
 	worldState->HasJustPickedGoalItemVar().SetValue( true ).SetIgnore( false );
 }
 
-#define TRY_APPLY_ACTION( actionName )                                                     \
-	do                                                                                       \
-	{                                                                                        \
-		if( PlannerNode *currTransition = self->ai->botRef->actionName.TryApply( worldState ) ) \
-		{                                                                                    \
+#define TRY_APPLY_ACTION( actionName )                                                       \
+	do {                                                                                     \
+		if( PlannerNode *currTransition = module->actionName.TryApply( worldState ) ) {      \
 			currTransition->nextTransition = firstTransition;                                \
 			firstTransition = currTransition;                                                \
 		}                                                                                    \
@@ -74,7 +79,7 @@ void BotKillEnemyGoal::UpdateWeight( const WorldState &currWorldState ) {
 	const auto &configGroup = WeightConfig().nativeGoals.killEnemy;
 
 	this->weight = configGroup.baseWeight;
-	this->weight += configGroup.offCoeff * self->ai->botRef->GetEffectiveOffensiveness();
+	this->weight += configGroup.offCoeff * Self()->GetEffectiveOffensiveness();
 	if( currWorldState.HasThreateningEnemyVar() ) {
 		this->weight *= configGroup.nmyThreatCoeff;
 	} else {
@@ -107,7 +112,6 @@ PlannerNode *BotKillEnemyGoal::GetWorldStateTransitions( const WorldState &world
 	TRY_APPLY_ACTION( attackAdvancingToTargetAction );
 	TRY_APPLY_ACTION( advanceToGoodPositionAction );
 	TRY_APPLY_ACTION( retreatToGoodPositionAction );
-	TRY_APPLY_ACTION( steadyCombatAction );
 	TRY_APPLY_ACTION( gotoAvailableGoodPositionAction );
 	TRY_APPLY_ACTION( attackFromCurrentPositionAction );
 
@@ -129,7 +133,7 @@ void BotRunAwayGoal::UpdateWeight( const WorldState &currWorldState ) {
 	const auto &configGroup = WeightConfig().nativeGoals.runAway;
 
 	this->weight = configGroup.baseWeight;
-	this->weight = configGroup.offCoeff * ( 1.0f - self->ai->botRef->GetEffectiveOffensiveness() );
+	this->weight = configGroup.offCoeff * ( 1.0f - Self()->GetEffectiveOffensiveness() );
 	if( currWorldState.HasThreateningEnemyVar() ) {
 		this->weight *= configGroup.nmyThreatCoeff;
 	} else {
@@ -192,7 +196,7 @@ void BotAttackOutOfDespairGoal::UpdateWeight( const WorldState &currWorldState )
 	}
 
 	// The bot already has the maximal offensiveness, changing it would have the same effect as using duplicated search.
-	if( self->ai->botRef->GetEffectiveOffensiveness() == 1.0f ) {
+	if( Self()->GetEffectiveOffensiveness() == 1.0f ) {
 		return;
 	}
 
@@ -212,13 +216,13 @@ void BotAttackOutOfDespairGoal::GetDesiredWorldState( WorldState *worldState ) {
 
 void BotAttackOutOfDespairGoal::OnPlanBuildingStarted() {
 	// Hack: save the bot's base offensiveness and enrage the bot
-	this->oldOffensiveness = self->ai->botRef->GetBaseOffensiveness();
-	self->ai->botRef->SetBaseOffensiveness( 1.0f );
+	this->oldOffensiveness = Self()->GetBaseOffensiveness();
+	Self()->SetBaseOffensiveness( 1.0f );
 }
 
 void BotAttackOutOfDespairGoal::OnPlanBuildingCompleted( const AiBaseActionRecord *planHead ) {
 	// Hack: restore the bot's base offensiveness
-	self->ai->botRef->SetBaseOffensiveness( this->oldOffensiveness );
+	Self()->SetBaseOffensiveness( this->oldOffensiveness );
 }
 
 PlannerNode *BotAttackOutOfDespairGoal::GetWorldStateTransitions( const WorldState &worldState ) {
@@ -226,7 +230,6 @@ PlannerNode *BotAttackOutOfDespairGoal::GetWorldStateTransitions( const WorldSta
 
 	TRY_APPLY_ACTION( advanceToGoodPositionAction );
 	TRY_APPLY_ACTION( retreatToGoodPositionAction );
-	TRY_APPLY_ACTION( steadyCombatAction );
 	TRY_APPLY_ACTION( gotoAvailableGoodPositionAction );
 	TRY_APPLY_ACTION( attackFromCurrentPositionAction );
 
@@ -276,7 +279,7 @@ void BotReactToThreatGoal::UpdateWeight( const WorldState &currWorldState ) {
 	const auto &configGroup = WeightConfig().nativeGoals.reactToThreat;
 	float damageRatio = currWorldState.ThreatInflictedDamageVar() / currWorldState.DamageToBeKilled();
 	float weight_ = configGroup.baseWeight + configGroup.dmgFracCoeff * damageRatio;
-	float offensiveness = self->ai->botRef->GetEffectiveOffensiveness();
+	float offensiveness = Self()->GetEffectiveOffensiveness();
 	if( offensiveness >= 0.5f ) {
 		weight_ *= ( 1.0f + configGroup.offCoeff * ( offensiveness - 0.5f ) );
 	}
@@ -308,7 +311,31 @@ void BotReactToEnemyLostGoal::UpdateWeight( const WorldState &currWorldState ) {
 	}
 
 	const auto &configGroup = WeightConfig().nativeGoals.reactToEnemyLost;
-	this->weight = configGroup.baseWeight + configGroup.offCoeff * self->ai->botRef->GetEffectiveOffensiveness();
+	const float offensiveness = Self()->GetEffectiveOffensiveness();
+	this->weight = configGroup.baseWeight + configGroup.offCoeff * offensiveness;
+
+	// We know a certain distance threshold that losing enemy out of sight can be very dangerous. This is LG range.
+
+	const float distanceToEnemy = currWorldState.LostEnemyLastSeenOriginVar().DistanceTo( currWorldState.BotOriginVar() );
+	// TODO: Check whether the lost enemy actually had LG and was actually going to attack the bot
+	if( distanceToEnemy > GS_GetWeaponDef( WEAP_LASERGUN )->firedef.timeout ) {
+		return;
+	}
+
+	// If the bot might see enemy after turn, its likely the enemy sees the bot too and can attack
+	if( currWorldState.MightSeeLostEnemyAfterTurnVar() ) {
+		// Force turning back
+		this->weight *= 1.75f + 3.0f * offensiveness;
+		return;
+	}
+
+	// Don't add weight for pursuing far enemies
+	if( distanceToEnemy > 192.0f ) {
+		return;
+	}
+
+	// Force pursuit if the enemy is very close
+	this->weight *= 1.25f + 3.0f * ( 1.0f - std::sqrt( distanceToEnemy / 192.0f ) ) * offensiveness;
 }
 
 void BotReactToEnemyLostGoal::GetDesiredWorldState( WorldState *worldState ) {
@@ -330,7 +357,7 @@ PlannerNode *BotReactToEnemyLostGoal::GetWorldStateTransitions( const WorldState
 
 void BotRoamGoal::UpdateWeight( const WorldState &currWorldState ) {
 	// This goal is a fallback goal. Set the lowest feasible weight if it should be positive.
-	if( self->ai->botRef->ShouldUseRoamSpotAsNavTarget() ) {
+	if( Self()->ShouldUseRoamSpotAsNavTarget() ) {
 		this->weight = 0.000001f;
 		return;
 	}
@@ -341,7 +368,7 @@ void BotRoamGoal::UpdateWeight( const WorldState &currWorldState ) {
 void BotRoamGoal::GetDesiredWorldState( WorldState *worldState ) {
 	worldState->SetIgnoreAll( true );
 
-	const Vec3 &spotOrigin = self->ai->botRef->roamingManager.GetCachedRoamingSpot();
+	const Vec3 &spotOrigin = module->roamingManager.GetCachedRoamingSpot();
 	worldState->BotOriginVar().SetValue( spotOrigin );
 	worldState->BotOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, 32.0f );
 	worldState->BotOriginVar().SetIgnore( false );

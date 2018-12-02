@@ -2,14 +2,14 @@
 #include "planning/BasePlanner.h"
 #include "ai_ground_trace_cache.h"
 
-Ai::Ai( edict_t *self_
-	  , BasePlanner *planner_
-	  , AiAasRouteCache *routeCache_
-	  , AiEntityPhysicsState *entityPhysicsState_
-	  , int allowedAasTravelFlags_
-	  , int preferredAasTravelFlags_
-	  , float yawSpeed
-	  , float pitchSpeed )
+Ai::Ai( edict_t *self_,
+		BasePlanner *planner_,
+		AiAasRouteCache *routeCache_,
+		AiEntityPhysicsState *entityPhysicsState_,
+		int allowedAasTravelFlags_,
+		int preferredAasTravelFlags_,
+		float yawSpeed,
+		float pitchSpeed )
 	: self( self_ )
 	, basePlanner( planner_ )
 	, routeCache( routeCache_ )
@@ -17,7 +17,7 @@ Ai::Ai( edict_t *self_
 	, entityPhysicsState( entityPhysicsState_ )
 	, travelFlagsRange( travelFlags, 2 )
 	, blockedTimeoutAt( level.time + 15000 )
-	, localNavTargetStorage( NavTarget::Dummy() ) {
+	, localNavSpotStorage( NavSpot::Dummy() ) {
 	travelFlags[0] = preferredAasTravelFlags_;
 	travelFlags[1] = allowedAasTravelFlags_;
 	angularViewSpeed[YAW] = yawSpeed;

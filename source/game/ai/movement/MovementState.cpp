@@ -57,7 +57,15 @@ void BotWeaponJumpMovementState::TryDeactivate( const edict_t *self, const Conte
 		Deactivate();
 	}
 
-	if( !( hasTriggeredWeaponJump && hasCorrectedWeaponJump ) ) {
+	if( !hasTriggeredWeaponJump ) {
+		// If we have still not managed to trigger the jump
+		if( !millisToTriggerJumpLeft ) {
+			Deactivate();
+		}
+		return;
+	}
+
+	if( !hasCorrectedWeaponJump ) {
 		return;
 	}
 

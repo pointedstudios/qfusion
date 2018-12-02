@@ -1,4 +1,5 @@
 #include "AwarenessModule.h"
+#include "../ai_manager.h"
 #include "../teamplay/SquadBasedTeam.h"
 #include "../bot.h"
 
@@ -8,9 +9,12 @@ BotAwarenessModule::BotAwarenessModule( edict_t *self_, Bot *bot_, float skill_ 
 	, lostEnemies( bot_->lostEnemies )
 	, targetChoicePeriod( (unsigned)( 1500 - 500 * skill_ ) )
 	, reactionTime( 320u - (unsigned)( 300 * skill_ ) )
+	, alertTracker( bot_ )
 	, hazardsDetector( self_ )
 	, hazardsSelector( self_ )
 	, eventsTracker( self_ )
+	, keptInFovPointTracker( bot_, this )
+	, pathBlockingTracker( bot_ )
 	, ownEnemiesTracker( self_, this, skill_ ) {}
 
 void BotAwarenessModule::OnAttachedToSquad( AiSquad *squad_ ) {
@@ -28,6 +32,10 @@ void BotAwarenessModule::OnDetachedFromSquad( AiSquad *squad_ ) {
 	}
 	this->squad = nullptr;
 	this->activeEnemiesTracker = &ownEnemiesTracker;
+	// Prevent use-after-free since the squad memory might be released as well, and these entities refer to it.
+	// (happens when AI team is replaced by more feature-reach in runtime on demand)
+	this->selectedEnemies.Invalidate();
+	this->lostEnemies.Invalidate();
 }
 
 void BotAwarenessModule::OnEnemyViewed( const edict_t *enemy ) {
@@ -78,13 +86,18 @@ void BotAwarenessModule::Think() {
 	if( selectedEnemies.AreValid() ) {
 		if( level.time - selectedEnemies.LastSeenAt() > std::min( 64u, reactionTime ) ) {
 			selectedEnemies.Invalidate();
-			UpdateSelectedEnemies();
-			UpdateBlockedAreasStatus();
 		}
-	} else {
-		UpdateSelectedEnemies();
-		UpdateBlockedAreasStatus();
 	}
+
+	if( !selectedEnemies.AreValid() ) {
+		UpdateSelectedEnemies();
+		shouldUpdateBlockedAreasStatus = true;
+	}
+
+	// Calling this also makes sense if the "update" flag has been retained from previous frames
+	UpdateBlockedAreasStatus();
+
+	keptInFovPointTracker.Update();
 
 	TryTriggerPlanningForNewHazard();
 }
@@ -226,8 +239,16 @@ void BotAwarenessModule::OnEnemyRemoved( const TrackedEnemy *enemy ) {
 }
 
 void BotAwarenessModule::UpdateBlockedAreasStatus() {
-	// Disabled at this moment as the "old"-style blocking that does a raycast for every area in path is used.
-	// Refer to the git history of "bot_brain.cpp" for the removed code.
+	if( !shouldUpdateBlockedAreasStatus ) {
+		return;
+	}
+
+	if( !AiManager::Instance()->TryGetExpensiveThinkCallQuota( self->ai->botRef ) ) {
+		return;
+	}
+
+	pathBlockingTracker.Update();
+	shouldUpdateBlockedAreasStatus = false;
 }
 
 static bool IsEnemyVisible( const edict_t *self, const edict_t *enemyEnt ) {
@@ -361,7 +382,7 @@ void BotAwarenessModule::RegisterVisibleEnemies() {
 		OnEnemyViewed( gameEdicts + entNum );
 	}
 
-	self->ai->botRef->CheckAlertSpots( visibleTargets );
+	alertTracker.CheckAlertSpots( visibleTargets );
 }
 
 void BotAwarenessModule::CheckForNewHazards() {

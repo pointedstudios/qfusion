@@ -1,9 +1,11 @@
 #include "SideStepDodgeProblemSolver.h"
+#include "SpotsProblemSolversLocal.h"
 
 bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
 	trace_t trace;
 	Vec3 tmpVec3( 0, 0, 0 );
 	Vec3 *droppedToFloorOrigin = nullptr;
+	int testedAreaNum = -1;
 	if( auto originEntity = originParams.originEntity ) {
 		if( originEntity->groundentity ) {
 			tmpVec3.Set( originEntity->s.origin );
@@ -41,12 +43,33 @@ bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
 		return false;
 	}
 
-	Vec3 testedOrigin( *droppedToFloorOrigin );
-	// Make sure the tested box will be at least 1 unit above the ground
-	testedOrigin.Z() += ( -playerbox_stand_mins[2] ) + 1.0f;
+	float velocityInfluence = 0.0f;
+	vec3_t velocityDir;
+	// Perform deferred retrieval of these additional parameters
+	if( const auto *originEntity = originParams.originEntity ) {
+		if( originEntity->ai && originEntity->ai->botRef ) {
+			const auto &entityPhysicsState = originEntity->ai->botRef->EntityPhysicsState();
+			int areaNums[2];
+			entityPhysicsState->PrepareRoutingStartAreas( areaNums );
+			testedAreaNum = areaNums[0];
+			if( !originEntity->groundentity ) {
+				float speed = entityPhysicsState->Speed();
+				if( speed > DEFAULT_PLAYERSPEED ) {
+					velocityInfluence = 0.75f;
+				} else if( speed > 1 ) {
+					velocityInfluence = 0.5f;
+				}
+				if( velocityInfluence > 0 ) {
+					VectorCopy( entityPhysicsState->Velocity(), velocityDir );
+					VectorScale( velocityDir, 1.0f / speed, velocityDir );
+				}
+			}
+		}
+	}
 
-	float bestScore = -1.0f;
-	vec3_t bestDir;
+	Vec3 testedOrigin( *droppedToFloorOrigin );
+	// Make sure the tested box will be at least few units above the ground
+	testedOrigin.Z() += ( -playerbox_stand_mins[2] ) + 3.0f;
 
 	Vec3 keepVisible2DDir( problemParams.keepVisibleOrigin );
 	keepVisible2DDir -= originParams.origin;
@@ -54,6 +77,85 @@ bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
 	keepVisible2DDir.Normalize();
 
 	edict_t *const ignore = originParams.originEntity ? const_cast<edict_t *>( originParams.originEntity ) : nullptr;
+
+	float bestScore = -1.0f;
+	vec3_t bestVec;
+
+	const auto *const aasWorld = AiAasWorld::Instance();
+	// Check whether a computation of this area num has been deferred
+	if( testedAreaNum < 0 ) {
+		testedAreaNum = aasWorld->FindAreaNum( testedOrigin );
+	}
+
+	// If the tested area num belongs to an AAS floor cluster
+	// we should test all nearby spots in the cluster
+	// as they are almost guaranteed to be walkable if
+	// IsAreaWalkableInFloorCluster() call succeeds.
+	// We should prefer tactical spots over random origins.
+	// TODO: We can group all spots by floor cluster nums at loading
+	if( aasWorld->FloorClusterNum( testedAreaNum ) ) {
+		uint16_t insideSpotNum;
+		const auto *const __restrict spots = tacticalSpotsRegistry->spots;
+		// Must be cleaned up... todo: return a RAII wrapper?
+		const auto &queryVector = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
+		for( auto spotNum: queryVector ) {
+			const auto &spot = spots[spotNum];
+			// Skip nearby spots
+			if( spotNum == insideSpotNum ) {
+				continue;
+			}
+
+			Vec3 vec( spot.origin );
+			vec -= originParams.origin;
+			vec.Z() = 0;
+
+			const float squareDistance = vec.SquaredLength();
+			if( squareDistance < 32 * 32 ) {
+				continue;
+			}
+
+			// Check walkability in the cluster
+			if( !aasWorld->IsAreaWalkableInFloorCluster( testedAreaNum, spot.aasAreaNum ) ) {
+				continue;
+			}
+
+			// Check actual visibility of the origin specified in problem params
+			G_Trace( &trace, testedOrigin.Data(), nullptr, nullptr, problemParams.keepVisibleOrigin, ignore, MASK_SOLID );
+			if( trace.fraction != 1.0f || trace.startsolid ) {
+				continue;
+			}
+
+			Vec3 dir( vec );
+			const float distance = std::sqrt( squareDistance );
+			dir *= 1.0f / distance;
+
+			// Give side spots a greater score, but make sure the score is always positive for each spot
+			float score = ( 1.0f - fabsf( dir.Dot( keepVisible2DDir ) ) ) + 0.1f;
+			// Modulate score by distance (give nearby spots a priority too)
+			score *= 0.5f + 0.5f * ( 1.0f - ( distance / originParams.searchRadius ) );
+			// Modulate by velocity influence
+			score *= ( 1.0f - velocityInfluence ) + velocityInfluence * ( 1.0f + dir.Dot( velocityDir ) );
+			if( score <= bestScore ) {
+				continue;
+			}
+
+			bestScore = score;
+			vec.CopyTo( bestVec );
+		}
+
+		// Clean up temporarily allocated query result
+		tacticalSpotsRegistry->temporariesAllocator.Release();
+
+		if( bestScore > 0 ) {
+			VectorCopy( bestVec, spotOrigin );
+			VectorAdd( spotOrigin, testedOrigin.Data(), spotOrigin );
+			return true;
+		}
+	}
+
+	bestScore = -1.0f;
+	vec3_t bestDir;
+
 	const float dx = playerbox_stand_maxs[0] - playerbox_stand_mins[0];
 	const float dy = playerbox_stand_maxs[1] - playerbox_stand_mins[1];
 	for( int i = -1; i <= 1; ++i ) {
@@ -101,18 +203,22 @@ bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
 			spot2DDir.Normalize();
 
 			// Give side spots a greater score, but make sure the score is always positive for each spot
-			float score = ( 1.0f - fabsf( spot2DDir.Dot( keepVisible2DDir ) ) ) + 0.1f;
-			if( score > bestScore ) {
-				bestScore = score;
-				spot2DDir.CopyTo( bestDir );
+			float score = ( 1.0f - std::fabs( spot2DDir.Dot( keepVisible2DDir ) ) ) + 0.1f;
+			// Modulate by velocity influence
+			score *= ( 1.0f - velocityInfluence ) + velocityInfluence * ( 1.0f + spot2DDir.Dot( velocityDir ) );
+			if( score <= bestScore ) {
+				continue;
 			}
+
+			bestScore = score;
+			spot2DDir.CopyTo( bestDir );
 		}
 	}
 
 	if( bestScore > 0 ) {
 		VectorCopy( bestDir, spotOrigin );
 		VectorScale( spotOrigin, sqrtf( dx * dx + dy * dy ), spotOrigin );
-		VectorAdd( spotOrigin, droppedToFloorOrigin->Data(), spotOrigin );
+		VectorAdd( spotOrigin, testedOrigin.Data(), spotOrigin );
 		return true;
 	}
 

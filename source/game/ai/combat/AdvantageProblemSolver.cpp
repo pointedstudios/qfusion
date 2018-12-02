@@ -8,7 +8,8 @@ int AdvantageProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( candidateSpots, insideSpotNum );
 	SpotsAndScoreVector &visCheckedSpots = CheckOriginVisibility( reachCheckedSpots, maxSpots );
 	SortByVisAndOtherFactors( visCheckedSpots );
-	return CleanupAndCopyResults( visCheckedSpots, spots, maxSpots );
+	SpotsAndScoreVector &enemyCheckedSpots = CheckEnemiesInfluence( visCheckedSpots );
+	return CleanupAndCopyResults( enemyCheckedSpots, spots, maxSpots );
 }
 
 SpotsAndScoreVector &AdvantageProblemSolver::SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) {

@@ -3,29 +3,24 @@
 
 #include "BunnyTestingMultipleLookDirsAction.h"
 
-class BunnyStraighteningReachChainAction : public BunnyTestingMultipleLookDirsAction
-{
-	friend class BunnyToBestShortcutAreaAction;
+class BunnyStraighteningReachChainAction final : public BunnyTestingSavedLookDirsAction {
 	static constexpr const char *NAME = "BunnyStraighteningReachChainAction";
-	void SaveSuggestedLookDirs( MovementPredictionContext *context ) override;
+
+	friend class BunnyToBestNavMeshPointAction;
+
 	// Returns candidates end iterator
 	AreaAndScore *SelectCandidateAreas( MovementPredictionContext *context,
 										AreaAndScore *candidatesBegin,
 										unsigned lastValidReachIndex );
+
+	void SaveSuggestedLookDirs( MovementPredictionContext *context ) override;
 public:
 	explicit BunnyStraighteningReachChainAction( BotMovementModule *module_ );
 
-	void OnApplicationSequenceStarted( MovementPredictionContext *context ) override {
-		BunnyTestingMultipleLookDirsAction::OnApplicationSequenceStarted( context );
-		if( currSuggestedLookDirNum < suggestedLookDirs.size() ) {
-			checkStopAtAreaNums.push_back( dirsBaseAreas[currSuggestedLookDirNum] );
-		}
-	}
-
 	void BeforePlanning() override {
-		BunnyTestingMultipleLookDirsAction::BeforePlanning();
+		BunnyTestingSavedLookDirsAction::BeforePlanning();
 		// Reset to the action default value every frame
-		maxSuggestedLookDirs = 2;
+		maxSuggestedLookDirs = 3;
 	}
 };
 

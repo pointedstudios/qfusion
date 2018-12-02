@@ -12,7 +12,8 @@ class BaseMovementAction : public MovementPredictionConstants
 	void RegisterSelf();
 
 protected:
-	Bot *bot;
+	// Must be set by RegisterSelf() call. We have to break a circular dependency.
+	Bot *bot { nullptr };
 	BotMovementModule *const module;
 	const char *name;
 
@@ -20,23 +21,24 @@ protected:
 
 	// Used to establish a direct mapping between integers and actions.
 	// It is very useful for algorithms that involve lookup tables addressed by this field.
-	unsigned actionNum;
+	// Must be set by RegisterSelf() call.
+	unsigned actionNum { std::numeric_limits<unsigned>::max() };
 
-	Vec3 originAtSequenceStart;
+	Vec3 originAtSequenceStart { 0, 0, 0 };
 
-	unsigned sequenceStartFrameIndex;
-	unsigned sequenceEndFrameIndex;
+	unsigned sequenceStartFrameIndex { std::numeric_limits<unsigned>::max() };
+	unsigned sequenceEndFrameIndex { std::numeric_limits<unsigned>::max() };
 
 	// Has the action been completely disabled in current planning session for further planning
-	bool isDisabledForPlanning;
+	bool isDisabledForPlanning { false };
 	// These flags are used by default CheckPredictionStepResults() implementation.
 	// Set these flags in child class to tweak the mentioned method behaviour.
-	bool stopPredictionOnTouchingJumppad;
-	bool stopPredictionOnTouchingTeleporter;
-	bool stopPredictionOnTouchingPlatform;
-	bool stopPredictionOnTouchingNavEntity;
-	bool stopPredictionOnEnteringWater;
-	bool failPredictionOnEnteringHazardImpactZone;
+	bool stopPredictionOnTouchingJumppad { true };
+	bool stopPredictionOnTouchingTeleporter { true };
+	bool stopPredictionOnTouchingPlatform { true };
+	bool stopPredictionOnTouchingNavEntity { true };
+	bool stopPredictionOnEnteringWater { true };
+	bool failPredictionOnEnteringHazardImpactZone { true };
 
 	inline BaseMovementAction &DummyAction();
 	inline BaseMovementAction &DefaultWalkAction();
@@ -63,19 +65,7 @@ protected:
 	bool HasTouchedNavEntityThisFrame( MovementPredictionContext *context );
 public:
 	inline BaseMovementAction( BotMovementModule *module_, const char *name_, int debugColor_ = 0 )
-		: module( module_ )
-		, name( name_ )
-		, debugColor( debugColor_ )
-		, originAtSequenceStart( 0, 0, 0 )
-		, sequenceStartFrameIndex( std::numeric_limits<unsigned>::max() )
-		, sequenceEndFrameIndex( std::numeric_limits<unsigned>::max() )
-		, isDisabledForPlanning( false )
-		, stopPredictionOnTouchingJumppad( true )
-		, stopPredictionOnTouchingTeleporter( true )
-		, stopPredictionOnTouchingPlatform( true )
-		, stopPredictionOnTouchingNavEntity( true )
-		, stopPredictionOnEnteringWater( true )
-		, failPredictionOnEnteringHazardImpactZone( true ) {
+		: module( module_ ), name( name_ ), debugColor( debugColor_ ) {
 		RegisterSelf();
 	}
 	virtual void PlanPredictionStep( MovementPredictionContext *context ) = 0;

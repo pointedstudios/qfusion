@@ -1,8 +1,7 @@
 #include "HazardsSelector.h"
 #include "AwarenessModule.h"
 
-#include "../ai_shutdown_hooks_holder.h"
-#include "../ai_caching_game_allocator.h"
+#include "../../../qalgo/Links.h"
 
 void HazardsSelector::BeginUpdate() {
 	if( primaryHazard ) {
@@ -101,20 +100,6 @@ class SameDirBeamsList {
 public:
 	SameDirBeamsList( const edict_t *firstEntity, const edict_t *bot );
 
-	/*
-	 * TODO: Can we use GrowBack?
-	inline SameDirBeamsList( SameDirBeamsList &&that )
-		: lineEqnPoint( that.lineEqnPoint )
-		, sortedProjectiles( that.sortedProjectiles )
-		, projectilesCount( that.projectilesCount )
-		, isAlreadySkipped( that.isAlreadySkipped )
-		, avgDirection( that.avgDirection )
-		, plasmaBeams( that.plasmaBeams )
-		, plasmaBeamsCount( that.plasmaBeamsCount ) {
-		that.sortedProjectiles = nullptr;
-		that.plasmaBeams = nullptr;
-	}*/
-
 	~SameDirBeamsList();
 
 	bool TryAddProjectile( const edict_t *projectile );
@@ -149,8 +134,88 @@ public:
 	void FindMostHazardousBeams();
 };
 
-static CachingGameBufferAllocator<EntAndLineParam, MAX_EDICTS> sortedProjectilesBufferAllocator( "prj" );
-static CachingGameBufferAllocator<PlasmaBeam, MAX_EDICTS> plasmaBeamsBufferAllocator( "beams" );
+class CachingAllocator {
+	struct alignas( 8 )Chunk {
+		Chunk *prev;
+		Chunk *next;
+		uint8_t *data;
+	};
+
+	/**
+	 * We have to ensure that the returned data is at least 8-byte aligned (that's the malloc contract)
+	 */
+	enum { DATA_PADDING = sizeof( Chunk ) % 8 ? 8 - sizeof( Chunk ) % 8 : 0 };
+
+	const size_t chunkDataSize;
+	unsigned numUsedChunks { 0 };
+	Chunk *freeChunksHead { nullptr };
+
+public:
+	explicit CachingAllocator( size_t chunkDataSize_ ): chunkDataSize( chunkDataSize_ ) {}
+
+	~CachingAllocator() {
+		// Everything must be released properly by a user at the moment of this call
+		assert( !numUsedChunks );
+
+		Chunk *nextChunk;
+		for( Chunk *chunk = freeChunksHead; chunk; chunk = nextChunk ) {
+			nextChunk = chunk->next;
+			G_Free( chunk );
+		}
+	}
+
+	uint8_t *Alloc() {
+		if( freeChunksHead ) {
+			auto *const chunk = ::Unlink( freeChunksHead, &freeChunksHead );
+			numUsedChunks++;
+			return chunk->data;
+		}
+
+		const size_t size = sizeof( Chunk ) + DATA_PADDING + chunkDataSize;
+		auto *const mem = (uint8_t *)G_Malloc( size );
+		auto *const chunk = (Chunk *)mem;
+		chunk->data = mem + sizeof( Chunk ) + DATA_PADDING;
+		numUsedChunks++;
+		return chunk->data;
+	}
+
+	void Free( void *p ) {
+		if( !p ) {
+			return;
+		}
+		auto *chunk = (Chunk *)( ( (uint8_t *)p ) - sizeof( Chunk ) - DATA_PADDING );
+		::Link( chunk, &freeChunksHead );
+		numUsedChunks--;
+	}
+};
+
+static StaticVector<HazardsSelectorCache, 1> instanceHolder;
+HazardsSelectorCache *HazardsSelectorCache::instance = nullptr;
+
+HazardsSelectorCache::HazardsSelectorCache() {
+	auto *mem = storageMem = (uint8_t *)G_Malloc( 2 * sizeof( CachingAllocator ) );
+	sortedProjectilesAllocator = new( mem )CachingAllocator( sizeof( EntAndLineParam ) * MAX_EDICTS );
+	mem += sizeof( CachingAllocator );
+	plasmaBeamsAllocator = new( mem )CachingAllocator( sizeof( PlasmaBeam ) * MAX_EDICTS );
+}
+
+HazardsSelectorCache::~HazardsSelectorCache() {
+	sortedProjectilesAllocator->~CachingAllocator();
+	plasmaBeamsAllocator->~CachingAllocator();
+	G_Free( storageMem );
+}
+
+void HazardsSelectorCache::Init() {
+	assert( !instance );
+	instance = new( instanceHolder.unsafe_grow_back() )HazardsSelectorCache;
+}
+
+void HazardsSelectorCache::Shutdown() {
+	if( instance ) {
+		instance = nullptr;
+		instanceHolder.clear();
+	}
+}
 
 SameDirBeamsList::SameDirBeamsList( const edict_t *firstEntity, const edict_t *bot )
 	: avgDirection( firstEntity->velocity ), lineEqnPoint( firstEntity->s.origin ) {
@@ -165,8 +230,9 @@ SameDirBeamsList::SameDirBeamsList( const edict_t *firstEntity, const edict_t *b
 		return;
 	}
 
-	sortedProjectiles = sortedProjectilesBufferAllocator.Alloc();
-	plasmaBeams = plasmaBeamsBufferAllocator.Alloc();
+	auto *const cache = HazardsSelectorCache::Instance();
+	sortedProjectiles = (EntAndLineParam *)cache->sortedProjectilesAllocator->Alloc();
+	plasmaBeams = (PlasmaBeam *)cache->plasmaBeamsAllocator->Alloc();
 
 	sortedProjectiles[projectilesCount++] = EntAndLineParam( ENTNUM( firstEntity ), ComputeLineEqnParam( firstEntity ) );
 }
@@ -175,13 +241,9 @@ SameDirBeamsList::~SameDirBeamsList() {
 	if( isAlreadySkipped ) {
 		return;
 	}
-	// (Do not spam log by messages unless we have allocated memory chunks)
-	if( sortedProjectiles ) {
-		sortedProjectilesBufferAllocator.Free( sortedProjectiles );
-	}
-	if( plasmaBeams ) {
-		plasmaBeamsBufferAllocator.Free( plasmaBeams );
-	}
+	auto *const cache = HazardsSelectorCache::Instance();
+	cache->sortedProjectilesAllocator->Free( sortedProjectiles );
+	cache->plasmaBeamsAllocator->Free( plasmaBeams );
 	sortedProjectiles = nullptr;
 	plasmaBeams = nullptr;
 }

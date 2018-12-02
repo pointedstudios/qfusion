@@ -2,13 +2,14 @@
 #include "../ai_ground_trace_cache.h"
 #include "../teamplay/SquadBasedTeam.h"
 #include "BotPlanner.h"
+#include "PlanningLocal.h"
 #include "../combat/DodgeHazardProblemSolver.h"
 #include <algorithm>
 #include <limits>
 #include <stdarg.h>
 
-BotPlanner::BotPlanner( Bot *bot, float skillLevel_ )
-	: BasePlanner( bot->self ), cachedWorldState( bot->self ) {}
+BotPlanner::BotPlanner( edict_t *self_, BotPlanningModule *module_, float skillLevel_ )
+	: BasePlanner( self_ ), module( module_ ), cachedWorldState( module_->bot ) {}
 
 BotBaseGoal *BotPlanner::GetGoalByName( const char *name ) {
 	for( unsigned i = 0; i < scriptGoals.size(); ++i ) {
@@ -63,7 +64,7 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 		worldState->EnemyHasGoodFarRangeWeaponsVar().SetValue( selectedEnemies.HaveGoodFarRangeWeapons() );
 		worldState->EnemyHasGoodMiddleRangeWeaponsVar().SetValue( selectedEnemies.HaveGoodMiddleRangeWeapons() );
 		worldState->EnemyHasGoodCloseRangeWeaponsVar().SetValue( selectedEnemies.HaveGoodCloseRangeWeapons() );
-		worldState->EnemyCanHitVar().SetValue( selectedEnemies.CanHit() );
+		worldState->CanHitEnemyVar().SetValue( selectedEnemies.CanBeHit() );
 	} else {
 		worldState->EnemyOriginVar().SetIgnore( true );
 		worldState->HasThreateningEnemyVar().SetIgnore( true );
@@ -74,6 +75,7 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 		worldState->EnemyHasGoodMiddleRangeWeaponsVar().SetIgnore( true );
 		worldState->EnemyHasGoodCloseRangeWeaponsVar().SetIgnore( true );
 		worldState->EnemyCanHitVar().SetIgnore( true );
+		worldState->CanHitEnemyVar().SetIgnore( true );
 	}
 
 	auto &lostEnemies = self->ai->botRef->lostEnemies;
@@ -138,7 +140,7 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 	if( currSelectedNavEntity.IsEmpty() ) {
 		// HACK! If there is no selected nav entity, set the value to the roaming spot origin.
 		if( self->ai->botRef->ShouldUseRoamSpotAsNavTarget() ) {
-			Vec3 spot( self->ai->botRef->roamingManager.GetCachedRoamingSpot() );
+			Vec3 spot( module->roamingManager.GetCachedRoamingSpot() );
 			Debug( "Using a roaming spot @ %.1f %.1f %.1f as a world state nav target var\n", spot.X(), spot.Y(), spot.Z() );
 			worldState->NavTargetOriginVar().SetValue( spot );
 		} else {
@@ -170,7 +172,6 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 	worldState->HasJustPickedGoalItemVar().SetValue( self->ai->botRef->HasJustPickedGoalItem() );
 
 	worldState->HasPositionalAdvantageVar().SetValue( false );
-	worldState->CanHitEnemyVar().SetValue( true );
 
 	worldState->HasJustKilledEnemyVar().SetValue( false );
 
@@ -234,7 +235,7 @@ bool BotPlanner::ShouldSkipPlanning() const {
 void BotPlanner::BeforePlanning() {
 	BasePlanner::BeforePlanning();
 
-	self->ai->botRef->tacticalSpotsCache.Clear();
+	module->tacticalSpotsCache.Clear();
 }
 
 float Bot::GetEffectiveOffensiveness() const {

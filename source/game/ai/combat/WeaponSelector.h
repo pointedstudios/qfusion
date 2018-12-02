@@ -166,8 +166,6 @@ private:
 
 	int SuggestHitEscapingEnemyWeapon( const WorldState &worldState, bool botMovesFast, bool enemyMovesFast );
 
-	bool CheckForShotOfDespair( const WorldState &worldState );
-	int SuggestShotOfDespairWeapon( const WorldState &worldState );
 	int SuggestQuadBearerWeapon( const WorldState &worldState );
 
 	int ChooseWeaponByScores( struct WeaponAndScore *begin, struct WeaponAndScore *end );

@@ -15,41 +15,47 @@ void BotItemsSelector::UpdateInternalItemAndGoalWeights() {
 		}
 	}
 
-	const edict_t *objectiveSpotEntity = nullptr;
-	const auto &spotDef = self->ai->botRef->objectiveSpotDef;
-	if( spotDef.IsActive() ) {
-		const auto *team = AiBaseTeam::GetTeamForNum( self->s.team );
-		if( const auto *objectiveBasedTeam = dynamic_cast<const AiObjectiveBasedTeam *>( team ) ) {
-			objectiveSpotEntity = objectiveBasedTeam->GetSpotUnderlyingEntity( spotDef.id, spotDef.isDefenceSpot );
+	const auto *const bot = self->ai->botRef;
+	const auto *const botTeam = AiBaseTeam::GetTeamForNum( self->s.team );
+	const auto levelTime = level.time;
+	auto *const navEntitiesRegistry = NavEntitiesRegistry::Instance();
+
+	// Check whether we can skip not so cheap AiBaseTeam::GetEntityWeights() calls
+	if( !botTeam->OverridesEntityWeights( bot ) ) {
+		for( const NavEntity *goalEnt = navEntitiesRegistry->Head(); goalEnt; goalEnt = goalEnt->Next()) {
+			float &navWeight = internalEntityWeights[goalEnt->Id()];
+			float &goalWeight = internalPickupGoalWeights[goalEnt->Id()];
+			if( disabledForSelectionUntil[goalEnt->Id()] >= levelTime ) {
+				continue;
+			}
+
+			if( !goalEnt->Item() ) {
+				continue;
+			}
+
+			ItemAndGoalWeights weights = ComputeItemWeights( goalEnt->Item(), onlyGotGB );
+			std::tie( navWeight, goalWeight ) = std::make_pair( weights.itemWeight, weights.goalWeight );
 		}
+		return;
 	}
 
-	const auto levelTime = level.time;
-	auto *navEntitiesRegistry = NavEntitiesRegistry::Instance();
-	for( auto it = navEntitiesRegistry->begin(), end = navEntitiesRegistry->end(); it != end; ++it ) {
-		const NavEntity *goalEnt = *it;
-		// Picking clients as goal entities is currently disabled
-		if( goalEnt->IsClient() ) {
-			continue;
-		}
-
+	for( const NavEntity *goalEnt = navEntitiesRegistry->Head(); goalEnt; goalEnt = goalEnt->Next()) {
+		float &navWeight = internalEntityWeights[goalEnt->Id()];
+		float &goalWeight = internalPickupGoalWeights[goalEnt->Id()];
 		// Do not even try to compute a weight for the disabled item
 		if( disabledForSelectionUntil[goalEnt->Id()] >= levelTime ) {
-			internalEntityWeights[goalEnt->Id()] = 0;
-			internalPickupGoalWeights[goalEnt->Id()] = 0;
 			continue;
 		}
 
 		if( goalEnt->Item() ) {
 			ItemAndGoalWeights weights = ComputeItemWeights( goalEnt->Item(), onlyGotGB );
-			internalEntityWeights[goalEnt->Id()] = weights.itemWeight;
-			internalPickupGoalWeights[goalEnt->Id()] = weights.goalWeight;
+			std::tie( navWeight, goalWeight ) = std::make_pair( weights.itemWeight, weights.goalWeight );
 			continue;
 		}
 
-		if( goalEnt->IsBasedOnEntity( objectiveSpotEntity ) ) {
-			internalEntityWeights[goalEnt->Id()] = spotDef.navWeight;
-			internalPickupGoalWeights[goalEnt->Id()] = spotDef.goalWeight;
+		const auto *navAndGoalWeight = botTeam->GetEntityWeights( bot, goalEnt );
+		if( navAndGoalWeight ) {
+			std::tie( navWeight, goalWeight ) = *navAndGoalWeight;
 			continue;
 		}
 	}
@@ -196,29 +202,6 @@ BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputePowerupWeights( co
 	return ItemAndGoalWeights( 3.5f, 2.00f );
 }
 
-class EnemyPathBlockingDetector {
-	const edict_t *const self;
-	const AiAasWorld *const aasWorld;
-	const AiAasRouteCache *const routeCache;
-
-	// The capacity should not exceeded unless in some really bizarre setups.
-	// Extra enemies are just not taken into account in these rare cases.
-	StaticVector<const TrackedEnemy *, 16> potentialBlockers;
-
-	float damageToKillBot;
-
-	int startAreaNums[2];
-	int numStartAreas;
-
-	bool IsAPotentialBlocker( const TrackedEnemy *enemy, float damageToKillBot, int botBestWeaponTier ) const;
-
-	bool GetInitialRoutingParams( const NavEntity *navEntity, int *travelFlags, int *fromAreaNum ) const;
-public:
-	EnemyPathBlockingDetector( const edict_t *self_ );
-
-	bool IsPathToNavEntityBlocked( const NavEntity *navEntity ) const;
-};
-
 constexpr float MOVE_TIME_WEIGHT = 1.0f;
 constexpr float WAIT_TIME_WEIGHT = 3.5f;
 
@@ -236,8 +219,7 @@ SelectedNavEntity BotItemsSelector::SuggestGoalNavEntity( const SelectedNavEntit
 	StaticVector<NavEntityAndWeight, MAX_NAVENTS> rawWeightCandidates;
 	const auto levelTime = level.time;
 	auto *navEntitiesRegistry = NavEntitiesRegistry::Instance();
-	for( auto it = navEntitiesRegistry->begin(), end = navEntitiesRegistry->end(); it != end; ++it ) {
-		const NavEntity *navEnt = *it;
+	for( const NavEntity *navEnt = navEntitiesRegistry->Head(); navEnt; navEnt = navEnt->Next() ) {
 		if( navEnt->IsDisabled() ) {
 			continue;
 		}
@@ -314,8 +296,6 @@ SelectedNavEntity BotItemsSelector::SuggestGoalNavEntity( const SelectedNavEntit
 		rawBestNavEnt = ( *rawCandidatesIter ).goal;
 		rawBestAreaNum = rawBestNavEnt->AasAreaNum();
 	}
-
-	const EnemyPathBlockingDetector pathBlockingDetector( self );
 
 	// Try checking whether the bot is in some floor cluster to give a greater weight for items in the same cluster
 	int currFloorClusterNum = 0;
@@ -423,17 +403,6 @@ SelectedNavEntity BotItemsSelector::SuggestGoalNavEntity( const SelectedNavEntit
 		}
 
 		if( weight <= bestWeight ) {
-			// Go to next entity doing this additional check:
-			// Reset the curr goal entity weight if it was set and a path to it is blocked.
-			if( currGoalNavEntity == navEnt && pathBlockingDetector.IsPathToNavEntityBlocked( navEnt ) ) {
-				currGoalEntWeight = 0.0f;
-				currGoalEntCost = 0.0f;
-			}
-			continue;
-		}
-
-		// We tried to defer this extremely expensive test as long as we can
-		if( pathBlockingDetector.IsPathToNavEntityBlocked( navEnt ) ) {
 			continue;
 		}
 
@@ -477,7 +446,7 @@ bool BotItemsSelector::IsShortRangeReachable( const NavEntity *navEnt, const int
 		return false;
 	}
 
-	if( !navEnt->IsSpawnedAtm() ) {
+	if( !navEnt->IsSpawnedNow() ) {
 		return false;
 	}
 
@@ -501,171 +470,6 @@ bool BotItemsSelector::IsShortRangeReachable( const NavEntity *navEnt, const int
 		if( routeCache->TravelTimeToGoalArea( fromAreaNums[i], navEnt->AasAreaNum(), travelFlags ) ) {
 			return true;
 		}
-	}
-
-	return false;
-}
-
-EnemyPathBlockingDetector::EnemyPathBlockingDetector( const edict_t *self_ )
-	: self( self_ ), aasWorld( AiAasWorld::Instance() ), routeCache( self->ai->botRef->RouteCache() ) {
-	numStartAreas = self_->ai->botRef->EntityPhysicsState()->PrepareRoutingStartAreas( startAreaNums );
-
-	if( self_->ai->botRef->ShouldRushHeadless() ) {
-		return;
-	}
-
-	damageToKillBot = DamageToKill( self, g_armor_protection->value, g_armor_degradation->value );
-	if( HasShell( self ) ) {
-		damageToKillBot *= 4.0f;
-	}
-
-	// We modify "damage to kill" in order to take quad bearing into account
-	if( HasQuad( self ) && damageToKillBot > 50.0f ) {
-		damageToKillBot *= 2.0f;
-	}
-
-	const int botBestWeaponTier = FindBestWeaponTier( self_->r.client );
-
-	const TrackedEnemy *enemy = self->ai->botRef->TrackedEnemiesHead();
-	for(; enemy; enemy = enemy->NextInTrackedList() ) {
-		if( !IsAPotentialBlocker( enemy, damageToKillBot, botBestWeaponTier ) ) {
-			continue;
-		}
-		potentialBlockers.push_back( enemy );
-		if( potentialBlockers.size() == potentialBlockers.capacity() ) {
-			break;
-		}
-	}
-}
-
-bool EnemyPathBlockingDetector::IsAPotentialBlocker( const TrackedEnemy *enemy,
-													 float damageToKillBot,
-													 int botBestWeaponTier ) const {
-	if( !enemy->IsValid() ) {
-		return false;
-	}
-
-	int enemyWeaponTier;
-	if( const auto *client = enemy->ent->r.client ) {
-		enemyWeaponTier = FindBestWeaponTier( client );
-		if( enemyWeaponTier < 1 && !HasPowerups( enemy->ent ) ) {
-			return false;
-		}
-	} else {
-		// Try guessing...
-		enemyWeaponTier = (int)( 1.0f + BoundedFraction( enemy->ent->aiIntrinsicEnemyWeight, 3.0f ) );
-	}
-
-	float damageToKillEnemy = DamageToKill( enemy->ent, g_armor_protection->value, g_armor_degradation->value );
-
-	if( HasShell( enemy->ent ) ) {
-		damageToKillEnemy *= 4.0f;
-	}
-
-	// We modify "damage to kill" in order to take quad bearing into account
-	if( HasQuad( enemy->ent ) && damageToKillEnemy > 50 ) {
-		damageToKillEnemy *= 2.0f;
-	}
-
-	const float offensiveness = self->ai->botRef->GetEffectiveOffensiveness();
-
-	if( damageToKillBot < 50 && damageToKillEnemy < 50 ) {
-		// Just check weapons. Note: GB has 0 tier, GL has 1 tier, the rest of weapons have a greater tier
-		return ( std::min( 1, enemyWeaponTier ) / (float)std::min( 1, botBestWeaponTier ) ) > 0.7f + 0.8f * offensiveness;
-	}
-
-	const auto &selectedEnemies = self->ai->botRef->GetSelectedEnemies();
-	// Don't block if is in squad, except they have a quad runner
-	if( self->ai->botRef->IsInSquad() ) {
-		if( !( selectedEnemies.AreValid() && selectedEnemies.HaveQuad() ) ) {
-			return false;
-		}
-	}
-
-	float ratioThreshold = 1.25f;
-	if( selectedEnemies.AreValid() ) {
-		// If the bot is outnumbered
-		if( selectedEnemies.AreThreatening() && selectedEnemies.Contain( enemy ) ) {
-			ratioThreshold *= 1.25f;
-		}
-	}
-
-	if( selectedEnemies.AreValid() && selectedEnemies.AreThreatening() && selectedEnemies.Contain( enemy ) ) {
-		if( selectedEnemies.end() - selectedEnemies.begin() > 1 ) {
-			ratioThreshold *= 1.25f;
-		}
-	}
-
-	ratioThreshold -= ( botBestWeaponTier - enemyWeaponTier ) * 0.25f;
-	if( damageToKillEnemy / damageToKillBot < ratioThreshold ) {
-		return false;
-	}
-
-	return damageToKillEnemy / damageToKillBot > 1.0f + 2.0f * ( offensiveness * offensiveness );
-}
-
-// Discovers what params were used for actual route building
-// by doing a search again for all possible params
-// This is not as inefficient as it sounds as the route cache
-// nowadays guarantees O(1) and really fast retrieval for recent results.
-bool EnemyPathBlockingDetector::GetInitialRoutingParams( const NavEntity *navEntity,
-														 int *travelFlags,
-														 int *fromAreaNum ) const {
-	const int goalAreaNum = navEntity->AasAreaNum();
-	// Should be identical to what is used for goal estimation
-	int chosenTravelTime = routeCache->PreferredRouteToGoalArea( startAreaNums, numStartAreas, goalAreaNum );
-	for( int i = 0; i < numStartAreas; ++i ) {
-		for( int flags : self->ai->botRef->TravelFlags() ) {
-			if( chosenTravelTime == routeCache->TravelTimeToGoalArea( startAreaNums[i], goalAreaNum, flags ) ) {
-				*travelFlags = flags;
-				*fromAreaNum = startAreaNums[i];
-				return true;
-			}
-		}
-	}
-
-	return false;
-}
-
-bool EnemyPathBlockingDetector::IsPathToNavEntityBlocked( const NavEntity *navEntity ) const {
-	if( self->ai->botRef->ShouldRushHeadless() ) {
-		return false;
-	}
-
-	int travelFlags, currAreaNum;
-	if( !GetInitialRoutingParams( navEntity, &travelFlags, &currAreaNum ) ) {
-		return true;
-	}
-
-	const auto *aasAreas = aasWorld->Areas();
-	const auto *aasReach = aasWorld->Reachabilities();
-	const int goalAreaNum = navEntity->AasAreaNum();
-
-	int numReachHops = 0;
-	int reachNum = 0;
-	while( currAreaNum != goalAreaNum ) {
-		// Don't check for blocking areas that are fairly close to the bot,
-		// so the bot does not get blocked in his current position
-		if( DistanceSquared( aasAreas[currAreaNum].center, self->s.origin ) > 192 * 192 ) {
-			for( const TrackedEnemy *enemy: potentialBlockers ) {
-				if( enemy->MightBlockArea( damageToKillBot, currAreaNum, reachNum, aasWorld ) ) {
-					return true;
-				}
-			}
-		}
-
-		numReachHops++;
-		// Stop at some point
-		if( numReachHops == 48 ) {
-			break;
-		}
-
-		reachNum = routeCache->ReachabilityToGoalArea( currAreaNum, goalAreaNum, travelFlags );
-		// Break at unreachable, consider the path valid
-		if( !reachNum ) {
-			break;
-		}
-		currAreaNum = aasReach[reachNum].areanum;
 	}
 
 	return false;

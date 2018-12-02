@@ -2,6 +2,7 @@
 #define QFUSION_AI_GOAL_ENTITIES_H
 
 #include "../ai_local.h"
+#include "../static_vector.h"
 #include "../vec3.h"
 
 enum class NavEntityFlags : unsigned {
@@ -37,75 +38,107 @@ inline NavTargetFlags operator&( const NavTargetFlags &lhs, const NavTargetFlags
 	return (NavTargetFlags)( (unsigned)lhs & (unsigned)rhs );
 }
 
+class NavEntity;
+
+/**
+ * This is a base subclass for things that may be navigation targets for bot movement subsystem.
+ * Common and often-used fields are lifted here to avoid dynamic dispatch overhead
+ * (as they are accessed during bot movement planning).
+ * Descendants must set these fields properly.
+ */
+class NavTarget {
+protected:
+	int aasAreaNum;
+	Vec3 origin;
+
+	NavTarget( int aasAreaNum_, const Vec3 &origin_ )
+		: aasAreaNum( aasAreaNum_ ), origin( origin_ ) {}
+
+	NavTarget( int aasAreaNum_, const vec3_t origin_ )
+		: aasAreaNum( aasAreaNum_ ), origin( origin_ ) {}
+
+	virtual ~NavTarget() = default;
+public:
+	int AasAreaNum() const { return aasAreaNum; }
+	const Vec3 &Origin() const { return origin; }
+
+	virtual const char *Name() const = 0;
+
+	virtual bool IsBasedOnEntity( const edict_t *ent ) const { return false; }
+	virtual bool IsBasedOnNavEntity( const NavEntity *navEntity ) const { return false; }
+
+	virtual float RadiusOrDefault( float defaultValue ) const { return defaultValue; }
+	virtual bool IsTopTierItem( const float *externalEntityWeights ) const { return false; }
+	virtual bool ShouldBeReachedAtTouch() const = 0;
+	virtual bool ShouldBeReachedAtRadius() const = 0;
+	virtual bool ShouldBeReachedOnEvent() const = 0;
+};
+
 // A NavEntity is based on some entity (edict_t) plus some attributes.
 // All NavEntities are global for all Ai beings.
 // A Goal is often based on a NavEntity
-class NavEntity
-{
+class NavEntity final : public NavTarget {
 	friend class NavEntitiesRegistry;
-	friend class BotBrain;
+	template <typename T> friend T *Link( T *, T ** );
+	template <typename T> friend T *Unlink( T *, T ** );
 
-	// Numeric id that matches index of corresponding entity in game edicts (if any)
-	int id;
-	// Id of area this goal is located in
-	int aasAreaNum;
-	// A goal origin, set once on goal addition or updated explicitly for movable goals
-	// (It is duplicated from entity origin to prevent cheating with revealing
-	// an actual origin of movable entities not marked as movable).
-	Vec3 origin;
-	// Misc. goal flags, mainly defining way this goal should be reached
-	NavEntityFlags flags;
 	// An entity this goal is based on
-	edict_t *ent;
-	// Links for registry goals pool
-	NavEntity *prev, *next;
+	const edict_t *const ent;
 
-	NavEntity(): origin( 0, 0, 0 ) {
-		memset( this, 0, sizeof( NavEntity ) );
-	}
+	NavEntity *prev { nullptr };
+	NavEntity *next { nullptr };
 
-	static constexpr unsigned MAX_NAME_LEN = 128;
+	int entityId;
+	NavEntityFlags flags { NavEntityFlags::NONE };
+
+	static constexpr unsigned MAX_NAME_LEN = 64;
 	char name[MAX_NAME_LEN];
 
-	inline bool IsFlagSet( NavEntityFlags flag ) const {
+	bool IsFlagSet( NavEntityFlags flag ) const {
 		return NavEntityFlags::NONE != ( this->flags & flag );
 	}
 
+	NavEntity( const edict_t *ent_, int aasAreaNum_, NavEntityFlags flags_ );
+
+	NavEntity *Next() { return next; }
 public:
-	inline NavEntityFlags Flags() const { return flags; }
-	inline int Id() const { return id; }
-	inline int AasAreaNum() const { return aasAreaNum; }
-	// A cost influence defines how base entity weight is affected by cost (move duration and wait time).
-	// A cost influence is a positive float number usually in 0.5-1.0 range.
-	// Lesser cost influence means that an entity weight is less affected by distance.
+	NavEntityFlags Flags() const { return flags; }
+	int Id() const { return entityId; }
+	int EntityId() const { return entityId; }
+	/**
+	 * A cost influence defines how base entity weight is affected by cost (move duration and wait time).
+	 * A cost influence is a positive float number usually in 0.5-1.0 range.
+	 * Lesser cost influence means that an entity weight is less affected by distance.
+	 */
 	float CostInfluence() const;
-	inline Vec3 Origin() const { return origin; }
-	inline const gsitem_t *Item() const { return ent ? ent->item : nullptr; }
-	inline const char *Classname() const { return ent ? ent->classname : nullptr; }
-	inline bool IsEnabled() const { return ent && ent->r.inuse; }
-	inline bool IsDisabled() const { return !IsEnabled(); }
-	inline bool IsBasedOnEntity( const edict_t *e ) const { return e && this->ent == e; }
-	inline bool IsClient() const { return ent->r.client != nullptr; }
-	inline bool IsSpawnedAtm() const { return ent->r.solid != SOLID_NOT; }
-	inline bool ToBeSpawnedLater() const { return ent->r.solid == SOLID_NOT; }
 
-	inline bool IsDroppedEntity() const { return IsFlagSet( NavEntityFlags::DROPPED_ENTITY ); }
+	const gsitem_t *Item() const { return ent->item; }
 
-	inline bool MayBeReachedInGroup() const { return IsFlagSet( NavEntityFlags::REACH_IN_GROUP ); }
+	bool IsEnabled() const { return ent->r.inuse; }
+	bool IsDisabled() const { return !IsEnabled(); }
+
+	bool IsBasedOnEntity( const edict_t *e ) const override { return this->ent == e; }
+	bool IsBasedOnNavEntity( const NavEntity *navEntity ) const override { return navEntity == this; }
+	bool IsClient() const { return ent->r.client != nullptr; }
+	bool IsSpawnedNow() const { return ent->r.solid != SOLID_NOT; }
+
+	bool IsDroppedEntity() const { return IsFlagSet( NavEntityFlags::DROPPED_ENTITY ); }
+
+	bool ShouldBeReachedInGroup() const { return IsFlagSet( NavEntityFlags::REACH_IN_GROUP ); }
 
 	uint64_t MaxWaitDuration() const;
 
-	bool IsTopTierItem( const float *overriddenEntityWeights = nullptr ) const;
+	bool IsTopTierItem( const float *overriddenEntityWeights ) const override;
 
-	const char *Name() const { return name; }
+	const char *Name() const override { return name; }
 
-	inline void NotifyTouchedByBot( const edict_t *bot ) const {
+	void NotifyTouchedByBot( const edict_t *bot ) const {
 		if( ShouldNotifyScript() ) {
 			GT_asBotTouchedGoal( bot->ai, ent );
 		}
 	}
 
-	inline void NotifyBotReachedRadius( const edict_t *bot ) const {
+	void NotifyBotReachedRadius( const edict_t *bot ) const {
 		if( ShouldNotifyScript() ) {
 			GT_asBotReachedGoalRadius( bot->ai, ent );
 		}
@@ -113,224 +146,96 @@ public:
 
 	int64_t Timeout() const;
 
-	inline bool ShouldBeReachedAtTouch() const { return IsFlagSet( NavEntityFlags::REACH_AT_TOUCH ); }
-	inline bool ShouldBeReachedAtRadius() const { return IsFlagSet( NavEntityFlags::REACH_AT_RADIUS ); }
-	inline bool ShouldBeReachedOnEvent() const { return IsFlagSet( NavEntityFlags::REACH_ON_EVENT ); }
+	bool ShouldBeReachedAtTouch() const override { return IsFlagSet( NavEntityFlags::REACH_AT_TOUCH ); }
+	bool ShouldBeReachedAtRadius() const override { return IsFlagSet( NavEntityFlags::REACH_AT_RADIUS ); }
+	bool ShouldBeReachedOnEvent() const override { return IsFlagSet( NavEntityFlags::REACH_ON_EVENT ); }
 
-	inline bool ShouldNotifyScript() const { return IsFlagSet( NavEntityFlags::NOTIFY_SCRIPT ); }
+	bool ShouldNotifyScript() const { return IsFlagSet( NavEntityFlags::NOTIFY_SCRIPT ); }
 
-	// Returns level.time when the item is already spawned
-	// Returns zero if spawn time is unknown
-	// Returns spawn time when the item is not spawned and spawn time may be predicted
+	const NavEntity *Next() const { return next; }
+
+	/**
+	 * @return level.time if the item is already spawned, zero if spawn time is unknown,
+	 * a valid spawn time if the item is not spawned and spawn time could be predicted
+	 */
 	int64_t SpawnTime() const;
 };
 
-// A NavTarget may be based on a NavEntity (an item with attributes) or may be an "artificial" spot
-class NavTarget
-{
-	Vec3 explicitOrigin;
-	NavTargetFlags explicitFlags;
-	int64_t explicitSpawnTime;
-	int64_t explicitTimeout;
-	int explicitAasAreaNum;
-	float explicitRadius;
+class NavSpot final : public NavTarget {
+	NavTargetFlags flags;
+	float radius;
 
-	const NavEntity *navEntity;
-
-	const char *name;
-
-	inline bool IsFlagSet( NavTargetFlags flag ) const {
-		return NavTargetFlags::NONE != ( this->explicitFlags & flag );
+	bool IsFlagSet( NavTargetFlags flag ) const {
+		return NavTargetFlags::NONE != ( this->flags & flag );
 	}
-
-	NavTarget()
-		: explicitOrigin( NAN, NAN, NAN ),
-		explicitFlags( NavTargetFlags::NONE ),
-		explicitSpawnTime( 0 ),
-		explicitTimeout( 0 ),
-		explicitAasAreaNum( 0 ),
-		explicitRadius( 0 ),
-		navEntity( nullptr ),
-		name( nullptr ) {}
-
 public:
-	static inline NavTarget Dummy() { return NavTarget(); }
-
-	void SetToNavEntity( const NavEntity *navEntity_ ) {
-		this->navEntity = navEntity_;
+	static NavSpot Dummy() {
+		return NavSpot( Vec3( 0, 0, 0 ), 0.0f, NavTargetFlags::NONE );
 	}
 
-	void SetToTacticalSpot( const Vec3 &origin, float reachRadius = 32.0f ) {
-		this->navEntity = nullptr;
-		this->explicitOrigin = origin;
-		this->explicitFlags = NavTargetFlags::REACH_ON_RADIUS | NavTargetFlags::TACTICAL_SPOT;
-		this->explicitSpawnTime = 0;
-		this->explicitTimeout = std::numeric_limits<int64_t>::max();
-		this->explicitAasAreaNum = AiAasWorld::Instance()->FindAreaNum( origin );
-		this->explicitRadius = reachRadius;
+	NavSpot( const Vec3 &origin_, float radius_, NavTargetFlags flags_ )
+		: NavTarget( AiAasWorld::Instance()->FindAreaNum( origin_ ), origin_ )
+		, flags( flags_ | NavTargetFlags::REACH_ON_RADIUS ), radius( radius_ ) {}
+
+	void Set( const Vec3 &origin_, float radius_, NavTargetFlags flags_ ) {
+		NavTarget::origin = origin_;
+		NavTarget::aasAreaNum = AiAasWorld::Instance()->FindAreaNum( origin_ );
+		this->radius = radius_;
+		this->flags = flags_ | NavTargetFlags::REACH_ON_RADIUS;
 	}
 
-	inline int AasAreaNum() const {
-		return navEntity ? navEntity->AasAreaNum() : explicitAasAreaNum;
-	}
+	const char *Name() const override { return "???"; }
 
-	// A cost influence defines how base goal weight is affected by cost (move duration and wait time).
-	// A cost influence is a positive float number usually in 0.5-1.0 range.
-	// Lesser cost influence means that a goal weight is less affected by distance.
-	inline float CostInfluence() const {
-		return navEntity ? navEntity->CostInfluence() : 0.5f;
-	}
+	float RadiusOrDefault( float ) const override { return radius; }
 
-	inline bool IsBasedOnEntity( const edict_t *ent ) const {
-		return navEntity ? navEntity->IsBasedOnEntity( ent ) : false;
-	}
-
-	inline bool IsBasedOnNavEntity( const NavEntity *navEntity_ ) const {
-		return navEntity_ && this->navEntity == navEntity_;
-	}
-
-	inline bool IsBasedOnSomeEntity() const { return navEntity != nullptr; }
-
-	inline bool IsDisabled() const {
-		return navEntity && navEntity->IsDisabled();
-	}
-
-	inline bool IsDroppedEntity() const {
-		return navEntity && navEntity->IsDroppedEntity();
-	}
-
-	inline bool IsTacticalSpot() const { return IsFlagSet( NavTargetFlags::TACTICAL_SPOT ); }
-
-	inline bool IsEnabled() const { return !IsDisabled(); }
-
-	inline bool IsTopTierItem( const float *overriddenEntityWeights = nullptr ) const {
-		return navEntity && navEntity->IsTopTierItem( overriddenEntityWeights );
-	}
-
-	inline uint64_t MaxWaitDuration() const {
-		return navEntity ? navEntity->MaxWaitDuration() : 0;
-	}
-
-	inline bool MayBeReachedInGroup() const {
-		if( navEntity ) {
-			return navEntity->MayBeReachedInGroup();
-		}
-		return IsFlagSet( NavTargetFlags::REACH_IN_GROUP );
-	}
-
-	inline const char *Name() const { return name ? name : "???"; }
-
-	inline Vec3 Origin() const {
-		return navEntity ? navEntity->Origin() : explicitOrigin;
-	}
-
-	inline float RadiusOrDefault( float defaultRadius ) const {
-		if( ShouldBeReachedAtRadius() ) {
-			return explicitRadius;
-		}
-		return defaultRadius;
-	}
-
-	inline bool ShouldBeReachedAtTouch() const {
-		return navEntity ? navEntity->ShouldBeReachedAtTouch() : false;
-	}
-
-	inline bool ShouldBeReachedAtRadius() const {
-		if( navEntity ) {
-			return navEntity->ShouldBeReachedAtRadius();
-		}
-		return IsFlagSet( NavTargetFlags::REACH_ON_RADIUS );
-	}
-
-	inline bool ShouldBeReachedOnEvent() const {
-		if( navEntity ) {
-			return navEntity->ShouldBeReachedOnEvent();
-		}
-		return IsFlagSet( NavTargetFlags::REACH_ON_EVENT );
-	}
-
-	inline bool ShouldNotifyScript() const {
-		return navEntity ? navEntity->ShouldNotifyScript() : false;
-	}
-
-	inline void NotifyTouchedByBot( const edict_t *bot ) const {
-		if( navEntity ) {
-			navEntity->NotifyTouchedByBot( bot );
-		}
-	}
-
-	inline void NotifyBotReachedRadius( const edict_t *bot ) const {
-		if( navEntity ) {
-			navEntity->NotifyBotReachedRadius( bot );
-		}
-	}
-
-	// Returns level.time when the item is already spawned
-	// Returns zero if spawn time is unknown
-	// Returns spawn time when the item is not spawned and spawn time may be predicted
-	inline int64_t SpawnTime() const {
-		if( navEntity ) {
-			return navEntity->SpawnTime();
-		}
-		if( explicitSpawnTime > level.time ) {
-			return explicitSpawnTime;
-		}
-		return level.time;
-	}
-
-	inline int64_t Timeout() const {
-		return navEntity ? navEntity->Timeout() : explicitTimeout;
-	}
+	bool ShouldBeReachedAtTouch() const override { return false; }
+	bool ShouldBeReachedAtRadius() const override { return IsFlagSet( NavTargetFlags::REACH_ON_RADIUS ); }
+	bool ShouldBeReachedOnEvent() const override { return IsFlagSet( NavTargetFlags::REACH_ON_EVENT ); }
 };
 
-class NavEntitiesRegistry
-{
-	NavEntity navEntities[MAX_NAVENTS];
-	NavEntity *entityToNavEntity[MAX_EDICTS];
-	NavEntity *freeNavEntity;
-	NavEntity headnode;
+class NavEntitiesRegistry {
+	friend void AI_CommonFrame();
 
-	NavEntitiesRegistry() {
-		memset( this, 0, sizeof( NavEntitiesRegistry ) );
+	NavEntity **entityToNavEntity;
+
+	static constexpr size_t STORAGE_STRIDE =
+		( sizeof( NavEntity ) % 8 ? sizeof( NavEntity ) + 8 - sizeof( NavEntity ) % 8 : sizeof( NavEntity ) );
+
+	uint8_t *navEntsStorage;
+
+	NavEntity *activeNavEntsHead { nullptr };
+
+	NavEntitiesRegistry();
+
+	static NavEntitiesRegistry *instance;
+
+	void Update();
+public:
+	static void Init();
+	static void Shutdown();
+
+	/**
+	 * @note null results are allowed as a temporary hack for initialization order issues.
+	 * Otherwise intrusive changes to /game code are required.
+	 */
+	static NavEntitiesRegistry *Instance() { return instance; }
+
+	~NavEntitiesRegistry() {
+		// The storage follows in the same memory block
+		G_Free( entityToNavEntity );
 	}
 
-	static NavEntitiesRegistry instance;
-
-	NavEntity *AllocNavEntity();
-	void FreeNavEntity( NavEntity *navEntity );
-
-public:
-	void Init();
-	void Update();
+	const NavEntity *Head() const { return activeNavEntsHead; }
 
 	NavEntity *AddNavEntity( edict_t *ent, int aasAreaNum, NavEntityFlags flags );
 	void RemoveNavEntity( NavEntity *navEntity );
 
-	inline NavEntity *NavEntityForEntity( edict_t *ent ) {
+	NavEntity *NavEntityForEntity( const edict_t *ent ) {
 		if( !ent ) {
 			return nullptr;
 		}
 		return entityToNavEntity[ENTNUM( ent )];
 	}
-
-	class GoalEntitiesIterator
-	{
-		friend class NavEntitiesRegistry;
-		NavEntity *currEntity;
-		inline GoalEntitiesIterator( NavEntity *currEntity_ ) : currEntity( currEntity_ ) {}
-
-public:
-		inline NavEntity *operator*() { return currEntity; }
-		inline const NavEntity *operator*() const { return currEntity; }
-		inline void operator++() { currEntity = currEntity->prev; }
-		inline bool operator!=( const GoalEntitiesIterator &that ) const { return currEntity != that.currEntity; }
-	};
-	inline GoalEntitiesIterator begin() { return GoalEntitiesIterator( headnode.prev ); }
-	inline GoalEntitiesIterator end() { return GoalEntitiesIterator( &headnode ); }
-
-	static inline NavEntitiesRegistry *Instance() { return &instance; }
 };
-
-#define FOREACH_NAVENT( navEnt ) for( auto *navEnt : *NavEntitiesRegistry::Instance() )
 
 #endif

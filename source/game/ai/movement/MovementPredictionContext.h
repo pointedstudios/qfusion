@@ -6,7 +6,7 @@ class BaseMovementAction;
 #include "BotInput.h"
 #include "MovementState.h"
 #include "NavMeshQueryCache.h"
-#include "SameFloorClusterAreasCache.h"
+#include "FloorClusterAreasCache.h"
 #include "EnvironmentTraceCache.h"
 
 struct MovementActionRecord {
@@ -96,7 +96,8 @@ public:
 		static inline HitWhileRunningTestResult Failure() { return HitWhileRunningTestResult(); }
 	};
 
-	BotSameFloorClusterAreasCache sameFloorClusterAreasCache;
+	SameFloorClusterAreasCache sameFloorClusterAreasCache;
+	NextFloorClusterAreasCache nextFloorClusterAreasCache;
 	BotNavMeshQueryCache navMeshQueryCache;
 private:
 	struct PredictedMovementAction {
@@ -309,8 +310,8 @@ public:
 
 	const Ai::ReachChainVector &NextReachChain();
 	inline EnvironmentTraceCache &TraceCache();
-	inline EnvironmentTraceCache::ObstacleAvoidanceResult TryAvoidFullHeightObstacles( float correctionFraction );
-	inline EnvironmentTraceCache::ObstacleAvoidanceResult TryAvoidJumpableObstacles( float correctionFraction );
+	inline ObstacleAvoidanceResult TryAvoidFullHeightObstacles( float correctionFraction );
+	inline ObstacleAvoidanceResult TryAvoidJumpableObstacles( float correctionFraction );
 
 	// Do not return boolean value, avoid extra branching. Checking results if necessary is enough.
 	void NextReachNumAndTravelTimeToNavTarget( int *reachNum, int *travelTimeToNavTarget );
@@ -355,9 +356,10 @@ public:
 	// Frame index is restricted to topOfStack or topOfStack + 1
 	inline void MarkSavepoint( BaseMovementAction *markedBy, unsigned frameIndex );
 
+	inline const char *ActiveActionName() const;
+
 	inline void SetPendingRollback();
 	inline void RollbackToSavepoint();
-	inline void SetPendingWeapon( int weapon );
 	inline void SaveSuggestedActionForNextFrame( BaseMovementAction *action );
 	inline unsigned MillisAheadForFrameStart( unsigned frameIndex ) const;
 

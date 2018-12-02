@@ -3,16 +3,16 @@
 
 void BotPickupItemActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
-	self->ai->botRef->GetMiscTactics().shouldMoveCarefully = true;
-	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
-	self->ai->botRef->SetCampingSpot( AiCampingSpot( navTarget.Origin(), GOAL_PICKUP_ACTION_RADIUS, 0.5f ) );
-	self->ai->botRef->SetNavTarget( &navTarget );
+	Self()->GetMiscTactics().shouldMoveCarefully = true;
+	Self()->GetMiscTactics().PreferAttackRatherThanRun();
+	Self()->SetCampingSpot( AiCampingSpot( navEntity->Origin(), GOAL_PICKUP_ACTION_RADIUS, 0.5f ) );
+	Self()->SetNavTarget( navEntity );
 }
 
 void BotPickupItemActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
-	self->ai->botRef->ResetCampingSpot();
+	Self()->ResetNavTarget();
+	Self()->ResetCampingSpot();
 }
 
 AiBaseActionRecord::Status BotPickupItemActionRecord::CheckStatus( const WorldState &currWorldState ) const {
@@ -21,21 +21,21 @@ AiBaseActionRecord::Status BotPickupItemActionRecord::CheckStatus( const WorldSt
 		return COMPLETED;
 	}
 
-	const SelectedNavEntity &currSelectedNavEntity = self->ai->botRef->GetSelectedNavEntity();
-	if( !navTarget.IsBasedOnNavEntity( currSelectedNavEntity.GetNavEntity() ) ) {
-		Debug( "Nav target does no longer match current selected nav entity\n" );
+	const SelectedNavEntity &currSelectedNavEntity = Self()->GetSelectedNavEntity();
+	if( !navEntity->IsBasedOnNavEntity( currSelectedNavEntity.GetNavEntity() ) ) {
+		Debug( "Nav entity does no longer match current selected nav entity\n" );
 		return INVALID;
 	}
-	if( !navTarget.SpawnTime() ) {
-		Debug( "Illegal nav target spawn time (looks like it has been invalidated)\n" );
+	if( !navEntity->SpawnTime() ) {
+		Debug( "Illegal nav entity spawn time (looks like it has been invalidated)\n" );
 		return INVALID;
 	}
-	if( navTarget.SpawnTime() - level.time > 0 ) {
-		Debug( "The nav target requires waiting for it\n" );
+	if( navEntity->SpawnTime() - level.time > 0 ) {
+		Debug( "The nav entity requires waiting for it\n" );
 		return INVALID;
 	}
 	if( currWorldState.DistanceToNavTarget() > GOAL_PICKUP_ACTION_RADIUS ) {
-		Debug( "The nav target is too far from the bot to pickup it\n" );
+		Debug( "The nav entity is too far from the bot to pickup it\n" );
 		return INVALID;
 	}
 	if( currWorldState.HasThreateningEnemyVar() ) {
@@ -75,8 +75,8 @@ PlannerNode *BotPickupItemAction::TryApply( const WorldState &worldState ) {
 		return nullptr;
 	}
 
-	const auto &itemNavEntity = self->ai->botRef->GetSelectedNavEntity();
-	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( self, itemNavEntity.GetNavEntity() ) );
+	const auto &itemNavEntity = Self()->GetSelectedNavEntity();
+	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( Self(), itemNavEntity.GetNavEntity() ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

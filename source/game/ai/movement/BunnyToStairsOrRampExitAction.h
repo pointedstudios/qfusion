@@ -9,7 +9,7 @@ class BunnyToStairsOrRampExitAction: public GenericRunBunnyingAction {
 	int targetFloorCluster { 0 };
 
 	bool TryFindAndSaveLookDir( MovementPredictionContext *context );
-	void TrySaveStairsExitFloorCluster( MovementPredictionContext *context, int exitAreaNum );
+	void TrySaveExitFloorCluster( MovementPredictionContext *context, int exitAreaNum );
 public:
 	DECLARE_BUNNYING_MOVEMENT_ACTION_CONSTRUCTOR( BunnyToStairsOrRampExitAction, COLOR_RGB( 0, 255, 255 ) ) {}
 

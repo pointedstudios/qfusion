@@ -8,9 +8,14 @@ void WalkCarefullyAction::PlanPredictionStep( Context *context ) {
 	// Ramp/stairs areas and areas not in floor clusters are exceptions
 	// (these kinds of areas are still troublesome for bot movement).
 	BaseMovementAction *suggestedAction = &DefaultBunnyAction();
-	if( bot->ForceCombatKindOfMovement() ) {
+	auto *const combatMovementAction = &module->combatDodgeSemiRandomlyToTargetAction;
+	auto *const savedCombatNextAction = combatMovementAction->allowFailureUsingThatAsNextAction;
+	if( bot->ShouldSkinBunnyInFavorOfCombatMovement() ) {
 		// Do not try bunnying first and start from this combat action directly
-		suggestedAction = &module->combatDodgeSemiRandomlyToTargetAction;
+		if( !combatMovementAction->IsDisabledForPlanning() ) {
+			combatMovementAction->allowFailureUsingThatAsNextAction = &DefaultBunnyAction();
+			suggestedAction = combatMovementAction;
+		}
 	} else if( bot->Skill() < 0.33f ) {
 		const auto *aasWorld = AiAasWorld::Instance();
 		const int currGroundedAreaNum = context->CurrGroundedAasAreaNum();
@@ -189,6 +194,11 @@ void WalkCarefullyAction::PlanPredictionStep( Context *context ) {
 	// Be especially careful when there is a nearby hazard area
 	if( hazardSidesNum ) {
 		context->record->botInput.SetWalkButton( true );
+	}
+
+	// If the suggested action was unused, restore its next action
+	if( suggestedAction == combatMovementAction ) {
+		combatMovementAction->allowFailureUsingThatAsNextAction = savedCombatNextAction;
 	}
 }
 

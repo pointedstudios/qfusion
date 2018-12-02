@@ -10,12 +10,14 @@
 #include "Actions.h"
 #include "Goals.h"
 
-class BotPlanner : public BasePlanner
-{
-	friend class Bot;
+struct Hazard;
+
+class BotPlanner : public BasePlanner {
+	friend class BotPlanningModule;
 	friend class BotItemsSelector;
 	friend class BotBaseGoal;
-	friend class BotGutsActionsAccessor;
+
+	BotPlanningModule *const module;
 
 	StaticVector<BotScriptGoal, MAX_GOALS> scriptGoals;
 	StaticVector<BotScriptAction, MAX_ACTIONS> scriptActions;
@@ -23,8 +25,8 @@ class BotPlanner : public BasePlanner
 	BotBaseGoal *GetGoalByName( const char *name );
 	BotBaseAction *GetActionByName( const char *name );
 
-	inline BotScriptGoal *AllocScriptGoal() { return scriptGoals.unsafe_grow_back(); }
-	inline BotScriptAction *AllocScriptAction() { return scriptActions.unsafe_grow_back(); }
+	BotScriptGoal *AllocScriptGoal() { return scriptGoals.unsafe_grow_back(); }
+	BotScriptAction *AllocScriptAction() { return scriptActions.unsafe_grow_back(); }
 
 	inline const int *Inventory() const { return self->r.client->ps.inventory; }
 
@@ -62,8 +64,7 @@ public:
 	// A WorldState cached from the moment of last world state update
 	WorldState cachedWorldState;
 
-	// Note: saving references to Bot members is the only valid access kind to Bot in this call
-	BotPlanner( class Bot *bot, float skillLevel_ );
+	BotPlanner( edict_t *self_, BotPlanningModule *module_, float skillLevel_ );
 };
 
 #endif

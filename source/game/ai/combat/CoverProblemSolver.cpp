@@ -7,7 +7,8 @@ int CoverProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 	SpotsAndScoreVector &candidateSpots = SelectCandidateSpots( spotsFromQuery );
 	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( candidateSpots, insideSpotNum );
 	SpotsAndScoreVector &coverSpots = SelectCoverSpots( reachCheckedSpots, maxSpots );
-	return CleanupAndCopyResults( coverSpots, spots, maxSpots );
+	SpotsAndScoreVector &enemyCheckedSpots = CheckEnemiesInfluence( coverSpots );
+	return CleanupAndCopyResults( enemyCheckedSpots, spots, maxSpots );
 }
 
 SpotsAndScoreVector &CoverProblemSolver::SelectCoverSpots( const SpotsAndScoreVector &reachCheckedSpots, int maxSpots ) {

@@ -185,10 +185,16 @@ BaseMovementAction *MovementPredictionContext::GetActionAndRecordForCurrTime( Mo
 	auto *action = GetCachedActionAndRecordForCurrTime( record_ );
 	if( !action ) {
 		BuildPlan();
+#if 0
+		// Enabling this should be accompanied by setting sv_pps 62 to prevent running out of entities
+		ShowBuiltPlanPath();
+#endif
 		action = GetCachedActionAndRecordForCurrTime( record_ );
 	}
 
-	//AITools_DrawColorLine(self->s.origin, (Vec3(0, 0, 48) + self->s.origin).Data(), action->DebugColor(), 0);
+#if 0
+	AITools_DrawColorLine( bot->Origin(), ( Vec3( 0, 0, 48 ) + bot->Origin() ).Data(), action->DebugColor(), 0 );
+#endif
 	return action;
 }
 
@@ -540,14 +546,27 @@ inline BaseMovementAction *MovementPredictionContext::SuggestAnyAction() {
 		return action;
 	}
 
+	auto *const combatDodgeAction = &module->combatDodgeSemiRandomlyToTargetAction;
+
 	// If no action has been suggested, use a default/dummy one.
 	// We have to check the combat action since it might be disabled due to planning stack overflow.
-	if( bot->ShouldAttack() && bot->ShouldKeepXhairOnEnemy() ) {
+	if( bot->ShouldKeepXhairOnEnemy() ) {
 		const auto &selectedEnemies = bot->GetSelectedEnemies();
 		if( selectedEnemies.AreValid() && selectedEnemies.ArePotentiallyHittable() ) {
-			if( !module->combatDodgeSemiRandomlyToTargetAction.IsDisabledForPlanning() ) {
-				return &module->combatDodgeSemiRandomlyToTargetAction;
+			if( !combatDodgeAction->IsDisabledForPlanning() ) {
+				return combatDodgeAction;
 			}
+		}
+	}
+	if( bot->GetKeptInFovPoint() && !bot->ShouldRushHeadless() && bot->NavTargetAasAreaNum() ) {
+		if( !combatDodgeAction->IsDisabledForPlanning() ) {
+			// The fallback movement action produces fairly reliable results.
+			// However the fallback movement looks poor.
+			// Try using this "combat dodge action" using the "kept in fov" point as an enemy
+			// and apply stricter success/termination checks.
+			// If this combat action fails, the fallback action gets control.
+			combatDodgeAction->allowFailureUsingThatAsNextAction = &module->fallbackMovementAction;
+			return combatDodgeAction;
 		}
 	}
 
