@@ -7,8 +7,6 @@
 
 #include "MovementPredictionContext.h"
 
-#include "VisibleNextReachCache.h"
-
 #include "LandOnSavedAreasAction.h"
 #include "RidePlatformAction.h"
 #include "BunnyToStairsOrRampExitAction.h"
@@ -134,8 +132,6 @@ class BotMovementModule {
 	RateLimiter weaponJumpAttemptsRateLimiter;
 	// Is not for rate limiting but for preventing instant weapon switch for shooting after a failed attempt
 	Int64Align4 lastWeaponJumpTriggeringFailedAt { 0 };
-
-	VisibleNextReachCache visibleNextReachCache;
 
 	// Must be initialized before any of movement actions constructors is called
 	StaticVector<BaseMovementAction *, 20> movementActions;
