@@ -64,11 +64,11 @@ mm_uuid_t *Uuid_FromString( const char *buffer, mm_uuid_t *dest ) {
 char *Uuid_ToString( char *buffer, const mm_uuid_t uuid ) {
 	const char *format = "%08" PRIx64 "-%04" PRIx64 "-%04" PRIx64 "-%04" PRIx64 "-%012" PRIx64;
 	uint64_t groups[5];
-	groups[0] = ( uuid.hiPart >> 32 ) & 0xFFFFFFFFul;
+	groups[0] = ( uuid.hiPart >> 32 ) & 0xFFFFFFFFull;
 	groups[1] = ( uuid.hiPart >> 16 ) & 0xFFFF;
 	groups[2] = ( uuid.hiPart >> 00 ) & 0xFFFF;
 	groups[3] = ( uuid.loPart >> 48 ) & 0xFFFF;
-	groups[4] = ( uuid.loPart >> 00 ) & ( ( 0xFFFFFFFFul << 16 ) | 0xFFFF );
+	groups[4] = ( uuid.loPart >> 00 ) & 0xFFFFFFFFFFFFull;
 	Q_snprintfz( buffer, UUID_BUFFER_SIZE, format, groups[0], groups[1], groups[2], groups[3], groups[4] );
 	return buffer;
 }
