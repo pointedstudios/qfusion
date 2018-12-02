@@ -683,7 +683,7 @@ void G_SetRaceTime( edict_t *ent, int sector, int64_t time ) {
 		// race runs are reported for non-authenticated players too
 
 		if( !game.raceruns ) {
-			game.raceruns = LinearAllocator( sizeof( raceRun_t ), 0, _G_LevelMalloc, _G_LevelFree );
+			game.raceruns = LinearAllocator( sizeof( raceRun_t ), 0, trap_MemAlloc, trap_MemFree );
 		}
 
 		// push new run
@@ -859,7 +859,7 @@ void G_AddPlayerReport( edict_t *ent, bool final ) {
 		// merge awards
 		if( cl->level.stats.awardAllocator ) {
 			if( !quit->stats.awardAllocator ) {
-				quit->stats.awardAllocator = LinearAllocator( sizeof( gameaward_t ), 0, _G_LevelMalloc, _G_LevelFree );
+				quit->stats.awardAllocator = LinearAllocator( sizeof( gameaward_t ), 0, trap_MemAlloc, trap_MemFree );
 			}
 
 			inSize = LA_Size( cl->level.stats.awardAllocator );
@@ -891,7 +891,7 @@ void G_AddPlayerReport( edict_t *ent, bool final ) {
 		if( cl->level.stats.fragAllocator ) {
 			inSize = LA_Size( cl->level.stats.fragAllocator );
 			if( !quit->stats.fragAllocator ) {
-				quit->stats.fragAllocator = LinearAllocator( sizeof( loggedFrag_t ), 0, _G_LevelMalloc, _G_LevelFree );
+				quit->stats.fragAllocator = LinearAllocator( sizeof( loggedFrag_t ), 0, trap_MemAlloc, trap_MemFree );
 			}
 
 			for( i = 0; i < inSize; i++ ) {
@@ -935,7 +935,7 @@ void G_Match_AddAward( edict_t *ent, const char *awardMsg ) {
 
 	auto *const stats = &ent->r.client->level.stats;
 	if( !stats->awardAllocator ) {
-		stats->awardAllocator = LinearAllocator( sizeof( gameaward_t ), 0, _G_LevelMalloc, _G_LevelFree );
+		stats->awardAllocator = LinearAllocator( sizeof( gameaward_t ), 0, trap_MemAlloc, trap_MemFree );
 	}
 
 	// first check if we already have this one on the clients list
@@ -972,7 +972,7 @@ void G_Match_AddFrag( edict_t *attacker, edict_t *victim, int mod ) {
 	// ch : frag log
 	auto *const stats = &attacker->r.client->level.stats;
 	if( !stats->fragAllocator ) {
-		stats->fragAllocator = LinearAllocator( sizeof( loggedFrag_t ), 0, _G_LevelMalloc, _G_LevelFree );
+		stats->fragAllocator = LinearAllocator( sizeof( loggedFrag_t ), 0, trap_MemAlloc, trap_MemFree );
 	}
 
 	auto *const lfrag = ( loggedFrag_t * )LA_Alloc( stats->fragAllocator );

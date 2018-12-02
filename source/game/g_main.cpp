@@ -403,11 +403,14 @@ void G_Shutdown( void ) {
 	}
 
 	G_Free( game.edicts );
+	game.edicts = nullptr;
 
 	for( i = 0; i < gs.maxclients; ++i ) {
 		game.clients[i].~gclient_t();
 	}
+
 	G_Free( game.clients );
+	game.clients = nullptr;
 
 	G_LevelFreePool();
 }
