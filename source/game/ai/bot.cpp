@@ -15,57 +15,22 @@
 
 Bot::Bot( edict_t *self_, float skillLevel_ )
 	: Ai( self_
-		, &botPlanner
+		, &planningModule.planner
 		, AiAasRouteCache::NewInstance( &travelFlags[0] )
 		, &movementModule.movementState.entityPhysicsState
 		, PREFERRED_TRAVEL_FLAGS
 		, ALLOWED_TRAVEL_FLAGS
 		, skillLevel_ > 0.33f ? DEFAULT_YAW_SPEED * 1.5f : DEFAULT_YAW_SPEED
 		, skillLevel_ > 0.33f ? DEFAULT_PITCH_SPEED * 1.2f : DEFAULT_PITCH_SPEED )
-	, weightConfig( self_ )
-	, awarenessModule( self_, this, skillLevel_ )
-	, botPlanner( this, skillLevel_ )
 	, skillLevel( skillLevel_ )
 	, selectedEnemies( self_ )
 	, lostEnemies( self_ )
-	, weaponsUsageModule( this )
-	, tacticalSpotsCache( self_ )
-	, roamingManager( self_ )
-	, grabItemGoal( this )
-	, killEnemyGoal( this )
-	, runAwayGoal( this )
-	, reactToHazardGoal( this )
-	, reactToThreatGoal( this )
-	, reactToEnemyLostGoal( this )
-	, attackOutOfDespairGoal( this )
-	, roamGoal( this )
-	, genericRunToItemAction( this )
-	, pickupItemAction( this )
-	, waitForItemAction( this )
-	, killEnemyAction( this )
-	, advanceToGoodPositionAction( this )
-	, retreatToGoodPositionAction( this )
-	, gotoAvailableGoodPositionAction( this )
-	, attackFromCurrentPositionAction( this )
-	, attackAdvancingToTargetAction( this )
-	, genericRunAvoidingCombatAction( this )
-	, startGotoCoverAction( this )
-	, takeCoverAction( this )
-	, startGotoRunAwayTeleportAction( this )
-	, doRunAwayViaTeleportAction( this )
-	, startGotoRunAwayJumppadAction( this )
-	, doRunAwayViaJumppadAction( this )
-	, startGotoRunAwayElevatorAction( this )
-	, doRunAwayViaElevatorAction( this )
-	, stopRunningAwayAction( this )
-	, dodgeToSpotAction( this )
-	, turnToThreatOriginAction( this )
-	, turnToLostEnemyAction( this )
-	, startLostEnemyPursuitAction( this )
-	, stopLostEnemyPursuitAction( this )
-	, movementModule( this )
 	, selectedNavEntity( nullptr, 0, 0, 0 )
-	, itemsSelector( self ) {
+	, movementModule( this )
+	, awarenessModule( self_, this, skillLevel_ )
+	, planningModule( self_, this, skillLevel_ )
+	, weightConfig( self_ )
+	, weaponsUsageModule( this ) {
 	self->r.client->movestyle = GS_CLASSICBUNNY;
 	// Enable skimming for bots (since it is useful and should not be noticed from a 3rd person POV).
 	self->r.client->ps.pmove.stats[PM_STAT_FEATURES] &= PMFEAT_CORNERSKIMMING;
@@ -147,6 +112,8 @@ bool Bot::HasJustPickedGoalItem() const {
 }
 
 void Bot::CheckTargetProximity() {
+	planningModule.CheckTargetProximity();
+
 	if( !NavTargetAasAreaNum() ) {
 		return;
 	}
@@ -170,7 +137,7 @@ const SelectedNavEntity &Bot::GetOrUpdateSelectedNavEntity() {
 
 	// Force an update using the currently selected nav entity
 	// (it's OK if it's not valid) as a reference info for selection
-	ForceSetNavEntity( itemsSelector.SuggestGoalNavEntity( selectedNavEntity ) );
+	ForceSetNavEntity( planningModule.SuggestGoalNavEntity( selectedNavEntity ) );
 	// Return the modified selected nav entity
 	return selectedNavEntity;
 }
@@ -215,7 +182,7 @@ void Bot::OnBlockedTimeout() {
 void Bot::GhostingFrame() {
 	selectedEnemies.Invalidate();
 
-	botPlanner.ClearGoalAndPlan();
+	planningModule.ClearGoalAndPlan();
 
 	movementModule.Reset();
 
@@ -289,7 +256,7 @@ void Bot::Think() {
 
 	// TODO: Let the weapons usage module decide?
 	if( CanChangeWeapons() ) {
-		weaponsUsageModule.Think( botPlanner.cachedWorldState );
+		weaponsUsageModule.Think( planningModule.CachedWorldState() );
 		ChangeWeapons( weaponsUsageModule.GetSelectedWeapons() );
 	}
 }
@@ -318,13 +285,12 @@ void Bot::ActiveFrame() {
 	// Always calls Frame() and calls Think() if needed
 	awarenessModule.Update();
 
-	weaponsUsageModule.Frame( botPlanner.cachedWorldState );
+	weaponsUsageModule.Frame( planningModule.CachedWorldState() );
 
 	BotInput botInput;
 	// Might modify botInput
 	movementModule.Frame( &botInput );
 
-	roamingManager.CheckSpotsProximity();
 	CheckTargetProximity();
 
 	// Might modify botInput
@@ -372,18 +338,15 @@ void Bot::OnMovementToNavTargetBlocked() {
 	lastBlockedNavTargetReportedAt = level.time;
 
 	// Force replanning
-	botPlanner.ClearGoalAndPlan();
+	planningModule.ClearGoalAndPlan();
 
 	const auto *navEntity = selectedNavEntity.GetNavEntity();
-	if( !navEntity ) {
-		// It is very likely that the nav entity was based on a tactical spot.
-		// Disable all nearby tactical spots for the origin
-		roamingManager.DisableSpotsInRadius( navEntity->Origin(), 144.0f );
+	if( navEntity ) {
+		planningModule.OnMovementToNavEntityBlocked( navEntity );
 		selectedNavEntity.InvalidateNextFrame();
 		return;
 	}
 
-	itemsSelector.MarkAsDisabled( *navEntity, 4000 );
 	selectedNavEntity.InvalidateNextFrame();
 }
 
@@ -406,7 +369,7 @@ bool Bot::NavTargetWorthRushing() const {
 		return false;
 	}
 
-	return selectedEnemies.AreValid() && itemsSelector.IsTopTierItem( navTarget );
+	return selectedEnemies.AreValid() && planningModule.IsTopTierItem( navTarget );
 }
 
 int Bot::GetWeaponsForWeaponJumping( int *weaponNumsBuffer ) {

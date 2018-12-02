@@ -476,16 +476,18 @@ void AiManager::RegisterBuiltinAction( const char *actionName ) {
 }
 
 void AiManager::SetupBotGoalsAndActions( edict_t *ent ) {
+	Bot *const bot = ent->ai->botRef;
+
 #ifdef _DEBUG
 	// Make sure all builtin goals and actions have been registered
 	bool wereErrors = false;
-	for( const auto *goal: ent->ai->botRef->botPlanner.goals ) {
+	for( const auto *goal: bot->planningModule.Goals() ) {
 		if( !registeredGoals.Get( goal->Name() ) ) {
 			Debug( S_COLOR_RED "Builtin goal %s has not been registered\n", goal->Name() );
 			wereErrors = true;
 		}
 	}
-	for( const auto *action: ent->ai->botRef->botPlanner.actions ) {
+	for( const auto *action: bot->planningModule.Actions() ) {
 		if( !registeredActions.Get( action->Name() ) ) {
 			Debug( S_COLOR_RED "Builtin action %s has not been registered\n", action->Name() );
 			wereErrors = true;
@@ -501,17 +503,9 @@ void AiManager::SetupBotGoalsAndActions( edict_t *ent ) {
 		// If the goal is builtin
 		BotBaseGoal *goal;
 		if( !goalProps.factoryObject ) {
-			goal = ent->ai->botRef->GetGoalByName( goalProps.name );
+			goal = bot->GetGoalByName( goalProps.name );
 		} else {
-			// Allocate a persistent memory chunk but not initialize it.
-			// GENERIC_asInstantiateGoal() expects a persistent memory address for a native object reference.
-			// BotScriptGoal constructor expects a persistent script object address too.
-			// We defer BotScriptGoal constructor call to break this loop.
-			// GENERIC_asInstantiateGoal() script counterpart be aware that the native object is not constructed yet.
-			// That's why an additional entity argument is provided to access the owner instead of using scriptGoal fields.
-			BotScriptGoal *scriptGoal = ent->ai->botRef->AllocScriptGoal();
-			void *goalObject = GENERIC_asInstantiateGoal( goalProps.factoryObject, ent, scriptGoal );
-			goal = new(scriptGoal)BotScriptGoal( ent->ai->aiRef, goalProps.name, goalProps.updatePeriod, goalObject );
+			goal = bot->InstantiateScriptGoal( goalProps.factoryObject, goalProps.name, goalProps.updatePeriod );
 		}
 
 		for( unsigned i = 0; i < goalProps.numApplicableActions; ++i ) {
@@ -520,12 +514,9 @@ void AiManager::SetupBotGoalsAndActions( edict_t *ent ) {
 			BotBaseAction *action;
 			// If the action is builtin
 			if( !actionProps->factoryObject ) {
-				action = ent->ai->botRef->GetActionByName( actionProps->name );
+				action = bot->GetActionByName( actionProps->name );
 			} else {
-				// See the explanation above related to a script goal, this is a similar case
-				BotScriptAction *scriptAction = ent->ai->botRef->AllocScriptAction();
-				void *actionObject = GENERIC_asInstantiateAction( actionProps->factoryObject, ent, scriptAction );
-				action = new(scriptAction)BotScriptAction( ent->ai->aiRef, goalProps.name, actionObject );
+				action = bot->InstantiateScriptAction( actionProps->factoryObject, actionProps->name );
 			}
 			goal->AddExtraApplicableAction( action );
 		}

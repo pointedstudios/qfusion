@@ -3,6 +3,11 @@
 #include <cmath>
 #include <cstdlib>
 
+BotBaseGoal::BotBaseGoal( BotPlanningModule *module_, const char *name_, int debugColor_, unsigned updatePeriod_ )
+	: AiBaseGoal( module_->bot, name_, updatePeriod_ ), module( module_ ) {
+	this->debugColor = debugColor_;
+}
+
 inline const SelectedNavEntity &BotBaseGoal::SelectedNavEntity() const {
 	return Self()->GetSelectedNavEntity();
 }
@@ -48,7 +53,7 @@ void BotGrabItemGoal::GetDesiredWorldState( WorldState *worldState ) {
 
 #define TRY_APPLY_ACTION( actionName )                                                       \
 	do {                                                                                     \
-		if( PlannerNode *currTransition = Self()->actionName.TryApply( worldState ) ) {      \
+		if( PlannerNode *currTransition = module->actionName.TryApply( worldState ) ) {      \
 			currTransition->nextTransition = firstTransition;                                \
 			firstTransition = currTransition;                                                \
 		}                                                                                    \
@@ -363,7 +368,7 @@ void BotRoamGoal::UpdateWeight( const WorldState &currWorldState ) {
 void BotRoamGoal::GetDesiredWorldState( WorldState *worldState ) {
 	worldState->SetIgnoreAll( true );
 
-	const Vec3 &spotOrigin = Self()->roamingManager.GetCachedRoamingSpot();
+	const Vec3 &spotOrigin = module->roamingManager.GetCachedRoamingSpot();
 	worldState->BotOriginVar().SetValue( spotOrigin );
 	worldState->BotOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, 32.0f );
 	worldState->BotOriginVar().SetIgnore( false );

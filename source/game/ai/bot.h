@@ -3,7 +3,7 @@
 
 #include "static_vector.h"
 #include "awareness/AwarenessModule.h"
-#include "planning/BotPlanner.h"
+#include "planning/PlanningModule.h"
 #include "ai_base_ai.h"
 #include "vec3.h"
 
@@ -16,6 +16,8 @@
 
 #include "planning/Goals.h"
 #include "planning/Actions.h"
+
+#include <functional>
 
 class AiSquad;
 class AiEnemiesTracker;
@@ -90,17 +92,8 @@ class Bot: public Ai {
 	friend class BotRoamingManager;
 	friend class TacticalSpotsRegistry;
 	friend class BotNavMeshQueryCache;
-	friend class BotSameFloorClusterAreasCache;
-	friend class BotBaseGoal;
-	friend class BotGrabItemGoal;
-	friend class BotKillEnemyGoal;
-	friend class BotRunAwayGoal;
-	friend class BotReactToHazardGoal;
-	friend class BotReactToThreatGoal;
-	friend class BotReactToEnemyLostGoal;
-	friend class BotAttackOutOfDespairGoal;
-	friend class BotRoamGoal;
 	friend class BotTacticalSpotsCache;
+	friend class BotRoamGoal;
 	friend class WorldState;
 
 	friend class BotMovementModule;
@@ -226,11 +219,11 @@ public:
 	}
 
 	void ClearOverriddenEntityWeights() {
-		itemsSelector.ClearOverriddenEntityWeights();
+		planningModule.ClearOverriddenEntityWeights();
 	}
 
 	void OverrideEntityWeight( const edict_t *ent, float weight ) {
-		itemsSelector.OverrideEntityWeight( ent, weight );
+		planningModule.OverrideEntityWeight( ent, weight );
 	}
 
 	const int *Inventory() const { return self->r.client->ps.inventory; }
@@ -297,11 +290,21 @@ public:
 	 */
 	float FovDotFactor() const { return cosf( (float)DEG2RAD( Fov() / 2 ) ); }
 
-	BotBaseGoal *GetGoalByName( const char *name ) { return botPlanner.GetGoalByName( name ); }
-	BotBaseAction *GetActionByName( const char *name ) { return botPlanner.GetActionByName( name ); }
+	BotBaseGoal *GetGoalByName( const char *name ) {
+		return planningModule.GetGoalByName( name );
+	}
 
-	BotScriptGoal *AllocScriptGoal() { return botPlanner.AllocScriptGoal(); }
-	BotScriptAction *AllocScriptAction() { return botPlanner.AllocScriptAction(); }
+	BotBaseAction *GetActionByName( const char *name ) {
+		return planningModule.GetActionByName( name );
+	}
+
+	BotScriptGoal *InstantiateScriptGoal( void *scriptFactoryObject, const char *name, unsigned updatePeriod ) {
+		return planningModule.InstantiateScriptGoal( scriptFactoryObject, name, updatePeriod );
+	}
+
+	BotScriptAction *InstantiateScriptAction( void *scriptFactoryObject, const char *name ) {
+		return planningModule.InstantiateScriptAction( scriptFactoryObject, name );
+	}
 
 	const BotWeightConfig &WeightConfig() const { return weightConfig; }
 	BotWeightConfig &WeightConfig() { return weightConfig; }
@@ -333,7 +336,7 @@ protected:
 
 	void SetFrameAffinity( unsigned modulo, unsigned offset ) override {
 		AiFrameAwareUpdatable::SetFrameAffinity( modulo, offset );
-		botPlanner.SetFrameAffinity( modulo, offset );
+		planningModule.SetFrameAffinity( modulo, offset );
 		awarenessModule.SetFrameAffinity( modulo, offset );
 	}
 
@@ -347,64 +350,30 @@ private:
 		return selectedEnemies.IsPrimaryEnemy( enemy );
 	}
 
-	BotWeightConfig weightConfig;
-	BotAwarenessModule awarenessModule;
-	BotPlanner botPlanner;
+	// Put these often accessed members first
 
+	AiSquad *squad;
 	float skillLevel;
+	float baseOffensiveness { 0.5f };
+
+	unsigned similarWorldStateInstanceId { 0 };
 
 	SelectedEnemies selectedEnemies;
 	SelectedEnemies lostEnemies;
 	SelectedMiscTactics selectedTactics;
+	SelectedNavEntity selectedNavEntity;
+	// For tracking picked up items
+	const NavEntity *prevSelectedNavEntity { nullptr };
+
+	// Put the movement module at the object beginning so the relative offset is small
+	BotMovementModule movementModule;
+	BotAwarenessModule awarenessModule;
+
+	// Put planning module and weight config together
+	BotPlanningModule planningModule;
+	BotWeightConfig weightConfig;
 
 	BotWeaponsUsageModule weaponsUsageModule;
-
-	BotTacticalSpotsCache tacticalSpotsCache;
-	BotRoamingManager roamingManager;
-
-	BotGrabItemGoal grabItemGoal;
-	BotKillEnemyGoal killEnemyGoal;
-	BotRunAwayGoal runAwayGoal;
-	BotReactToHazardGoal reactToHazardGoal;
-	BotReactToThreatGoal reactToThreatGoal;
-	BotReactToEnemyLostGoal reactToEnemyLostGoal;
-	BotAttackOutOfDespairGoal attackOutOfDespairGoal;
-	BotRoamGoal roamGoal;
-
-	BotGenericRunToItemAction genericRunToItemAction;
-	BotPickupItemAction pickupItemAction;
-	BotWaitForItemAction waitForItemAction;
-
-	BotKillEnemyAction killEnemyAction;
-	BotAdvanceToGoodPositionAction advanceToGoodPositionAction;
-	BotRetreatToGoodPositionAction retreatToGoodPositionAction;
-	BotGotoAvailableGoodPositionAction gotoAvailableGoodPositionAction;
-	BotAttackFromCurrentPositionAction attackFromCurrentPositionAction;
-	BotAttackAdvancingToTargetAction attackAdvancingToTargetAction;
-
-	BotGenericRunAvoidingCombatAction genericRunAvoidingCombatAction;
-	BotStartGotoCoverAction startGotoCoverAction;
-	BotTakeCoverAction takeCoverAction;
-
-	BotStartGotoRunAwayTeleportAction startGotoRunAwayTeleportAction;
-	BotDoRunAwayViaTeleportAction doRunAwayViaTeleportAction;
-	BotStartGotoRunAwayJumppadAction startGotoRunAwayJumppadAction;
-	BotDoRunAwayViaJumppadAction doRunAwayViaJumppadAction;
-	BotStartGotoRunAwayElevatorAction startGotoRunAwayElevatorAction;
-	BotDoRunAwayViaElevatorAction doRunAwayViaElevatorAction;
-	BotStopRunningAwayAction stopRunningAwayAction;
-
-	BotDodgeToSpotAction dodgeToSpotAction;
-
-	BotTurnToThreatOriginAction turnToThreatOriginAction;
-
-	BotTurnToLostEnemyAction turnToLostEnemyAction;
-	BotStartLostEnemyPursuitAction startLostEnemyPursuitAction;
-	BotStopLostEnemyPursuitAction stopLostEnemyPursuitAction;
-
-	BotMovementModule movementModule;
-
-	AiSquad *squad;
 
 	/**
 	 * {@code next[]} and {@code prev[]} links below are addressed by these indices
@@ -426,7 +395,7 @@ private:
 	Bot *NextInObjective() { return next[OBJECTIVE_LINKS]; }
 	const Bot *NextInObjective() const { return next[OBJECTIVE_LINKS]; }
 
-	AiObjectiveSpot *objectiveSpot;
+	AiObjectiveSpot *objectiveSpot { nullptr };
 
 	int64_t lastTouchedTeleportAt { 0 };
 	int64_t lastTouchedJumppadAt { 0 };
@@ -435,8 +404,6 @@ private:
 	int64_t lastOwnKnockbackAt { 0 };
 	int lastOwnKnockbackKick { 0 };
 	vec3_t lastKnockbackBaseDir;
-
-	unsigned similarWorldStateInstanceId { 0 };
 
 	int64_t lastItemSelectedAt { 0 };
 	int64_t noItemAvailableSince { 0 };
@@ -457,15 +424,8 @@ private:
 		return level.time - noItemAvailableSince > 3000;
 	}
 
-	float baseOffensiveness { 0.5f };
-
+	// TODO: Move to the movement module
 	class AiNavMeshQuery *navMeshQuery { nullptr };
-
-	SelectedNavEntity selectedNavEntity;
-	// For tracking picked up items
-	const NavEntity *prevSelectedNavEntity { nullptr };
-
-	BotItemsSelector itemsSelector;
 
 	bool CanChangeWeapons() const {
 		return movementModule.CanChangeWeapons();
@@ -582,8 +542,7 @@ public:
 	 * otherwise shoot immediately if there is such opportunity.
 	 */
 	bool ShouldAimPrecisely() const {
-		// Try shooting immediately if "attacking out of despair"
-		return ShouldKeepXhairOnEnemy() && botPlanner.activeGoal != &attackOutOfDespairGoal;
+		return ShouldKeepXhairOnEnemy() && planningModule.ShouldAimPrecisely();
 	}
 
 	// Whether the bot should stop bunnying even if it could produce

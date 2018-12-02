@@ -8,6 +8,8 @@ constexpr const float TACTICAL_SPOT_RADIUS = 40.0f;
 
 class Bot;
 
+class BotPlanningModule;
+
 class BotBaseActionRecord : public AiBaseActionRecord
 {
 protected:
@@ -23,11 +25,11 @@ public:
 class BotBaseAction : public AiBaseAction
 {
 protected:
+	BotPlanningModule *const module;
 	Bot *Self() { return (Bot *)self; }
 	const Bot *Self() const { return (const Bot *)self; }
 public:
-	BotBaseAction( Ai *ai, const char *name_ )
-		: AiBaseAction( ai, name_ ) {}
+	BotBaseAction( BotPlanningModule *module_, const char *name_ );
 
 	inline const class BotWeightConfig &WeightConfig() const;
 };
@@ -45,22 +47,24 @@ public:
 	Status CheckStatus( const WorldState &currWorldState ) const override;
 };
 
-#define DECLARE_ACTION( actionName, poolSize )                                                     \
-	class actionName : public BotBaseAction                                                           \
-	{                                                                                                \
-		Pool<actionName ## Record, poolSize> pool;                                                     \
-public:                                                                                          \
-		actionName( Ai * ai_ ) : BotBaseAction( ai_, #actionName ), pool( "Pool<" #actionName "Record>" ) {} \
-		PlannerNode *TryApply( const WorldState &worldState ) override final;                          \
+#define DECLARE_ACTION( actionName, poolSize )                                    \
+	class actionName final : public BotBaseAction {                               \
+		Pool<actionName ## Record, poolSize> pool;                                \
+	public:                                                                       \
+		actionName( BotPlanningModule * module_ )                                 \
+			: BotBaseAction( module_, #actionName )                               \
+			, pool( "Pool<" #actionName "Record>" ) {}                            \
+		PlannerNode *TryApply( const WorldState &worldState ) override;           \
 	}
 
-#define DECLARE_INHERITED_ACTION( actionName, baseActionName, poolSize )                            \
-	class actionName : public baseActionName                                                           \
-	{                                                                                                 \
-		Pool<actionName ## Record, poolSize> pool;                                                      \
-public:                                                                                           \
-		actionName( Ai * ai_ ) : baseActionName( ai_, #actionName ), pool( "Pool<" #actionName "Record>" ) {} \
-		PlannerNode *TryApply( const WorldState &worldState ) override final;                           \
+#define DECLARE_INHERITED_ACTION( actionName, baseActionName, poolSize )          \
+	class actionName : public baseActionName {                                    \
+		Pool<actionName ## Record, poolSize> pool;                                \
+public:                                                                           \
+		actionName( BotPlanningModule * module_ )                                 \
+			: baseActionName( module_, #actionName )                              \
+			, pool( "Pool<" #actionName "Record>" ) {}                            \
+		PlannerNode *TryApply( const WorldState &worldState ) override;           \
 	}
 
 DECLARE_ACTION( BotGenericRunToItemAction, 3 );
@@ -215,7 +219,8 @@ protected:
 	bool CheckCloseRangeKDDamageRatio( const WorldState &worldState ) const;
 
 public:
-	BotRunAwayAction( Ai *ai_, const char *name_ ) : BotBaseAction( ai_, name_ ) {}
+	BotRunAwayAction( BotPlanningModule *module_, const char *name_ )
+		: BotBaseAction( module_, name_ ) {}
 };
 
 class BotGenericRunAvoidingCombatActionRecord : public BotBaseActionRecord
@@ -360,8 +365,8 @@ class BotScriptAction : public BotBaseAction
 	void *scriptObject;
 
 public:
-	BotScriptAction( Ai *ai_, const char *name_, void *scriptObject_ )
-		: BotBaseAction( ai_, name_ ),
+	BotScriptAction( BotPlanningModule *module_, const char *name_, void *scriptObject_ )
+		: BotBaseAction( module_, name_ ),
 		pool( name_ ),
 		scriptObject( scriptObject_ ) {}
 
