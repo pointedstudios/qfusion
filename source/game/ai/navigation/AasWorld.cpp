@@ -851,8 +851,11 @@ AasFileReader::AasFileReader( const char *mapname )
 	// Shut up an analyzer
 	memset( &header, 0, sizeof( header ) );
 
-	char filename[MAX_QPATH];
-	Q_snprintfz( filename, MAX_QPATH, "maps/%s.aas", mapname );
+	char strippedNameBuffer[MAX_QPATH];
+	char combinedNameBuffer[MAX_QPATH];
+
+	const auto strippedName = AiAasWorld::StripMapName( mapname, strippedNameBuffer );
+	const char *const filename = AiAasWorld::MakeFileName( strippedName, ".aas", combinedNameBuffer );
 
 	fileSize = trap_FS_FOpenFile( filename, &fp, FS_READ );
 	if( !fp || fileSize <= 0 ) {

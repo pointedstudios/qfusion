@@ -196,6 +196,8 @@ template <typename T> class ArrayRange;
 
 class AiAasWorld
 {
+	friend class AasFileReader;
+
 	bool loaded = false;
 	// Should be released by G_LevelFree();
 	char *checksum = nullptr;
