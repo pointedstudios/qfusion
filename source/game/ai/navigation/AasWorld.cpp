@@ -2549,9 +2549,11 @@ bool AiAasWorld::FindInVisList( const uint16_t *__restrict visList, int areaNum 
 
 	const auto *__restrict p = (__m128i *)( visList + 1 );
 	// We ensure that the list data always starts at 16-byte boundaries
-	assert( !( ( (uintptr_t)p ) % 8 ) );
+	assert( !( ( (uintptr_t)p ) % 16 ) );
 
+	// The number of elements in the list
 	const int listSize = visList[0];
+	// Every vector contains 8 shorts
 	for( int i = 0; i < listSize / 8; ++i ) {
 		// Just load a single vector.
 		// Agner Fog says that an OOE architecture itself acts as unrolling
@@ -2591,9 +2593,11 @@ bool AiAasWorld::FindInVisList( const uint16_t *__restrict visList, int areaNum1
 
 	auto *__restrict p = (__m128i *)( visList + 1 );
 	// We ensure that the list data always starts at 16-byte boundaries
-	assert( !( ( (uintptr_t)p ) % 8 ) );
+	assert( !( ( (uintptr_t)p ) % 16 ) );
 
+	// The number of elements in the list
 	const int listSize = visList[0];
+	// Every vector contains 8 shorts
 	for( int i = 0; i < listSize / 8; ++i ) {
 		__m128i xmmVal = _mm_load_si128( p );
 		// Limit ourselves to SSE2 instruction set.
