@@ -20,8 +20,8 @@
 
 template <typename AdjacencyListType, typename DistanceType>
 GraphLike<AdjacencyListType, DistanceType>::~GraphLike() {
-	TaggedAllocators::FreeUsingMetadata( distanceTable );
-	TaggedAllocators::FreeUsingMetadata( adjacencyListsData );
+	TaggedAllocators::FreeUsingMetadata( distanceTable, "distance table" );
+	TaggedAllocators::FreeUsingMetadata( adjacencyListsData, "adjacency data" );
 }
 
 template <typename AdjacencyListType, typename DistanceType>
@@ -45,8 +45,8 @@ protected:
 	DistanceType *distanceTableBackup { nullptr };
 public:
 	~MutableGraph() override {
-		TaggedAllocators::FreeUsingMetadata( distanceTableBackup );
-		TaggedAllocators::FreeUsingMetadata( distanceTableScratchpad );
+		TaggedAllocators::FreeUsingMetadata( distanceTableBackup, "distance table backup" );
+		TaggedAllocators::FreeUsingMetadata( distanceTableScratchpad, "distance table scratchpad" );
 		// Prevent double-free in the parent constructor
 		this->distanceTable = nullptr;
 	}
@@ -245,7 +245,7 @@ public:
 	}
 
 	~PropagationGraphBuilder() override {
-		TaggedAllocators::FreeUsingMetadata( dirsTable );
+		TaggedAllocators::FreeUsingMetadata( dirsTable, "dirs table of builder" );
 	}
 
 	void TransferOwnership( DistanceType **distanceTable, uint8_t **dirsTable, int **lists, int **listsOffsets ) {
@@ -531,7 +531,7 @@ void PropagationGraphBuilder<DistanceType>::PrepareToBuild() {
 
 	vec3_t dir;
 	const int dirsTableSide = numLeafs - 1;
-	dirsTable = DirsAllocator().Alloc( dirsTableSide * dirsTableSide - dirsTableSide );
+	dirsTable = DirsAllocator().Alloc( dirsTableSide * dirsTableSide - dirsTableSide, "dirs table" );
 	uint8_t *dirsDataPtr = &dirsTable[0];
 	for( int i = 1; i < numLeafs; ++i ) {
 		for( int j = i + 1; j < numLeafs; ++j ) {
@@ -559,11 +559,11 @@ void PropagationGraphBuilder<DistanceType>::PrepareToBuild() {
  * Might be useful in future.
  */
 template <typename ExistingType, typename AllocatorElemType>
-static AllocatorElemType *ConvertFloatArray( const ExistingType *existing, int numVectorElems ) {
+static AllocatorElemType *ConvertFloatArray( const ExistingType *existing, int numVectorElems, const char *logTag ) {
 	assert( existing );
 
 	// Using a ref-counting allocator is either mandatory or just won't hurt
-	auto *const result = RefCountingAllocatorForType<AllocatorElemType>().Alloc( numVectorElems );
+	auto *const result = RefCountingAllocatorForType<AllocatorElemType>().Alloc( numVectorElems, logTag );
 
 	// Convert using flattened views of data.
 	// This is a more generic approach and yields better code in all builds.
@@ -589,7 +589,8 @@ template <typename DistanceType> DistanceType *ReuseGlobalDistanceTable( int num
  * A specialization of {@code ReuseGlobalDistanceTable<?>( int )} that shares the global leafs graph distance table.
  */
 template <> float *ReuseGlobalDistanceTable<float>( int ) {
-	return RefCountingAllocatorForType<float>().AddRef( CachedLeafsGraph::Instance()->distanceTable );
+	float *existingTable = CachedLeafsGraph::Instance()->distanceTable;
+	return RefCountingAllocatorForType<float>().AddRef( existingTable, "global distance table" );
 }
 
 /**
@@ -597,7 +598,8 @@ template <> float *ReuseGlobalDistanceTable<float>( int ) {
  * by converting data of the global leafs graph distnace table.
  */
 template <> double *ReuseGlobalDistanceTable<double>( int numLeafs ) {
-	return ConvertFloatArray<float, double>( CachedLeafsGraph::Instance()->distanceTable, numLeafs * numLeafs );
+	float *existingTable = CachedLeafsGraph::Instance()->distanceTable;
+	return ConvertFloatArray<float, double>( existingTable, numLeafs * numLeafs, "global distance table" );
 }
 
 template <typename DistanceType>
@@ -606,7 +608,8 @@ bool PropagationGraphBuilder<DistanceType>::TryUsingGlobalGraph( TargetType *tar
 		return false;
 	}
 
-	this->dirsTable = RefCountingAllocatorForType<uint8_t>().AddRef( CachedLeafsGraph::Instance()->dirsTable );
+	auto *existingTable = CachedLeafsGraph::Instance()->dirsTable;
+	this->dirsTable = RefCountingAllocatorForType<uint8_t>().AddRef( existingTable, "dirs table" );
 	return true;
 }
 
@@ -616,8 +619,8 @@ void GraphBuilder<AdjacencyListType, DistanceType>::PrepareToBuild() {
 	// We can't allocate "backup" and "scratchpad" in the same chunk
 	// as we want to be able to share the immutable table data ("backup")
 	// Its still doable by providing a custom allocator.
-	this->distanceTableBackup = TableBackupAllocator().Alloc( numTableCells );
-	this->distanceTableScratchpad = TableScratchpadAllocator().Alloc( numTableCells );
+	this->distanceTableBackup = TableBackupAllocator().Alloc( numTableCells, "distance table backup" );
+	this->distanceTableScratchpad = TableScratchpadAllocator().Alloc( numTableCells, "distance table scratchpad" );
 	// Set the distance table as it is expected for the first SaveDistanceTable() call
 	this->distanceTable = this->distanceTableBackup;
 }
@@ -631,6 +634,8 @@ void GraphBuilder<AdjacencyListType, DistanceType>::CheckMutualReachability( int
 	DistanceType reverse = this->EdgeDistance( leaf2, leaf1 );
 	// Takes infinity into account as well
 	assert( direct == reverse );
+	// Avoid warnings in release builds
+	(void)direct, (void)reverse;
 }
 
 template <typename AdjacencyListType, typename DistanceType>
@@ -667,7 +672,7 @@ void GraphBuilder<AdjacencyListType, DistanceType>::BuildAdjacencyLists() {
 	// A first additional cell for a leaf is for a size "prefix" of adjacency list
 	// A second additional cell is for offset of the adjacency list in the compactified data
 	totalNumCells += 2 * numLeafs;
-	AdjacencyListType *mem = AdjacencyListsAllocator().Alloc( (int)totalNumCells );
+	AdjacencyListType *mem = AdjacencyListsAllocator().Alloc( (int)totalNumCells, "adjacency data" );
 	auto *const adjacencyListsData = this->adjacencyListsData = mem;
 	auto *const adjacencyListsOffsets = this->adjacencyListsOffsets = mem + ( totalNumCells - numLeafs );
 
@@ -1224,14 +1229,14 @@ bool PropagationTableBuilder<DistanceType>::Build() {
 		assert( rangeLength > 0 );
 		// See a detailed explanation in task::Exec().
 		task->total = ( leafsRangeBegin - 1 ) * rangeLength + ( rangeLength * ( rangeLength - 1 ) ) / 2;
-		if( i != actualNumTasks ) {
+		if( i + 1 != actualNumTasks ) {
 			leafsRangeBegin += rangeLength;
 			assert( leafsRangeBegin < numLeafs );
 			task->leafsRangeEnd = leafsRangeBegin;
 			continue;
 		}
 		// We lose few units due to rounding, so specify the upper bound as it is intended to be.
-		task->leafsRangeEnd = numTasks;
+		task->leafsRangeEnd = numLeafs;
 	}
 
 	computationHost->Exec();
@@ -1263,11 +1268,17 @@ void PropagationTableBuilder<DistanceType>::ValidateJointResults() {
 				ValidationError( "Direct path presence does not match for leaves %d, %d", i, j );
 			}
 			if( iToJ.HasDirectPath() ) {
+				if( !std::isfinite( graphBuilder.EdgeDistance( i, j ) ) ) {
+					ValidationError( "Graph distance is not finite for leaves %d, %d but props have direct path", i, j );
+				}
 				continue;
 			}
 
 			if( iToJ.HasIndirectPath() ^ jToI.HasIndirectPath() ) {
 				ValidationError( "Indirect path presence does not match for leaves %d, %d", i, j );
+			}
+			if( std::isfinite( graphBuilder.EdgeDistance( i, j ) ) ) {
+				ValidationError( "An edge in graph exists for leaves %d, %d but props do not have a direct path", i, j );
 			}
 			if( !iToJ.HasIndirectPath() ) {
 				continue;
@@ -1275,7 +1286,7 @@ void PropagationTableBuilder<DistanceType>::ValidateJointResults() {
 
 			const float pathDistance = iToJ.GetDistance();
 			if( !std::isfinite( pathDistance ) || pathDistance <= 0 ) {
-				ValidationError( "Illegal propagation distance %f for pair (%d, %d)", pathDistance, i, j );
+				ValidationError( "Illegal propagation distance %f for pair (%d, %d)\n", pathDistance, i, j );
 			}
 
 			const auto reversePathDistance = jToI.GetDistance();
@@ -1308,7 +1319,7 @@ void PropagationTableBuilder<DistanceType>::ValidationError( const char *format,
 	// Make sure we use the proper size
 	static_assert( sizeof( tag ) > sizeof( char * ), "Do not use sizeof( char * ) instead of a real array size" );
 	// Copy including the last zero byte
-	memcpy( buffer, tag, sizeof( buffer ) );
+	memcpy( buffer, tag, sizeof( tag ) );
 	// Start writing at the zero byte position
 	char *writablePtr = buffer + sizeof( tag ) - 1;
 
@@ -1316,7 +1327,9 @@ void PropagationTableBuilder<DistanceType>::ValidationError( const char *format,
 	va_start( va, format );
 	Q_vsnprintfz( writablePtr, sizeof( buffer ) -  sizeof( tag ), format, va );
 	va_end( va );
-	trap_Error( buffer );
+	trap_Print( buffer );
+	trap_Print("\n");
+	abort();
 }
 
 template <typename DistanceType>
@@ -1339,6 +1352,7 @@ PropagationBuilderTask<DistanceType>::~PropagationBuilderTask() {
 		S_Free( tmpLeafNums );
 	}
 }
+
 
 template <typename DistanceType>
 void PropagationBuilderTask<DistanceType>::Exec() {
@@ -1407,16 +1421,13 @@ void PropagationBuilderTask<DistanceType>::ComputePropsForPair( int leaf1, int l
 	vec3_t dir1, dir2;
 	DistanceType distance;
 	if( !BuildPropagationPath( leaf1, leaf2, dir1, dir2, &distance ) ) {
+		firstProps->MarkAsFailed();
+		secondProps->MarkAsFailed();
 		return;
 	}
 
-	firstProps->SetHasIndirectPath();
-	firstProps->SetDistance( (float)distance );
-	firstProps->SetDir( dir1 );
-
-	secondProps->SetHasIndirectPath();
-	secondProps->SetDistance( (float)distance );
-	secondProps->SetDir( dir2 );
+	firstProps->SetIndirectPath( dir1, (float)distance );
+	secondProps->SetIndirectPath( dir2, (float)distance );
 }
 
 /**
@@ -1631,11 +1642,15 @@ void PropagationBuilderTask<DistanceType>::BuildInfluxDirForLeaf( float *allocat
 
 			VectorSubtract( centers[1], centers[0], allocatedDir );
 			VectorNormalize( allocatedDir );
+			return;
 		}
 
 		// Continue accumulating dirs coming from other leafs to the first one.
 		vec3_t dir;
-		assert( graphInstance->GetDirFromLeafToLeaf( leafsChain[i], leafsChain[0], dir ) );
+		if( !graphInstance->GetDirFromLeafToLeaf( leafsChain[i], leafsChain[0], dir ) ) {
+			assert( 0 && "Should not be reached" );
+		}
+
 		// The dir must be present as there is a finite edge distance between leaves
 
 		// We dropped using a distance from leaf to the first leaf
@@ -1698,6 +1713,11 @@ inline void PropagationTable::PropagationProps::SetDir( const vec3_t dir ) {
 	int byte = DirToByteTable::DirToByte( dir );
 	assert( (unsigned)byte < std::numeric_limits<uint8_t>::max() - 1 );
 	maybeDirByte = (uint8_t)byte;
+}
+
+inline void PropagationTable::PropagationProps::SetIndirectPath( const vec3_t dir, float distance ) {
+	SetDistance( distance );
+	SetDir( dir );
 }
 
 bool PropagationTable::TryReadFromFile( int fsFlags ) {
@@ -1835,13 +1855,13 @@ void CachedLeafsGraph::Shutdown() {
 
 CachedLeafsGraph::~CachedLeafsGraph() {
 	// Can't be defined in header due to this call
-	TaggedAllocators::FreeUsingMetadata( dirsTable );
+	TaggedAllocators::FreeUsingMetadata( dirsTable, "dirs table of global graph" );
 }
 
 void CachedLeafsGraph::ResetExistingState() {
-	distanceTable = TaggedAllocators::FreeUsingMetadata( distanceTable );
-	dirsTable = TaggedAllocators::FreeUsingMetadata( dirsTable );
-	adjacencyListsData = TaggedAllocators::FreeUsingMetadata( adjacencyListsData );
+	distanceTable = TaggedAllocators::FreeUsingMetadata( distanceTable, "distance table of global graph" );
+	dirsTable = TaggedAllocators::FreeUsingMetadata( dirsTable, "dirs table of global graph" );
+	adjacencyListsData = TaggedAllocators::FreeUsingMetadata( adjacencyListsData, "lists data of global graph" );
 	adjacencyListsData = nullptr;
 	// Just nullify the pointer. A corresponding chunk belongs to the lists data.
 	adjacencyListsOffsets = nullptr;
@@ -1882,9 +1902,9 @@ bool CachedLeafsGraph::ComputeNewState( bool fastAndCoarse_ ) {
 void CachedLeafsGraph::ProvideDummyData() {
 	// Allocate a small chunk for the table... it is not going to be accessed
 	// That's bad...
-	this->distanceTable = TaggedAllocatorForType<float>().Alloc( 1 );
+	this->distanceTable = TaggedAllocatorForType<float>().Alloc( 1, "(dummy) distance table" );
 	// Allocate a dummy cell for a dummy list and a full row for offsets
-	auto *leafsData = TaggedAllocatorForType<int>().Alloc( NumLeafs() + 1 );
+	auto *leafsData = TaggedAllocatorForType<int>().Alloc( NumLeafs() + 1, "(dummy) adjacency data" );
 	// Put the dummy list at the beginning
 	leafsData[0] = 0;
 	// Make all offsets refer to the dummy list
@@ -1910,7 +1930,7 @@ struct SoundMemDeleter {
 template <typename T>
 struct TaggedAllocatorCaller {
 	void operator()( T *p ) {
-		TaggedAllocators::FreeUsingMetadata( p );
+		TaggedAllocators::FreeUsingMetadata( p, "Generic TaggedAllocator caller" );
 	}
 };
 
@@ -1952,20 +1972,24 @@ bool CachedGraphReader::Read( CachedLeafsGraph *readObject ) {
 	}
 
 	using DistanceTableHolder = std::unique_ptr<float, TaggedAllocatorCaller<float>>;
-	DistanceTableHolder distanceTableHolder( ::TaggedAllocatorForType<float>().Alloc( numLeafs * numLeafs ) );
+	float *distanceData = ::RefCountingAllocatorForType<float>()
+	    .Alloc( numLeafs * numLeafs, "graph distance table of global graph" );
+
+	DistanceTableHolder distanceTableHolder( distanceData );
 	if( !CachedComputationReader::Read( distanceTableHolder.get(), numBytesForDistanceTable ) ) {
 		return false;
 	}
 
 	using DirsTableHolder = std::unique_ptr<uint8_t, TaggedAllocatorCaller<uint8_t>>;
-	// TODO: Should other holders use memory supplied by ref-counting allocators?
-	DirsTableHolder	dirsTableHolder( ::RefCountingAllocatorForType<uint8_t>().Alloc( numLeafs * numLeafs ) );
+	uint8_t *dirsData = ::RefCountingAllocatorForType<uint8_t>()
+	    .Alloc( numLeafs * numLeafs, "graph dirs data of global graph" );
+
+	DirsTableHolder	dirsTableHolder( dirsData );
 	if( !CachedComputationReader::Read( dirsTableHolder.get(), numBytesForDirsTable ) ) {
 		return false;
 	}
 
 	// Validate dirs
-	const uint8_t *const dirsData = dirsTableHolder.get();
 	for( int i = 0; i < numStoredDirs; ++i ) {
 		if( !DirToByteTable::IsValidDirByte( dirsData[i] ) ) {
 			if( dirsData[i] != std::numeric_limits<uint8_t>::max() ) {
@@ -1975,7 +1999,8 @@ bool CachedGraphReader::Read( CachedLeafsGraph *readObject ) {
 	}
 
 	using ListsDataHolder = std::unique_ptr<int, TaggedAllocatorCaller<int>>;
-	ListsDataHolder listsDataHolder( ::TaggedAllocatorForType<int>().Alloc( listsDataSize ) );
+	int *listsData = TaggedAllocatorForType<int>().Alloc( listsDataSize, "adjacency data of global graph" );
+	ListsDataHolder listsDataHolder( listsData );
 	if( !CachedComputationReader::Read( listsDataHolder.get(), numBytesForLists ) ) {
 		return false;
 	}
@@ -2112,7 +2137,7 @@ bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( TargetT
 		listsDataAllocator = &RefCountingAllocatorForType<AdjacencyListType>();
 	}
 
-	this->adjacencyListsData = listsDataAllocator->Alloc( listsDataSize );
+	this->adjacencyListsData = listsDataAllocator->Alloc( listsDataSize, "clone lists data" );
 	this->adjacencyListsOffsets = this->adjacencyListsData + listsDataSize - numLeafs;
 
 	// If the global graph has been built/loaded successfully
@@ -2164,7 +2189,8 @@ bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( TargetT
 			// so we can spot attempts of sharing mutable per-instance data easily
 			tableScratchpadAllocator = &TaggedAllocatorForType<DistanceType>();
 		}
-		mutableGraphTarget->distanceTableScratchpad = tableScratchpadAllocator->Alloc( numLeafs * numLeafs );
+		mutableGraphTarget->distanceTableScratchpad =
+			tableScratchpadAllocator->Alloc( numLeafs * numLeafs, "scratchpad of a clone" );
 	}
 
 	this->distanceTable = this->distanceTableBackup = ReuseGlobalDistanceTable<DistanceType>( numLeafs );
@@ -2183,17 +2209,21 @@ CloneableGraphBuilder<DistanceType> *CloneableGraphBuilder<DistanceType>::Clone(
 	using CloneHolder = std::unique_ptr<CloneableGraphBuilder<DistanceType>, SoundMemDeleter>;
 	CloneHolder clone( new( objectMem )CloneableGraphBuilder<DistanceType>( this->NumLeafs(), this->fastAndCoarse ) );
 
-	clone->distanceTable = clone->distanceTableBackup = this->TableBackupAllocator().AddRef( this->distanceTableBackup );
-	clone->distanceTableScratchpad = clone->TableScratchpadAllocator().Alloc( this->NumLeafs() * this->NumLeafs() );
+	clone->distanceTable = clone->distanceTableBackup =
+		this->TableBackupAllocator().AddRef( this->distanceTableBackup, "cloned table backup" );
+
+	clone->distanceTableScratchpad =
+		clone->TableScratchpadAllocator().Alloc( this->NumLeafs() * this->NumLeafs(), "scratchpad of a clone" );
+
 	if( !clone->distanceTableScratchpad ) {
 		return nullptr;
 	}
 
-	clone->adjacencyListsData = this->AdjacencyListsAllocator().AddRef( this->adjacencyListsData );
+	clone->adjacencyListsData = this->AdjacencyListsAllocator().AddRef( this->adjacencyListsData, "lists data of a clone" );
 	// Just copy the address... offsets are allocated within the lists data memory chunk
 	clone->adjacencyListsOffsets = this->adjacencyListsOffsets;
 
-	clone->dirsTable = this->DirsAllocator().AddRef( this->dirsTable );
+	clone->dirsTable = this->DirsAllocator().AddRef( this->dirsTable, "dirs of a clone" );
 
 	return clone.release();
 }

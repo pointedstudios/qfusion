@@ -13,6 +13,14 @@
 #define ENABLE_ACCESS( addr, size )
 #endif
 
+#ifndef _MSC_VER
+void AllocatorDebugPrintf( const char *format, ... ) __attribute__( ( format( printf, 1, 2 ) ) );
+#else
+void AllocatorDebugPrintf( _Printf_format_string_ const char *format, ... );
+#endif
+
+inline const char *PrintableTag( const char *s ) { return s ? s : "not specified"; }
+
 /**
  * Defines an interface for anything that resembles default {@code malloc()/realloc()/free()} routines.
  */
@@ -20,17 +28,31 @@ class MallocLike {
 public:
 	virtual ~MallocLike() = default;
 
-	virtual void *Alloc( size_t size ) = 0;
-	virtual void *Realloc( void *p, size_t size ) = 0;
-	virtual void Free( void *p ) = 0;
+	virtual void *Alloc( size_t size, const char *logTag = nullptr ) = 0;
+	virtual void *Realloc( void *p, size_t size, const char *logTag ) = 0;
+	virtual void Free( void *p, const char *logTag ) = 0;
 };
 
 class SoundMalloc: public MallocLike {
 	static SoundMalloc instance;
 public:
-	void *Alloc( size_t size ) override { return S_Malloc( size ); }
-	void *Realloc( void *, size_t ) override { abort(); }
-	void Free( void *p ) override { return S_Free( p ); }
+	void *Alloc( size_t size, const char *logTag ) override {
+		void *result = S_Malloc( size );
+		const char *format = "SoundMalloc@%p allocated %p (%u bytes) for `%s`\n";
+		AllocatorDebugPrintf( format, this, result, (unsigned)size, PrintableTag( logTag ) );
+		return result;
+	}
+
+	void *Realloc( void *p, size_t size, const char *logTag ) override {
+		const char *format = "SoundMalloc@%p has to realloc %p to %u bytes for `%s`. Unsupported!\n";
+		AllocatorDebugPrintf( format, this, (unsigned)size, PrintableTag( logTag ) );
+		abort();
+	}
+
+	void Free( void *p, const char *logTag ) override {
+		AllocatorDebugPrintf( "SoundMalloc@%p has to free %p for `%s`\n", this, p, PrintableTag( logTag ) );
+		return S_Free( p );
+	}
 
 	static SoundMalloc *Instance() { return &instance; }
 };
@@ -45,9 +67,9 @@ class UntypedTaggedAllocator {
 
 	MallocLike *const underlying;
 protected:
-	virtual void *AllocUntyped( size_t size );
+	virtual void *AllocUntyped( size_t size, const char *logTag );
 
-	virtual void FreeUntyped( void *p );
+	virtual void FreeUntyped( void *p, const char *logTag );
 public:
 	explicit UntypedTaggedAllocator( MallocLike *underlying_ = SoundMalloc::Instance() )
 		: underlying( underlying_ ) {}
@@ -95,15 +117,21 @@ public:
 	 * }</pre>
 	 * (passing a pointer as a reference is too confusing and probably ambiguous)
 	 */
-	template <typename T> static T *FreeUsingMetadata( T *p ) {
-		FreeUsingMetadata( (void *)p );
+	template <typename T> static T *FreeUsingMetadata( T *p, const char *logTag ) {
+		FreeUsingMetadata( (void *)p, logTag );
 		return nullptr;
 	}
 
-	static void FreeUsingMetadata( void *p ) {
+	static void FreeUsingMetadata( void *p, const char *logTag ) {
 		if( !p ) {
+			const char *format = "TaggedAllocators::FreeUsingMetadata(): Doing nothing for null `%s`\n";
+			AllocatorDebugPrintf( format, PrintableTag( logTag ) );
 			return;
 		}
+
+		const char *format2 = "TaggedAllocators::FreeUsingMetadata(): about to free %p for `%s`\n";
+		AllocatorDebugPrintf( format2, p, PrintableTag( logTag ) );
+
 		// Allow metadata access/modification
 		ENABLE_ACCESS( (uint8_t *)p - 16, 16 );
 		// Get the underlying tagged allocator
@@ -111,7 +139,7 @@ public:
 		// Check whether it's really a tagged allocator
 		assert( dynamic_cast<UntypedTaggedAllocator *>( allocator ) );
 		// Delegate the deletion to it (this call is virtual and can use different implementations)
-		allocator->FreeUntyped( p );
+		allocator->FreeUntyped( p, logTag );
 	}
 
 	static TaggedAllocator<double> &Double();
@@ -128,12 +156,12 @@ class TaggedAllocator: public UntypedTaggedAllocator {
 public:
 	virtual ~TaggedAllocator() = default;
 
-	virtual T *Alloc( int numElems ) {
-		return (T *)AllocUntyped( numElems * sizeof( T ) );
+	virtual T *Alloc( int numElems, const char *logTag ) {
+		return (T *)AllocUntyped( numElems * sizeof( T ), logTag );
 	}
 
-	virtual void Free( T *p ) {
-		FreeUntyped( p );
+	virtual void Free( T *p, const char *logTag ) {
+		FreeUntyped( p, logTag );
 	}
 };
 
@@ -160,21 +188,37 @@ template <typename T>
 class RefCountingAllocator: public TaggedAllocator<T> {
 	uint32_t &RefCountOf( void *p ) {
 		// The allocator must be already put to a moment of any ref-count operation
-		assert( this == TaggedAllocators::Get<UntypedTaggedAllocator *>( p, -16 ) );
+		auto *allocatorFromMetadata = TaggedAllocators::Get<UntypedTaggedAllocator *>( p, -16 );
+		if( this != allocatorFromMetadata ) {
+			const char *format = "%p -> RefCountOf(%p): %p is the allocator specified in metadata\n";
+			AllocatorDebugPrintf( format, this, p, allocatorFromMetadata );
+			// May crash here on dynamic cast if the address is not an allocator address at all.
+			if( allocatorFromMetadata && !dynamic_cast<RefCountingAllocator<T> *>( allocatorFromMetadata ) ) {
+				AllocatorDebugPrintf( "The allocator specified in metadata is not even a ref-counting allocator\n" );
+			}
+			abort();
+		}
+
 		return TaggedAllocators::Get<uint32_t>( p, -8 );
 	}
 
-	void RemoveRef( void *p ) {
+	void RemoveRef( void *p, const char *logTag ) {
+		const char *format = "%p -> RefCountingAllocator<?>::RemoveRef(%p) for `%s`\n";
+		AllocatorDebugPrintf( format, this, p, PrintableTag( logTag ) );
+
 		auto &refCount = RefCountOf( p );
 		--refCount;
 		if( !refCount ) {
 			// Call the parent method explicitly to actually free the pointer
-			UntypedTaggedAllocator::FreeUntyped( p );
+			UntypedTaggedAllocator::FreeUntyped( p, logTag );
 		}
 	}
 
-	void *AllocUntyped( size_t size ) override {
-		void *result = UntypedTaggedAllocator::AllocUntyped( size );
+	void *AllocUntyped( size_t size, const char *logTag ) override {
+		const char *format = "%p -> RefCountingAllocator<?>::AllocUntyped(%u) for `%s`\n";
+		AllocatorDebugPrintf( format, this, (unsigned)size, PrintableTag( logTag ) );
+
+		void *result = UntypedTaggedAllocator::AllocUntyped( size, logTag );
 		auto *underlying = (uint8_t *)result - 16;
 		// Allow metadata modification
 		ENABLE_ACCESS( underlying, 16 );
@@ -184,19 +228,22 @@ class RefCountingAllocator: public TaggedAllocator<T> {
 		return result;
 	}
 
-	void FreeUntyped( void *p ) override {
-		RemoveRef( p );
+	void FreeUntyped( void *p, const char *logTag ) override {
+		RemoveRef( p, logTag );
 	}
 public:
-	T *Alloc( int numElems ) override {
-		return ( T *)AllocUntyped( numElems * sizeof( T ) );
+	T *Alloc( int numElems, const char *logTag ) override {
+		return ( T *)AllocUntyped( numElems * sizeof( T ), logTag );
 	}
 
-	void Free( T *p ) override {
-		FreeUntyped( p );
+	void Free( T *p, const char *logTag ) override {
+		FreeUntyped( p, logTag );
 	}
 
-	T *AddRef( T *p ) {
+	T *AddRef( T *p, const char *logTag ) {
+		const char *format = "%p -> RefCountingAllocator<?>::AddRef(%p) for `%s`\n";
+		AllocatorDebugPrintf( format, this, (const void *)p, PrintableTag( logTag ) );
+
 		auto *underlying = (uint8_t *)p - 16;
 		// Allow metadata modification
 		ENABLE_ACCESS( underlying, 16 );

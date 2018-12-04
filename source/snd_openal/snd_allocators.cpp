@@ -1,8 +1,26 @@
 #include "snd_allocators.h"
 
+//#define DEBUG_TAGGED_ALLOCATORS
+
+void AllocatorDebugPrintf( const char *format, ... ) {
+#if !defined( PUBLIC_BUILD ) && defined( DEBUG_TAGGED_ALLOCATORS )
+	char buffer[2048];
+
+	va_list va;
+	va_start( va, format );
+	Q_vsnprintfz( buffer, sizeof( buffer ), format, va );
+	va_end( va );
+
+	trap_Print( buffer );
+#endif
+}
+
 SoundMalloc SoundMalloc::instance;
 
-void *UntypedTaggedAllocator::AllocUntyped( size_t size ) {
+void *UntypedTaggedAllocator::AllocUntyped( size_t size, const char *logTag ) {
+	const char *format1 = "%p -> UntypedTaggedAllocator::AllocUntyped(%u bytes) for `%s`\n";
+	AllocatorDebugPrintf( format1, this, (unsigned)size, PrintableTag( logTag ) );
+
 	// MallocLike follows malloc() contract and returns at least 8-byte aligned chunks.
 	// The allocator pointer must be aligned on alignof( void *): 4 or 8 bytes
 	// The size must be aligned on 2 bytes
@@ -15,15 +33,22 @@ void *UntypedTaggedAllocator::AllocUntyped( size_t size ) {
 	TaggedAllocators::Put<uint16_t>( 16, -2, userAccessible );
 	// Prevent metadata modification by rogue memory access
 	DISABLE_ACCESS( allocated, 16 );
+
+	const char *format2 = "%p has allocated real chunk at %p. User-accessible data starts from %p\n";
+	AllocatorDebugPrintf( format2, this, allocated, userAccessible );
+
 	return userAccessible;
 }
 
-void UntypedTaggedAllocator::FreeUntyped( void *p ) {
+void UntypedTaggedAllocator::FreeUntyped( void *p, const char *logTag ) {
+	const char *format = "%p -> UntypedTaggedAllocator::FreeUntyped(%p) for %s\n";
+	AllocatorDebugPrintf( format, this, p, PrintableTag( logTag ) );
+
 	auto metadataSize = TaggedAllocators::Get<uint16_t>( p, -2 );
 	// Get an address of an actually allocated by MallocLike::Alloc() chunk
 	auto *underlyingChunk = ( (uint8_t *)p ) - metadataSize;
 	// Call MallocLike::Free() on an actual chunk
-	underlying->Free( underlyingChunk );
+	underlying->Free( underlyingChunk, logTag );
 }
 
 #define DEFINE_DEFAULT_TAGGED_ALLOCATOR( type, Method )         \

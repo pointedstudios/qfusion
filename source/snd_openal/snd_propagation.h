@@ -138,9 +138,11 @@ class PropagationTable: public CachedComputation {
 			maybeDirByte = std::numeric_limits<uint8_t>::max();
 		}
 
-		void SetHasIndirectPath() {
+		void MarkAsFailed() {
 			maybeDirByte = std::numeric_limits<uint8_t>::max() - 1;
 		}
+
+		inline void SetIndirectPath( const vec3_t dir, float distance );
 
 		/**
 		 * Implemented in the source as some things related to implementation should not be exposed right now
@@ -160,6 +162,9 @@ class PropagationTable: public CachedComputation {
 			// Store the distance using 256 units granularity
 			u >>= 8;
 			assert( u >= 0 && u < 256 );
+			// Make sure that we do not lose the property of distance being positive.
+			// Otherwise validation fails (while computations were perfect up to this).
+			clamp_low( u, 1u );
 			distanceByte = (uint8_t)u;
 		}
 
