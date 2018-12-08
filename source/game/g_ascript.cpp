@@ -1730,7 +1730,7 @@ static void objectGameClient_NewRaceRun( int numSectors, gclient_t *self ) {
 		return;
 	}
 
-	G_NewRaceRun( PLAYERENT( playerNum ), numSectors );
+	StatsowFacade::Instance()->NewRaceRun( PLAYERENT( playerNum ), numSectors );
 }
 
 static void objectGameClient_SetRaceTime( int sector, int64_t time, gclient_t *self ) {
@@ -1741,7 +1741,7 @@ static void objectGameClient_SetRaceTime( int sector, int64_t time, gclient_t *s
 		return;
 	}
 
-	G_SetRaceTime( PLAYERENT( playerNum ), sector, time );
+	StatsowFacade::Instance()->SetRaceTime( PLAYERENT( playerNum ), sector, time );
 }
 
 static void objectGameClient_SetHelpMessage( unsigned int index, gclient_t *self ) {

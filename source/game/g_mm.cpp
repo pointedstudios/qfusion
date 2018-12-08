@@ -21,7 +21,21 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../matchmaker/mm_query.h"
 #include "g_gametypes.h"
 
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
+#include "../qalgo/SingletonHolder.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <functional>
 #include <new>
+#include <utility>
 
 // A common supertype for query readers/writers
 class alignas( 8 )QueryIOHelper {
@@ -309,12 +323,12 @@ public:
 	}
 };
 
+
+
+static SingletonHolder<StatsowFacade> statsHolder;
+
 // number of raceruns to send in one batch
 #define RACERUN_BATCH_SIZE  16
-
-stat_query_api_t *sq_api;
-
-static void G_Match_SendRaceReport( void );
 
 //====================================================
 
@@ -329,13 +343,13 @@ static clientRating_t *g_ratingAlloc( const char *gametype, float rating, float 
 	Q_strncpyz( cr->gametype, gametype, sizeof( cr->gametype ) - 1 );
 	cr->rating = rating;
 	cr->deviation = deviation;
-	cr->next = 0;
+	cr->next = nullptr;
 	cr->uuid = uuid;
 
 	return cr;
 }
 
-static clientRating_t *g_ratingCopy( clientRating_t *other ) {
+static clientRating_t *g_ratingCopy( const clientRating_t *other ) {
 	return g_ratingAlloc( other->gametype, other->rating, other->deviation, other->uuid );
 }
 
@@ -350,15 +364,14 @@ static void g_ratingsFree( clientRating_t *list ) {
 	}
 }
 
-// update the current servers rating
-static void g_serverRating( void ) {
+void StatsowFacade::UpdateAverageRating() {
 	clientRating_t avg;
 
-	if( !game.ratings ) {
+	if( !ratingsHead ) {
 		avg.rating = MM_RATING_DEFAULT;
 		avg.deviation = MM_DEVIATION_DEFAULT;
 	} else {
-		Rating_AverageRating( &avg, game.ratings );
+		Rating_AverageRating( &avg, ratingsHead );
 	}
 
 	// Com_Printf("g_serverRating: Updated server's skillrating to %f\n", avg.rating );
@@ -366,18 +379,15 @@ static void g_serverRating( void ) {
 	trap_Cvar_ForceSet( "sv_skillRating", va( "%.0f", avg.rating ) );
 }
 
-/*
-* G_TransferRatings
-*/
-void G_TransferRatings( void ) {
+void StatsowFacade::TransferRatings() {
 	clientRating_t *cr, *found;
 	edict_t *ent;
 	gclient_t *client;
 
 	// shuffle the ratings back from game.ratings to clients->ratings and back
 	// based on current gametype
-	g_ratingsFree( game.ratings );
-	game.ratings = 0;
+	g_ratingsFree( ratingsHead );
+	ratingsHead = nullptr;
 
 	for( ent = game.edicts + 1; PLAYERNUM( ent ) < gs.maxclients; ent++ ) {
 		client = ent->r.client;
@@ -390,7 +400,7 @@ void G_TransferRatings( void ) {
 		}
 
 		// temphack for duplicate client entries
-		found = Rating_FindId( game.ratings, client->mm_session );
+		found = Rating_FindId( ratingsHead, client->mm_session );
 		if( found ) {
 			continue;
 		}
@@ -411,227 +421,127 @@ void G_TransferRatings( void ) {
 
 		// add it to the games list
 		cr = g_ratingCopy( found );
-		cr->next = game.ratings;
-		game.ratings = cr;
+		cr->next = ratingsHead;
+		ratingsHead = cr;
 	}
 
-	g_serverRating();
+	UpdateAverageRating();
 }
 
 // This doesnt update ratings, only inserts new default rating if it doesnt exist
 // if gametype is NULL, use current gametype
-clientRating_t *G_AddDefaultRating( edict_t *ent, const char *gametype ) {
-	clientRating_t *cr;
-	gclient_t *client;
-
-	if( gametype == NULL ) {
+clientRating_t *StatsowFacade::AddDefaultRating( edict_t *ent, const char *gametype ) {
+	if( !gametype ) {
 		gametype = gs.gametypeName;
 	}
 
-	client = ent->r.client;
+	auto *client = ent->r.client;
 	if( !ent->r.inuse ) {
-		return NULL;
+		return nullptr;
 	}
 
-	cr = Rating_Find( client->ratings, gametype );
-	if( cr == NULL ) {
+	auto *cr = Rating_Find( client->ratings, gametype );
+	if( !cr ) {
 		cr = g_ratingAlloc( gametype, MM_RATING_DEFAULT, MM_DEVIATION_DEFAULT, ent->r.client->mm_session );
 		if( !cr ) {
-			return NULL;
+			return nullptr;
 		}
 
 		cr->next = client->ratings;
 		client->ratings = cr;
 	}
 
-	if( !strcmp( gametype, gs.gametypeName ) ) {
-		clientRating_t *found;
-
-		// add this rating to current game-ratings
-		found = Rating_FindId( game.ratings, client->mm_session );
-		if( !found ) {
-			found = g_ratingCopy( cr );
-			if( found ) {
-				found->next = game.ratings;
-				game.ratings = found;
-			}
-		} else {
-			// update rating
-			found->rating = cr->rating;
-			found->deviation = cr->deviation;
-		}
-		g_serverRating();
-	}
-
+	TryUpdatingGametypeRating( client, cr, gametype );
 	return cr;
 }
 
 // this inserts a new one, or updates the ratings if it exists
-clientRating_t *G_AddRating( edict_t *ent, const char *gametype, float rating, float deviation ) {
-	clientRating_t *cr;
-	gclient_t *client;
-
-	if( gametype == NULL ) {
+clientRating_t *StatsowFacade::AddRating( edict_t *ent, const char *gametype, float rating, float deviation ) {
+	if( !gametype ) {
 		gametype = gs.gametypeName;
 	}
 
-	client = ent->r.client;
+	auto *client = ent->r.client;
 	if( !ent->r.inuse ) {
-		return NULL;
+		return nullptr;
 	}
 
-	cr = Rating_Find( client->ratings, gametype );
-	if( cr != NULL ) {
+	auto *cr = Rating_Find( client->ratings, gametype );
+	if( cr ) {
 		cr->rating = rating;
 		cr->deviation = deviation;
 	} else {
 		cr = g_ratingAlloc( gametype, rating, deviation, ent->r.client->mm_session );
 		if( !cr ) {
-			return NULL;
+			return nullptr;
 		}
 
 		cr->next = client->ratings;
 		client->ratings = cr;
 	}
 
-	if( !strcmp( gametype, gs.gametypeName ) ) {
-		clientRating_t *found;
-
-		// add this rating to current game-ratings
-		found = Rating_FindId( game.ratings, client->mm_session );
-		if( !found ) {
-			found = g_ratingCopy( cr );
-			if( found ) {
-				found->next = game.ratings;
-				game.ratings = found;
-			}
-		} else {
-			// update values
-			found->rating = rating;
-			found->deviation = deviation;
-		}
-
-		g_serverRating();
-	}
-
+	TryUpdatingGametypeRating( client, cr, gametype );
 	return cr;
 }
 
+void StatsowFacade::TryUpdatingGametypeRating( const gclient_t *client,
+											   const clientRating_t *addedRating,
+											   const char *addedForGametype ) {
+	// If the gametype is not a current gametype
+	if( strcmp( addedForGametype, gs.gametypeName ) != 0 ) {
+		return;
+	}
+
+	// add this rating to current game-ratings
+	auto *found = Rating_FindId( ratingsHead, client->mm_session );
+	if( !found ) {
+		found = g_ratingCopy( addedRating );
+		if( found ) {
+			found->next = ratingsHead;
+			ratingsHead = found;
+		}
+	} else {
+		// update values
+		found->rating = addedRating->rating;
+		found->deviation = addedRating->deviation;
+	}
+
+	UpdateAverageRating();
+}
+
 // removes all references for given entity
-void G_RemoveRating( edict_t *ent ) {
+void StatsowFacade::RemoveRating( edict_t *ent ) {
 	gclient_t *client;
 	clientRating_t *cr;
 
 	client = ent->r.client;
 
 	// first from the game
-	cr = Rating_DetachId( &game.ratings, client->mm_session );
+	cr = Rating_DetachId( &ratingsHead, client->mm_session );
 	if( cr ) {
 		G_Free( cr );
 	}
 
 	// then the clients own list
 	g_ratingsFree( client->ratings );
-	client->ratings = 0;
+	client->ratings = nullptr;
 
-	g_serverRating();
-}
-
-// debug purposes
-void G_ListRatings_f( void ) {
-	clientRating_t *cr;
-	gclient_t *cl;
-	edict_t *ent;
-	char uuid_buffer[UUID_BUFFER_SIZE];
-
-	Com_Printf( "Listing ratings by gametype:\n" );
-	for( cr = game.ratings; cr ; cr = cr->next ) {
-		Com_Printf( "  %s %s %f %f\n", cr->gametype, cr->uuid.ToString( uuid_buffer ), cr->rating, cr->deviation );
-	}
-
-	Com_Printf( "Listing ratings by player\n" );
-	for( ent = game.edicts + 1; PLAYERNUM( ent ) < gs.maxclients; ent++ ) {
-		cl = ent->r.client;
-
-		if( !ent->r.inuse ) {
-			continue;
-		}
-
-		Com_Printf( "%s:\n", cl->netname );
-		for( cr = cl->ratings; cr ; cr = cr->next ) {
-			Com_Printf( "  %s %s %f %f\n", cr->gametype, cr->uuid.ToString( uuid_buffer ), cr->rating, cr->deviation );
-		}
-	}
-}
-
-//==========================================================
-
-// race records from MM
-void G_AddRaceRecords( edict_t *ent, int numSectors, int64_t *records ) {
-	gclient_t *cl;
-	raceRun_t *rr;
-	size_t size;
-
-	cl = ent->r.client;
-
-	if( !ent->r.inuse || cl == NULL ) {
-		return;
-	}
-
-	rr = &cl->level.stats.raceRecords;
-	if( rr->times ) {
-		G_LevelFree( rr->times );
-	}
-
-	size = ( numSectors + 1 ) * sizeof( *rr->times );
-	rr->times = ( int64_t * )G_LevelMalloc( size );
-
-	memcpy( rr->times, records, size );
-	rr->numSectors = numSectors;
-}
-
-// race records to AS (TODO: export this to AS)
-int64_t G_GetRaceRecord( edict_t *ent, int sector ) {
-	gclient_t *cl;
-	raceRun_t *rr;
-
-	cl = ent->r.client;
-
-	if( !ent->r.inuse || cl == NULL ) {
-		return 0;
-	}
-
-	rr = &cl->level.stats.raceRecords;
-	if( !rr->times ) {
-		return 0;
-	}
-
-	// sector = -1 means final sector
-	if( sector < -1 || sector >= rr->numSectors ) {
-		return 0;
-	}
-
-	if( sector < 0 ) {
-		return rr->times[rr->numSectors];   // SAFE!
-	}
-
-	// else
-	return rr->times[sector];
+	UpdateAverageRating();
 }
 
 // from AS
-raceRun_t *G_NewRaceRun( edict_t *ent, int numSectors ) {
+raceRun_t *StatsowFacade::NewRaceRun( const edict_t *ent, int numSectors ) {
 	gclient_t *cl;
 	raceRun_t *rr;
 
 	cl = ent->r.client;
 
-	if( !ent->r.inuse || cl == NULL  ) {
-		return 0;
+	if( !ent->r.inuse || !cl  ) {
+		return nullptr;
 	}
 
 	rr = &cl->level.stats.currentRun;
-	if( rr->times != NULL ) {
+	if( rr->times ) {
 		G_LevelFree( rr->times );
 	}
 
@@ -648,17 +558,14 @@ raceRun_t *G_NewRaceRun( edict_t *ent, int numSectors ) {
 }
 
 // from AS
-void G_SetRaceTime( edict_t *ent, int sector, int64_t time ) {
-	gclient_t *cl;
-	raceRun_t *rr;
+void StatsowFacade::SetRaceTime( edict_t *owner, int sector, int64_t time ) {
+	auto *const cl = owner->r.client;
 
-	cl = ent->r.client;
-
-	if( !ent->r.inuse || cl == NULL ) {
+	if( !owner->r.inuse || !cl ) {
 		return;
 	}
 
-	rr = &cl->level.stats.currentRun;
+	raceRun_t *const rr = &cl->level.stats.currentRun;
 	if( sector < -1 || sector >= rr->numSectors ) {
 		return;
 	}
@@ -674,7 +581,7 @@ void G_SetRaceTime( edict_t *ent, int sector, int64_t time ) {
 
 		// validate the client
 		// no bots for race, at all
-		if( ent->r.svflags & SVF_FAKECLIENT /* && mm_debug_reportbots->value == 0 */ ) {
+		if( owner->r.svflags & SVF_FAKECLIENT /* && mm_debug_reportbots->value == 0 */ ) {
 			G_Printf( "G_SetRaceTime: not reporting fakeclients\n" );
 			return;
 		}
@@ -682,32 +589,32 @@ void G_SetRaceTime( edict_t *ent, int sector, int64_t time ) {
 		// Note: the test whether client session id has been removed,
 		// race runs are reported for non-authenticated players too
 
-		if( !game.raceruns ) {
-			game.raceruns = LinearAllocator( sizeof( raceRun_t ), 0, trap_MemAlloc, trap_MemFree );
+		if( !raceRuns ) {
+			raceRuns = LinearAllocator( sizeof( raceRun_t ), 0, trap_MemAlloc, trap_MemFree );
 		}
 
 		// push new run
-		nrr = ( raceRun_t * )LA_Alloc( game.raceruns );
+		nrr = ( raceRun_t * )LA_Alloc( raceRuns );
 		memcpy( nrr, rr, sizeof( raceRun_t ) );
 
 		// reuse this one in nrr
-		rr->times = 0;
+		rr->times = nullptr;
 
 		// see if we have to push intermediate result
 		// TODO: We can live with eventual consistency of race records, but it should be kept in mind
 		// TODO: Send new race runs every N seconds, or if its likely to be a new record
-		if( LA_Size( game.raceruns ) >= RACERUN_BATCH_SIZE ) {
+		if( LA_Size( raceRuns ) >= RACERUN_BATCH_SIZE ) {
 			// Update an actual nickname that is going to be used to identify a run for a non-authenticated player
 			if( !cl->mm_session.IsValidSessionId() ) {
 				Q_strncpyz( rr->nickname, cl->netname, MAX_NAME_BYTES );
 			}
-			G_Match_SendReport();
+			SendReport();
 
 			// double-check this for memory-leaks
-			if( game.raceruns != 0 ) {
-				LinearAllocator_Free( game.raceruns );
+			if( raceRuns ) {
+				LinearAllocator_Free( raceRuns );
 			}
-			game.raceruns = 0;
+			raceRuns = nullptr;
 		}
 	}
 
@@ -717,71 +624,107 @@ void G_SetRaceTime( edict_t *ent, int sector, int64_t time ) {
 	}
 }
 
-void G_ListRaces_f( void ) {
-	int i, j, size;
-	raceRun_t *run;
-	char uuid_buffer[UUID_BUFFER_SIZE];
+int StatsowFacade::ForEachRaceRun( const std::function<void( const raceRun_t & )> &applyThis ) const {
+	if( !raceRuns ) {
+		return 0;
+	}
 
-	if( !game.raceruns || !LA_Size( game.raceruns ) ) {
-		G_Printf( "No races to report\n" );
+	size_t size = LA_Size( raceRuns );
+	if( !size ) {
+		return 0;
+	}
+
+	for( size_t i = 0; i < size; i++ ) {
+		const auto *run = (raceRun_t*)LA_Pointer( raceRuns, i );
+		applyThis( *run );
+	}
+
+	return (int)size;
+}
+
+static SingletonHolder<StatsowFacade> statsInstanceHolder;
+
+void StatsowFacade::Init() {
+	statsInstanceHolder.Init();
+}
+
+void StatsowFacade::Shutdown() {
+	statsInstanceHolder.Shutdown();
+}
+
+StatsowFacade *StatsowFacade::Instance() {
+	return statsInstanceHolder.Instance();
+}
+
+void StatsowFacade::ClearEntries() {
+	ClientEntry *next;
+	for( ClientEntry *e = clientEntriesHead; e; e = next ) {
+		next = e->next;
+		e->~ClientEntry();
+		G_Free( e );
+	}
+
+	clientEntriesHead = nullptr;
+}
+
+void StatsowFacade::DiscardMatchReport( const char *reason ) {
+	// TODO: Print it to clients as well...
+	G_Printf( S_COLOR_YELLOW "%s. Discarding match report...\n", reason );
+
+	// Do not hold no longer useful data
+	ClearEntries();
+	// TODO:!!!!!!!!
+	// TODO:!!!!!!!!
+	// TODO:!!!!!!!! clear other data as well
+}
+
+void StatsowFacade::OnClientDisconnected( edict_t *ent ) {
+	// always report in RACE mode
+	if( GS_RaceGametype() ) {
+		// TODO: "AddRaceReport(void)" ?
+		AddPlayerReport( ent, GS_MatchState() == MATCH_STATE_POSTMATCH );
 		return;
 	}
 
-	G_Printf( S_COLOR_RED "  session    " S_COLOR_YELLOW "times\n" );
-	size = LA_Size( game.raceruns );
-	for( i = 0; i < size; i++ ) {
-		run = (raceRun_t*)LA_Pointer( game.raceruns, i );
-		if( run->owner.IsValidSessionId() ) {
-			G_Printf( S_COLOR_RED "  %s    " S_COLOR_YELLOW, run->owner.ToString( uuid_buffer ) );
-		} else {
-			// TODO: Is the nickname actually set at the time of this call?
-			G_Printf( S_COLOR_RED "  %s    " S_COLOR_YELLOW, run->nickname );
-		}
-		for( j = 0; j < run->numSectors; j++ )
-			G_Printf( "%" PRIi64 " ", run->times[j] );
-		G_Printf( S_COLOR_GREEN "%" PRIi64 "\n", run->times[run->numSectors] );    // SAFE!
-	}
-}
-
-//==========================================================
-//		MM Reporting
-//==========================================================
-
-static void G_FreeClientQuits() {
-	gclient_quit_t *qnext = nullptr;
-
-	for( gclient_quit_t *qcl = game.quits; qcl ; qcl = qnext ) {
-		qnext = qcl->next;
-
-		qcl->~gclient_quit_t();
-		G_Free( qcl );
+	if( ent->r.client->team == TEAM_SPECTATOR ) {
+		return;
 	}
 
-	game.quits = nullptr;
+	const bool isMatchOver = GS_MatchState() == MATCH_STATE_POSTMATCH;
+	if( !isMatchOver && ( GS_MatchState() != MATCH_STATE_PLAYTIME ) ) {
+		return;
+	}
+
+	AddPlayerReport( ent, isMatchOver );
 }
 
-static void G_DiscardMatchReport( const char *reason ) {
-	G_Printf( S_COLOR_YELLOW "G_AddPlayerReport(): %s, discarding match report...\n", reason );
-	game.discardMatchReport = true;
+void StatsowFacade::OnClientJoinedTeam( edict_t *ent, int newTeam ) {
+	if( ent->r.client->team == TEAM_SPECTATOR ) {
+		return;
+	}
+	if( newTeam != TEAM_SPECTATOR ) {
+		return;
+	}
 
-	// Do not hold no longer useful data
-	G_FreeClientQuits();
+	if ( GS_MatchState() != MATCH_STATE_PLAYTIME ) {
+		return;
+	}
+
+	G_Printf( "Sending teamchange to MM, team %d to team %d\n", ent->r.client->team, newTeam );
+	StatsowFacade::Instance()->AddPlayerReport( ent, false );
 }
 
-/*
-* G_AddPlayerReport
-*/
-void G_AddPlayerReport( edict_t *ent, bool final ) {
-	gclient_t *cl;
-	gclient_quit_t *quit;
-	int i;
+void StatsowFacade::AddPlayerReport( edict_t *ent, bool final ) {
 	char uuid_buffer[UUID_BUFFER_SIZE];
 
+	if( !ent->r.inuse ) {
+		return;
+	}
 	// TODO: check if MM is enabled
 
 	if( GS_RaceGametype() ) {
 		// force sending report when someone disconnects
-		G_Match_SendReport();
+		SendReport();
 		return;
 	}
 
@@ -790,142 +733,155 @@ void G_AddPlayerReport( edict_t *ent, bool final ) {
 	}
 
 	// Do not try to add player report if the match report has been discarded
-	if( game.discardMatchReport ) {
+	if( isDiscarded ) {
 		return;
 	}
 
-	cl = ent->r.client;
-
-	if( !ent->r.inuse ) {
+	const auto *cl = ent->r.client;
+	if( !cl || cl->team == TEAM_SPECTATOR ) {
 		return;
 	}
 
 	if( ( ent->r.svflags & SVF_FAKECLIENT ) ) {
 		if( ent->r.client->level.stats.had_playtime ) {
-			G_DiscardMatchReport( "A bot had some playtime" );
+			DiscardMatchReport( "A bot had some playtime" );
 		}
 		return;
 	}
 
-	if( cl == NULL || cl->team == TEAM_SPECTATOR ) {
-		return;
-	}
-
-	mm_uuid_t mm_session = cl->mm_session;
-	if( !mm_session.IsValidSessionId() ) {
+	if( !cl->mm_session.IsValidSessionId() ) {
 		if( ent->r.client->level.stats.had_playtime ) {
-			G_DiscardMatchReport( va( "A client %s @ %s without valid session id had some playtime", cl->netname, cl->ip ) );
+			DiscardMatchReport( va( "A client %s without valid session id had some playtime", cl->netname ) );
 		}
 		return;
 	}
 
 	// check merge situation
-	for( quit = game.quits; quit; quit = quit->next ) {
-		if( quit->mm_session == mm_session ) {
+	ClientEntry *entry;
+	for( entry = clientEntriesHead; entry; entry = entry->next ) {
+		if( entry->mm_session == cl->mm_session ) {
 			break;
 		}
 	}
 
 	// debug :
-	G_Printf( "G_AddPlayerReport %s" S_COLOR_WHITE ", session %s\n", cl->netname, mm_session.ToString( uuid_buffer ) );
+	G_Printf( "Stats::AddPlayerReport(): %s" S_COLOR_WHITE " (%s)\n", cl->netname, cl->mm_session.ToString( uuid_buffer ) );
 
-	if( quit ) {
-		gameaward_t *award1, *award2;
-		loggedFrag_t *frag1, *frag2;
-		int j, inSize, outSize;
+	if( entry ) {
+		AddToExistingEntry( ent, final, entry );
+		return;
+	}
 
-		// we can merge
-		Q_strncpyz( quit->netname, cl->netname, sizeof( quit->netname ) );
-		quit->team = cl->team;
-		quit->timePlayed += ( level.time - cl->teamstate.timeStamp ) / 1000;
-		quit->final = final;
+	entry = NewPlayerEntry( ent, final );
+	// put it to the list
+	entry->next = clientEntriesHead;
+	clientEntriesHead = entry;
+}
 
-		quit->stats.awards += cl->level.stats.awards;
-		quit->stats.score += cl->level.stats.score;
+void StatsowFacade::AddToExistingEntry( edict_t *ent, bool final, ClientEntry *e ) {
+	auto *const cl = ent->r.client;
 
-		for( const auto &keyAndValue : cl->level.stats ) {
-			quit->stats.AddToEntry( keyAndValue );
+	// we can merge
+	Q_strncpyz( e->netname, cl->netname, sizeof( e->netname ) );
+	e->team = cl->team;
+	e->timePlayed += ( level.time - cl->teamstate.timeStamp ) / 1000;
+	e->final = final;
+
+	e->stats.awards += cl->level.stats.awards;
+	e->stats.score += cl->level.stats.score;
+
+	for( const auto &keyAndValue : cl->level.stats ) {
+		e->stats.AddToEntry( keyAndValue );
+	}
+
+	for( int i = 0; i < ( AMMO_TOTAL - AMMO_GUNBLADE ); i++ ) {
+		auto &stats = e->stats;
+		const auto &thatStats = cl->level.stats;
+		stats.accuracy_damage[i] += thatStats.accuracy_damage[i];
+		stats.accuracy_frags[i] += thatStats.accuracy_frags[i];
+		stats.accuracy_hits[i] += thatStats.accuracy_hits[i];
+		stats.accuracy_hits_air[i] += thatStats.accuracy_hits_air[i];
+		stats.accuracy_hits_direct[i] += thatStats.accuracy_hits_direct[i];
+		stats.accuracy_shots[i] += thatStats.accuracy_shots[i];
+	}
+
+	// merge awards
+	if( cl->level.stats.awardAllocator ) {
+		if( !e->stats.awardAllocator ) {
+			e->stats.awardAllocator = LinearAllocator( sizeof( gameaward_t ), 0, trap_MemAlloc, trap_MemFree );
 		}
 
-		for( i = 0; i < ( AMMO_TOTAL - AMMO_GUNBLADE ); i++ ) {
-			quit->stats.accuracy_damage[i] += cl->level.stats.accuracy_damage[i];
-			quit->stats.accuracy_frags[i] += cl->level.stats.accuracy_frags[i];
-			quit->stats.accuracy_hits[i] += cl->level.stats.accuracy_hits[i];
-			quit->stats.accuracy_hits_air[i] += cl->level.stats.accuracy_hits_air[i];
-			quit->stats.accuracy_hits_direct[i] += cl->level.stats.accuracy_hits_direct[i];
-			quit->stats.accuracy_shots[i] += cl->level.stats.accuracy_shots[i];
-		}
+		size_t inSize = LA_Size( cl->level.stats.awardAllocator );
+		size_t outSize = e->stats.awardAllocator ? LA_Size( e->stats.awardAllocator ) : 0;
+		for( int i = 0; i < inSize; i++ ) {
+			auto *award1 = ( gameaward_t * )LA_Pointer( cl->level.stats.awardAllocator, i + 0u );
 
-		// merge awards
-		if( cl->level.stats.awardAllocator ) {
-			if( !quit->stats.awardAllocator ) {
-				quit->stats.awardAllocator = LinearAllocator( sizeof( gameaward_t ), 0, trap_MemAlloc, trap_MemFree );
-			}
-
-			inSize = LA_Size( cl->level.stats.awardAllocator );
-			outSize = quit->stats.awardAllocator ? LA_Size( quit->stats.awardAllocator ) : 0;
-			for( i = 0; i < inSize; i++ ) {
-				award1 = ( gameaward_t * )LA_Pointer( cl->level.stats.awardAllocator, i );
-
-				// search for matching one
-				for( j = 0; j < outSize; j++ ) {
-					award2 = ( gameaward_t * )LA_Pointer( quit->stats.awardAllocator, j );
-					if( !strcmp( award1->name, award2->name ) ) {
-						award2->count += award1->count;
-						break;
-					}
+			int j;
+			// search for matching one
+			gameaward_t *award2;
+			for( j = 0; j < outSize; j++ ) {
+				award2 = ( gameaward_t * )LA_Pointer( e->stats.awardAllocator, j + 0u );
+				if( !strcmp( award1->name, award2->name ) ) {
+					award2->count += award1->count;
+					break;
 				}
-				if( j >= outSize ) {
-					award2 = ( gameaward_t * )LA_Alloc( quit->stats.awardAllocator );
-					award2->name = award1->name;
-					award2->count = award1->count;
-				}
 			}
-
-			// we can free the old awards
-			LinearAllocator_Free( cl->level.stats.awardAllocator );
-			cl->level.stats.awardAllocator = 0;
+			if( j >= outSize ) {
+				award2 = ( gameaward_t * )LA_Alloc( e->stats.awardAllocator );
+				award2->name = award1->name;
+				award2->count = award1->count;
+			}
 		}
 
-		// merge logged frags
-		if( cl->level.stats.fragAllocator ) {
-			inSize = LA_Size( cl->level.stats.fragAllocator );
-			if( !quit->stats.fragAllocator ) {
-				quit->stats.fragAllocator = LinearAllocator( sizeof( loggedFrag_t ), 0, trap_MemAlloc, trap_MemFree );
-			}
+		// we can free the old awards
+		LinearAllocator_Free( cl->level.stats.awardAllocator );
+		cl->level.stats.awardAllocator = nullptr;
+	}
 
-			for( i = 0; i < inSize; i++ ) {
-				frag1 = ( loggedFrag_t * )LA_Pointer( cl->level.stats.fragAllocator, i );
-				frag2 = ( loggedFrag_t * )LA_Alloc( quit->stats.fragAllocator );
-				memcpy( frag2, frag1, sizeof( *frag1 ) );
-			}
-
-			// we can free the old frags
-			LinearAllocator_Free( cl->level.stats.fragAllocator );
-			cl->level.stats.fragAllocator = 0;
+	// merge logged frags
+	if( cl->level.stats.fragAllocator ) {
+		size_t inSize = LA_Size( cl->level.stats.fragAllocator );
+		if( !e->stats.fragAllocator ) {
+			e->stats.fragAllocator = LinearAllocator( sizeof( loggedFrag_t ), 0, trap_MemAlloc, trap_MemFree );
 		}
-	} else {
-		// note: constructors must be called now
-		quit = new( G_Malloc( sizeof( *quit ) ) )gclient_quit_t;
 
-		// fill in the data
-		Q_strncpyz( quit->netname, cl->netname, sizeof( quit->netname ) );
-		quit->team = cl->team;
-		quit->timePlayed = ( level.time - cl->teamstate.timeStamp ) / 1000;
-		quit->final = final;
-		quit->mm_session = mm_session;
-		quit->stats = std::move( cl->level.stats );
-		// TODO: Not sure what reasons are
-		quit->stats.fragAllocator = NULL;
+		for( int i = 0; i < inSize; i++ ) {
+			auto *frag1 = ( loggedFrag_t * )LA_Pointer( cl->level.stats.fragAllocator, i + 0u );
+			auto *frag2 = ( loggedFrag_t * )LA_Alloc( e->stats.fragAllocator );
+			memcpy( frag2, frag1, sizeof( *frag1 ) );
+		}
 
-		// put it to the list
-		quit->next = game.quits;
-		game.quits = quit;
+		// we can free the old frags
+		LinearAllocator_Free( cl->level.stats.fragAllocator );
+		cl->level.stats.fragAllocator = nullptr;
 	}
 }
 
-void G_Match_AddAward( edict_t *ent, const char *awardMsg ) {
-	if( game.discardMatchReport ) {
+StatsowFacade::ClientEntry *StatsowFacade::NewPlayerEntry( edict_t *ent, bool final ) {
+	auto *cl = ent->r.client;
+
+	auto *const e = new( G_Malloc( sizeof( ClientEntry ) ) )ClientEntry;
+
+	// fill in the data
+	Q_strncpyz( e->netname, cl->netname, sizeof( e->netname ) );
+	e->team = cl->team;
+	e->timePlayed = ( level.time - cl->teamstate.timeStamp ) / 1000;
+	e->final = final;
+	e->mm_session = cl->mm_session;
+	e->stats = std::move( cl->level.stats );
+	// TODO: Not sure what reasons are
+	e->stats.fragAllocator = nullptr;
+	return e;
+}
+
+void StatsowFacade::AddMetaAward( const edict_t *ent, const char *awardMsg ) {
+	if( GS_MatchState() == MATCH_STATE_PLAYTIME ) {
+		AddAward( ent, awardMsg );
+	}
+}
+
+void StatsowFacade::AddAward( const edict_t *ent, const char *awardMsg ) {
+	if( isDiscarded ) {
 		return;
 	}
 
@@ -940,7 +896,7 @@ void G_Match_AddAward( edict_t *ent, const char *awardMsg ) {
 
 	// first check if we already have this one on the clients list
 	size_t size = LA_Size( stats->awardAllocator );
-	gameaward_t *ga = NULL;
+	gameaward_t *ga = nullptr;
 	int i;
 	for( i = 0; i < size; i++ ) {
 		ga = (gameaward_t *)LA_Pointer( stats->awardAllocator, i );
@@ -960,8 +916,8 @@ void G_Match_AddAward( edict_t *ent, const char *awardMsg ) {
 	}
 }
 
-void G_Match_AddFrag( edict_t *attacker, edict_t *victim, int mod ) {
-	if( game.discardMatchReport ) {
+void StatsowFacade::AddFrag( const edict_t *attacker, const edict_t *victim, int mod ) {
+	if( isDiscarded ) {
 		return;
 	}
 
@@ -996,8 +952,7 @@ void G_Match_AddFrag( edict_t *attacker, edict_t *victim, int mod ) {
 	lfrag->time = game.serverTime - GS_MatchStartTime();
 }
 
-// It is assumed that the writer points to the root object.
-static void G_MatchReport_WriteHeaderFields( QueryWriter &writer, int teamGame ) {
+void StatsowFacade::WriteHeaderFields( QueryWriter &writer, int teamGame ) {
 	// Note: booleans are transmitted as integers due to underlying api limitations
 	writer << "match_id"       << trap_GetConfigString( CS_MATCHUUID );
 	writer << "gametype"       << gs.gametypeName;
@@ -1017,12 +972,7 @@ static void G_MatchReport_WriteHeaderFields( QueryWriter &writer, int teamGame )
 	}
 }
 
-static void G_MatchReport_AddPlayerAwards( QueryWriter &writer, gclient_quit_t *cl );
-static void G_MatchReport_AddPlayerLogFrags( QueryWriter &writer, gclient_quit_t *cl );
-static void G_MatchReport_AddPlayerWeapons( QueryWriter &writer, gclient_quit_t *cl, const char **weaponNames );
-
-static void G_Match_SendRegularReport( void ) {
-	gclient_quit_t *cl;
+void StatsowFacade::SendRegularReport( stat_query_api_t *sq_api ) {
 	int i, teamGame, duelGame;
 	static const char *weapnames[WEAP_TOTAL] = { NULL };
 
@@ -1047,7 +997,7 @@ static void G_Match_SendRegularReport( void ) {
 		teamGame = 1;
 	}
 
-	G_MatchReport_WriteHeaderFields( writer, teamGame );
+	WriteHeaderFields( writer, teamGame );
 
 	// Write team properties (if any)
 	if( teamlist[TEAM_ALPHA].numplayers > 0 && teamGame != 0 ) {
@@ -1080,7 +1030,7 @@ static void G_Match_SendRegularReport( void ) {
 
 	// Write player properties
 	writer << "players" << '[';
-	for( cl = game.quits; cl; cl = cl->next ) {
+	for( ClientEntry *cl = clientEntriesHead; cl; cl = cl->next ) {
 		writer << '{';
 		{
 			writer << "session_id"  << cl->mm_session;
@@ -1101,9 +1051,9 @@ static void G_Match_SendRegularReport( void ) {
 				writer << "team" << cl->team - TEAM_ALPHA;
 			}
 
-			G_MatchReport_AddPlayerAwards( writer, cl );
-			G_MatchReport_AddPlayerWeapons( writer, cl, weapnames );
-			G_MatchReport_AddPlayerLogFrags( writer, cl );
+			AddPlayerAwards( writer, cl );
+			AddPlayerWeapons( writer, cl, weapnames );
+			AddPlayerLogFrags( writer, cl );
 		}
 		writer << '}';
 	}
@@ -1112,7 +1062,7 @@ static void G_Match_SendRegularReport( void ) {
 	writer.Send();
 }
 
-static void G_MatchReport_AddPlayerAwards( QueryWriter &writer, gclient_quit_t *cl ) {
+void StatsowFacade::AddPlayerAwards( QueryWriter &writer, ClientEntry *cl ) {
 	const auto *stats = &cl->stats;
 	if( !stats->awardAllocator || !LA_Size( stats->awardAllocator ) ) {
 		return;
@@ -1133,7 +1083,7 @@ static void G_MatchReport_AddPlayerAwards( QueryWriter &writer, gclient_quit_t *
 	writer << ']';
 }
 
-static void G_MatchReport_AddPlayerLogFrags( QueryWriter &writer, gclient_quit_t *cl ) {
+void StatsowFacade::AddPlayerLogFrags( QueryWriter &writer, ClientEntry *cl ) {
 	const auto *stats = &cl->stats;
 	if( !stats->fragAllocator || !LA_Size( stats->fragAllocator ) ) {
 		return;
@@ -1165,10 +1115,10 @@ static inline double ComputeAccuracy( int hits, int shots ) {
 	}
 
 	// copied from cg_scoreboard.c, but changed the last -1 to 0 (no hits is zero acc, right??)
-	return ( min( (int)( floor( ( 100.0f * ( hits ) ) / ( (float)( shots ) ) + 0.5f ) ), 99 ) );
+	return ( std::min( (int)( std::floor( ( 100.0f * ( hits ) ) / ( (float)( shots ) ) + 0.5f ) ), 99 ) );
 }
 
-static void G_MatchReport_AddPlayerWeapons( QueryWriter &writer, gclient_quit_t *cl, const char **weaponNames ) {
+void StatsowFacade::AddPlayerWeapons( QueryWriter &writer, ClientEntry *cl, const char **weaponNames ) {
 	const auto *stats = &cl->stats;
 	int i;
 
@@ -1230,65 +1180,60 @@ static void G_MatchReport_AddPlayerWeapons( QueryWriter &writer, gclient_quit_t 
 	writer << ']';
 }
 
-/*
-* G_Match_SendReport
-*/
-void G_Match_SendReport( void ) {
-	edict_t *ent;
-
+void StatsowFacade::SendReport() {
 	// TODO: check if MM is enabled
 
-	sq_api = trap_GetStatQueryAPI();
+	stat_query_api_t *sq_api = trap_GetStatQueryAPI();
 	if( !sq_api ) {
 		return;
 	}
 
 	if( GS_RaceGametype() ) {
-		G_Match_SendRaceReport();
+		SendRaceReport( sq_api );
 		return;
 	}
 
-	if( GS_MMCompatible() ) {
-		// merge game.clients with game.quits
-		for( ent = game.edicts + 1; PLAYERNUM( ent ) < gs.maxclients; ent++ ) {
-			G_AddPlayerReport( ent, true );
-		}
+	if( !GS_MMCompatible() ) {
+		ClearEntries();
+		return;
+	}
 
-		if( game.discardMatchReport ) {
-			G_Printf( S_COLOR_YELLOW "G_Match_SendReport(): The match report has been discarded\n" );
-		} else {
-			// check if we have enough players to report (at least 2)
-			if( game.quits && game.quits->next ) {
-				G_Match_SendRegularReport();
-			}
+	// merge game.clients with game.quits
+	for( edict_t *ent = game.edicts + 1; PLAYERNUM( ent ) < gs.maxclients; ent++ ) {
+		AddPlayerReport( ent, true );
+	}
+
+	if( isDiscarded ) {
+		G_Printf( S_COLOR_YELLOW "SendReport(): The match report has been discarded\n" );
+	} else {
+		// check if we have enough players to report (at least 2)
+		if( clientEntriesHead && clientEntriesHead->next ) {
+			SendRegularReport( sq_api );
 		}
 	}
 
-	G_FreeClientQuits();
+	ClearEntries();
 }
 
-/*
-* G_Match_SendRaceReport
-*/
-static void G_Match_SendRaceReport( void ) {
+void StatsowFacade::SendRaceReport( stat_query_api_t *sq_api ) {
 	if( !GS_RaceGametype() ) {
-		G_Printf( "G_Match_RaceReport.. not race gametype\n" );
+		G_Printf( S_COLOR_YELLOW "G_Match_RaceReport.. not race gametype\n" );
 		return;
 	}
 
-	if( !game.raceruns || !LA_Size( game.raceruns ) ) {
+	if( !raceRuns || !LA_Size( raceRuns ) ) {
 		return;
 	}
 
 	QueryWriter writer( sq_api, "server/matchReport" );
 
-	G_MatchReport_WriteHeaderFields( writer, false );
+	WriteHeaderFields( writer, false );
 
 	writer << "race_runs" << '[';
 	{
-		size_t size = LA_Size( game.raceruns );
+		size_t size = LA_Size( raceRuns );
 		for( size_t i = 0; i < size; i++ ) {
-			raceRun_t *prr = (raceRun_t*)LA_Pointer( game.raceruns, i );
+			auto *prr = (raceRun_t*)LA_Pointer( raceRuns, i );
 
 			writer << '{';
 			{
@@ -1317,6 +1262,6 @@ static void G_Match_SendRaceReport( void ) {
 	writer.Send();
 
 	// clear gameruns
-	LinearAllocator_Free( game.raceruns );
-	game.raceruns = NULL;
+	LinearAllocator_Free( raceRuns );
+	raceRuns = nullptr;
 }

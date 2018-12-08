@@ -313,20 +313,14 @@ void G_Teams_SetTeam( edict_t *ent, int team ) {
 	assert( ent && ent->r.inuse && ent->r.client );
 	assert( team >= TEAM_SPECTATOR && team < GS_MAX_TEAMS );
 
+	StatsowFacade::Instance()->OnClientJoinedTeam( ent, team );
+
 	if( ent->r.client->team != TEAM_SPECTATOR && team != TEAM_SPECTATOR ) {
 		// keep scores when switching between non-spectating teams
 		int64_t timeStamp = ent->r.client->teamstate.timeStamp;
 		ent->r.client->teamstate.Reset();
 		ent->r.client->teamstate.timeStamp = timeStamp;
 	} else {
-		// if player was on a team, send partial report to matchmaker
-		if( ent->r.client->team != TEAM_SPECTATOR && GS_MatchState() == MATCH_STATE_PLAYTIME ) {
-			G_Printf( "Sending teamchange to MM, team %d to team %d\n", ent->r.client->team, team );
-			G_AddPlayerReport( ent, false );
-
-			// trap_MR_SendPartialReport();
-		}
-
 		// clear scores at changing team
 		ent->r.client->level.stats.Clear();
 		ent->r.client->teamstate.Reset();

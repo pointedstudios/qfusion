@@ -45,7 +45,7 @@ void G_PlayerAward( edict_t *ent, const char *awardMsg ) {
 	teamlist[ent->s.team].stats.awards++;
 	G_Gametype_ScoreEvent( ent->r.client, "award", awardMsg );
 
-	G_Match_AddAward( ent, awardMsg );
+	StatsowFacade::Instance()->AddAward( ent, awardMsg );
 
 	// add it to every player who's chasing this player
 	for( edict_t *other = game.edicts + 1; PLAYERNUM( other ) < gs.maxclients; other++ ) {
@@ -69,10 +69,7 @@ void G_PlayerMetaAward( edict_t *ent, const char *awardMsg ) {
 		return;
 	}
 
-	// ch : this doesnt work for race right?
-	if( GS_MatchState() == MATCH_STATE_PLAYTIME ) {
-		G_Match_AddAward( ent, awardMsg );
-	}
+	StatsowFacade::Instance()->AddMetaAward( ent, awardMsg );
 }
 
 #define COMBO_FLAG( a )   ( 1 << ( a - 1 ) )
@@ -370,7 +367,7 @@ void G_AwardPlayerKilled( edict_t *self, edict_t *inflictor, edict_t *attacker, 
 		attacker->r.client->level.stats.accuracy_frags[G_ModToAmmo( mod ) - AMMO_GUNBLADE]++;
 	}
 
-	G_Match_AddFrag( attacker, self, mod );
+	StatsowFacade::Instance()->AddFrag( attacker, self, mod );
 }
 
 void G_AwardPlayerPickup( edict_t *self, edict_t *item ) {

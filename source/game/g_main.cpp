@@ -349,7 +349,7 @@ void G_Init( unsigned int seed, unsigned int framemsec, int protocol, const char
 		new( game.clients + i )gclient_s;
 	}
 
-	game.quits = NULL;
+	StatsowFacade::Init();
 
 	game.numentities = gs.maxclients + 1;
 
@@ -395,6 +395,8 @@ void G_Shutdown( void ) {
 	G_RemoveCommands();
 
 	G_FreeCallvotes();
+
+	StatsowFacade::Shutdown();
 
 	for( i = 0; i < game.numentities; i++ ) {
 		if( game.edicts[i].r.inuse ) {

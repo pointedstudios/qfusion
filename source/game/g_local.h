@@ -139,11 +139,6 @@ typedef struct {
 	edict_t *edicts;        // [maxentities]
 	gclient_t *clients;     // [maxclients]
 
-	gclient_quit_t *quits;  // [dynamic] <-- MM
-	clientRating_t *ratings;    // list of ratings for current game and gametype <-- MM
-	linear_allocator_t *raceruns;   // raceRun_t <-- MM
-	bool discardMatchReport;
-
 	int protocol;
 	char demoExtension[MAX_QPATH];
 
@@ -1318,26 +1313,80 @@ struct gclient_s {
 	}
 };
 
-// quit or teamchange data for clients (stats)
-struct gclient_quit_s {
-	char netname[MAX_NAME_BYTES];
-	int team;
-	mm_uuid_t mm_session;
+namespace std {
+	template<typename F> class function;
+}
 
-	score_stats_t stats;
-	int64_t timePlayed;
-	bool final;         // is true, player was there in the end
-	struct gclient_quit_s *next;
+class StatsowFacade {
+	struct ClientEntry {
+		ClientEntry *next { nullptr };
+		score_stats_t stats;
+		char netname[MAX_NAME_BYTES];
+		mm_uuid_t mm_session { Uuid_ZeroUuid() };
+		int64_t timePlayed { 0 };
+		int team { 0 };
+		bool final { false };
 
-	gclient_quit_s() {
-		netname[0] = '\0';
-		team = 0;
-		mm_session = Uuid_ZeroUuid();
+		ClientEntry() {
+			netname[0] = '\0';
+		}
+	};
 
-		timePlayed = 0;
-		final = false;
-		next = nullptr;
-	}
+	ClientEntry *clientEntriesHead { nullptr };
+	clientRating_t *ratingsHead { nullptr };
+
+	linear_allocator_t *raceRuns { nullptr };
+
+	bool isDiscarded { false };
+
+	void AddPlayerReport( edict_t *ent, bool final );
+
+	void AddToExistingEntry( edict_t *ent, bool final, ClientEntry *e );
+	ClientEntry *NewPlayerEntry( edict_t *ent, bool final );
+
+	void AddPlayerAwards( class QueryWriter &writer, ClientEntry *cl );
+	void AddPlayerLogFrags( class QueryWriter &writer, ClientEntry *cl );
+	void AddPlayerWeapons( class QueryWriter &writer, ClientEntry *cl, const char **weaponNames );
+public:
+	static void Init();
+	static void Shutdown();
+
+	static StatsowFacade *Instance();
+
+	void ClearEntries();
+
+	raceRun_t *NewRaceRun( const edict_t *owner, int numSectors );
+	void SetRaceTime( edict_t *owner, int sector, int64_t time );
+
+	void WriteHeaderFields( class QueryWriter &writer, int teamGame );
+
+	void SendRaceReport( stat_query_api_s *sq_api );
+	void SendRegularReport( stat_query_api_s *sq_api );
+
+	void SendReport();
+
+	void AddAward( const edict_t *ent, const char *awardMsg );
+	void AddMetaAward( const edict_t *ent, const char *awardMsg );
+	void AddFrag( const edict_t *attacker, const edict_t *victim, int mod );
+
+	void DiscardMatchReport( const char *reason );
+
+	void OnClientDisconnected( edict_t *ent );
+	void OnClientJoinedTeam( edict_t *ent, int newTeam );
+
+	void UpdateAverageRating();
+
+	void TransferRatings();
+	clientRating_t *AddDefaultRating( edict_t *ent, const char *gametype );
+	clientRating_t *AddRating( edict_t *ent, const char *gametype, float rating, float deviation );
+
+	void TryUpdatingGametypeRating( const gclient_t *client,
+									const clientRating_t *addedRating,
+									const char *addedForGametype );
+
+	void RemoveRating( edict_t *ent );
+
+	int ForEachRaceRun( const std::function<void( const raceRun_t & )> &applyThis ) const;
 };
 
 typedef struct snap_edict_s {
@@ -1524,26 +1573,6 @@ static inline int PLAYERNUM( const edict_t *x ) { return x - game.edicts - 1; }
 static inline int PLAYERNUM( const gclient_t *x ) { return x - game.clients; }
 
 static inline edict_t *PLAYERENT( int x ) { return game.edicts + x + 1; }
-
-// matchmaker
-
-void G_AddPlayerReport( edict_t *ent, bool final );
-void G_Match_SendReport( void );
-
-void G_Match_AddAward( edict_t *ent, const char *awardMsg );
-void G_Match_AddFrag( edict_t *attacker, edict_t *victim, int mod );
-
-void G_TransferRatings( void );
-clientRating_t *G_AddDefaultRating( edict_t *ent, const char *gametype );
-clientRating_t *G_AddRating( edict_t *ent, const char *gametype, float rating, float deviation );
-void G_RemoveRating( edict_t *ent );
-void G_ListRatings_f( void );
-
-void G_AddRaceRecords( edict_t *ent, int numSectors, unsigned int *records );
-int64_t G_GetRaceRecord( edict_t *ent, int sector );
-raceRun_t *G_NewRaceRun( edict_t *ent, int numSectors );
-void G_SetRaceTime( edict_t *ent, int sector, int64_t time );
-void G_ListRaces_f( void );
 
 // web
 http_response_code_t G_WebRequest( http_query_method_t method, const char *resource,
