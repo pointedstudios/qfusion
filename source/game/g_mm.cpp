@@ -333,11 +333,9 @@ static SingletonHolder<StatsowFacade> statsHolder;
 //====================================================
 
 static clientRating_t *g_ratingAlloc( const char *gametype, float rating, float deviation, mm_uuid_t uuid ) {
-	clientRating_t *cr;
-
-	cr = (clientRating_t*)G_Malloc( sizeof( *cr ) );
+	auto *cr = (clientRating_t*)G_Malloc( sizeof( clientRating_t ) );
 	if( !cr ) {
-		return NULL;
+		return nullptr;
 	}
 
 	Q_strncpyz( cr->gametype, gametype, sizeof( cr->gametype ) - 1 );
@@ -589,12 +587,8 @@ void StatsowFacade::SetRaceTime( edict_t *owner, int sector, int64_t time ) {
 		// Note: the test whether client session id has been removed,
 		// race runs are reported for non-authenticated players too
 
-		if( !raceRuns ) {
-			raceRuns = LinearAllocator( sizeof( raceRun_t ), 0, trap_MemAlloc, trap_MemFree );
-		}
-
 		// push new run
-		nrr = ( raceRun_t * )LA_Alloc( raceRuns );
+		nrr = raceRuns.New();
 		memcpy( nrr, rr, sizeof( raceRun_t ) );
 
 		// reuse this one in nrr
@@ -603,7 +597,7 @@ void StatsowFacade::SetRaceTime( edict_t *owner, int sector, int64_t time ) {
 		// see if we have to push intermediate result
 		// TODO: We can live with eventual consistency of race records, but it should be kept in mind
 		// TODO: Send new race runs every N seconds, or if its likely to be a new record
-		if( LA_Size( raceRuns ) >= RACERUN_BATCH_SIZE ) {
+		if( raceRuns.size() >= RACERUN_BATCH_SIZE ) {
 			// Update an actual nickname that is going to be used to identify a run for a non-authenticated player
 			if( !cl->mm_session.IsValidSessionId() ) {
 				Q_strncpyz( rr->nickname, cl->netname, MAX_NAME_BYTES );
@@ -611,10 +605,7 @@ void StatsowFacade::SetRaceTime( edict_t *owner, int sector, int64_t time ) {
 			SendReport();
 
 			// double-check this for memory-leaks
-			if( raceRuns ) {
-				LinearAllocator_Free( raceRuns );
-			}
-			raceRuns = nullptr;
+			raceRuns.Clear();
 		}
 	}
 
@@ -625,21 +616,11 @@ void StatsowFacade::SetRaceTime( edict_t *owner, int sector, int64_t time ) {
 }
 
 int StatsowFacade::ForEachRaceRun( const std::function<void( const raceRun_t & )> &applyThis ) const {
-	if( !raceRuns ) {
-		return 0;
+	for( const auto &run: raceRuns ) {
+		applyThis( run );
 	}
 
-	size_t size = LA_Size( raceRuns );
-	if( !size ) {
-		return 0;
-	}
-
-	for( size_t i = 0; i < size; i++ ) {
-		const auto *run = (raceRun_t*)LA_Pointer( raceRuns, i );
-		applyThis( *run );
-	}
-
-	return (int)size;
+	return (int)raceRuns.size();
 }
 
 static SingletonHolder<StatsowFacade> statsInstanceHolder;
@@ -806,55 +787,33 @@ void StatsowFacade::AddToExistingEntry( edict_t *ent, bool final, ClientEntry *e
 	}
 
 	// merge awards
-	if( cl->level.stats.awardAllocator ) {
-		if( !e->stats.awardAllocator ) {
-			e->stats.awardAllocator = LinearAllocator( sizeof( gameaward_t ), 0, trap_MemAlloc, trap_MemFree );
-		}
-
-		size_t inSize = LA_Size( cl->level.stats.awardAllocator );
-		size_t outSize = e->stats.awardAllocator ? LA_Size( e->stats.awardAllocator ) : 0;
-		for( int i = 0; i < inSize; i++ ) {
-			auto *award1 = ( gameaward_t * )LA_Pointer( cl->level.stats.awardAllocator, i + 0u );
-
-			int j;
-			// search for matching one
-			gameaward_t *award2;
-			for( j = 0; j < outSize; j++ ) {
-				award2 = ( gameaward_t * )LA_Pointer( e->stats.awardAllocator, j + 0u );
-				if( !strcmp( award1->name, award2->name ) ) {
-					award2->count += award1->count;
-					break;
-				}
-			}
-			if( j >= outSize ) {
-				award2 = ( gameaward_t * )LA_Alloc( e->stats.awardAllocator );
-				award2->name = award1->name;
-				award2->count = award1->count;
-			}
-		}
-
-		// we can free the old awards
-		LinearAllocator_Free( cl->level.stats.awardAllocator );
-		cl->level.stats.awardAllocator = nullptr;
-	}
+	// requires handling of duplicates
+	MergeAwards( e->stats.awardsSequence, std::move( cl->level.stats.awardsSequence ) );
 
 	// merge logged frags
-	if( cl->level.stats.fragAllocator ) {
-		size_t inSize = LA_Size( cl->level.stats.fragAllocator );
-		if( !e->stats.fragAllocator ) {
-			e->stats.fragAllocator = LinearAllocator( sizeof( loggedFrag_t ), 0, trap_MemAlloc, trap_MemFree );
-		}
+	e->stats.fragsSequence.MergeWith( std::move( cl->level.stats.fragsSequence ) );
+}
 
-		for( int i = 0; i < inSize; i++ ) {
-			auto *frag1 = ( loggedFrag_t * )LA_Pointer( cl->level.stats.fragAllocator, i + 0u );
-			auto *frag2 = ( loggedFrag_t * )LA_Alloc( e->stats.fragAllocator );
-			memcpy( frag2, frag1, sizeof( *frag1 ) );
+void StatsowFacade::MergeAwards( StatsSequence<gameaward_t> &to, StatsSequence<gameaward_t> &&from ) {
+	for( const gameaward_t &mergable: from ) {
+		// search for matching one
+		auto it = to.begin();
+		const auto end = to.end();
+		for(; it != end; ++it ) {
+			if( !strcmp( ( *it ).name, mergable.name ) ) {
+				const_cast<gameaward_t &>( *it ).count += mergable.count;
+				break;
+			}
 		}
-
-		// we can free the old frags
-		LinearAllocator_Free( cl->level.stats.fragAllocator );
-		cl->level.stats.fragAllocator = nullptr;
+		if( it != end ) {
+			gameaward_t *added = to.New();
+			added->name = mergable.name;
+			added->count = mergable.count;
+		}
 	}
+
+	// we can free the old awards
+	from.Clear();
 }
 
 StatsowFacade::ClientEntry *StatsowFacade::NewPlayerEntry( edict_t *ent, bool final ) {
@@ -869,8 +828,6 @@ StatsowFacade::ClientEntry *StatsowFacade::NewPlayerEntry( edict_t *ent, bool fi
 	e->final = final;
 	e->mm_session = cl->mm_session;
 	e->stats = std::move( cl->level.stats );
-	// TODO: Not sure what reasons are
-	e->stats.fragAllocator = nullptr;
 	return e;
 }
 
@@ -890,30 +847,25 @@ void StatsowFacade::AddAward( const edict_t *ent, const char *awardMsg ) {
 	}
 
 	auto *const stats = &ent->r.client->level.stats;
-	if( !stats->awardAllocator ) {
-		stats->awardAllocator = LinearAllocator( sizeof( gameaward_t ), 0, trap_MemAlloc, trap_MemFree );
-	}
-
 	// first check if we already have this one on the clients list
-	size_t size = LA_Size( stats->awardAllocator );
 	gameaward_t *ga = nullptr;
-	int i;
-	for( i = 0; i < size; i++ ) {
-		ga = (gameaward_t *)LA_Pointer( stats->awardAllocator, i );
-		if( !strncmp( ga->name, awardMsg, sizeof( ga->name ) - 1 ) ) {
+
+	auto it = stats->awardsSequence.cbegin();
+	const auto end = stats->awardsSequence.end();
+	for(; it != end; ++it ) {
+		if( !strcmp( ( *it ).name, awardMsg ) ) {
+			ga = const_cast<gameaward_t *>( &( *it ) );
 			break;
 		}
 	}
 
-	if( i >= size ) {
-		ga = (gameaward_t *)LA_Alloc( stats->awardAllocator );
-		memset( ga, 0, sizeof( *ga ));
+	if( it == end ) {
+		ga = stats->awardsSequence.New();
 		ga->name = G_RegisterLevelString( awardMsg );
+		ga->count = 0;
 	}
 
-	if( ga ) {
-		ga->count++;
-	}
+	ga->count++;
 }
 
 void StatsowFacade::AddFrag( const edict_t *attacker, const edict_t *victim, int mod ) {
@@ -927,11 +879,7 @@ void StatsowFacade::AddFrag( const edict_t *attacker, const edict_t *victim, int
 
 	// ch : frag log
 	auto *const stats = &attacker->r.client->level.stats;
-	if( !stats->fragAllocator ) {
-		stats->fragAllocator = LinearAllocator( sizeof( loggedFrag_t ), 0, trap_MemAlloc, trap_MemFree );
-	}
-
-	auto *const lfrag = ( loggedFrag_t * )LA_Alloc( stats->fragAllocator );
+	loggedFrag_t *const lfrag = stats->fragsSequence.New();
 	lfrag->attacker = attacker->r.client->mm_session;
 	lfrag->victim = victim->r.client->mm_session;
 
@@ -974,7 +922,7 @@ void StatsowFacade::WriteHeaderFields( QueryWriter &writer, int teamGame ) {
 
 void StatsowFacade::SendRegularReport( stat_query_api_t *sq_api ) {
 	int i, teamGame, duelGame;
-	static const char *weapnames[WEAP_TOTAL] = { NULL };
+	static const char *weapnames[WEAP_TOTAL] = { nullptr };
 
 	// Feature: do not report matches with duration less than 1 minute (actually 66 seconds)
 	if( level.finalMatchDuration <= SIGNIFICANT_MATCH_DURATION ) {
@@ -1063,19 +1011,13 @@ void StatsowFacade::SendRegularReport( stat_query_api_t *sq_api ) {
 }
 
 void StatsowFacade::AddPlayerAwards( QueryWriter &writer, ClientEntry *cl ) {
-	const auto *stats = &cl->stats;
-	if( !stats->awardAllocator || !LA_Size( stats->awardAllocator ) ) {
-		return;
-	}
-
 	writer << "awards" << '[';
 	{
-		for( size_t i = 0, size = LA_Size( stats->awardAllocator ); i < size; i++ ) {
-			const auto *ga = (gameaward_t *)LA_Pointer( stats->awardAllocator, i );
+		for( const gameaward_t &award: cl->stats.awardsSequence ) {
 			writer << '{';
 			{
-				writer << "name"  << ga->name;
-				writer << "count" << ga->count;
+				writer << "name"  << award.name;
+				writer << "count" << award.count;
 			}
 			writer << '}';
 		}
@@ -1084,20 +1026,14 @@ void StatsowFacade::AddPlayerAwards( QueryWriter &writer, ClientEntry *cl ) {
 }
 
 void StatsowFacade::AddPlayerLogFrags( QueryWriter &writer, ClientEntry *cl ) {
-	const auto *stats = &cl->stats;
-	if( !stats->fragAllocator || !LA_Size( stats->fragAllocator ) ) {
-		return;
-	}
-
 	writer << "log_frags" << '[';
 	{
-		for( size_t i = 0, size = LA_Size( stats->fragAllocator ); i < size; i++ ) {
-			const auto *frag = (loggedFrag_t *)LA_Pointer( stats->fragAllocator, i );
+		for( const loggedFrag_t &frag: cl->stats.fragsSequence ) {
 			writer << '{';
 			{
-				writer << "victim" << frag->victim;
-				writer << "weapon" << frag->weapon;
-				writer << "time" << frag->time;
+				writer << "victim" << frag.victim;
+				writer << "weapon" << frag.weapon;
+				writer << "time" << frag.time;
 			}
 			writer << '}';
 		}
@@ -1221,7 +1157,7 @@ void StatsowFacade::SendRaceReport( stat_query_api_t *sq_api ) {
 		return;
 	}
 
-	if( !raceRuns || !LA_Size( raceRuns ) ) {
+	if( raceRuns.empty() ) {
 		return;
 	}
 
@@ -1231,26 +1167,23 @@ void StatsowFacade::SendRaceReport( stat_query_api_t *sq_api ) {
 
 	writer << "race_runs" << '[';
 	{
-		size_t size = LA_Size( raceRuns );
-		for( size_t i = 0; i < size; i++ ) {
-			auto *prr = (raceRun_t*)LA_Pointer( raceRuns, i );
-
+		for( const auto &rr: raceRuns ) {
 			writer << '{';
 			{
 				// Setting session id and nickname is mutually exclusive
-				if( prr->owner.IsValidSessionId() ) {
-					writer << "session_id" << prr->owner;
+				if( rr.owner.IsValidSessionId() ) {
+					writer << "session_id" << rr.owner;
 				} else {
-					writer << "nickname" << prr->nickname;
+					writer << "nickname" << rr.nickname;
 				}
 
-				writer << "timestamp" << prr->utcTimestamp;
+				writer << "timestamp" << rr.utcTimestamp;
 
 				writer << "times" << '[';
 				{
 					// Accessing the "+1" element is legal (its the final time). Supply it along with other times.
-					for( int j = 0; j < prr->numSectors + 1; j++ )
-						writer << prr->times[j];
+					for( int j = 0; j < rr.numSectors + 1; j++ )
+						writer << rr.times[j];
 				}
 				writer << ']';
 			}
@@ -1261,7 +1194,5 @@ void StatsowFacade::SendRaceReport( stat_query_api_t *sq_api ) {
 
 	writer.Send();
 
-	// clear gameruns
-	LinearAllocator_Free( raceRuns );
-	raceRuns = nullptr;
+	raceRuns.Clear();
 }

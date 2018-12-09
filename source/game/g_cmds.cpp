@@ -818,8 +818,6 @@ static void Cmd_Timein_f( edict_t *ent ) {
 */
 static void Cmd_Awards_f( edict_t *ent ) {
 	gclient_t *client;
-	gameaward_t *ga;
-	int i, size;
 	static char entry[MAX_TOKEN_CHARS];
 
 	assert( ent && ent->r.client );
@@ -827,11 +825,10 @@ static void Cmd_Awards_f( edict_t *ent ) {
 
 	Q_snprintfz( entry, sizeof( entry ), "Awards for %s\n", client->netname );
 
-	if( client->level.stats.awardAllocator ) {
-		size = LA_Size( client->level.stats.awardAllocator );
-		for( i = 0; i < size; i++ ) {
-			ga = ( gameaward_t * )LA_Pointer( client->level.stats.awardAllocator, i );
-			Q_strncatz( entry, va( "\t%dx %s\n", ga->count, ga->name ), sizeof( entry ) );
+	const auto &awards = client->level.stats.awardsSequence;
+	if( !awards.empty() ) {
+		for( const gameaward_t &ga: awards ) {
+			Q_strncatz( entry, va( "\t%dx %s\n", ga.count, ga.name ), sizeof( entry ) );
 		}
 		G_PrintMsg( ent, "%s", entry );
 	}

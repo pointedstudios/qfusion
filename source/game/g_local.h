@@ -1335,13 +1335,15 @@ class StatsowFacade {
 	ClientEntry *clientEntriesHead { nullptr };
 	clientRating_t *ratingsHead { nullptr };
 
-	linear_allocator_t *raceRuns { nullptr };
+	StatsSequence<raceRun_t> raceRuns;
 
 	bool isDiscarded { false };
 
 	void AddPlayerReport( edict_t *ent, bool final );
 
 	void AddToExistingEntry( edict_t *ent, bool final, ClientEntry *e );
+	void MergeAwards( StatsSequence<gameaward_t> &to, StatsSequence<gameaward_t> &&from );
+
 	ClientEntry *NewPlayerEntry( edict_t *ent, bool final );
 
 	void AddPlayerAwards( class QueryWriter &writer, ClientEntry *cl );
