@@ -908,7 +908,6 @@ void CG_DrawTeamInfo( int x, int y, int align, struct qfontface_s *font, vec4_t 
 	int height;
 	int locationTag;
 	int health, armor;
-	centity_t *cent;
 	int xalign = align % 3;
 
 	if( !( cg.predictedPlayerState.stats[STAT_LAYOUTS] & STAT_LAYOUT_TEAMTAB ) ) {
@@ -1052,7 +1051,6 @@ void CG_DrawTeamInfo( int x, int y, int align, struct qfontface_s *font, vec4_t 
 					 ( health < 25 ) ? S_COLOR_RED : "", health, S_COLOR_WHITE, armor, S_COLOR_WHITE );
 
 		// draw the head-icon in the case this player has one
-		cent = &cg_entities[teammate + 1];
 		trap_SCR_DrawString( x, y, xalign, string, font, color );
 
 		y += height;

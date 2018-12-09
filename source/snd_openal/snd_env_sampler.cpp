@@ -291,7 +291,7 @@ static void ENV_ProcessUpdatesPriorityQueue() {
 		// Stop updates if the time quota has been exceeded immediately.
 		// Do not block the commands queue processing.
 		// The priority queue will be rebuilt next ENV_UpdateListenerCall().
-		if( trap_Microseconds() - micros > 2000 ) {
+		if( trap_Microseconds() - micros > 2000 && lastProcessedPriority < 1.0f ) {
 			break;
 		}
 	}

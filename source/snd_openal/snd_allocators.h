@@ -4,7 +4,7 @@
 #include "snd_local.h"
 
 // TODO: Should be lifted to the project top-level
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <sanitizer/asan_interface.h>
 #define DISABLE_ACCESS( addr, size ) ASAN_POISON_MEMORY_REGION( addr, size )
 #define ENABLE_ACCESS( addr, size ) ASAN_UNPOISON_MEMORY_REGION( addr, size )

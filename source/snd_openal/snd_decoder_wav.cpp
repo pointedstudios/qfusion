@@ -52,7 +52,7 @@ static int FGetLittleShort( int f ) {
 }
 
 static int readChunkInfo( int f, char *name ) {
-	int len, read;
+	int64_t len, read;
 
 	name[4] = 0;
 
@@ -62,12 +62,12 @@ static int readChunkInfo( int f, char *name ) {
 	}
 
 	len = FGetLittleLong( f );
-	if( len < 0 || len > 0xffffffff ) {
+	if( len < 0 || len > 0xffffffffll ) {
 		return 0;
 	}
 
 	len = ( len + 1 ) & ~1; // pad to word boundary
-	return len;
+	return (int)len;
 }
 
 static void skipChunk( int f, int length ) {

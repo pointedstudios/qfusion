@@ -111,7 +111,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set(CMAKE_OSX_SYSROOT "macosx")                                # Compile with latest available OS X sdk
     set(CMAKE_XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET "10.8")     # Use 10.8 as deployment target
     set(CMAKE_XCODE_ATTRIBUTE_GCC_C_LANGUAGE_STANDARD "gnu99")     # Use GNU99 standart for compiling C files
-    set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD "c++11") # Use C++11 standart for compiling C++ files
+    set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD "c++14") # Use C++14 standart for compiling C++ files
     set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")          # Use modern libc++ instead of libstdc++
     set(CMAKE_FRAMEWORK_PATH "../libsrcs/lib/mac/Frameworks")
     set(CMAKE_MACOSX_RPATH 1)
@@ -141,9 +141,9 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux" OR MINGW)
     set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fno-strict-aliasing -ffast-math -funroll-loops -msse2 -O2")
 
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-        set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++11")
+        set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++14")
     else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++11")
+        set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++14")
     endif()
 
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")

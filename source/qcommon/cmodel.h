@@ -18,10 +18,6 @@
 
  */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct cmodel_state_s cmodel_state_t;
 
 struct cmodel_s *CM_LoadMap( cmodel_state_t *cms, const char *name, bool clientload, unsigned *checksum );
@@ -88,7 +84,3 @@ void CM_ReleaseReference( cmodel_state_t *cms );
 //
 void CM_Init( void );
 void CM_Shutdown( void );
-
-#ifdef __cplusplus
-}
-#endif

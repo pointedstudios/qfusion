@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "cm_trace.h"
 
 static inline void CM_SetBuiltinBrushBounds( vec_bounds_t mins, vec_bounds_t maxs ) {
-	for( int i = 0; i < sizeof( vec_bounds_t ) / sizeof( vec_t ); ++i ) {
+	for( int i = 0; i < (int)( sizeof( vec_bounds_t ) / sizeof( vec_t ) ); ++i ) {
 		mins[i] = +999999;
 		maxs[i] = -999999;
 	}
@@ -65,7 +65,7 @@ struct CMTraceComputer *CM_GetTraceComputer( cmodel_state_t *cms ) {
 * Set up the planes so that the six floats of a bounding box
 * can just be stored out and get a proper clipping hull structure.
 */
-extern "C" void CM_InitBoxHull( cmodel_state_t *cms ) {
+void CM_InitBoxHull( cmodel_state_t *cms ) {
 	cms->box_brush->numsides = 6;
 	cms->box_brush->brushsides = cms->box_brushsides;
 	cms->box_brush->contents = CONTENTS_BODY;
@@ -111,7 +111,7 @@ extern "C" void CM_InitBoxHull( cmodel_state_t *cms ) {
 * Set up the planes so that the six floats of a bounding box
 * can just be stored out and get a proper clipping hull structure.
 */
-extern "C" void CM_InitOctagonHull( cmodel_state_t *cms ) {
+void CM_InitOctagonHull( cmodel_state_t *cms ) {
 	const vec3_t oct_dirs[4] = {
 		{  1,  1, 0 },
 		{ -1,  1, 0 },
@@ -181,7 +181,7 @@ extern "C" void CM_InitOctagonHull( cmodel_state_t *cms ) {
 *
 * To keep everything totally uniform, bounding boxes are turned into inline models
 */
-extern "C" cmodel_t *CM_ModelForBBox( cmodel_state_t *cms, vec3_t mins, vec3_t maxs ) {
+cmodel_t *CM_ModelForBBox( cmodel_state_t *cms, vec3_t mins, vec3_t maxs ) {
 	cbrushside_t *sides = cms->box_brush->brushsides;
 	sides[0].plane.dist = maxs[0];
 	sides[1].plane.dist = -mins[0];
@@ -202,7 +202,7 @@ extern "C" cmodel_t *CM_ModelForBBox( cmodel_state_t *cms, vec3_t mins, vec3_t m
 * Same as CM_ModelForBBox with 4 additional planes at corners.
 * Internally offset to be symmetric on all sides.
 */
-extern "C" cmodel_t *CM_OctagonModelForBBox( cmodel_state_t *cms, vec3_t mins, vec3_t maxs ) {
+cmodel_t *CM_OctagonModelForBBox( cmodel_state_t *cms, vec3_t mins, vec3_t maxs ) {
 	int i;
 	float a, b, d, t;
 	float sina, cosa;
@@ -821,7 +821,7 @@ void CMTraceComputer::Trace( trace_t *tr, const vec3_t start, const vec3_t end,
 * Handles offseting and rotation of the end points for moving and
 * rotating entities
 */
-extern "C" void CM_TransformedBoxTrace( cmodel_state_t *cms, trace_t *tr, vec3_t start, vec3_t end,
+void CM_TransformedBoxTrace( cmodel_state_t *cms, trace_t *tr, vec3_t start, vec3_t end,
 										vec3_t mins, vec3_t maxs, cmodel_t *cmodel,
 										int brushmask, vec3_t origin, vec3_t angles ) {
 	vec3_t start_l, end_l;

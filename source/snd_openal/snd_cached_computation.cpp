@@ -184,7 +184,7 @@ CachedComputationWriter::CachedComputationWriter( const CachedComputation *paren
 bool CachedComputationWriter::WriteString( const char *string ) {
 	char buffer[MAX_STRING_CHARS];
 	auto charsPrinted = (unsigned)Q_snprintfz( buffer, sizeof( buffer ), "%s\r\n", string );
-	if( charsPrinted == trap_FS_Write( buffer, charsPrinted, fd ) ) {
+	if( charsPrinted == (unsigned)trap_FS_Write( buffer, charsPrinted, fd ) ) {
 		bytesWritten += charsPrinted;
 		return true;
 	}

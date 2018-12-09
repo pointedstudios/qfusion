@@ -33,7 +33,7 @@ file(GLOB GAME_SOURCES
 	"ai/planning/*.cpp"
 	"ai/teamplay/*.cpp"
 	"../gameshared/*.c"
-	"../matchmaker/mm_rating.c"
+	"../matchmaker/mm_rating.cpp"
 	"../qalgo/base64.c"
 	"../qalgo/md5.c"
 	"../../third-party/recastnavigation/Recast/Source/*.cpp"

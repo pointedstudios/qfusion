@@ -34,14 +34,15 @@ file(GLOB CLIENT_HEADERS
 )
 
 file(GLOB CLIENT_COMMON_SOURCES
-    "../qcommon/*.c"
 	"../qcommon/*.cpp"
-    "../server/*.c"
-    "*.c"
+	"../qcommon/patch.c"
+	"../qcommon/bsp.c"
+    "../server/*.cpp"
+    "*.cpp"
     "../gameshared/q_*.c"
     "../qalgo/*.c"
-    "../matchmaker/*.c"
-	"libmumblelink/*.c"
+    "../matchmaker/*.cpp"
+	"libmumblelink/*.cpp"
 )
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
@@ -54,22 +55,22 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 
     if (USE_SDL2)
         file(GLOB CLIENT_PLATFORM_SOURCES
-            "../win32/win_fs.c"
-            "../win32/win_net.c"
-            "../win32/win_sys.c"
-            "../win32/win_console.c"
-            "../win32/win_threads.c"
-            "../null/sys_vfs_null.c"
+            "../win32/win_fs.cpp"
+            "../win32/win_net.cpp"
+            "../win32/win_sys.cpp"
+            "../win32/win_console.cpp"
+            "../win32/win_threads.cpp"
+            "../null/sys_vfs_null.cpp"
 
-            "../sdl/sdl_input.c"
-            "../sdl/sdl_input_joy.c"
-            "../sdl/sdl_input_win.c"
-            "../sdl/sdl_vid.c"
-            "../sdl/sdl_sys.c"
-            "../sdl/sdl_clipboard.c"
-            "../sdl/sdl_time.c"
-            "../sdl/sdl_lib.c"
-            "../sdl/sdl_client.c"
+            "../sdl/sdl_input.cpp"
+            "../sdl/sdl_input_joy.cpp"
+            "../sdl/sdl_input_win.cpp"
+            "../sdl/sdl_vid.cpp"
+            "../sdl/sdl_sys.cpp"
+            "../sdl/sdl_clipboard.cpp"
+            "../sdl/sdl_time.cpp"
+            "../sdl/sdl_lib.cpp"
+            "../sdl/sdl_client.cpp"
 
             "../win32/qfusion.rc"
         )
@@ -77,20 +78,20 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
         set(CLIENT_PLATFORM_LIBRARIES ${SDL2_LIBRARY} ${SDL2MAIN_LIBRARY} "ws2_32.lib" "winmm.lib")
     else()
         file(GLOB CLIENT_PLATFORM_SOURCES
-            "../win32/win_fs.c"
-            "../win32/win_lib.c"
-            "../win32/win_net.c"
-            "../win32/win_sys.c"
-            "../win32/win_console.c"
-            "../win32/win_clipboard.c"
-            "../win32/win_time.c"
-            "../win32/win_threads.c"
-            "../null/sys_vfs_null.c"
+            "../win32/win_fs.cpp"
+            "../win32/win_lib.cpp"
+            "../win32/win_net.cpp"
+            "../win32/win_sys.cpp"
+            "../win32/win_console.cpp"
+            "../win32/win_clipboard.cpp"
+            "../win32/win_time.cpp"
+            "../win32/win_threads.cpp"
+            "../null/sys_vfs_null.cpp"
 
-            "../win32/win_client.c"
-            "../win32/win_input.c"
-            "../win32/win_vid.c"
-            "../win32/conproc.c"
+            "../win32/win_client.cpp"
+            "../win32/win_input.cpp"
+            "../win32/win_vid.cpp"
+            "../win32/conproc.cpp"
 
             "../win32/qfusion.rc"
         )
@@ -107,22 +108,22 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 	set(CLIENT_PLATFORM_HEADERS "")
 	
     file(GLOB CLIENT_PLATFORM_SOURCES
-        "../unix/unix_fs.c"
-        "../unix/unix_net.c"
-        "../unix/unix_sys.c"
-        "../unix/unix_console.c"
-        "../unix/unix_threads.c"
-        "../null/sys_vfs_null.c"
+        "../unix/unix_fs.cpp"
+        "../unix/unix_net.cpp"
+        "../unix/unix_sys.cpp"
+        "../unix/unix_console.cpp"
+        "../unix/unix_threads.cpp"
+        "../null/sys_vfs_null.cpp"
 
-        "../sdl/sdl_input.c"
-        "../sdl/sdl_input_joy.c"
+        "../sdl/sdl_input.cpp"
+        "../sdl/sdl_input_joy.cpp"
         "../sdl/sdl_input_osx.m"
-        "../sdl/sdl_vid.c"
-        "../sdl/sdl_sys.c"
-        "../sdl/sdl_clipboard.c"
-        "../sdl/sdl_time.c"
-        "../sdl/sdl_lib.c"
-        "../sdl/sdl_client.c"
+        "../sdl/sdl_vid.cpp"
+        "../sdl/sdl_sys.cpp"
+        "../sdl/sdl_clipboard.cpp"
+        "../sdl/sdl_time.cpp"
+        "../sdl/sdl_lib.cpp"
+        "../sdl/sdl_client.cpp"
 
         "../mac/mac_sys.m"
         "${QFUSION_MAC_INFO_PLIST}"
@@ -148,43 +149,43 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 
     if (USE_SDL2)
         file(GLOB CLIENT_PLATFORM_SOURCES
-            "../unix/unix_fs.c"
-            "../unix/unix_net.c"
-            "../unix/unix_sys.c"
-            "../unix/unix_console.c"
-            "../unix/unix_threads.c"
-            "../null/sys_vfs_null.c"
+            "../unix/unix_fs.cpp"
+            "../unix/unix_net.cpp"
+            "../unix/unix_sys.cpp"
+            "../unix/unix_console.cpp"
+            "../unix/unix_threads.cpp"
+            "../null/sys_vfs_null.cpp"
 
-            "../sdl/sdl_input.c"
-            "../sdl/sdl_input_joy.c"
-            "../sdl/sdl_input_unix.c"
-            "../sdl/sdl_vid.c"
-            "../sdl/sdl_sys.c"
-            "../sdl/sdl_clipboard.c"
-            "../sdl/sdl_time.c"
-            "../sdl/sdl_lib.c"
-            "../sdl/sdl_client.c"
+            "../sdl/sdl_input.cpp"
+            "../sdl/sdl_input_joy.cpp"
+            "../sdl/sdl_input_unix.cpp"
+            "../sdl/sdl_vid.cpp"
+            "../sdl/sdl_sys.cpp"
+            "../sdl/sdl_clipboard.cpp"
+            "../sdl/sdl_time.cpp"
+            "../sdl/sdl_lib.cpp"
+            "../sdl/sdl_client.cpp"
         )
 
         set(CLIENT_PLATFORM_LIBRARIES ${SDL2_LIBRARY} "pthread" "m" "dl" "rt")
     else()
         file(GLOB CLIENT_PLATFORM_SOURCES
-            "../unix/unix_fs.c"
-            "../unix/unix_lib.c"
-            "../unix/unix_net.c"
-            "../unix/unix_sys.c"
-            "../unix/unix_console.c"
-            "../unix/unix_clipboard.c"
-            "../unix/unix_time.c"
-            "../unix/unix_threads.c"
-            "../null/sys_vfs_null.c"
+            "../unix/unix_fs.cpp"
+            "../unix/unix_lib.cpp"
+            "../unix/unix_net.cpp"
+            "../unix/unix_sys.cpp"
+            "../unix/unix_console.cpp"
+            "../unix/unix_clipboard.cpp"
+            "../unix/unix_time.cpp"
+            "../unix/unix_threads.cpp"
+            "../null/sys_vfs_null.cpp"
 
             "../unix/keysym2ucs.c"
-            "../unix/unix_client.c"
-            "../unix/unix_input.c"
-            "../unix/unix_vid.c"
+            "../unix/unix_client.cpp"
+            "../unix/unix_input.cpp"
+            "../unix/unix_vid.cpp"
 
-            "../sdl/sdl_input_joy.c"
+            "../sdl/sdl_input_joy.cpp"
         )
     
         set(CLIENT_PLATFORM_LIBRARIES ${SDL2_LIBRARY} "pthread" "dl" "m" "X11" "Xi" "Xext" "Xrandr" "rt")

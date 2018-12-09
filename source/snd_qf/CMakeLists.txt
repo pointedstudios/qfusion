@@ -13,7 +13,7 @@ file(GLOB SND_QF_HEADERS
 )
 
 file(GLOB SND_QF_SOURCES
-    "*.c"
+    "*.cpp"
     "../snd_common/*.c"
     "../snd_common/*.cpp"
     "../gameshared/q_*.c"
@@ -21,7 +21,7 @@ file(GLOB SND_QF_SOURCES
 
 if (USE_SDL2 OR (${CMAKE_SYSTEM_NAME} MATCHES "Linux"))
     file(GLOB SND_QF_PLATFORM_SOURCES
-        "../sdl/sdl_snd.c"
+        "../sdl/sdl_snd.cpp"
     )
 
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
@@ -31,7 +31,7 @@ if (USE_SDL2 OR (${CMAKE_SYSTEM_NAME} MATCHES "Linux"))
     endif()
 else()
     file(GLOB SND_QF_PLATFORM_SOURCES
-        "../win32/win_snd.c"
+        "../win32/win_snd.cpp"
     )
 
     set(SND_QF_PLATFORM_LIBRARIES "winmm.lib")

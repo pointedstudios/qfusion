@@ -21,10 +21,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "snd_local.h"
 #include "snd_cmdque.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // =====================================================================
 
 /*
@@ -408,7 +404,3 @@ void S_WaitEnqueuedCmds( sndCmdPipe_t *queue, int ( *read )( sndCmdPipe_t *, uns
 						 unsigned( **cmdHandlers )( const void * ), unsigned timeout_msec ) {
 	trap_BufPipe_Wait( queue, read, cmdHandlers, timeout_msec );
 }
-
-#ifdef __cplusplus
-}
-#endif

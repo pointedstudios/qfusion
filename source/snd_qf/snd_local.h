@@ -19,10 +19,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // snd_loc.h -- private sound functions
 
+#ifndef SND_QF_LOCAL_H_
+#define SND_QF_LOCAL_H_
+
 //#define VORBISLIB_RUNTIME // enable this define for dynamic linked vorbis libraries
 
 // it's in qcommon.h too, but we don't include it for modules
-typedef struct { char *name; void **funcPointer; } dllfunc_t;
+typedef struct { const char *name; void **funcPointer; } dllfunc_t;
 
 #include "../gameshared/q_arch.h"
 #include "../gameshared/q_math.h"
@@ -152,7 +155,13 @@ typedef struct {
 } entity_spatialization_t;
 
 int S_API( void );
-void S_Error( const char *format, ... );
+
+#ifndef _MSC_VER
+void S_Error( const char *format, ... ) __attribute__( ( format( printf, 1, 2 ) ) ) __attribute__( ( noreturn ) );
+#else
+__declspec( noreturn ) void S_Error( _Printf_format_string_ const char *format, ... );
+#endif
+
 void S_Activate( bool active );
 
 void *S_BackgroundUpdateProc( void *param );
@@ -324,3 +333,5 @@ static inline int S_Lowpass2pole( int sample, int *history, int coeff ) {
 	history[1] = output;
 	return output;
 }
+
+#endif

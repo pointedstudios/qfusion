@@ -19,6 +19,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // winquake.h: Win32-specific Quake header file
 
+#ifndef WINQUAKE_H_
+#define WINQUAKE_H_
+
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
@@ -41,3 +44,5 @@ extern HINSTANCE global_hInstance;
 
 extern HWND cl_hwnd, cl_parent_hwnd;
 extern int ActiveApp, Minimized, AppFocused;
+
+#endif

@@ -38,10 +38,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 //#define	PARANOID			// speed sapping error checking
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //============================================================================
 
 struct mempool_s;
@@ -972,9 +968,5 @@ void Com_Autoupdate_Init( void );
 void Com_Autoupdate_Run( bool checkOnly, void ( *newfiles_cb )( void ) );
 void Com_Autoupdate_Cancel( void );
 void Com_Autoupdate_Shutdown( void );
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // __QCOMMON_H

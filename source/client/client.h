@@ -33,6 +33,23 @@
 #include "console.h"
 #include "l10n.h"
 
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdlib>
+#include <functional>
+#include <limits>
+#include <memory>
+#include <new>
+#include <utility>
+
 typedef struct shader_s shader_t;
 typedef struct qfontface_s qfontface_t;
 
@@ -359,7 +376,7 @@ void CL_Init( void );
 void CL_Quit( void );
 
 void CL_UpdateClientCommandsToServer( msg_t *msg );
-void CL_AddReliableCommand( /*const*/ char *cmd );
+void CL_AddReliableCommand( const char *cmd );
 void CL_Netchan_Transmit( msg_t *msg );
 void CL_SendMessagesToServer( bool sendNow );
 void CL_RestartTimeDeltas( int newTimeDelta );

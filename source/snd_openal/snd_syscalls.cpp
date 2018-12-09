@@ -22,16 +22,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 sound_import_t SOUND_IMPORT;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /*
 * GetCGameAPI
 *
 * Returns a pointer to the structure with all entry points
 */
-QF_DLL_EXPORT sound_export_t *GetSoundAPI( sound_import_t *import ) {
+QF_DLL_EXPORT extern "C" sound_export_t *GetSoundAPI( sound_import_t *import ) {
 	static sound_export_t globals;
 
 	SOUND_IMPORT = *import;
@@ -75,7 +71,3 @@ QF_DLL_EXPORT sound_export_t *GetSoundAPI( sound_import_t *import ) {
 
 	return &globals;
 }
-
-#ifdef __cplusplus
-}
-#endif
