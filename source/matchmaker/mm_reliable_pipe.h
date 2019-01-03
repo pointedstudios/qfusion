@@ -27,7 +27,7 @@ class ReliablePipe {
 			return signaledForTermination.load( std::memory_order_relaxed );
 		}
 
-		void RunMessageLoop();
+		virtual void RunMessageLoop();
 
 		virtual void RunStep() = 0;
 
@@ -36,8 +36,6 @@ class ReliablePipe {
 		void SignalForTermination() {
 			signaledForTermination.store( true, std::memory_order_relaxed );
 		}
-
-		virtual void DropReport( QueryObject *report );
 	};
 
 	/**
@@ -46,13 +44,6 @@ class ReliablePipe {
 	 */
 	class BackgroundWriter final : public BackgroundRunner {
 		struct qbufPipe_s *const pipe;
-		/**
-		 * A report we currently try writing to the database.
-		 * @note do not confuse with {@code BackgroundSender::activeReport}.
-		 */
-		QueryObject *activeReport { nullptr };
-
-		unsigned numRetries { 0 };
 	public:
 		BackgroundWriter( LocalReportsStorage *reportsStorage_, struct qbufPipe_s *pipe_ )
 			: BackgroundRunner( "BackgroundWriter", reportsStorage_ ), pipe( pipe_ ) {}
@@ -66,19 +57,9 @@ class ReliablePipe {
 			AddReportCmd( BackgroundWriter *self_, QueryObject *report_ ): id( 0 ), self( self_ ), report( report_ ) {}
 		};
 
-		void AddReport( QueryObject *report ) {
-			// The pipe must be read only if there's no active report
-			assert( !activeReport );
-			activeReport = report;
-			numRetries = 0;
-		}
+		void AddReport( QueryObject *report );
 
-		void DeleteActiveReport() {
-			assert( activeReport );
-			QueryObject::DeleteQuery( activeReport );
-			activeReport = nullptr;
-			numRetries = 0;
-		}
+		void RunMessageLoop() override;
 
 		void RunStep() override;
 

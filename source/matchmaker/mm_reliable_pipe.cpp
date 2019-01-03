@@ -77,60 +77,58 @@ ReliablePipe::BackgroundWriter::Handler ReliablePipe::BackgroundWriter::pipeHand
 	&ReliablePipe::BackgroundWriter::AddReportHandler
 };
 
-void ReliablePipe::BackgroundRunner::DropReport( QueryObject *report ) {
-	// TODO: What to do?
-	// This only can occur if the database keeps being locked.
-	// Writing reports to a file system can preserve report data but we dislike this approach.
-	// TODO: Maybe link in a queue and try writing while idle?
-	Com_Printf( S_COLOR_RED "Warning: Can't write a match report to a database, dropping the report..." );
-}
-
 unsigned ReliablePipe::BackgroundWriter::AddReportHandler( const void *data ) {
 	AddReportCmd cmd;
 	memcpy( &cmd, data, sizeof( AddReportCmd ) );
+	// Can block for a substantial amount of time
+	// (for several seconds awaiting for completion of uploader thread transaction)
 	cmd.self->AddReport( cmd.report );
 	return (unsigned)sizeof( AddReportCmd );
 }
 
 void ReliablePipe::BackgroundWriter::RunStep() {
 	Sys_Sleep( 32 );
-	// If there is no active report
-	if( !activeReport ) {
-		// Check the pipe for ingoing reports
-		QBufPipe_ReadCmds( pipe, pipeHandlers );
-		// If there is still no active report
-		if( !activeReport ) {
-			return;
-		}
-	}
 
-	assert( activeReport );
+	QBufPipe_ReadCmds( pipe, pipeHandlers );
+}
 
+void ReliablePipe::BackgroundWriter::RunMessageLoop() {
+	// Run the regular inherited message loop
+	ReliablePipe::BackgroundRunner::RunMessageLoop();
+
+	// Make sure all reports get written to the database.
+	// They could be still enqueued as the network uploader that could hold transactions
+	// has much lower throughput compared to writing to disk locally.
+	// At this moment the uploader is either terminated
+	// or won't do another read-and-upload attempt, hence the database is not going to be locked.
+	// This call blocks until all reports (if any) are written to the database.
+	QBufPipe_ReadCmds( pipe, pipeHandlers );
+}
+
+void ReliablePipe::BackgroundWriter::AddReport( QueryObject *report ) {
 	bool hasInsertionSucceeded = false;
-	bool hasTransactionSucceeded = reportsStorage->WithinTransaction([&]( DbConnection connection ) {
-		hasInsertionSucceeded = reportsStorage->Push( connection, activeReport );
+	auto block = [&]( DbConnection connection ) {
+		hasInsertionSucceeded = reportsStorage->Push( connection, report );
 		// Returning true means the transaction should be committed
 		return true;
-	});
+	};
 
-	if( hasTransactionSucceeded ) {
-		if( !hasInsertionSucceeded ) {
-			DropReport( activeReport );
+	for(;; ) {
+		bool hasTransactionSucceeded = reportsStorage->WithinTransaction( block );
+		// TODO: investigate SQLite behaviour... this code is based purely on MVCC RDBMS habits...
+		if( hasTransactionSucceeded ) {
+			// TODO: can insertion really fail?
+			if( !hasInsertionSucceeded ) {
+				Com_Printf( S_COLOR_RED "ReliablePipe::BackgroundWriter::AddReport(): Dropping a report\n" );
+			}
+			QueryObject::DeleteQuery( report );
+			return;
 		}
-		DeleteActiveReport();
-		return;
+
+		// Wait for an opportunity for writing given us by the uploader thread time-to-time.
+		// There should not be a substantial database lock contention.
+		Sys_Sleep( 16 );
 	}
-
-	// Looks like the database is locked by sender.
-	// Try inserting the active report again next step.
-
-	if( numRetries < 5 ) {
-		numRetries++;
-		return;
-	}
-
-	DropReport( activeReport );
-	DeleteActiveReport();
 }
 
 void ReliablePipe::BackgroundSender::RunStep() {
