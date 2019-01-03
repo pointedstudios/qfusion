@@ -497,7 +497,7 @@ static bool SV_MM_Login() {
 	}
 
 	query->SetAuthKey( sv_mm_authkey->string );
-	query->SetPort( va( "%d", sv_port->integer ) );
+	query->SetPort( sv_port->integer );
 	query->SetServerName( sv.configstrings[CS_HOSTNAME] );
 	query->SetServerAddress( sv_ip->string );
 	query->SetDemosBaseUrl( sv_uploads_demos_baseurl->string );

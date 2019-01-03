@@ -51,7 +51,7 @@ void QueryObject::RawCallback( wswcurl_req *req, int wswStatus, void *customp ) 
 }
 
 void QueryObject::HandleOtherFailure( wswcurl_req *, int wswStatus ) {
-	Com_Printf( "MM Query CURL error `%s`", wswcurl_errorstr( wswStatus ) );
+	Com_Printf( S_COLOR_YELLOW "QueryObject::HandleOtherFailure(): error `%s`\n", wswcurl_errorstr( wswStatus ) );
 	switch( -wswStatus ) {
 		case CURLE_COULDNT_RESOLVE_HOST:
 		case CURLE_COULDNT_CONNECT:
@@ -69,7 +69,7 @@ void QueryObject::HandleOtherFailure( wswcurl_req *, int wswStatus ) {
 void QueryObject::HandleHttpFailure( wswcurl_req *req, int status ) {
 	const char *error = wswcurl_errorstr( status );
 	const char *url = wswcurl_get_effective_url( req );
-	Com_Printf( "MM Query HTTP error: `%s`, url `%s`\n", error, url );
+	Com_Printf( S_COLOR_YELLOW "QueryObject::HandleHttpFailure(): HTTP error: `%s`, url `%s`\n", error, url );
 
 	// Get the real HTTP status. The supplied status argument is something else
 	// and might be an HTTP code if negated but lets query tested status explicitly.
@@ -91,13 +91,15 @@ void QueryObject::HandleHttpSuccess( wswcurl_req *req ) {
 		return;
 	}
 
+	constexpr const char *tag = "QueryObject::HandleHttpSuccess()";
 	if( strcmp( contentType, "application/json" ) != 0 ) {
 		// Some calls return plain text ok (do they?)
 		if( strcmp( contentType, "text/plain" ) == 0 ) {
 			SetStatus( SUCCEEDED );
 		}
-		Com_Printf( "MM Query error: unexpected content type `%s`", contentType );
+		Com_Printf( S_COLOR_YELLOW "%s: Unexpected content type `%s`\n", tag, contentType );
 		SetStatus( MALFORMED_RESPONSE );
+		return;
 	}
 
 	size_t rawSize;
@@ -111,73 +113,133 @@ void QueryObject::HandleHttpSuccess( wswcurl_req *req ) {
 	// read the response string
 	rawResponse = (char *)malloc( rawSize + 1 );
 	size_t readSize = wswcurl_read( req, rawResponse, rawSize );
+	QueryObject::Status status = SUCCEEDED;
 	if( readSize != rawSize ) {
-		const char *format = "MM Query error: can't read expected %u bytes, got %d instead\n";
-		Com_Printf( format, (unsigned)rawSize, (unsigned)readSize );
+		const char *format = "%s: Can't read expected %u bytes, got %d instead\n";
+		Com_Printf( format, tag, (unsigned)rawSize, (unsigned)readSize );
 		// We think it's better than a "network error"
-		SetStatus( MALFORMED_RESPONSE );
+		status = MALFORMED_RESPONSE;
 	} else {
 		if( rawSize ) {
 			if( !( responseRoot = cJSON_Parse( rawResponse ) ) ) {
-				SetStatus( MALFORMED_RESPONSE );
+				Com_Printf( "%s: Failed to parse JSON response\n", tag );
+				status = MALFORMED_RESPONSE;
 			}
 		}
 	}
 
 	rawResponse[rawSize] = '\0';
+
+	// Make sure it is set only all response parsing is finished
+	// so a polling thread can only see the object in a consistent state
+	SetStatus( status );
 }
 
-QueryObject::QueryObject( const char *url_, const char *iface_ ) {
-	assert( url_ );
-	if( !iface_ || !*iface_ ) {
-		return;
+char *QueryObject::CombineHostAndResource( const char *host, const char *resource, const char *postfix ) {
+	size_t hostLen = ::strlen( host );
+	size_t resourceLen = ::strlen( resource );
+	size_t postfixLen = ::strlen( postfix );
+
+	if( *resource == '/' ) {
+		resourceLen--;
+		resource++;
 	}
 
-	size_t len = strlen( iface_ );
-	this->iface = (char *)malloc( len + 1 );
-	memcpy( this->iface, iface_, len + 1 );
+	char *const result = (char *)::malloc( hostLen + resourceLen + postfixLen + 2 );
+	if( !result ) {
+		Com_Printf( S_COLOR_YELLOW "QueryObject::CombineHostAndResource(): Allocation failure\n" );
+		return nullptr;
+	}
+
+	char *p = CopyString( result, host, hostLen );
+
+	*p++ = '/';
+
+	p = CopyString( p, resource, resourceLen );
+	CopyString( p, postfix, postfixLen );
+
+	return result;
 }
 
-QueryObject *QueryObject::NewGetQuery( const char *url, const char *iface ) {
-	auto *query = new( malloc( sizeof( QueryObject ) ) )QueryObject( url, iface );
-	if( *url == '/' ) {
-		url++;
+QueryObject *QueryObject::NewQuery( const char *outgoingIp_ ) {
+	// Should not really fail here due to overcommit stuff but let's follow standards
+	void *queryMem = ::malloc( sizeof( QueryObject ) );
+	if( !queryMem ) {
+		Com_Printf( S_COLOR_YELLOW "QueryObject::NewQuery(): Can't allocate memory for a QueryObject\n" );
+		return nullptr;
 	}
-	// TODO: Get url from cvar system!
-	query->url = (char *)malloc( strlen( mm_url->string ) + strlen( url ) + 3 );
-	// ch : lazy code :(
-	// add in '/', '?' and '\0' = 3
-	strcpy( query->url, mm_url->string );
-	strcat( query->url, "/" );
-	strcat( query->url, url );
-	strcat( query->url, "?" );
 
-	query->isPostQuery = false;
+	if( !outgoingIp_ || !( *outgoingIp_ ) ) {
+		return new( queryMem )QueryObject;
+	}
+
+	size_t ipLen = ::strlen( outgoingIp_ );
+	void *ipMem = ::malloc( ipLen + 1 );
+	if( !ipMem ) {
+		Com_Printf( S_COLOR_YELLOW "QueryObject::NewQuery(): Can't allocate memory for a QueryObject interface field\n" );
+		::free( queryMem );
+		return nullptr;
+	}
+
+	::memcpy( ipMem, outgoingIp_, ipLen + 1 );
+
+	auto *result = new( queryMem )QueryObject;
+	result->outgoingIp = (char *)ipMem;
+	return result;
+}
+
+QueryObject *QueryObject::NewQuery( const char *outgoingIp_, char *combinedUrl ) {
+	if( !combinedUrl ) {
+		return nullptr;
+	}
+
+	auto *query = NewQuery( outgoingIp_ );
+	if( !query ) {
+		::free( combinedUrl );
+		return nullptr;
+	}
+
+	query->url = combinedUrl;
 	return query;
 }
 
-QueryObject *QueryObject::NewPostQuery( const char *url, const char *iface ) {
-	auto *query = new( malloc( sizeof( QueryObject ) ) )QueryObject( url, iface );
-	query->isPostQuery = true;
-	return query;
+QueryObject *QueryObject::NewGetQuery( const char *resource, const char *outgoingIp ) {
+	if( char *url = CombineHostAndResource( mm_url->string, resource, "?" ) ) {
+		if( QueryObject *query = NewQuery( outgoingIp, url ) ) {
+			query->isPostQuery = false;
+			return query;
+		}
+	}
+	return nullptr;
+}
+
+QueryObject *QueryObject::NewPostQuery( const char *resource, const char *outgoingIp ) {
+	if( char *url = CombineHostAndResource( mm_url->string, resource ) ) {
+		if( QueryObject *query = NewQuery( outgoingIp, url ) ) {
+			query->isPostQuery = true;
+			return query;
+		}
+	}
+	return nullptr;
 }
 
 QueryObject::~QueryObject() {
-	if( req ) {
-		::wswcurl_delete( req );
-	}
-	if( oldReq ) {
-		::wswcurl_delete( oldReq );
-	}
+	::wswcurl_delete( req );
+	::wswcurl_delete( oldReq );
 
 	ClearFormData();
 
 	cJSON_Delete( requestRoot );
 	cJSON_Delete( responseRoot );
 
-	::free( iface );
+	::free( outgoingIp );
 	::free( url );
 	::free( rawResponse );
+}
+
+void QueryObject::DeleteQuery( QueryObject *query ) {
+	query->~QueryObject();
+	::free( query );
 }
 
 void QueryObject::ClearFormData() {
@@ -236,7 +298,7 @@ bool QueryObject::Prepare() {
 	// GET request, finish the url and create the object
 	if( !isPostQuery ) {
 		assert( url );
-		req = wswcurl_create( iface, url );
+		req = wswcurl_create( outgoingIp, url );
 		return true;
 	}
 
@@ -248,8 +310,7 @@ bool QueryObject::Prepare() {
 		assert( !requestRoot );
 	}
 
-	// TODO: Get url from cvar system!
-	req = wswcurl_create( iface, "%s/%s", mm_url->string, ( *url == '/' ) ? url + 1 : url );
+	req = wswcurl_create( outgoingIp, url );
 	for( FormParam *param = formParamsHead; param; param = param->next ) {
 		// Hack for encoded JSON that is stored along other parameters
 		if( Q_stricmp( param->name, "json_attachment" ) != 0 ) {
@@ -274,16 +335,18 @@ bool QueryObject::ConvertJsonToEncodedForm() {
 
 	using DataHolder = std::unique_ptr<uint8_t, CallFree>;
 
+	constexpr const char *tag = "QueryObject::ConvertJsonToEncodedForm";
+
 	unsigned long compSize = (unsigned)( jsonSize * 1.1f ) + 12;
 	DataHolder compressed( (uint8_t *)::malloc( compSize ) );
 	if( !compressed ) {
-		Com_Printf( "StatQuery: Failed to allocate space for compressed JSON\n" );
+		Com_Printf( S_COLOR_YELLOW "%s: Failed to allocate space for compressed JSON\n", tag );
 		return false;
 	}
 
 	int z_result = qzcompress( compressed.get(), &compSize, (unsigned char*)jsonText.get(), jsonSize );
 	if( z_result != Z_OK ) {
-		Com_Printf( "StatQuery: Failed to compress JSON\n" );
+		Com_Printf( S_COLOR_YELLOW "%s: Failed to compress JSON\n", tag );
 		return false;
 	}
 
@@ -291,7 +354,7 @@ bool QueryObject::ConvertJsonToEncodedForm() {
 	size_t b64Size;
 	DataHolder base64Encoded( ::base64_encode( (unsigned char *)compressed.get(), compSize, &b64Size ) );
 	if( !base64Encoded ) {
-		Com_Printf( "StatQuery: Failed to base64_encode JSON\n" );
+		Com_Printf( S_COLOR_YELLOW "%s: Failed to base64_encode JSON\n", tag );
 		return false;
 	}
 
@@ -319,5 +382,5 @@ void QueryObject::FailWith( const char *format, ... ) {
 
 	buffer[sizeof( buffer ) - 1] = '\0';
 
-	Com_Error( ERR_FATAL, "Fatal query error: %s\n", buffer );
+	Com_Error( ERR_FATAL, "QueryObject::FailWith(): `%s`\n", buffer );
 }

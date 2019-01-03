@@ -90,18 +90,18 @@ public:
  * Some methods are way too tied with {@code qcommon} stuff and have to be exported in modules (namely the game module).
  * The {@code FailWith} call should be defined in modules appropriately as well.
  */
-class QueryObject {
+class QueryObject final {
 	friend class JsonWriter;
 	friend class NodeReader;
 	friend class ObjectReader;
 	friend class ArrayReader;
 	friend class LocalReportsStorage;
-	friend class ReportsUploader;
 public:
 	using CompletionCallback = std::function<void( QueryObject * )>;
-
-protected:
-	// An implementation of this is left for every binary it gets included.
+private:
+	/**
+	 * An implementation of this is left for every binary it gets included.
+	 */
 #ifndef _MSC_VER
 	[[noreturn]]
 	static void FailWith( const char *format, ... ) __attribute__( ( format( printf, 1, 2 ) ) );
@@ -109,26 +109,70 @@ protected:
 	[[noreturn]]
 	static void FailWith( _Printf_format_string_ const char *format, ... );
 #endif
-private:
+	/**
+	 * Gets invoked by CURL completion callbacks.
+	 * Useful if the query gets begun by {@code QueryObject::
+	 */
 	CompletionCallback completionCallback = []( QueryObject * ) {};
+
+	/**
+	 * A JSON root of (an outgoing) request.
+	 * Gets created on demand.
+	 * The request must not be in "started" state for a valid access to this.
+	 * @note this root gets converted to a regular form parameter
+	 * for making query restart functionality code uniform.
+	 * @note should be released via {@code cJSON_Delete(cJSON *)} call.
+	 */
 	cJSON *requestRoot { nullptr };
+
+	/**
+	 * A root of a response JSON (if any).
+	 * The request must be in "ready" state and must succeed for a valid access to this.
+	 * @note should be released via {@code cJSON_Delete(cJSON *)} call.
+	 */
 	cJSON *responseRoot { nullptr };
 
+	/**
+	 * A current (active) request.
+	 * A successful {@code QueryObject::Prepare()} invocation creates this request.
+	 * @note should be released via {@code ::wswcurl_delete(wswcurl_req_s *)} call.
+	 */
 	wswcurl_req_s *req { nullptr };
+
 	/**
 	 * Just copy a request to this var and it is going to be deleted
 	 * (we do not want to link against {@code wswcurl} in the game module.
 	 * This is for supporting query restart functionality.
+	 * @note should be released via {@code ::wswcurl_delete(wswcurl_req_s *)} call.
 	 */
 	wswcurl_req_s *oldReq { nullptr };
 
+	/**
+	 * A full request URL.
+	 * @note should be released via {@code ::free(void *)} call.
+	 */
 	char *url { nullptr };
-	size_t urlLen { 0 };
-	char *iface { nullptr };
+
+	/**
+	 * An interface (outgoing IP to be clear) of this host that should be used for making a request.
+	 * Statsow expect server requests to come from IP's/interfaces specified in server credentials.
+	 * This field is not mandatory for clients.
+	 * @note should be released via {@code ::free(void *)} call.
+	 * @note {@code interface} could look better but it's a MSVC reserved word.
+	 */
+	char *outgoingIp { nullptr };
+
+	/**
+	 * A raw response string.
+	 * The request must be in "ready" state for a valid access to this.
+	 * @note should be released via {@code ::free(void *)} call.
+	 */
 	char *rawResponse { nullptr };
 
 	/**
-	 * Maintain a copy of parameters for query restarts
+	 * Stores copies of form parameters for query restarts.
+	 * (they are not attached directly to a CURL object).
+	 * This is also very useful for requests serialization/deserialization.
 	 */
 	struct FormParam {
 		FormParam *next { nullptr };
@@ -140,6 +184,11 @@ private:
 	};
 
 	FormParam *formParamsHead { nullptr };
+	/**
+	 * Indicates whether we have already converted JSON request root to a form parameter
+	 * (so there is a present JSON root even if the corresponding class field is null).
+	 * Useful for requests serialization to / deserialization from a local storage.
+	 */
 	bool hasConveredJsonToFormParam { false };
 
 	enum Status: uint32_t {
@@ -154,50 +203,177 @@ private:
 		EXPLICIT_RETRY
 	};
 
+	/**
+	 * An atomic request status indicator used for status polling.
+	 */
 	std::atomic<Status> status { CREATED };
 
+	/**
+	 * Indicates whether this is a POST query (GET otherwise).
+	 * Using two disjoint types would look better but unforturnately
+	 * operating on polymorphic types is complicated across module bounds.
+	 */
 	bool isPostQuery { false };
+
+	/**
+	 * A request should delete self once completion callback returns if this flag is set.
+	 * Otherwise {@code QueryObject::DeleteQuery(QueryObject *)} should be invoked manually.
+	 */
 	bool deleteOnCompletion { false };
 
-	QueryObject( const char *url_, const char *iface_ );
+	/**
+	 * A helper for using instead of calling a constructor.
+	 * We still try avoiding using exceptions whether possible.
+	 */
+	static QueryObject *NewQuery( const char *outgoingIp_ );
+
+	/**
+	 * Another helper for multiphase construction
+	 */
+	static QueryObject *NewQuery( const char *outgoingIp, char *combinedUrl );
 
 	~QueryObject();
 
 	const char *FindFormParamByName( const char *name ) const;
 
 	void ClearFormData();
-public:
-	static QueryObject *NewGetQuery( const char *url, const char *iface = nullptr );
-	static QueryObject *NewPostQuery( const char *url, const char *iface = nullptr );
 
-	static void DeleteQuery( QueryObject *query ) {
-		query->~QueryObject();
-		::free( query );
-	}
+	static char *CombineHostAndResource( const char *host, const char *resource, const char *postfix = "" );
 
+	/**
+	 * Creates a CURL request and fills pending/postponed query parameters.
+	 */
 	bool Prepare();
 
+	/**
+	 * Converts the request JSON object to a regular form parameter
+	 * (a serialization to string, a zlib compression and a base-64 encoding are performed).
+	 */
 	bool ConvertJsonToEncodedForm();
 
+	/**
+	 * A raw (plain C) completion callback for CURL system.
+	 * Invokes a proper {@code Handle*} method, the {@code completionCallback}
+	 * and deletes the object if {@code deleteOnCompletion} flag is set.
+	 * @param req the executed request
+	 * @param wswStatus the status code. An HTTP status if positive.
+	 * Corresponds to a negated CURL error code if an error occurred.
+	 * @param customp a type-erased this object passed for the callback.
+	 */
 	static void RawCallback( wswcurl_req *req, int wswStatus, void *customp );
 
+	/**
+	 * Handles situations when {@code wswStatus} parameter supplied to
+	 * {@code RawCallback()} corresponds to some other (non-HTTP) CURL error.
+	 */
 	void HandleOtherFailure( wswcurl_req *req, int wswStatus );
 
+	/**
+	 * Handles situations when {@code wswStatus} parameter supplied to
+	 * {@code RawCallback()} corresponds to a CURL-detected HTTP error.
+	 */
 	void HandleHttpFailure( wswcurl_req *req, int wswStatus );
 
 	/**
-	 * Should handle situations when {@code RawCallback()} has been called with non-negative status.
+	 * Handles situations when a non-negative {@code wswStatus} parameter
+	 * has been supplied to {@code RawCallback()}.
 	 * An attempt to get and parse response body should be made.
 	 * {@code this->status} should be set appropriately.
 	 */
 	void HandleHttpSuccess( wswcurl_req *req );
 
+	/**
+	 * Sets the object completion status. There is no strict memory ordering implied.
+	 * In worst case the updated status is going to be read next polling frame.
+	 */
 	void SetStatus( Status status_ ) {
 		this->status.store( status_, std::memory_order_relaxed );
 	}
 
+	/**
+	 * A helper method that checks whether a response field access is valid.
+	 * @param itemToAccess a name of an item (a field) to access.
+	 */
+	void CheckReadyStatusForAccess( const char *itemToAccess ) const {
+		Status actualStatus = this->status.load( std::memory_order_seq_cst );
+		if( actualStatus < SUCCEEDED ) {
+			FailWith( "Attempt to get %s while the request is not ready yet", itemToAccess );
+		} else if( actualStatus > SUCCEEDED ) {
+			FailWith( "Attempt to get %s while the request has not succeeded", itemToAccess );
+		}
+	}
 
+	/**
+	 * Launches a CURL request setting callbacks. Sets a "started" status of the object.
+	 */
+	void Fire();
 
+	/**
+	 * A helper for the object status retrieval, checks the actual status against the supplied one.
+	 * @warning the object must be in "ready" state for calling this.
+	 */
+	bool TestCompletionStatus( Status testedStatus ) const {
+		return GetCompletionStatus() == testedStatus;
+	}
+
+	QueryObject &SetField( const char *name, const mm_uuid_t &value ) {
+		char buffer[UUID_BUFFER_SIZE];
+		return SetField( name, value.ToString( buffer ) );
+	}
+
+	static inline char *CopyString( char *p, const char *s, size_t len ) {
+		memcpy( p, s, len );
+		p[len] = '\0';
+		return p + len;
+	}
+
+	void SetGetQueryField( const char *name, size_t nameLen, const char *value, size_t valueLen ) {
+		assert( url );
+
+		// GET request, store parameters
+		// add in '=', '&' and '\0' = 3
+
+		size_t currLen = strlen( url );
+		// FIXME: add proper URL encode
+		size_t len = currLen + 3 + nameLen + valueLen;
+		url = (char *)realloc( url, len );
+
+		char *p = url + currLen;
+		p = CopyString( p, name, nameLen );
+		*p++ = '=';
+		p = CopyString( p, value, valueLen );
+		*p++ = '&';
+		*p = '\0';
+	}
+
+	void SetPostQueryField( const char *name, size_t nameLen, const char *value, size_t valueLen ) {
+		auto *p = (char *)::malloc( sizeof( FormParam ) + nameLen + 1 + valueLen + 1 );
+		auto *param = new( p )FormParam;
+		p += sizeof( FormParam );
+
+		param->name = p;
+		param->nameLen = (uint32_t)nameLen;
+		p = CopyString( p, name, nameLen );
+
+		// Skip zero byte after name
+		p++;
+
+		param->value = p;
+		param->valueLen = (uint32_t)valueLen;
+		CopyString( p, value, valueLen );
+
+		param->next = formParamsHead;
+		formParamsHead = param;
+	}
+
+	Status GetCompletionStatus() const {
+		Status actualStatus = status.load( std::memory_order_seq_cst );
+		if( actualStatus < SUCCEEDED ) {
+			FailWith( "Attempt to test status of request that is not ready yet" );
+		}
+		return actualStatus;
+	}
+public:
 	/**
 	 * Set a key/value request parameter.
 	 * GET parameters are added to an URL immediately.
@@ -219,57 +395,19 @@ public:
 	}
 
 	QueryObject &SetField( const char *name, size_t nameLen, const char *value, size_t valueLen ) {
-		// WARNING!
+		// CAUTION!
 		// Do not rely on input strings having zero terminators.
 		// Copy the given bytes count exactly and put zero bytes after manually.
 
-		if( !isPostQuery ) {
-			assert( url );
-			// GET request, store parameters
-			// add in '=', '&' and '\0' = 3
-
-			// FIXME: add proper URL encode
-			size_t len = urlLen + 3 + nameLen + valueLen;
-			url = (char *)realloc( url, len );
-
-			char *mem = url + urlLen;
-			::memcpy( mem, name, nameLen );
-			mem += nameLen;
-			*mem++ = '=';
-			memcpy( mem, value, valueLen );
-			*mem++ = '&';
-			*mem++ = '\0';
-
-			urlLen = len;
-			return *this;
+		if( isPostQuery ) {
+			SetPostQueryField( name, nameLen, value, valueLen );
+		} else {
+			SetGetQueryField( name, nameLen, value, valueLen );
 		}
 
-		auto *mem = (uint8_t *) ::malloc( sizeof( FormParam ) + nameLen + 1 + valueLen + 1 );
-		auto *param = new( mem )FormParam;
-		mem += sizeof( FormParam );
-
-		param->name = (char *)( mem );
-		param->nameLen = (uint32_t)nameLen;
-		::memcpy( mem, name, nameLen );
-		mem[nameLen] = '\0';
-
-		mem += nameLen + 1;
-
-		param->value = (char *)( mem );
-		param->valueLen = (uint32_t)valueLen;
-		::memcpy( mem, value, valueLen );
-		mem[valueLen] = '\0';
-
-		param->next = formParamsHead;
-		formParamsHead = param;
 		return *this;
 	}
 
-	QueryObject &SetField( const char *name, const mm_uuid_t &value ) {
-		char buffer[UUID_BUFFER_SIZE];
-		return SetField( name, value.ToString( buffer ) );
-	}
-public:
 	/**
 	 * Reads a root response string field. Provided for convenience.
 	 * @param field the field name
@@ -292,62 +430,98 @@ public:
 		return ObjectReader( ResponseJsonRoot() ).GetDouble( field, defaultValue );
 	}
 
-	QueryObject &SetServerSession( const char *value ) {
-		return SetField( "server_session", value );
-	}
-
+	/**
+	 * Sets a well-known predefined "server session" form parameter.
+	 */
 	QueryObject &SetServerSession( const mm_uuid_t &value ) {
 		return SetField( "server_session", value );
 	}
 
-	QueryObject &SetClientSession( const char *value ) {
-		return SetField( "client_session", value );
-	}
-
+	/**
+	 * Sets a well-known predefined "client session" form parameter.
+	 */
 	QueryObject &SetClientSession( const mm_uuid_t &value ) {
 		return SetField( "client_session", value );
 	}
 
+	/**
+	 * Sets a well-known predefined "client-to-server connection ticket" form parameter.
+	 */
 	QueryObject &SetTicket( const mm_uuid_t &value ) {
 		return SetField( "ticket", value );
 	}
 
+	/**
+	 * Sets a well-known predefined "client login handle" (login request id) form parameter.
+	 */
 	QueryObject &SetHandle( const mm_uuid_t &value ) {
 		return SetField( "handle", value );
 	}
 
+	/**
+	 * Sets a well-known predefined "login" (username) form parameter.
+	 */
 	QueryObject &SetLogin( const char *value ) {
 		return SetField( "login", value );
 	}
 
+	/**
+	 * Sets a well-known predefined "password" form parameter.
+	 */
 	QueryObject &SetPassword( const char *value ) {
 		return SetField( "password", value );
 	}
 
-	QueryObject &SetPort( const char *value ) {
-		return SetField( "port", value );
+	/**
+	 * Sets a well-known predefined "server port" form parameter
+	 */
+	QueryObject &SetPort( int value ) {
+		char buffer[64];
+		sprintf( buffer, "%d", value );
+		buffer[sizeof( buffer ) - 1] = '\0';
+		return SetField( "port", buffer );
 	}
 
+	/**
+	 * Sets a well-known predefined "server auth key" form parameter.
+	 */
 	QueryObject &SetAuthKey( const char *value ) {
 		return SetField( "auth_key", value );
 	}
 
+	/**
+	 * Sets a well-known predefined "server name" form parameter.
+	 */
 	QueryObject &SetServerName( const char *value ) {
 		return SetField( "server_name", value );
 	}
 
+	/**
+	 * Sets a well-known predefined "server demos base URL" form parameter.
+	 */
 	QueryObject &SetDemosBaseUrl( const char *value ) {
 		return SetField( "demos_baseurl", value );
 	}
 
+	/**
+	 * Sets a well-known predefined "server IP address" form parameter.
+	 */
 	QueryObject &SetServerAddress( const char *value ) {
 		return SetField( "server_address", value );
 	}
 
+	/**
+	 * Sets a well-known predefined "client IP address" form parameter.
+	 */
 	QueryObject &SetClientAddress( const char *value ) {
 		return SetField( "client_address", value );
 	}
 
+	/**
+	 * Gets a JSON response root to attach fields to.
+	 * Creates it if it is necessary. The query must be a POST query.
+	 * The query object should not be in "started" state.
+	 */
 	cJSON *RequestJsonRoot() {
 		if( !isPostQuery ) {
 			FailWith( "Attempt to add a JSON root to a GET request" );
@@ -364,67 +538,79 @@ public:
 		return requestRoot;
 	}
 
-	void CheckStatusOnGet( const char *itemToGet ) const {
-		Status actualStatus = this->status.load( std::memory_order_seq_cst );
-		if( actualStatus < SUCCEEDED ) {
-			FailWith( "Attempt to get %s while the request is not ready yet", itemToGet );
-		} else if( actualStatus > SUCCEEDED ) {
-			FailWith( "Attempt to get %s while the request has failed", itemToGet );
-		}
-	}
+	/**
+	 * Tries to create a new query object for GET request.
+	 * @param resource a resource part of a resulting URL.
+	 * @param outgoingIp an interface to use for making a network request (matters for a server).
+	 * @return a non-null object if the query creation has succeeded, null otherwise.
+	 */
+	static QueryObject *NewGetQuery( const char *resource, const char *outgoingIp = nullptr );
 
-	const cJSON *ResponseJsonRoot() const {
-		CheckStatusOnGet( "a JSON response root" );
-		return responseRoot;
-	}
+	/**
+	 * Tries to create a new query object for POST request.
+	 * @param resource a resource part of a resulting URL.
+	 * @param outgoingIp an interface to use for making a network request (matters for a server).
+	 * @return a non-null object if the query creating has succeeded, null otherwise.
+	 */
+	static QueryObject *NewPostQuery( const char *resource, const char *outgoingIp = nullptr );
 
-	cJSON *ResponseJsonRoot() {
-		CheckStatusOnGet( "a JSON response root" );
-		return responseRoot;
-	}
+	/**
+	 * Deletes a query previously created by
+	 * {@code QueryObject::NewGetQuery(const char *, const char *)}
+	 * or {@code QueryObject::NewPostQuery(const char *, const char *).
+	 * @warning the network request must not be in active state.
+	 * Either do not launch a query or wait for completion.
+	 */
+	static void DeleteQuery( QueryObject *query );
 
-	const char *RawResponse() {
-		CheckStatusOnGet( "a raw response" );
-		return rawResponse;
-	}
-
-	void Fire();
-
+	/**
+	 * Tries to start a network request for further status polling of it.
+	 * The query object should be deleted manually using
+	 * {@code QueryObject::DeleteQuery(QueryObject *)} after becoming ready.
+	 */
 	bool SendForStatusPolling();
 
+	/**
+	 * Tries to start a network request in "fire-and-forget" fashion.
+	 * @param callback a block of code to call once the object becomes ready.
+	 * @note the query object would be deleted automatically on completion.
+	 */
 	bool SendDeletingOnCompletion( CompletionCallback &&callback );
 
+	/**
+	 * Should be called (every) frame if there are active queries.
+	 * @fixme eliminate the necessity of doing this.
+	 */
 	static void Poll();
 
+	/**
+	 * Checks whether the network request has been executed (successfully or not).
+	 * Its safe to call this in any state.
+	 */
 	bool IsReady() const {
 		return status.load( std::memory_order_seq_cst ) >= SUCCEEDED;
 	}
 
-	Status GetCompletionStatus() const {
-		Status actualStatus = status.load( std::memory_order_seq_cst );
-		if( actualStatus < SUCCEEDED ) {
-			FailWith( "Attempt to test status of request that is not ready yet" );
-		}
-		return actualStatus;
-	}
+	/**
+	 * Indicates that the query has been executed successfully
+	 * and response retrieval (if any) is now can be performed.
+	 * @warning an object must be in "ready" state to call this.
+	 */
+	bool HasSucceeded() const { return TestCompletionStatus( SUCCEEDED ); }
 
-	bool TestStatus( Status testedStatus ) const {
-		return GetCompletionStatus() == testedStatus;
-	}
-
-	bool HasSucceeded() const { return TestStatus( SUCCEEDED ); }
-	bool IsOtherFailure() const { return TestStatus( OTHER_FAILURE ); }
-	bool IsNetworkFailure() const { return TestStatus( NETWORK_FAILURE ); }
-	bool IsServerFailure() const { return TestStatus( SERVER_FAILURE ); }
-	bool WasRequestMalformed() const { return TestStatus( MALFORMED_REQUEST ); }
-	bool WasResponseMalformed() const { return TestStatus( MALFORMED_RESPONSE ); }
-	bool ServerToldToRetry() const { return TestStatus( EXPLICIT_RETRY ); }
-
+	/**
+	 * Checks whether the failure is not a logical error and is due to
+	 * some 3-rd party troubles (e.g. network ones) so the query can (and should) be retried.
+	 * @warning an object must be in "ready" state to call this.
+	 */
 	bool ShouldRetry() {
 		Status status_ = GetCompletionStatus();
 		return status_ == EXPLICIT_RETRY || status_ == NETWORK_FAILURE || status_ == SERVER_FAILURE;
 	}
 
+	/**
+	 * Resets the query state (if present) for a retry.
+	 */
 	void ResetForRetry() {
 		if( req ) {
 			assert( !oldReq );
@@ -434,6 +620,33 @@ public:
 			::free( rawResponse );
 		}
 		SetStatus( CREATED );
+	}
+
+	/**
+	 * Gets a root of a JSON response (if any).
+	 * The object must be in "ready" state for the access being valid.
+	 */
+	const cJSON *ResponseJsonRoot() const {
+		CheckReadyStatusForAccess( "a JSON response root" );
+		return responseRoot;
+	}
+
+	/**
+	 * Gets a root of a JSON response (if any).
+	 * The object must be in "ready" state for the access being valid.
+	 */
+	cJSON *ResponseJsonRoot() {
+		CheckReadyStatusForAccess( "a JSON response root" );
+		return responseRoot;
+	}
+
+	/**
+	 * Gets a raw response string.
+	 * The object must be in "ready" state for the access being valid.
+	 */
+	const char *RawResponse() {
+		CheckReadyStatusForAccess( "a raw response" );
+		return rawResponse;
 	}
 };
 
