@@ -274,9 +274,9 @@ static edict_t *W_Fire_LinearProjectile( edict_t *self, vec3_t start, vec3_t ang
 	projectile->timeStamp = level.time;
 	projectile->timeDelta = timeDelta;
 
-	projectile->projectileInfo.minDamage = min( minDamage, damage );
+	projectile->projectileInfo.minDamage = std::min( (float)minDamage, damage );
 	projectile->projectileInfo.maxDamage = damage;
-	projectile->projectileInfo.minKnockback = min( minKnockback, maxKnockback );
+	projectile->projectileInfo.minKnockback = std::min( minKnockback, maxKnockback );
 	projectile->projectileInfo.maxKnockback = maxKnockback;
 	projectile->projectileInfo.stun = stun;
 	projectile->projectileInfo.radius = radius;
@@ -288,6 +288,7 @@ static edict_t *W_Fire_LinearProjectile( edict_t *self, vec3_t start, vec3_t ang
 	VectorCopy( projectile->s.origin, projectile->s.linearMovementBegin );
 	VectorCopy( projectile->velocity, projectile->s.linearMovementVelocity );
 	projectile->s.linearMovementTimeStamp = game.serverTime;
+	projectile->s.linearMovementOldTimeStamp = game.serverTime;
 	projectile->s.team = self->s.team;
 	projectile->s.modelindex2 = ( abs( timeDelta ) > 255 ) ? 255 : (unsigned int)abs( timeDelta );
 	return projectile;
@@ -336,9 +337,9 @@ static edict_t *W_Fire_TossProjectile( edict_t *self, vec3_t start, vec3_t angle
 	projectile->timeDelta = timeDelta;
 	projectile->s.team = self->s.team;
 
-	projectile->projectileInfo.minDamage = min( minDamage, damage );
+	projectile->projectileInfo.minDamage = std::min( (float)minDamage, damage );
 	projectile->projectileInfo.maxDamage = damage;
-	projectile->projectileInfo.minKnockback = min( minKnockback, maxKnockback );
+	projectile->projectileInfo.minKnockback = std::min( minKnockback, maxKnockback );
 	projectile->projectileInfo.maxKnockback = maxKnockback;
 	projectile->projectileInfo.stun = stun;
 	projectile->projectileInfo.radius = radius;

@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // g_public.h -- game dll information visible to server
 
-#define GAME_API_VERSION    51
+#define GAME_API_VERSION    55
 
 //===============================================================
 
@@ -81,7 +81,7 @@ typedef struct {
 #endif
 
 	// server commands sent to clients
-	void ( *GameCmd )( edict_t *ent, const char *cmd );
+	void ( *GameCmd )( const edict_t *ent, const char *cmd );
 
 	// config strings hold all the index strings,
 	// and misc data like audio track and gridsize.
@@ -104,17 +104,19 @@ typedef struct {
 
 	int ( *CM_NumInlineModels )( void );
 	struct cmodel_s *( *CM_InlineModel )( int num );
-	int ( *CM_TransformedPointContents )( vec3_t p, struct cmodel_s *cmodel, vec3_t origin, vec3_t angles );
-	void ( *CM_TransformedBoxTrace )( trace_t *tr, vec3_t start, vec3_t end, vec3_t mins, vec3_t maxs, struct cmodel_s *cmodel, int brushmask, vec3_t origin, vec3_t angles );
-	void ( *CM_InlineModelBounds )( struct cmodel_s *cmodel, vec3_t mins, vec3_t maxs );
-	struct cmodel_s *( *CM_ModelForBBox )( vec3_t mins, vec3_t maxs );
-	struct cmodel_s *( *CM_OctagonModelForBBox )( vec3_t mins, vec3_t maxs );
+	int ( *CM_TransformedPointContents )( const vec3_t p, const struct cmodel_s *cmodel, const vec3_t origin, const vec3_t angles, int topNodeHint );
+	void ( *CM_TransformedBoxTrace )( trace_t *tr, const vec3_t start, const vec3_t end, const vec3_t mins, const vec3_t maxs, const struct cmodel_s *cmodel, int brushmask, const vec3_t origin, const vec3_t angles, int topNodeHint );
+	void ( *CM_InlineModelBounds )( const struct cmodel_s *cmodel, vec3_t mins, vec3_t maxs );
+	struct cmodel_s *( *CM_ModelForBBox )( const vec3_t mins, const vec3_t maxs );
+	struct cmodel_s *( *CM_OctagonModelForBBox )( const vec3_t mins, const vec3_t maxs );
 	void ( *CM_SetAreaPortalState )( int area, int otherarea, bool open );
 	bool ( *CM_AreasConnected )( int area1, int area2 );
-	int ( *CM_BoxLeafnums )( vec3_t mins, vec3_t maxs, int *list, int listsize, int *topnode );
+	int ( *CM_BoxLeafnums )( const vec3_t mins, const vec3_t maxs, int *list, int listsize, int *topnode, int topNodeHint );
 	int ( *CM_LeafCluster )( int leafnum );
 	int ( *CM_LeafArea )( int leafnum );
 	int ( *CM_LeafsInPVS )( int leafnum1, int leafnum2 );
+	int ( *CM_FindTopNodeForBox )( const vec3_t mins, const vec3_t maxs, unsigned maxValue );
+	int ( *CM_FindTopNodeForSphere )( const vec3_t center, float radius, unsigned maxValue );
 
 	// managed memory allocation
 	void *( *Mem_Alloc )( size_t size, const char *filename, int fileline );
@@ -169,7 +171,7 @@ typedef struct {
 
 	// a fake client connection, ClientConnect is called afterwords
 	// with fakeClient set to true
-	int ( *FakeClientConnect )( char *fakeUserinfo, char *fakeSocketType, const char *fakeIP );
+	int ( *FakeClientConnect )( const char *fakeUserinfo, const char *fakeSocketType, const char *fakeIP );
 	void ( *DropClient )( struct edict_s *ent, int type, const char *message );
 	int ( *GetClientState )( int numClient );
 	void ( *ExecuteClientThinks )( int clientNum );
@@ -181,11 +183,12 @@ typedef struct {
 	// angelscript api
 	struct angelwrap_api_s *( *asGetAngelExport )( void );
 
-	// Match reporting to MM
+	class QueryObject *( *MM_NewPostQuery )( const char *url );
+	class QueryObject *( *MM_NewGetQuery )( const char *url );
+	void ( *MM_DeleteQuery )( class QueryObject *query );
+	bool ( *MM_SendQuery )( class QueryObject *query );
+	void ( *MM_EnqueueReport )( class QueryObject *query );
 
-	// GAME CANT USE ->Send directly!
-	struct stat_query_api_s *( *GetStatQueryAPI )( void );
-	void ( *MM_SendQuery )( struct stat_query_s *query );
 	void ( *MM_GameState )( bool state );
 } game_import_t;
 

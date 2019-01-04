@@ -21,10 +21,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef SND_OPENAL_SYSCALLS_H
 #define SND_OPENAL_SYSCALLS_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifdef SOUND_HARD_LINKED
 #define SOUND_IMPORT sndi_imp_local
 #endif
@@ -192,16 +188,17 @@ static inline void trap_UnloadLibrary( void **lib ) {
 	SOUND_IMPORT.Sys_UnloadLibrary( lib );
 }
 
-static inline void trap_Trace( struct trace_s *tr, vec3_t start, vec3_t end, vec3_t mins, vec3_t maxs, int mask ) {
-	SOUND_IMPORT.Trace( tr, start, end, mins, maxs, mask );
+static inline void trap_Trace( struct trace_s *tr, const vec3_t start, const vec3_t end, const vec3_t mins,
+							   const vec3_t maxs, int mask, int topNodeHint = 0 ) {
+	SOUND_IMPORT.Trace( tr, start, end, mins, maxs, mask, topNodeHint );
 }
 
-static inline int trap_PointContents( vec3_t p ) {
-	return SOUND_IMPORT.PointContents( p );
+static inline int trap_PointContents( const vec3_t p, int topNodeHint = 0 ) {
+	return SOUND_IMPORT.PointContents( p, topNodeHint );
 }
 
-static inline int trap_PointLeafNum( const vec3_t p ) {
-	return SOUND_IMPORT.PointLeafNum( p );
+static inline int trap_PointLeafNum( const vec3_t p, int topNodeHint = 0 ) {
+	return SOUND_IMPORT.PointLeafNum( p, topNodeHint );
 }
 
 static inline int trap_NumLeafs() {
@@ -219,6 +216,14 @@ static inline bool trap_LeafsInPVS( int leafnum1, int leafnum2 ) {
 		return true;
 	}
 	return SOUND_IMPORT.LeafsInPVS( leafnum1, leafnum2 );
+}
+
+static inline int trap_FindTopNodeForBox( const vec3_t mins, const vec3_t maxs ) {
+	return SOUND_IMPORT.FindTopNodeForBox( mins, maxs );
+}
+
+static inline int trap_FindTopNodeForSphere( const vec3_t center, float radius ) {
+	return SOUND_IMPORT.FindTopNodeForSphere( center, radius );
 }
 
 static inline const char *trap_GetConfigString( int index ) {
@@ -278,8 +283,8 @@ static inline void trap_BufPipe_Wait( qbufPipe_t *queue, int ( *read )( qbufPipe
 	SOUND_IMPORT.BufPipe_Wait( queue, read, cmdHandlers, timeout_msec );
 }
 
-#ifdef __cplusplus
+static inline bool trap_GetNumberOfProcessors( unsigned *physical, unsigned *logical ) {
+	return SOUND_IMPORT.GetNumberOfProcessors( physical, logical );
 }
-#endif
 
 #endif

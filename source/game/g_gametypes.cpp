@@ -536,8 +536,6 @@ cvar_t *g_gametype;
 cvar_t *g_gametype_generic;
 cvar_t *g_gametypes_list;
 
-void G_MatchSendReport( void );
-
 //==========================================================
 //					Matches
 //==========================================================
@@ -836,7 +834,7 @@ void G_Match_LaunchState( int matchState ) {
 	if( ( matchState == MATCH_STATE_POSTMATCH && GS_RaceGametype() )
 		|| ( matchState != MATCH_STATE_POSTMATCH && gs.gameState.stats[GAMESTAT_MATCHSTATE] == MATCH_STATE_POSTMATCH ) ) {
 		// entering postmatch in race or leaving postmatch in normal gt
-		G_Match_SendReport();
+		StatsowFacade::Instance()->SendReport();
 		trap_MM_GameState( false );
 	}
 
@@ -2019,6 +2017,6 @@ void G_Gametype_Init( void ) {
 	// ch : if new gametype has been initialized, transfer the
 	// client-specific ratings to gametype-specific list
 	if( changed ) {
-		G_TransferRatings();
+		StatsowFacade::Instance()->TransferRatings();
 	}
 }

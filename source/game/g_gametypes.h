@@ -21,6 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __G_GAMETYPE_H__
 #define __G_GAMETYPE_H__
 
+#include <cassert>
+#include <cstring>
+#include <cstdlib>
 #include <utility>
 
 #include "../matchmaker/mm_rating.h"
@@ -154,13 +157,193 @@ template <typename T, size_t N> inline void MoveArray( T ( &dest )[N], T ( &src 
 	memset( src, 0, N );
 }
 
-typedef struct score_stats_s: public GVariousStats {
-	score_stats_s(): GVariousStats( 271 ) {
+template <typename T>
+class StatsSequence {
+	struct Chunk {
+		Chunk *next { nullptr };
+		unsigned numItems { 0 };
+		/**
+		 * Keep this value instead of basing on the chunk size of a parent
+		 * as chunks could be transferred from other sequence
+		 * that does not obligatory has the same chunk size.
+		 */
+		unsigned itemsLeft { 0 };
+		uint8_t *data { nullptr };
+
+		~Chunk() {
+			auto *items = (T *)data;
+			for( unsigned i = 0; i < numItems; ++i ) {
+				items[i].~T();
+			}
+		}
+
+		bool IsFull() const {
+			return !itemsLeft;
+		}
+
+		void *UnsafeGrowBack() {
+			assert( itemsLeft );
+			void *result = data + ( numItems * sizeof( T ) );
+			numItems++;
+			itemsLeft--;
+			return result;
+		}
+	};
+
+	Chunk *headChunk { nullptr };
+	Chunk *tailChunk { nullptr };
+	const unsigned elemsPerChunk;
+	unsigned totalNumItems { 0 };
+
+	Chunk *AllocChunk() {
+		// TODO: Something weird was with operations priority so we have separated statements
+		size_t memSize = sizeof( Chunk );
+		memSize += ( sizeof( T ) + 8 ) & 7;
+		memSize += elemsPerChunk * sizeof( T );
+		auto *mem = (uint8_t *)trap_MemAlloc( memSize, __FILE__, __LINE__ );
+		auto *result = new( mem )Chunk;
+		result->itemsLeft = elemsPerChunk;
+		result->data = mem;
+		result->data += sizeof( Chunk );
+		result->data += ( sizeof( T ) + 8 ) & 7;
+		return result;
+	}
+
+	/**
+	 * @warning assumes default field values of `this`.
+	 */
+	void MoveFieldsFrom( StatsSequence &&that ) noexcept {
+		std::swap( this->headChunk, that.headChunk );
+		std::swap( this->tailChunk, that.tailChunk );
+		std::swap( this->totalNumItems, that.totalNumItems );
+	}
+public:
+	explicit StatsSequence( unsigned elemsPerChunk_ = 32 )
+		: elemsPerChunk( elemsPerChunk_ ) {
+		// Sanity check
+		assert( elemsPerChunk_ >= 1 && elemsPerChunk_ < ( 1u << 16u ) );
+	}
+
+	StatsSequence( const StatsSequence & ) = delete;
+	StatsSequence &operator=( const StatsSequence & ) = delete;
+
+	StatsSequence( StatsSequence &&that ) noexcept
+		: elemsPerChunk( that.elemsPerChunk ) {
+		MoveFieldsFrom( std::move( that ) );
+	}
+
+	StatsSequence &operator=( StatsSequence &&that ) noexcept {
+		Clear();
+		MoveFieldsFrom( std::move( that ) );
+		return *this;
+	}
+
+	~StatsSequence() {
 		Clear();
 	}
 
-	~score_stats_s() {
-		ReleaseAllocators();
+	void Clear() {
+		Chunk *nextChunk;
+		for( Chunk *chunk = headChunk; chunk; chunk = nextChunk ) {
+			nextChunk = chunk->next;
+			chunk->~Chunk();
+			trap_MemFree( chunk, __FILE__, __LINE__ );
+		}
+		headChunk = nullptr;
+		tailChunk = nullptr;
+		totalNumItems = 0;
+	}
+
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	unsigned size() const { return totalNumItems; }
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	bool empty() const { return !totalNumItems; };
+
+	template <typename... Args>
+	T *New( Args... args ) {
+		if( !tailChunk ) {
+			headChunk = tailChunk = AllocChunk();
+		} else if( tailChunk->IsFull() ) {
+			Chunk *chunk = AllocChunk();
+			tailChunk->next = chunk;
+			tailChunk = chunk;
+		}
+		totalNumItems++;
+		return new( tailChunk->UnsafeGrowBack() )T( args ... );
+	}
+
+	void MergeWith( StatsSequence<T> &&that ) noexcept {
+		if( !tailChunk ) {
+			this->headChunk = that.headChunk;
+			this->tailChunk = that.tailChunk;
+			this->totalNumItems = that.totalNumItems;
+		} else {
+			this->tailChunk->next = that.headChunk;
+			this->tailChunk = that.tailChunk;
+			this->totalNumItems += that.totalNumItems;
+		}
+		that.totalNumItems = 0;
+		that.headChunk = that.tailChunk = nullptr;
+	}
+
+	struct const_iterator {
+		Chunk *currChunk;
+		unsigned currElem;
+
+		bool operator==( const const_iterator &that ) const {
+			return currChunk == that.currChunk && currElem == that.currElem;
+		}
+
+		bool operator!=( const const_iterator &that ) const {
+			return !( *this == that );
+		}
+
+		const_iterator &operator++() {
+			assert( currChunk );
+			if( currElem + 1 < currChunk->numItems ) {
+				currElem++;
+				return *this;
+			}
+			currChunk = currChunk->next;
+			currElem = 0;
+			return *this;
+		}
+
+		const T &operator *() const {
+			assert( currChunk );
+			return *( (T *)currChunk->data + currElem );
+		}
+	};
+
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	const_iterator cbegin() const {
+		return { headChunk, 0 };
+	}
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	const_iterator cend() const {
+		return { nullptr, 0 };
+	}
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	const_iterator begin() const { return cbegin(); }
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	const_iterator end() const { return cend(); }
+};
+
+typedef struct score_stats_s: public GVariousStats {
+	score_stats_s(): GVariousStats( 271 ) {
+		Clear();
 	}
 
 	int score;
@@ -183,7 +366,8 @@ typedef struct score_stats_s: public GVariousStats {
 		memset( &currentRun, 0, sizeof( currentRun ) );
 		memset( &raceRecords, 0, sizeof( raceRecords ) );
 
-		ReleaseAllocators();
+		fragsSequence.Clear();
+		awardsSequence.Clear();
 	}
 
 	// These getters serve an utilty. We might think of precomputing handles (key/length)
@@ -217,12 +401,8 @@ typedef struct score_stats_s: public GVariousStats {
 
 	bool had_playtime;
 
-	// loggedFrag_t
-	linear_allocator_t *fragAllocator;
-
-	// gameaward_t
-	linear_allocator_t *awardAllocator;
-	// gameaward_t *gameawards;
+	StatsSequence<loggedFrag_t> fragsSequence;
+	StatsSequence<gameaward_t> awardsSequence;
 
 	raceRun_t currentRun;
 	raceRun_t raceRecords;
@@ -261,19 +441,8 @@ private:
 		this->raceRecords = that.raceRecords;
 		memset( &that.raceRecords, 0, sizeof( that.raceRecords ) );
 
-		this->awardAllocator = that.awardAllocator, that.awardAllocator = nullptr;
-		this->fragAllocator = that.fragAllocator, that.fragAllocator = nullptr;
-	}
-
-	void ReleaseAllocators() {
-		if( fragAllocator ) {
-			LinearAllocator_Free( fragAllocator );
-			fragAllocator = nullptr;
-		}
-		if( awardAllocator ) {
-			LinearAllocator_Free( awardAllocator );
-			awardAllocator = nullptr;
-		}
+		this->fragsSequence = std::move( that.fragsSequence );
+		this->awardsSequence = std::move( that.awardsSequence );
 	}
 } score_stats_t;
 

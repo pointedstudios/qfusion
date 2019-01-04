@@ -30,6 +30,7 @@ void CachedComputation::EnsureValid() {
 	// If it was a custom map a user has loaded once, results are expected to be under the cache directory.
 	for( int fsFlags : { FS_READ, ( FS_READ | FS_CACHE ) } ) {
 		if( TryReadFromFile( fsFlags ) ) {
+			isUsingValidData = true;
 			CommitUpdate();
 			return;
 		}
@@ -184,7 +185,7 @@ CachedComputationWriter::CachedComputationWriter( const CachedComputation *paren
 bool CachedComputationWriter::WriteString( const char *string ) {
 	char buffer[MAX_STRING_CHARS];
 	auto charsPrinted = (unsigned)Q_snprintfz( buffer, sizeof( buffer ), "%s\r\n", string );
-	if( charsPrinted == trap_FS_Write( buffer, charsPrinted, fd ) ) {
+	if( charsPrinted == (unsigned)trap_FS_Write( buffer, charsPrinted, fd ) ) {
 		bytesWritten += charsPrinted;
 		return true;
 	}

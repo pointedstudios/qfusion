@@ -19,9 +19,26 @@
  */
 // server.h
 
+#ifndef QFUSION_SERVER_H
+#define QFUSION_SERVER_H
+
 #include "../qcommon/qcommon.h"
 #include "../game/g_public.h"
 #include "../matchmaker/mm_rating.h"
+
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
+#include <algorithm>
+#include <cstdlib>
+#include <cmath>
+#include <memory>
+#include <new>
+#include <utility>
 
 //=============================================================================
 
@@ -388,7 +405,7 @@ void SV_MasterHeartbeat( void );
 void SV_MasterSendQuit( void );
 
 void SVC_MasterInfoResponse( const socket_t *socket, const netadr_t *address );
-int SVC_FakeConnect( char *fakeUserinfo, char *fakeSocketType, const char *fakeIP );
+int SVC_FakeConnect( const char *fakeUserinfo, const char *fakeSocketType, const char *fakeIP );
 
 void SV_UpdateActivity( void );
 
@@ -448,7 +465,11 @@ typedef struct {
 void SV_FlushRedirect( int sv_redirected, const char *outputbuf, const void *extra );
 void SV_SendClientMessages( void );
 
-void SV_Multicast( vec3_t origin, multicast_t to );
+/**
+ * Just a workaround to prevent inclusion of tables headers in other parts of server code than {@code sv_main.cpp}.
+ * @param cms a CM for a newly loaded map
+ */
+void SV_SetupSnapTables( cmodel_state_t *cms );
 
 #ifndef _MSC_VER
 void SV_BroadcastCommand( const char *format, ... ) __attribute__( ( format( printf, 1, 2 ) ) );
@@ -535,9 +556,14 @@ int SV_MM_GenerateLocalSession( void );
 
 // match report
 #include "../matchmaker/mm_common.h"
-struct stat_query_s *SV_MM_CreateQuery( const char *iface, const char *url, bool get );
-void SV_MM_SendQuery( stat_query_t *query );
+
+class QueryObject *SV_MM_NewGetQuery( const char *url );
+class QueryObject *SV_MM_NewPostQuery( const char *url );
+void SV_MM_DeleteQuery( class QueryObject *query );
+bool SV_MM_SendQuery( class QueryObject *query );
+void SV_MM_EnqueueReport( class QueryObject *matchReport );
 void SV_MM_GameState( bool state );
+
 void SV_MM_GetMatchUUID( void ( *callback_fn )( const char *uuid ) );
 
 //
@@ -553,3 +579,5 @@ const char *SV_Web_UpstreamBaseUrl( void );
 bool SV_Web_AddGameClient( const char *session, int clientNum, const netadr_t *netAdr );
 void SV_Web_RemoveGameClient( const char *session );
 void SV_Web_GameFrame( http_game_query_cb cb );
+
+#endif

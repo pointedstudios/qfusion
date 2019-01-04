@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "cm_trace.h"
 
 static inline void CM_SetBuiltinBrushBounds( vec_bounds_t mins, vec_bounds_t maxs ) {
-	for( int i = 0; i < sizeof( vec_bounds_t ) / sizeof( vec_t ); ++i ) {
+	for( int i = 0; i < (int)( sizeof( vec_bounds_t ) / sizeof( vec_t ) ); ++i ) {
 		mins[i] = +999999;
 		maxs[i] = -999999;
 	}
@@ -47,7 +47,7 @@ struct CMTraceComputer *CM_GetTraceComputer( cmodel_state_t *cms ) {
 		return selectedTraceComputer;
 	}
 
-	if( COM_CPUFeatures() & QF_CPU_FEATURE_SSE42 ) {
+	if( Sys_GetProcessorFeatures() & Q_CPU_FEATURE_SSE42 ) {
 		Com_Printf( "SSE4.2 instructions are supported. An optimized collision code will be used\n" );
 		selectedTraceComputer = &sse42TraceComputer;
 	} else {
@@ -65,7 +65,7 @@ struct CMTraceComputer *CM_GetTraceComputer( cmodel_state_t *cms ) {
 * Set up the planes so that the six floats of a bounding box
 * can just be stored out and get a proper clipping hull structure.
 */
-extern "C" void CM_InitBoxHull( cmodel_state_t *cms ) {
+void CM_InitBoxHull( cmodel_state_t *cms ) {
 	cms->box_brush->numsides = 6;
 	cms->box_brush->brushsides = cms->box_brushsides;
 	cms->box_brush->contents = CONTENTS_BODY;
@@ -111,7 +111,7 @@ extern "C" void CM_InitBoxHull( cmodel_state_t *cms ) {
 * Set up the planes so that the six floats of a bounding box
 * can just be stored out and get a proper clipping hull structure.
 */
-extern "C" void CM_InitOctagonHull( cmodel_state_t *cms ) {
+void CM_InitOctagonHull( cmodel_state_t *cms ) {
 	const vec3_t oct_dirs[4] = {
 		{  1,  1, 0 },
 		{ -1,  1, 0 },
@@ -181,7 +181,7 @@ extern "C" void CM_InitOctagonHull( cmodel_state_t *cms ) {
 *
 * To keep everything totally uniform, bounding boxes are turned into inline models
 */
-extern "C" cmodel_t *CM_ModelForBBox( cmodel_state_t *cms, vec3_t mins, vec3_t maxs ) {
+cmodel_t *CM_ModelForBBox( cmodel_state_t *cms, const vec3_t mins, const vec3_t maxs ) {
 	cbrushside_t *sides = cms->box_brush->brushsides;
 	sides[0].plane.dist = maxs[0];
 	sides[1].plane.dist = -mins[0];
@@ -202,7 +202,7 @@ extern "C" cmodel_t *CM_ModelForBBox( cmodel_state_t *cms, vec3_t mins, vec3_t m
 * Same as CM_ModelForBBox with 4 additional planes at corners.
 * Internally offset to be symmetric on all sides.
 */
-extern "C" cmodel_t *CM_OctagonModelForBBox( cmodel_state_t *cms, vec3_t mins, vec3_t maxs ) {
+cmodel_t *CM_OctagonModelForBBox( cmodel_state_t *cms, const vec3_t mins, const vec3_t maxs ) {
 	int i;
 	float a, b, d, t;
 	float sina, cosa;
@@ -600,7 +600,9 @@ void CMTraceComputer::ClipBoxToLeaf( CMTraceContext *tlc, cbrush_t *brushes,
 	}
 }
 
-void CMTraceComputer::RecursiveHullCheck( CMTraceContext *tlc, int num, float p1f, float p2f, vec3_t p1, vec3_t p2 ) {
+void CMTraceComputer::RecursiveHullCheck( CMTraceContext *tlc, int num,
+										  float p1f, float p2f,
+										  const vec3_t p1, const vec3_t p2 ) {
 	cnode_t *node;
 	cplane_t *plane;
 	int side;
@@ -718,11 +720,10 @@ void CMTraceComputer::SetupCollideContext( CMTraceContext *tlc, trace_t *tr, con
 	AddPointToBounds( tlc->endmaxs, tlc->absmins, tlc->absmaxs );
 }
 
-
-
 void CMTraceComputer::Trace( trace_t *tr, const vec3_t start, const vec3_t end,
-							 const vec3_t mins, const vec3_t maxs, cmodel_t *cmodel, int brushmask ) {
-	ATTRIBUTE_ALIGNED( 16 ) CMTraceContext tlc;
+							 const vec3_t mins, const vec3_t maxs,
+							 const cmodel_t *cmodel, int brushmask, int topNodeHint ) {
+	assert( topNodeHint >= 0 );
 
 	// fill in a default trace
 	memset( tr, 0, sizeof( *tr ) );
@@ -731,6 +732,7 @@ void CMTraceComputer::Trace( trace_t *tr, const vec3_t start, const vec3_t end,
 		return;
 	}
 
+	alignas( 16 ) CMTraceContext tlc;
 	SetupCollideContext( &tlc, tr, start, end, mins, maxs, brushmask );
 
 	//
@@ -751,7 +753,7 @@ void CMTraceComputer::Trace( trace_t *tr, const vec3_t start, const vec3_t end,
 
 			int leafs[1024];
 			int topnode;
-			int numleafs = CM_BoxLeafnums( cms, boxmins, boxmaxs, leafs, 1024, &topnode );
+			int numleafs = CM_BoxLeafnums( cms, boxmins, boxmaxs, leafs, 1024, &topnode, topNodeHint );
 			for( int i = 0; i < numleafs; i++ ) {
 				cleaf_t *leaf = &cms->map_leafs[leafs[i]];
 					if( leaf->contents & tlc.contents ) {
@@ -797,7 +799,7 @@ void CMTraceComputer::Trace( trace_t *tr, const vec3_t start, const vec3_t end,
 	// general sweeping through world
 	//
 	if( cmodel == cms->map_cmodels ) {
-		RecursiveHullCheck( &tlc, 0, 0, 1, const_cast<float *>( start ), const_cast<float *>( end ) );
+		RecursiveHullCheck( &tlc, topNodeHint, 0, 1, start, end );
 	} else if( BoundsIntersect( cmodel->mins, cmodel->maxs, tlc.absmins, tlc.absmaxs ) ) {
 		auto func = &CMTraceComputer::ClipBoxToBrush;
 		CollideBox( &tlc, func, cmodel->brushes, cmodel->numbrushes, cmodel->faces, cmodel->numfaces );
@@ -821,9 +823,14 @@ void CMTraceComputer::Trace( trace_t *tr, const vec3_t start, const vec3_t end,
 * Handles offseting and rotation of the end points for moving and
 * rotating entities
 */
-extern "C" void CM_TransformedBoxTrace( cmodel_state_t *cms, trace_t *tr, vec3_t start, vec3_t end,
-										vec3_t mins, vec3_t maxs, cmodel_t *cmodel,
-										int brushmask, vec3_t origin, vec3_t angles ) {
+void CM_TransformedBoxTrace( const cmodel_state_t *cms, trace_t *tr,
+							 const vec3_t start, const vec3_t end,
+							 const vec3_t mins, const vec3_t maxs,
+							 const cmodel_t *cmodel, int brushmask,
+							 const vec3_t origin, const vec3_t angles,
+							 int topNodeHint ) {
+	assert( topNodeHint >= 0 );
+
 	vec3_t start_l, end_l;
 	vec3_t a, temp;
 	mat3_t axis;
@@ -885,7 +892,7 @@ extern "C" void CM_TransformedBoxTrace( cmodel_state_t *cms, trace_t *tr, vec3_t
 	}
 
 	// sweep the box through the model
-	cms->traceComputer->Trace( tr, start_l, end_l, mins, maxs, cmodel, brushmask );
+	cms->traceComputer->Trace( tr, start_l, end_l, mins, maxs, cmodel, brushmask, topNodeHint );
 
 	if( rotated && tr->fraction != 1.0 ) {
 		VectorNegate( angles, a );

@@ -308,9 +308,10 @@ class LeafToLeafDirBuilder {
 	 * A picking might fail for degenerate leaves of some kind.
 	 * @param leafNum an actual leaf num in the collision world.
 	 * @param storageIndex an index of internal storage for first or second leaf (0 or 1)
+	 * @param topNodeHint a top node to start BSP traversal while testing point CM leaf num
 	 * @return false if a point picking has failed. A dir building should be interrupted in this case.
 	 */
-	bool PrepareTestedPointForLeaf( int leafNum, int storageIndex );
+	bool PrepareTestedPointForLeaf( int leafNum, int storageIndex, int topNodeHint );
 public:
 	explicit LeafToLeafDirBuilder( bool fastAndCoarse_, int numLeafs_ )
 		: maxAdditionalAttempts( fastAndCoarse_ ? ( numLeafs_ > 1000 ? 0 : 5 ) : 24 ) {
@@ -329,7 +330,7 @@ public:
 	float Build( int leaf1, int leaf2, vec3_t resultDir );
 };
 
-bool LeafToLeafDirBuilder::PrepareTestedPointForLeaf( int leafNum, int storageIndex ) {
+bool LeafToLeafDirBuilder::PrepareTestedPointForLeaf( int leafNum, int storageIndex, int topNodeHint ) {
 	float *const point = leafPoints[storageIndex];
 	const auto randomShift = (float)std::minstd_rand::min();
 	const auto randomScale = 1.0f / ( std::minstd_rand::max() - randomShift );
@@ -340,7 +341,7 @@ bool LeafToLeafDirBuilder::PrepareTestedPointForLeaf( int leafNum, int storageIn
 			float random01 = randomScale * ( randomnessEngine() - randomShift );
 			point[i] += -0.5f + random01 * leafDimensions[storageIndex][i];
 		}
-		if( trap_PointLeafNum( point ) == leafNum ) {
+		if( trap_PointLeafNum( point, topNodeHint ) == leafNum ) {
 			return true;
 		}
 	}
@@ -352,26 +353,32 @@ float LeafToLeafDirBuilder::Build( int leaf1, int leaf2, vec3_t resultDir ) {
 		return std::numeric_limits<float>::infinity();
 	}
 
-	const vec3_t *const bounds[2] = { trap_GetLeafBounds( leaf1 ), trap_GetLeafBounds( leaf2 ) };
-
+	vec3_t nodeHintBounds[2];
+	ClearBounds( nodeHintBounds[0], nodeHintBounds[1] );
+	const vec3_t *const leafBounds[2] = { trap_GetLeafBounds( leaf1 ), trap_GetLeafBounds( leaf2 ) };
 	for( int i = 0; i < 2; ++i ) {
 		// Get dimensions
-		VectorSubtract( bounds[i][1], bounds[i][0], leafCenters[i] );
+		VectorSubtract( leafBounds[i][1], leafBounds[i][0], leafCenters[i] );
 		VectorCopy( leafCenters[i], leafDimensions[i] );
 		// Get half-dimensions
 		VectorScale( leafCenters[i], 0.5f, leafCenters[i] );
 		// Add mins
-		VectorAdd( leafCenters[i], bounds[i][0], leafCenters[i] );
+		VectorAdd( leafCenters[i], leafBounds[i][0], leafCenters[i] );
+
+		// Build bounds for top node hint
+		AddPointToBounds( leafBounds[i][0], nodeHintBounds[0], nodeHintBounds[1] );
+		AddPointToBounds( leafBounds[i][1], nodeHintBounds[1], nodeHintBounds[1] );
 	}
 
 	// Prepare for adding dir contributions
 	VectorClear( resultDir );
 	bool hasContributingDirs = false;
 
+	const int topNodeHint = trap_FindTopNodeForBox( nodeHintBounds[0], nodeHintBounds[1] );
 	// Cast a ray from a leaf center to another leaf center.
 	// Do not test whether these centers really belong to a leaf
 	// (we remember this happening a lot for (almost) degenerate leaves while computing LeafPropsCache).
-	trap_Trace( &trace, leafCenters[0], leafCenters[1], vec3_origin, vec3_origin, MASK_SOLID );
+	trap_Trace( &trace, leafCenters[0], leafCenters[1], vec3_origin, vec3_origin, MASK_SOLID, topNodeHint );
 	if( trace.fraction == 1.0f ) {
 		// Add center-to-center dir contribution.
 		VectorSubtract( leafCenters[1], leafCenters[0], resultDir );
@@ -391,12 +398,12 @@ float LeafToLeafDirBuilder::Build( int leaf1, int leaf2, vec3_t resultDir ) {
 			// Stop doing attempts immediately on failure
 			// (we are very likely have met another kind of a degenerate leaf).
 			// TODO: We can try reusing picked leaf points from LeafPropsCache
-			if( !this->PrepareTestedPointForLeaf( leaves[j], j ) ) {
+			if( !this->PrepareTestedPointForLeaf( leaves[j], j, topNodeHint ) ) {
 				goto done;
 			}
 		}
 
-		trap_Trace( &trace, leafPoints[0], leafPoints[1], vec3_origin, vec3_origin, MASK_SOLID );
+		trap_Trace( &trace, leafPoints[0], leafPoints[1], vec3_origin, vec3_origin, MASK_SOLID, topNodeHint );
 		if( trace.fraction != 1.0f ) {
 			continue;
 		}
@@ -703,14 +710,15 @@ void GraphBuilder<AdjacencyListType, DistanceType>::BuildAdjacencyLists() {
 template <typename DistanceType>
 struct HeapEntry {
 	DistanceType distance;
+	DistanceType heapCost;
 	int leafNum;
 
-	HeapEntry( int leafNum_, DistanceType distance_ )
-		: distance( distance_ ), leafNum( leafNum_ ) {}
+	HeapEntry( int leafNum_, DistanceType distance_, DistanceType heapCost_ )
+		: distance( distance_ ), heapCost( heapCost_ ), leafNum( leafNum_ ) {}
 
 	bool operator<( const HeapEntry &that ) const {
 		// std:: algorithms use a max-heap
-		return distance > that.distance;
+		return heapCost > that.heapCost;
 	}
 };
 
@@ -739,9 +747,10 @@ public:
 	 * Constructs a new {@code HeapEntry} in place and adds it to the heap.
 	 * @param leaf a forwarded parameter of {@code HeapEntry()} constructor.
 	 * @param distance a forwarded parameter of {@code HeapEntry()} constructor.
+	 * @param heapCost a forwarded parameter of {@code HeapEntry()} constructor.
 	 */
-	void Push( int leaf, double distance ) {
-		new( buffer + size++ )HeapEntry<DistanceType>( leaf, distance );
+	void Push( int leaf, DistanceType distance, DistanceType heapCost ) {
+		new( buffer + size++ )HeapEntry<DistanceType>( leaf, distance, heapCost );
 		std::push_heap( buffer, buffer + size );
 	}
 
@@ -749,7 +758,7 @@ public:
 		return !size;
 	}
 
-	double BestDistance() const {
+	DistanceType BestDistance() const {
 		return buffer[0].distance;
 	}
 
@@ -818,6 +827,12 @@ public:
 template <typename DistanceType>
 class PathFinder {
 	template <typename> friend class PathReverseIterator;
+	template <typename> friend class PropagationTableBuilder;
+
+	/**
+	 * An euclidean leaf-to-leaf distance table supplied by a parent
+	 */
+	const float *const euclideanDistanceTable;
 
 	PropagationGraphBuilder<DistanceType> &graphBuilder;
 
@@ -829,9 +844,14 @@ class PathFinder {
 
 	IteratorType tmpDirectIterator;
 	IteratorType tmpReverseIterator;
+
+	float GetEuclideanDistance( int leaf1, int leaf2 ) const {
+		return euclideanDistanceTable[leaf1 * graphBuilder.NumLeafs() + leaf2];
+	}
 public:
-	explicit PathFinder( PropagationGraphBuilder<DistanceType> &graph_ )
-		: graphBuilder( graph_ )
+	explicit PathFinder( const float *euclideanDistanceTable_, PropagationGraphBuilder<DistanceType> &graph_ )
+		: euclideanDistanceTable( euclideanDistanceTable_ )
+		, graphBuilder( graph_ )
 		, tmpDirectIterator( this, 0 )
 		, tmpReverseIterator( this, 1 ) {
 		size_t memSize = graph_.NumLeafs() * sizeof( VertexUpdateStatus<DistanceType> );
@@ -868,6 +888,9 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 												 int toLeaf,
 												 IteratorType **direct,
 												 IteratorType **reverse ) {
+	// A-star hinting targets for each turn
+	const int turnTargetLeaf[2] = { toLeaf, fromLeaf };
+
 	for( int i = 0, end = graphBuilder.NumLeafs(); i < end; ++i ) {
 		auto *status = updateStatus + i;
 		for( int turn = 0; turn < 2; ++turn ) {
@@ -881,9 +904,9 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 	heaps[1].Clear();
 
 	updateStatus[fromLeaf].distance[0] = DistanceType( 0 );
-	heaps[0].Push( fromLeaf, DistanceType( 0 ) );
+	heaps[0].Push( fromLeaf, DistanceType( 0 ), GetEuclideanDistance( fromLeaf, toLeaf ) );
 	updateStatus[toLeaf].distance[1] = DistanceType( 0 );
-	heaps[1].Push( toLeaf, DistanceType( 0 ) );
+	heaps[1].Push( toLeaf, DistanceType( 0 ), GetEuclideanDistance( toLeaf, fromLeaf ) );
 
 	int bestLeaf = -1;
 	auto bestDistanceSoFar = std::numeric_limits<DistanceType>::infinity();
@@ -892,8 +915,8 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 			if( heaps[0].BestDistance() + heaps[1].BestDistance() >= bestDistanceSoFar ) {
 				assert( bestLeaf > 0 );
 				// Check whether this leaf has been really touched by direct and reverse algorithm turns
-				assert( updateStatus[bestLeaf].parentLeaf >= 0 );
-				assert( updateStatus[bestLeaf].parentLeaf >= 0 );
+				assert( updateStatus[bestLeaf].parentLeaf[0] >= 0 );
+				assert( updateStatus[bestLeaf].parentLeaf[1] >= 0 );
 				tmpDirectIterator.ResetWithLeaf( bestLeaf );
 				*direct = &tmpDirectIterator;
 				tmpReverseIterator.ResetWithLeaf( bestLeaf );
@@ -906,7 +929,7 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 			const HeapEntry<DistanceType> &entry = activeHeap->PopInPlace();
 			// Save these values immediately as ReserveForAddition() call might make accessing the entry illegal.
 			const int entryLeafNum = entry.leafNum;
-			const double entryDistance = entry.distance;
+			const double entryDistance = updateStatus[entryLeafNum].distance[turn];
 
 			updateStatus[entryLeafNum].isVisited[turn] = true;
 
@@ -917,6 +940,7 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 			for( int i = 0; i < listSize; ++i ) {
 				const auto leafNum = adjacencyList[i];
 				auto *const status = &updateStatus[leafNum];
+				// We do not have to re-check already visited nodes for an euclidean heuristic
 				if( status->isVisited[turn] ) {
 					continue;
 				}
@@ -935,7 +959,8 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 				status->distance[turn] = relaxedDistance;
 				status->parentLeaf[turn] = entryLeafNum;
 
-				activeHeap->Push( leafNum, relaxedDistance );
+				DistanceType euclideanDistance = GetEuclideanDistance( leafNum, turnTargetLeaf[turn] );
+				activeHeap->Push( leafNum, relaxedDistance, relaxedDistance + euclideanDistance );
 			}
 		}
 	}
@@ -1025,14 +1050,45 @@ private:
 	bool BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, DistanceType *distance );
 };
 
+static inline void ComputeLeafCenter( int leaf, vec3_t result ) {
+	const vec3_t *bounds = trap_GetLeafBounds( leaf );
+	VectorSubtract( bounds[1], bounds[0], result );
+	VectorScale( result, 0.5f, result );
+	VectorAdd( bounds[0], result, result );
+}
+
+static inline float ComputeLeafToLeafDistance( int leaf1, int leaf2 ) {
+	vec3_t center1, center2;
+	ComputeLeafCenter( leaf1, center1 );
+	ComputeLeafCenter( leaf2, center2 );
+	return std::sqrt( DistanceSquared( center1, center2 ) );
+}
+
+static void BuildLeafEuclideanDistanceTable( float *table, int numLeafs ) {
+	for( int i = 1; i < numLeafs; ++i ) {
+		for( int j = i + 1; j < numLeafs; ++j ) {
+			float distance = ComputeLeafToLeafDistance( i, j );
+			table[i * numLeafs + j] = table[j * numLeafs + i] = (uint16_t)distance;
+		}
+	}
+}
+
 template <typename DistanceType>
 class PropagationTableBuilder {
 	template <typename> friend class PropagationBuilderTask;
 
-	CloneableGraphBuilder<DistanceType> graphBuilder;
-	PathFinder<DistanceType> pathFinder;
+	/**
+	 * An euclidean distance table for leaves
+	 * @todo using short values is sufficient for the majority of maps
+	 */
+	float *const euclideanDistanceTable { nullptr };
 
 	using PropagationProps = PropagationTable::PropagationProps;
+	using PathFinderType = PathFinder<DistanceType>;
+	using TaskType = PropagationBuilderTask<DistanceType>;
+
+	CloneableGraphBuilder<DistanceType> graphBuilder;
+	PathFinderType pathFinder;
 
 	PropagationProps *table { nullptr };
 	struct qmutex_s *progressLock { nullptr };
@@ -1061,10 +1117,15 @@ class PropagationTableBuilder {
 #endif
 public:
 	PropagationTableBuilder( int actualNumLeafs, bool fastAndCoarse_ )
-		: graphBuilder( actualNumLeafs, fastAndCoarse_ )
-		, pathFinder( graphBuilder )
+		: euclideanDistanceTable( (float *)S_Malloc( actualNumLeafs * actualNumLeafs * sizeof( float ) ) )
+		, graphBuilder( actualNumLeafs, fastAndCoarse_ )
+		, pathFinder( euclideanDistanceTable, graphBuilder )
 		, fastAndCoarse( fastAndCoarse_ ) {
 		assert( executedWorkload.is_lock_free() );
+
+		if( euclideanDistanceTable ) {
+			BuildLeafEuclideanDistanceTable( euclideanDistanceTable, actualNumLeafs );
+		}
 	}
 
 	~PropagationTableBuilder();
@@ -1089,6 +1150,9 @@ PropagationTableBuilder<DistanceType>::~PropagationTableBuilder() {
 	}
 	if( progressLock ) {
 		trap_Mutex_Destroy( &progressLock );
+	}
+	if( euclideanDistanceTable ) {
+		S_Free( euclideanDistanceTable );
 	}
 }
 
@@ -1123,6 +1187,11 @@ void PropagationTableBuilder<DistanceType>::AddTaskProgress( int taskWorkloadDel
 
 template <typename DistanceType>
 bool PropagationTableBuilder<DistanceType>::Build() {
+	// If the euclidean distance table allocation has failed
+	if( !euclideanDistanceTable ) {
+		return false;
+	}
+
 	progressLock = trap_Mutex_Create();
 	if( !progressLock ) {
 		return false;
@@ -1155,12 +1224,12 @@ bool PropagationTableBuilder<DistanceType>::Build() {
 	PropagationBuilderTask<DistanceType> *submittedTasks[32];
 	for( int i = 0; i < std::min( 32, numTasks ); ++i ) {
 		// TODO: Use just malloc()
-		void *const objectMem = S_Malloc( sizeof( PropagationBuilderTask<DistanceType> ) );
+		void *const objectMem = S_Malloc( sizeof( TaskType ) );
 		if( !objectMem ) {
 			break;
 		}
 
-		auto *const task = new( objectMem )PropagationBuilderTask<DistanceType>( this, numLeafs );
+		auto *const task = new( objectMem )TaskType( this, numLeafs );
 		// A task gets an ownership over the clone
 		task->graphInstance = graphBuilder.Clone();
 		if( !task->graphInstance ) {
@@ -1168,13 +1237,13 @@ bool PropagationTableBuilder<DistanceType>::Build() {
 		}
 
 		// TODO: Use just malloc()
-		void *const pathFinderMem = S_Malloc( sizeof( PathFinder<DistanceType> ) );
+		void *const pathFinderMem = S_Malloc( sizeof( PathFinderType ) );
 		if( !pathFinderMem ) {
 			break;
 		}
 
 		// A task gets an ownership over the instance
-		task->pathFinderInstance = new( pathFinderMem )PathFinder<DistanceType>( *task->graphInstance );
+		task->pathFinderInstance = new( pathFinderMem )PathFinderType( euclideanDistanceTable, *task->graphInstance );
 
 		// The "+1" part is not mandatory but we want a range "end"
 		// to always have a valid address in address space.
@@ -1500,7 +1569,7 @@ bool PropagationBuilderTask<DistanceType>::BuildPropagationPath( int leaf1, int 
 	const int maxAttempts = fastAndCoarse ? 1 : WeightedDirBuilder::MAX_DIRS;
 	// Do at most maxAttempts to find an alternative path
 	for( ; numAttempts != maxAttempts; ++numAttempts ) {
-		double newPathDistance = pathFinderInstance->FindPath( leaf1, leaf2, &directIterator, &reverseIterator );
+		DistanceType newPathDistance = pathFinderInstance->FindPath( leaf1, leaf2, &directIterator, &reverseIterator );
 		// If the path cannot be (longer) found stop
 		if( std::isinf( newPathDistance ) ) {
 			break;
@@ -2120,7 +2189,7 @@ bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( TargetT
 	}
 
 	globalGraph->EnsureValid();
-	if( globalGraph->IsUsingValidData() ) {
+	if( !globalGraph->IsUsingValidData() ) {
 		return false;
 	}
 

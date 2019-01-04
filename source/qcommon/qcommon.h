@@ -38,10 +38,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 //#define	PARANOID			// speed sapping error checking
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //============================================================================
 
 struct mempool_s;
@@ -875,12 +871,14 @@ CPU FEATURES
 
 // Query only features that seem to have some utility for the code base
 
-#define QF_CPU_FEATURE_SSE2    ( 0x1 )
-#define QF_CPU_FEATURE_SSE41   ( 0x2 )
-#define QF_CPU_FEATURE_SSE42   ( 0x4 )
-#define QF_CPU_FEATURE_AVX     ( 0x8 )
+#define Q_CPU_FEATURE_SSE2    ( 0x1u )
+#define Q_CPU_FEATURE_SSE41   ( 0x2u )
+#define Q_CPU_FEATURE_SSE42   ( 0x4u )
+#define Q_CPU_FEATURE_AVX     ( 0x8u )
 
-unsigned int COM_CPUFeatures( void );
+unsigned Sys_GetProcessorFeatures();
+
+bool Sys_GetNumberOfProcessors( unsigned *physical, unsigned *logical );
 
 /*
 ==============================================================
@@ -972,9 +970,5 @@ void Com_Autoupdate_Init( void );
 void Com_Autoupdate_Run( bool checkOnly, void ( *newfiles_cb )( void ) );
 void Com_Autoupdate_Cancel( void );
 void Com_Autoupdate_Shutdown( void );
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // __QCOMMON_H

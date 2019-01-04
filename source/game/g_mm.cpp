@@ -21,321 +21,44 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../matchmaker/mm_query.h"
 #include "g_gametypes.h"
 
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
+#include "../qalgo/SingletonHolder.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <chrono>
+#include <functional>
 #include <new>
+#include <utility>
+#include <thread>
 
-// A common supertype for query readers/writers
-class alignas( 8 )QueryIOHelper {
-protected:
-	virtual bool CheckTopOfStack( const char *tag, int topOfStack_ ) = 0;
-
-	struct StackedIOHelper {
-		virtual ~StackedIOHelper() {}
-	};
-
-	static constexpr int STACK_SIZE = 32;
-
-	template<typename Parent, typename ObjectIOHelper, typename ArrayIOHelper>
-	class alignas( 8 )StackedHelpersAllocator {
-	protected:
-		static_assert( sizeof( ObjectIOHelper ) >= sizeof( ArrayIOHelper ), "Redefine LargestEntry" );
-		typedef ObjectIOHelper LargestEntry;
-
-		static constexpr auto ENTRY_SIZE =
-			sizeof( LargestEntry ) % 8 ? sizeof( LargestEntry ) + 8 - sizeof( LargestEntry ) % 8 : sizeof( LargestEntry );
-
-		alignas( 8 ) uint8_t storage[STACK_SIZE * ENTRY_SIZE];
-
-		QueryIOHelper *parent;
-		int topOfStack;
-
-		void *AllocEntry( const char *tag ) {
-			if( parent->CheckTopOfStack( tag, topOfStack ) ) {
-				return storage + ( topOfStack++ ) * ENTRY_SIZE;
-			}
-			return nullptr;
-		}
-	public:
-		explicit StackedHelpersAllocator( QueryIOHelper *parent_ ): parent( parent_ ), topOfStack( 0 ) {
-			if( ( (uintptr_t)this ) % 8 ) {
-				G_Error( "StackedHelpersAllocator(): the object is misaligned!\n" );
-			}
-		}
-
-		ArrayIOHelper *NewArrayIOHelper( stat_query_api_t *api, stat_query_section_t *section ) {
-			return new( AllocEntry( "array" ) )ArrayIOHelper( (Parent *)parent, api, section );
-		}
-
-		ObjectIOHelper *NewObjectIOHelper( stat_query_api_t *api, stat_query_section_t *section ) {
-			return new( AllocEntry( "object" ) )ObjectIOHelper( (Parent *)parent, api, section );
-		}
-
-		void DeleteHelper( StackedIOHelper *helper ) {
-			helper->~StackedIOHelper();
-			if( (uint8_t *)helper != storage + ( topOfStack - 1 ) * ENTRY_SIZE ) {
-				G_Error( "WritersAllocator::DeleteWriter(): Attempt to delete an entry that is not on top of stack\n" );
-			}
-			topOfStack--;
-		}
-	};
-};
-
-class alignas( 8 )QueryWriter final: public QueryIOHelper {
-	friend class CompoundWriter;
-	friend class ObjectWriter;
-	friend class ArrayWriter;
-	friend struct WritersAllocator;
-
-	stat_query_api_t *api;
-	stat_query_t *query;
-
-	static constexpr int STACK_SIZE = 32;
-
-	bool CheckTopOfStack( const char *tag, int topOfStack_ ) override {
-		if( topOfStack_ < 0 || topOfStack_ >= STACK_SIZE ) {
-			const char *kind = topOfStack_ < 0 ? "underflow" : "overflow";
-			G_Error( "%s: Objects stack %s, top of stack index is %d\n", tag, kind, topOfStack_ );
-		}
-		return true;
-	}
-
-	void NotifyOfNewArray( const char *name ) {
-		auto *section = api->CreateArray( query, TopOfStack().section, name );
-		topOfStackIndex++;
-		stack[topOfStackIndex] = writersAllocator.NewArrayIOHelper( api, section );
-	}
-
-	void NotifyOfNewObject( const char *name ) {
-		auto *section = api->CreateSection( query, TopOfStack().section, name );
-		topOfStackIndex++;
-		stack[topOfStackIndex] = writersAllocator.NewObjectIOHelper( api, section );
-	}
-
-	void NotifyOfArrayEnd() {
-		writersAllocator.DeleteHelper( &TopOfStack() );
-		topOfStackIndex--;
-	}
-
-	void NotifyOfObjectEnd() {
-		writersAllocator.DeleteHelper( &TopOfStack() );
-		topOfStackIndex--;
-	}
-
-	class CompoundWriter: public StackedIOHelper {
-		friend class QueryWriter;
-	protected:
-		QueryWriter *const parent;
-		stat_query_api_t *const api;
-		stat_query_section_t *const section;
-	public:
-		CompoundWriter( QueryWriter *parent_, stat_query_api_t *api_, stat_query_section_t *section_ )
-			: parent( parent_ ), api( api_ ), section( section_ ) {}
-
-		virtual void operator<<( const char *nameOrValue ) = 0;
-		virtual void operator<<( int value ) = 0;
-		virtual void operator<<( int64_t value ) = 0;
-		virtual void operator<<( double value ) = 0;
-		virtual void operator<<( const mm_uuid_t &value ) = 0;
-		virtual void operator<<( char ch ) = 0;
-	};
-
-	class ObjectWriter: public CompoundWriter {
-		const char *fieldName;
-
-		const char *CheckFieldName( const char *tag ) {
-			if( !fieldName ) {
-				G_Error( "QueryWriter::ObjectWriter::operator<<(%s): "
-						 "A field name has not been set before supplying a value", tag );
-			}
-			return fieldName;
-		}
-	public:
-		ObjectWriter( QueryWriter *parent_, stat_query_api_t *api_, stat_query_section_t *section_ )
-			: CompoundWriter( parent_, api_, section_ ), fieldName( nullptr ) {}
-
-		void operator<<( const char *nameOrValue ) override {
-			if( !fieldName ) {
-				// TODO: Check whether it is a valid identifier?
-				fieldName = nameOrValue;
-			} else {
-				api->SetString( section, fieldName, nameOrValue );
-				fieldName = nullptr;
-			}
-		}
-
-		void operator<<( int value ) override {
-			api->SetNumber( section, CheckFieldName( "int" ), value );
-			fieldName = nullptr;
-		}
-
-		void operator<<( int64_t value ) override {
-			if( (int64_t)( (double)value ) != value ) {
-				G_Error( "ObjectWriter::operator<<(int64_t): The value %"
-							 PRIi64 " will be lost in conversion to double", value );
-			}
-			api->SetNumber( section, CheckFieldName( "int64_t" ), value );
-			fieldName = nullptr;
-		}
-
-		void operator<<( double value ) override {
-			api->SetNumber( section, CheckFieldName( "double" ), value );
-			fieldName = nullptr;
-		}
-
-		void operator<<( const mm_uuid_t &value ) override {
-			char buffer[UUID_BUFFER_SIZE];
-			api->SetString( section, CheckFieldName( "const mm_uuid_t &" ), value.ToString( buffer ) );
-			fieldName = nullptr;
-		}
-
-		void operator<<( char ch ) override {
-			if( ch == '{' ) {
-				parent->NotifyOfNewObject( CheckFieldName( "{..." ) );
-				fieldName = nullptr;
-			} else if( ch == '[' ) {
-				parent->NotifyOfNewArray( CheckFieldName( "[..." ) );
-				fieldName = nullptr;
-			} else if( ch == '}' ) {
-				parent->NotifyOfObjectEnd();
-			} else if( ch == ']' ) {
-				G_Error( "ArrayWriter::operator<<('...]'): Unexpected token (an array end token)" );
-			} else {
-				G_Error( "ArrayWriter::operator<<(char): Illegal character (%d as an integer)", (int)ch );
-			}
-		}
-	};
-
-	class ArrayWriter: public CompoundWriter {
-	public:
-		ArrayWriter( QueryWriter *parent_, stat_query_api_t *api_, stat_query_section_t *section_ )
-			: CompoundWriter( parent_, api_, section_ ) {}
-
-		void operator<<( const char *nameOrValue ) override {
-			api->AddArrayString( section, nameOrValue );
-		}
-
-		void operator<<( int value ) override {
-			api->AddArrayNumber( section, value );
-		}
-
-		void operator<<( int64_t value ) override {
-			api->AddArrayNumber( section, value );
-		}
-
-		void operator<<( double value ) override {
-			api->AddArrayNumber( section, value );
-		}
-
-		void operator<<( const mm_uuid_t &value ) override {
-			char buffer[UUID_BUFFER_SIZE];
-			api->AddArrayString( section, value.ToString( buffer ) );
-		}
-
-		void operator<<( char ch ) override {
-			if( ch == '[' ) {
-				parent->NotifyOfNewArray( nullptr );
-			} else if( ch == '{' ) {
-				parent->NotifyOfNewObject( nullptr );
-			} else if( ch == ']' ) {
-				parent->NotifyOfArrayEnd();
-			} else if( ch == '}' ) {
-				G_Error( "ArrayWriter::operator<<('...}'): Unexpected token (an object end token)");
-			} else {
-				G_Error( "ArrayWriter::operator<<(char): Illegal character (%d as an integer)", (int)ch );
-			}
-		}
-	};
-
-	struct WritersAllocator: public StackedHelpersAllocator<QueryWriter, ObjectWriter, ArrayWriter> {
-		explicit WritersAllocator( QueryWriter *parent_ ): StackedHelpersAllocator( parent_ ) {}
-	};
-
-	WritersAllocator writersAllocator;
-
-	// Put the root object onto the top of stack
-	// Do not require closing it explicitly
-	CompoundWriter *stack[32 + 1];
-	int topOfStackIndex;
-
-	CompoundWriter &TopOfStack() {
-		CheckTopOfStack( "QueryWriter::TopOfStack()", topOfStackIndex );
-		return *stack[topOfStackIndex];
-	}
-public:
-	QueryWriter( stat_query_api_t *api_, const char *url )
-		: api( api_ ), writersAllocator( this ) {
-		query = api->CreateQuery( nullptr, url, false );
-		topOfStackIndex = 0;
-		stack[topOfStackIndex] = writersAllocator.NewObjectIOHelper( api, api->GetOutRoot( query ) );
-	}
-
-	QueryWriter &operator<<( const char *nameOrValue ) {
-		G_Printf("Writer: <<%s \n", nameOrValue);
-		TopOfStack() << nameOrValue;
-		return *this;
-	}
-
-	QueryWriter &operator<<( int value ) {
-		TopOfStack() << value;
-		return *this;
-	}
-
-	QueryWriter &operator<<( int64_t value ) {
-		TopOfStack() << value;
-		return *this;
-	}
-
-	QueryWriter &operator<<( double value ) {
-		TopOfStack() << value;
-		return *this;
-	}
-
-	QueryWriter &operator<<( const mm_uuid_t &value ) {
-		TopOfStack() << value;
-		return *this;
-	}
-
-	QueryWriter &operator<<( char ch ) {
-		TopOfStack() << ch;
-		return *this;
-	}
-
-	void Send() {
-		if( topOfStackIndex != 0 ) {
-			G_Error( "QueryWriter::Send(): Root object building is incomplete, remaining stack depth is %d\n", topOfStackIndex );
-		}
-
-		// Note: Do not call api->Send() directly, let the server code perform an augmentation of the request!
-		trap_MM_SendQuery( query );
-	}
-};
-
-// number of raceruns to send in one batch
-#define RACERUN_BATCH_SIZE  16
-
-stat_query_api_t *sq_api;
-
-static void G_Match_SendRaceReport( void );
+static SingletonHolder<StatsowFacade> statsHolder;
 
 //====================================================
 
 static clientRating_t *g_ratingAlloc( const char *gametype, float rating, float deviation, mm_uuid_t uuid ) {
-	clientRating_t *cr;
-
-	cr = (clientRating_t*)G_Malloc( sizeof( *cr ) );
+	auto *cr = (clientRating_t*)G_Malloc( sizeof( clientRating_t ) );
 	if( !cr ) {
-		return NULL;
+		return nullptr;
 	}
 
 	Q_strncpyz( cr->gametype, gametype, sizeof( cr->gametype ) - 1 );
 	cr->rating = rating;
 	cr->deviation = deviation;
-	cr->next = 0;
+	cr->next = nullptr;
 	cr->uuid = uuid;
 
 	return cr;
 }
 
-static clientRating_t *g_ratingCopy( clientRating_t *other ) {
+static clientRating_t *g_ratingCopy( const clientRating_t *other ) {
 	return g_ratingAlloc( other->gametype, other->rating, other->deviation, other->uuid );
 }
 
@@ -350,15 +73,14 @@ static void g_ratingsFree( clientRating_t *list ) {
 	}
 }
 
-// update the current servers rating
-static void g_serverRating( void ) {
+void StatsowFacade::UpdateAverageRating() {
 	clientRating_t avg;
 
-	if( !game.ratings ) {
+	if( !ratingsHead ) {
 		avg.rating = MM_RATING_DEFAULT;
 		avg.deviation = MM_DEVIATION_DEFAULT;
 	} else {
-		Rating_AverageRating( &avg, game.ratings );
+		Rating_AverageRating( &avg, ratingsHead );
 	}
 
 	// Com_Printf("g_serverRating: Updated server's skillrating to %f\n", avg.rating );
@@ -366,18 +88,15 @@ static void g_serverRating( void ) {
 	trap_Cvar_ForceSet( "sv_skillRating", va( "%.0f", avg.rating ) );
 }
 
-/*
-* G_TransferRatings
-*/
-void G_TransferRatings( void ) {
+void StatsowFacade::TransferRatings() {
 	clientRating_t *cr, *found;
 	edict_t *ent;
 	gclient_t *client;
 
 	// shuffle the ratings back from game.ratings to clients->ratings and back
 	// based on current gametype
-	g_ratingsFree( game.ratings );
-	game.ratings = 0;
+	g_ratingsFree( ratingsHead );
+	ratingsHead = nullptr;
 
 	for( ent = game.edicts + 1; PLAYERNUM( ent ) < gs.maxclients; ent++ ) {
 		client = ent->r.client;
@@ -390,7 +109,7 @@ void G_TransferRatings( void ) {
 		}
 
 		// temphack for duplicate client entries
-		found = Rating_FindId( game.ratings, client->mm_session );
+		found = Rating_FindId( ratingsHead, client->mm_session );
 		if( found ) {
 			continue;
 		}
@@ -411,227 +130,127 @@ void G_TransferRatings( void ) {
 
 		// add it to the games list
 		cr = g_ratingCopy( found );
-		cr->next = game.ratings;
-		game.ratings = cr;
+		cr->next = ratingsHead;
+		ratingsHead = cr;
 	}
 
-	g_serverRating();
+	UpdateAverageRating();
 }
 
 // This doesnt update ratings, only inserts new default rating if it doesnt exist
 // if gametype is NULL, use current gametype
-clientRating_t *G_AddDefaultRating( edict_t *ent, const char *gametype ) {
-	clientRating_t *cr;
-	gclient_t *client;
-
-	if( gametype == NULL ) {
+clientRating_t *StatsowFacade::AddDefaultRating( edict_t *ent, const char *gametype ) {
+	if( !gametype ) {
 		gametype = gs.gametypeName;
 	}
 
-	client = ent->r.client;
+	auto *client = ent->r.client;
 	if( !ent->r.inuse ) {
-		return NULL;
+		return nullptr;
 	}
 
-	cr = Rating_Find( client->ratings, gametype );
-	if( cr == NULL ) {
+	auto *cr = Rating_Find( client->ratings, gametype );
+	if( !cr ) {
 		cr = g_ratingAlloc( gametype, MM_RATING_DEFAULT, MM_DEVIATION_DEFAULT, ent->r.client->mm_session );
 		if( !cr ) {
-			return NULL;
+			return nullptr;
 		}
 
 		cr->next = client->ratings;
 		client->ratings = cr;
 	}
 
-	if( !strcmp( gametype, gs.gametypeName ) ) {
-		clientRating_t *found;
-
-		// add this rating to current game-ratings
-		found = Rating_FindId( game.ratings, client->mm_session );
-		if( !found ) {
-			found = g_ratingCopy( cr );
-			if( found ) {
-				found->next = game.ratings;
-				game.ratings = found;
-			}
-		} else {
-			// update rating
-			found->rating = cr->rating;
-			found->deviation = cr->deviation;
-		}
-		g_serverRating();
-	}
-
+	TryUpdatingGametypeRating( client, cr, gametype );
 	return cr;
 }
 
 // this inserts a new one, or updates the ratings if it exists
-clientRating_t *G_AddRating( edict_t *ent, const char *gametype, float rating, float deviation ) {
-	clientRating_t *cr;
-	gclient_t *client;
-
-	if( gametype == NULL ) {
+clientRating_t *StatsowFacade::AddRating( edict_t *ent, const char *gametype, float rating, float deviation ) {
+	if( !gametype ) {
 		gametype = gs.gametypeName;
 	}
 
-	client = ent->r.client;
+	auto *client = ent->r.client;
 	if( !ent->r.inuse ) {
-		return NULL;
+		return nullptr;
 	}
 
-	cr = Rating_Find( client->ratings, gametype );
-	if( cr != NULL ) {
+	auto *cr = Rating_Find( client->ratings, gametype );
+	if( cr ) {
 		cr->rating = rating;
 		cr->deviation = deviation;
 	} else {
 		cr = g_ratingAlloc( gametype, rating, deviation, ent->r.client->mm_session );
 		if( !cr ) {
-			return NULL;
+			return nullptr;
 		}
 
 		cr->next = client->ratings;
 		client->ratings = cr;
 	}
 
-	if( !strcmp( gametype, gs.gametypeName ) ) {
-		clientRating_t *found;
-
-		// add this rating to current game-ratings
-		found = Rating_FindId( game.ratings, client->mm_session );
-		if( !found ) {
-			found = g_ratingCopy( cr );
-			if( found ) {
-				found->next = game.ratings;
-				game.ratings = found;
-			}
-		} else {
-			// update values
-			found->rating = rating;
-			found->deviation = deviation;
-		}
-
-		g_serverRating();
-	}
-
+	TryUpdatingGametypeRating( client, cr, gametype );
 	return cr;
 }
 
+void StatsowFacade::TryUpdatingGametypeRating( const gclient_t *client,
+											   const clientRating_t *addedRating,
+											   const char *addedForGametype ) {
+	// If the gametype is not a current gametype
+	if( strcmp( addedForGametype, gs.gametypeName ) != 0 ) {
+		return;
+	}
+
+	// add this rating to current game-ratings
+	auto *found = Rating_FindId( ratingsHead, client->mm_session );
+	if( !found ) {
+		found = g_ratingCopy( addedRating );
+		if( found ) {
+			found->next = ratingsHead;
+			ratingsHead = found;
+		}
+	} else {
+		// update values
+		found->rating = addedRating->rating;
+		found->deviation = addedRating->deviation;
+	}
+
+	UpdateAverageRating();
+}
+
 // removes all references for given entity
-void G_RemoveRating( edict_t *ent ) {
+void StatsowFacade::RemoveRating( edict_t *ent ) {
 	gclient_t *client;
 	clientRating_t *cr;
 
 	client = ent->r.client;
 
 	// first from the game
-	cr = Rating_DetachId( &game.ratings, client->mm_session );
+	cr = Rating_DetachId( &ratingsHead, client->mm_session );
 	if( cr ) {
 		G_Free( cr );
 	}
 
 	// then the clients own list
 	g_ratingsFree( client->ratings );
-	client->ratings = 0;
+	client->ratings = nullptr;
 
-	g_serverRating();
-}
-
-// debug purposes
-void G_ListRatings_f( void ) {
-	clientRating_t *cr;
-	gclient_t *cl;
-	edict_t *ent;
-	char uuid_buffer[UUID_BUFFER_SIZE];
-
-	Com_Printf( "Listing ratings by gametype:\n" );
-	for( cr = game.ratings; cr ; cr = cr->next ) {
-		Com_Printf( "  %s %s %f %f\n", cr->gametype, cr->uuid.ToString( uuid_buffer ), cr->rating, cr->deviation );
-	}
-
-	Com_Printf( "Listing ratings by player\n" );
-	for( ent = game.edicts + 1; PLAYERNUM( ent ) < gs.maxclients; ent++ ) {
-		cl = ent->r.client;
-
-		if( !ent->r.inuse ) {
-			continue;
-		}
-
-		Com_Printf( "%s:\n", cl->netname );
-		for( cr = cl->ratings; cr ; cr = cr->next ) {
-			Com_Printf( "  %s %s %f %f\n", cr->gametype, cr->uuid.ToString( uuid_buffer ), cr->rating, cr->deviation );
-		}
-	}
-}
-
-//==========================================================
-
-// race records from MM
-void G_AddRaceRecords( edict_t *ent, int numSectors, int64_t *records ) {
-	gclient_t *cl;
-	raceRun_t *rr;
-	size_t size;
-
-	cl = ent->r.client;
-
-	if( !ent->r.inuse || cl == NULL ) {
-		return;
-	}
-
-	rr = &cl->level.stats.raceRecords;
-	if( rr->times ) {
-		G_LevelFree( rr->times );
-	}
-
-	size = ( numSectors + 1 ) * sizeof( *rr->times );
-	rr->times = ( int64_t * )G_LevelMalloc( size );
-
-	memcpy( rr->times, records, size );
-	rr->numSectors = numSectors;
-}
-
-// race records to AS (TODO: export this to AS)
-int64_t G_GetRaceRecord( edict_t *ent, int sector ) {
-	gclient_t *cl;
-	raceRun_t *rr;
-
-	cl = ent->r.client;
-
-	if( !ent->r.inuse || cl == NULL ) {
-		return 0;
-	}
-
-	rr = &cl->level.stats.raceRecords;
-	if( !rr->times ) {
-		return 0;
-	}
-
-	// sector = -1 means final sector
-	if( sector < -1 || sector >= rr->numSectors ) {
-		return 0;
-	}
-
-	if( sector < 0 ) {
-		return rr->times[rr->numSectors];   // SAFE!
-	}
-
-	// else
-	return rr->times[sector];
+	UpdateAverageRating();
 }
 
 // from AS
-raceRun_t *G_NewRaceRun( edict_t *ent, int numSectors ) {
+raceRun_t *StatsowFacade::NewRaceRun( const edict_t *ent, int numSectors ) {
 	gclient_t *cl;
 	raceRun_t *rr;
 
 	cl = ent->r.client;
 
-	if( !ent->r.inuse || cl == NULL  ) {
-		return 0;
+	if( !ent->r.inuse || !cl  ) {
+		return nullptr;
 	}
 
 	rr = &cl->level.stats.currentRun;
-	if( rr->times != NULL ) {
+	if( rr->times ) {
 		G_LevelFree( rr->times );
 	}
 
@@ -648,17 +267,14 @@ raceRun_t *G_NewRaceRun( edict_t *ent, int numSectors ) {
 }
 
 // from AS
-void G_SetRaceTime( edict_t *ent, int sector, int64_t time ) {
-	gclient_t *cl;
-	raceRun_t *rr;
+void StatsowFacade::SetRaceTime( edict_t *owner, int sector, int64_t time ) {
+	auto *const cl = owner->r.client;
 
-	cl = ent->r.client;
-
-	if( !ent->r.inuse || cl == NULL ) {
+	if( !owner->r.inuse || !cl ) {
 		return;
 	}
 
-	rr = &cl->level.stats.currentRun;
+	raceRun_t *const rr = &cl->level.stats.currentRun;
 	if( sector < -1 || sector >= rr->numSectors ) {
 		return;
 	}
@@ -674,7 +290,7 @@ void G_SetRaceTime( edict_t *ent, int sector, int64_t time ) {
 
 		// validate the client
 		// no bots for race, at all
-		if( ent->r.svflags & SVF_FAKECLIENT /* && mm_debug_reportbots->value == 0 */ ) {
+		if( owner->r.svflags & SVF_FAKECLIENT /* && mm_debug_reportbots->value == 0 */ ) {
 			G_Printf( "G_SetRaceTime: not reporting fakeclients\n" );
 			return;
 		}
@@ -682,32 +298,28 @@ void G_SetRaceTime( edict_t *ent, int sector, int64_t time ) {
 		// Note: the test whether client session id has been removed,
 		// race runs are reported for non-authenticated players too
 
-		if( !game.raceruns ) {
-			game.raceruns = LinearAllocator( sizeof( raceRun_t ), 0, trap_MemAlloc, trap_MemFree );
-		}
-
 		// push new run
-		nrr = ( raceRun_t * )LA_Alloc( game.raceruns );
+		nrr = raceRuns.New();
 		memcpy( nrr, rr, sizeof( raceRun_t ) );
 
 		// reuse this one in nrr
-		rr->times = 0;
+		rr->times = nullptr;
 
-		// see if we have to push intermediate result
-		// TODO: We can live with eventual consistency of race records, but it should be kept in mind
-		// TODO: Send new race runs every N seconds, or if its likely to be a new record
-		if( LA_Size( game.raceruns ) >= RACERUN_BATCH_SIZE ) {
+		// Once the reliable match reports pipe has been implemented
+		// we can avoid batching sent race runs in game module.
+		// Still keep in mind that all race records are valid only locally.
+		// Announcement of new game-global records is tied to introduction
+		// of a full-duplex channel between Statsow server and every game server
+		// that is planned for future development.
+		if( !raceRuns.empty() ) {
 			// Update an actual nickname that is going to be used to identify a run for a non-authenticated player
 			if( !cl->mm_session.IsValidSessionId() ) {
 				Q_strncpyz( rr->nickname, cl->netname, MAX_NAME_BYTES );
 			}
-			G_Match_SendReport();
+			SendReport();
 
 			// double-check this for memory-leaks
-			if( game.raceruns != 0 ) {
-				LinearAllocator_Free( game.raceruns );
-			}
-			game.raceruns = 0;
+			raceRuns.Clear();
 		}
 	}
 
@@ -717,215 +329,280 @@ void G_SetRaceTime( edict_t *ent, int sector, int64_t time ) {
 	}
 }
 
-void G_ListRaces_f( void ) {
-	int i, j, size;
-	raceRun_t *run;
-	char uuid_buffer[UUID_BUFFER_SIZE];
+int StatsowFacade::ForEachRaceRun( const std::function<void( const raceRun_t & )> &applyThis ) const {
+	for( const auto &run: raceRuns ) {
+		applyThis( run );
+	}
 
-	if( !game.raceruns || !LA_Size( game.raceruns ) ) {
-		G_Printf( "No races to report\n" );
+	return (int)raceRuns.size();
+}
+
+static SingletonHolder<StatsowFacade> statsInstanceHolder;
+
+void StatsowFacade::Init() {
+	statsInstanceHolder.Init();
+}
+
+void StatsowFacade::Shutdown() {
+	statsInstanceHolder.Shutdown();
+}
+
+StatsowFacade *StatsowFacade::Instance() {
+	return statsInstanceHolder.Instance();
+}
+
+StatsowFacade::~StatsowFacade() {
+	if( !raceRuns.empty() ) {
+		SendRaceReport();
+	}
+}
+
+void StatsowFacade::Frame() {
+}
+
+void StatsowFacade::ClearEntries() {
+	ClientEntry *next;
+	for( ClientEntry *e = clientEntriesHead; e; e = next ) {
+		next = e->next;
+		e->~ClientEntry();
+		G_Free( e );
+	}
+
+	clientEntriesHead = nullptr;
+}
+
+void StatsowFacade::OnClientHadPlaytime( const gclient_t *client ) {
+	if( isDiscarded ) {
 		return;
 	}
 
-	G_Printf( S_COLOR_RED "  session    " S_COLOR_YELLOW "times\n" );
-	size = LA_Size( game.raceruns );
-	for( i = 0; i < size; i++ ) {
-		run = (raceRun_t*)LA_Pointer( game.raceruns, i );
-		if( run->owner.IsValidSessionId() ) {
-			G_Printf( S_COLOR_RED "  %s    " S_COLOR_YELLOW, run->owner.ToString( uuid_buffer ) );
-		} else {
-			// TODO: Is the nickname actually set at the time of this call?
-			G_Printf( S_COLOR_RED "  %s    " S_COLOR_YELLOW, run->nickname );
-		}
-		for( j = 0; j < run->numSectors; j++ )
-			G_Printf( "%" PRIi64 " ", run->times[j] );
-		G_Printf( S_COLOR_GREEN "%" PRIi64 "\n", run->times[run->numSectors] );    // SAFE!
-	}
-}
-
-//==========================================================
-//		MM Reporting
-//==========================================================
-
-static void G_FreeClientQuits() {
-	gclient_quit_t *qnext = nullptr;
-
-	for( gclient_quit_t *qcl = game.quits; qcl ; qcl = qnext ) {
-		qnext = qcl->next;
-
-		qcl->~gclient_quit_t();
-		G_Free( qcl );
+	if( !sv_mm_enable->integer ) {
+		isDiscarded = true;
+		return;
 	}
 
-	game.quits = nullptr;
-}
-
-static void G_DiscardMatchReport( const char *reason ) {
-	G_Printf( S_COLOR_YELLOW "G_AddPlayerReport(): %s, discarding match report...\n", reason );
-	game.discardMatchReport = true;
-
-	// Do not hold no longer useful data
-	G_FreeClientQuits();
-}
-
-/*
-* G_AddPlayerReport
-*/
-void G_AddPlayerReport( edict_t *ent, bool final ) {
-	gclient_t *cl;
-	gclient_quit_t *quit;
-	int i;
-	char uuid_buffer[UUID_BUFFER_SIZE];
-
-	// TODO: check if MM is enabled
+	// TODO: Did we forget something else? What if sv_mm_enable is true but the session is not valid?
+	if( !GS_MMCompatible() ) {
+		isDiscarded = true;
+		return;
+	}
 
 	if( GS_RaceGametype() ) {
-		// force sending report when someone disconnects
-		G_Match_SendReport();
 		return;
 	}
+
+	const char *reason = nullptr;
+	const edict_t *ent = game.edicts + ENTNUM( client );
+	// Check whether it's a bot first (they do not have valid session ids as well)
+	if( ent->ai ) {
+		if( AI_GetType( ent->ai ) == AI_ISBOT ) {
+			reason = "A bot had a play-time";
+		}
+		// The report is still valid if it's an AI but not a bot.
+		// TODO: Are logged frags valid as well in this case?
+	} else {
+		if( !client->mm_session.IsValidSessionId() ) {
+			reason = va( "An anonymous player `%s` had a play-time", client->netname );
+		}
+	}
+
+	if( !reason ) {
+		return;
+	}
+
+	// Print to everybody
+	G_PrintMsg( nullptr, S_COLOR_YELLOW "%s. Discarding match report...\n", reason );
+
+	// Do not hold no longer useful data
+	ClearEntries();
+	// TODO:!!!!!!!!
+	// TODO:!!!!!!!!
+	// TODO:!!!!!!!! clear other data as well
+
+	isDiscarded = true;
+}
+
+void StatsowFacade::OnClientDisconnected( edict_t *ent ) {
+	if( GS_RaceGametype() ) {
+		// Force sending race reports if somebody disconnects
+		SendReport();
+		return;
+	}
+
+	if( ent->r.client->team == TEAM_SPECTATOR ) {
+		return;
+	}
+
+	const bool isMatchOver = GS_MatchState() == MATCH_STATE_POSTMATCH;
+	// If not in match-time and not in post-match ignore this
+	if( !isMatchOver && ( GS_MatchState() != MATCH_STATE_PLAYTIME ) ) {
+		return;
+	}
+
+	ChatHandlersChain::Instance()->OnClientDisconnected( ent );
+	AddPlayerReport( ent, isMatchOver );
+}
+
+void StatsowFacade::OnClientJoinedTeam( edict_t *ent, int newTeam ) {
+	ChatHandlersChain::Instance()->OnClientJoinedTeam( ent, newTeam );
+
+	if( ent->r.client->team == TEAM_SPECTATOR ) {
+		return;
+	}
+	if( newTeam != TEAM_SPECTATOR ) {
+		return;
+	}
+
+	if ( GS_MatchState() != MATCH_STATE_PLAYTIME ) {
+		return;
+	}
+
+	G_Printf( "Sending teamchange to MM, team %d to team %d\n", ent->r.client->team, newTeam );
+	StatsowFacade::Instance()->AddPlayerReport( ent, false );
+}
+
+void StatsowFacade::AddPlayerReport( edict_t *ent, bool final ) {
+	char uuid_buffer[UUID_BUFFER_SIZE];
+
+	if( !ent->r.inuse ) {
+		return;
+	}
+
+	// This code path should not be entered by race gametypes
+	assert( !GS_RaceGametype() );
 
 	if( !GS_MMCompatible() ) {
 		return;
 	}
 
 	// Do not try to add player report if the match report has been discarded
-	if( game.discardMatchReport ) {
+	if( isDiscarded ) {
 		return;
 	}
 
-	cl = ent->r.client;
-
-	if( !ent->r.inuse ) {
+	const auto *cl = ent->r.client;
+	if( !cl || cl->team == TEAM_SPECTATOR ) {
 		return;
 	}
 
-	if( ( ent->r.svflags & SVF_FAKECLIENT ) ) {
-		if( ent->r.client->level.stats.had_playtime ) {
-			G_DiscardMatchReport( "A bot had some playtime" );
-		}
-		return;
-	}
+	constexpr const char *format = "StatsowFacade::AddPlayerReport(): %s" S_COLOR_WHITE " (%s)\n";
+	G_Printf( format, cl->netname, cl->mm_session.ToString( uuid_buffer ) );
 
-	if( cl == NULL || cl->team == TEAM_SPECTATOR ) {
-		return;
-	}
-
-	mm_uuid_t mm_session = cl->mm_session;
-	if( !mm_session.IsValidSessionId() ) {
-		if( ent->r.client->level.stats.had_playtime ) {
-			G_DiscardMatchReport( va( "A client %s @ %s without valid session id had some playtime", cl->netname, cl->ip ) );
-		}
-		return;
-	}
-
-	// check merge situation
-	for( quit = game.quits; quit; quit = quit->next ) {
-		if( quit->mm_session == mm_session ) {
-			break;
-		}
-	}
-
-	// debug :
-	G_Printf( "G_AddPlayerReport %s" S_COLOR_WHITE ", session %s\n", cl->netname, mm_session.ToString( uuid_buffer ) );
-
-	if( quit ) {
-		gameaward_t *award1, *award2;
-		loggedFrag_t *frag1, *frag2;
-		int j, inSize, outSize;
-
-		// we can merge
-		Q_strncpyz( quit->netname, cl->netname, sizeof( quit->netname ) );
-		quit->team = cl->team;
-		quit->timePlayed += ( level.time - cl->teamstate.timeStamp ) / 1000;
-		quit->final = final;
-
-		quit->stats.awards += cl->level.stats.awards;
-		quit->stats.score += cl->level.stats.score;
-
-		for( const auto &keyAndValue : cl->level.stats ) {
-			quit->stats.AddToEntry( keyAndValue );
-		}
-
-		for( i = 0; i < ( AMMO_TOTAL - AMMO_GUNBLADE ); i++ ) {
-			quit->stats.accuracy_damage[i] += cl->level.stats.accuracy_damage[i];
-			quit->stats.accuracy_frags[i] += cl->level.stats.accuracy_frags[i];
-			quit->stats.accuracy_hits[i] += cl->level.stats.accuracy_hits[i];
-			quit->stats.accuracy_hits_air[i] += cl->level.stats.accuracy_hits_air[i];
-			quit->stats.accuracy_hits_direct[i] += cl->level.stats.accuracy_hits_direct[i];
-			quit->stats.accuracy_shots[i] += cl->level.stats.accuracy_shots[i];
-		}
-
-		// merge awards
-		if( cl->level.stats.awardAllocator ) {
-			if( !quit->stats.awardAllocator ) {
-				quit->stats.awardAllocator = LinearAllocator( sizeof( gameaward_t ), 0, trap_MemAlloc, trap_MemFree );
-			}
-
-			inSize = LA_Size( cl->level.stats.awardAllocator );
-			outSize = quit->stats.awardAllocator ? LA_Size( quit->stats.awardAllocator ) : 0;
-			for( i = 0; i < inSize; i++ ) {
-				award1 = ( gameaward_t * )LA_Pointer( cl->level.stats.awardAllocator, i );
-
-				// search for matching one
-				for( j = 0; j < outSize; j++ ) {
-					award2 = ( gameaward_t * )LA_Pointer( quit->stats.awardAllocator, j );
-					if( !strcmp( award1->name, award2->name ) ) {
-						award2->count += award1->count;
-						break;
-					}
-				}
-				if( j >= outSize ) {
-					award2 = ( gameaward_t * )LA_Alloc( quit->stats.awardAllocator );
-					award2->name = award1->name;
-					award2->count = award1->count;
-				}
-			}
-
-			// we can free the old awards
-			LinearAllocator_Free( cl->level.stats.awardAllocator );
-			cl->level.stats.awardAllocator = 0;
-		}
-
-		// merge logged frags
-		if( cl->level.stats.fragAllocator ) {
-			inSize = LA_Size( cl->level.stats.fragAllocator );
-			if( !quit->stats.fragAllocator ) {
-				quit->stats.fragAllocator = LinearAllocator( sizeof( loggedFrag_t ), 0, trap_MemAlloc, trap_MemFree );
-			}
-
-			for( i = 0; i < inSize; i++ ) {
-				frag1 = ( loggedFrag_t * )LA_Pointer( cl->level.stats.fragAllocator, i );
-				frag2 = ( loggedFrag_t * )LA_Alloc( quit->stats.fragAllocator );
-				memcpy( frag2, frag1, sizeof( *frag1 ) );
-			}
-
-			// we can free the old frags
-			LinearAllocator_Free( cl->level.stats.fragAllocator );
-			cl->level.stats.fragAllocator = 0;
-		}
+	ClientEntry *entry = FindEntryById( cl->mm_session );
+	if( entry ) {
+		AddToExistingEntry( ent, final, entry );
 	} else {
-		// note: constructors must be called now
-		quit = new( G_Malloc( sizeof( *quit ) ) )gclient_quit_t;
-
-		// fill in the data
-		Q_strncpyz( quit->netname, cl->netname, sizeof( quit->netname ) );
-		quit->team = cl->team;
-		quit->timePlayed = ( level.time - cl->teamstate.timeStamp ) / 1000;
-		quit->final = final;
-		quit->mm_session = mm_session;
-		quit->stats = std::move( cl->level.stats );
-		// TODO: Not sure what reasons are
-		quit->stats.fragAllocator = NULL;
-
+		entry = NewPlayerEntry( ent, final );
 		// put it to the list
-		quit->next = game.quits;
-		game.quits = quit;
+		entry->next = clientEntriesHead;
+		clientEntriesHead = entry;
 	}
+
+	ChatHandlersChain::Instance()->AddToReportStats( ent, &entry->respectStats );
 }
 
-void G_Match_AddAward( edict_t *ent, const char *awardMsg ) {
-	if( game.discardMatchReport ) {
+void StatsowFacade::AddToExistingEntry( edict_t *ent, bool final, ClientEntry *e ) {
+	auto *const cl = ent->r.client;
+
+	// we can merge
+	Q_strncpyz( e->netname, cl->netname, sizeof( e->netname ) );
+	e->team = cl->team;
+	e->timePlayed += ( level.time - cl->teamstate.timeStamp ) / 1000;
+	e->final = final;
+
+	e->stats.awards += cl->level.stats.awards;
+	e->stats.score += cl->level.stats.score;
+
+	for( const auto &keyAndValue : cl->level.stats ) {
+		e->stats.AddToEntry( keyAndValue );
+	}
+
+	for( int i = 0; i < ( AMMO_TOTAL - AMMO_GUNBLADE ); i++ ) {
+		auto &stats = e->stats;
+		const auto &thatStats = cl->level.stats;
+		stats.accuracy_damage[i] += thatStats.accuracy_damage[i];
+		stats.accuracy_frags[i] += thatStats.accuracy_frags[i];
+		stats.accuracy_hits[i] += thatStats.accuracy_hits[i];
+		stats.accuracy_hits_air[i] += thatStats.accuracy_hits_air[i];
+		stats.accuracy_hits_direct[i] += thatStats.accuracy_hits_direct[i];
+		stats.accuracy_shots[i] += thatStats.accuracy_shots[i];
+	}
+
+	// merge awards
+	// requires handling of duplicates
+	MergeAwards( e->stats.awardsSequence, std::move( cl->level.stats.awardsSequence ) );
+
+	// merge logged frags
+	e->stats.fragsSequence.MergeWith( std::move( cl->level.stats.fragsSequence ) );
+}
+
+void StatsowFacade::MergeAwards( StatsSequence<gameaward_t> &to, StatsSequence<gameaward_t> &&from ) {
+	for( const gameaward_t &mergable: from ) {
+		// search for matching one
+		auto it = to.begin();
+		const auto end = to.end();
+		for(; it != end; ++it ) {
+			if( !strcmp( ( *it ).name, mergable.name ) ) {
+				const_cast<gameaward_t &>( *it ).count += mergable.count;
+				break;
+			}
+		}
+		if( it != end ) {
+			gameaward_t *added = to.New();
+			added->name = mergable.name;
+			added->count = mergable.count;
+		}
+	}
+
+	// we can free the old awards
+	from.Clear();
+}
+
+StatsowFacade::ClientEntry *StatsowFacade::FindEntryById( const mm_uuid_t &playerSessionId ) {
+	for( ClientEntry *entry = clientEntriesHead; entry; entry = entry->next ) {
+		if( entry->mm_session == playerSessionId ) {
+			return entry;
+		}
+	}
+	return nullptr;
+}
+
+StatsowFacade::RespectStats *StatsowFacade::FindRespectStatsById( const mm_uuid_t &playerSessionId ) {
+	if( ClientEntry *entry = FindEntryById( playerSessionId ) ) {
+		return &entry->respectStats;
+	}
+	return nullptr;
+}
+
+StatsowFacade::ClientEntry *StatsowFacade::NewPlayerEntry( edict_t *ent, bool final ) {
+	auto *cl = ent->r.client;
+
+	auto *const e = new( G_Malloc( sizeof( ClientEntry ) ) )ClientEntry;
+
+	// fill in the data
+	Q_strncpyz( e->netname, cl->netname, sizeof( e->netname ) );
+	e->team = cl->team;
+	e->timePlayed = ( level.time - cl->teamstate.timeStamp ) / 1000;
+	e->final = final;
+	e->mm_session = cl->mm_session;
+	e->stats = std::move( cl->level.stats );
+	return e;
+}
+
+void StatsowFacade::AddMetaAward( const edict_t *ent, const char *awardMsg ) {
+	if( GS_MatchState() != MATCH_STATE_PLAYTIME ) {
+		return;
+	}
+
+	if( ChatHandlersChain::Instance()->SkipStatsForClient( ent ) ) {
+		return;
+	}
+
+	AddAward( ent, awardMsg );
+}
+
+void StatsowFacade::AddAward( const edict_t *ent, const char *awardMsg ) {
+	if( isDiscarded ) {
 		return;
 	}
 
@@ -933,35 +610,34 @@ void G_Match_AddAward( edict_t *ent, const char *awardMsg ) {
 		return;
 	}
 
-	auto *const stats = &ent->r.client->level.stats;
-	if( !stats->awardAllocator ) {
-		stats->awardAllocator = LinearAllocator( sizeof( gameaward_t ), 0, trap_MemAlloc, trap_MemFree );
+	if( ChatHandlersChain::Instance()->SkipStatsForClient( ent ) ) {
+		return;
 	}
 
+	auto *const stats = &ent->r.client->level.stats;
 	// first check if we already have this one on the clients list
-	size_t size = LA_Size( stats->awardAllocator );
-	gameaward_t *ga = NULL;
-	int i;
-	for( i = 0; i < size; i++ ) {
-		ga = (gameaward_t *)LA_Pointer( stats->awardAllocator, i );
-		if( !strncmp( ga->name, awardMsg, sizeof( ga->name ) - 1 ) ) {
+	gameaward_t *ga = nullptr;
+
+	auto it = stats->awardsSequence.cbegin();
+	const auto end = stats->awardsSequence.end();
+	for(; it != end; ++it ) {
+		if( !strcmp( ( *it ).name, awardMsg ) ) {
+			ga = const_cast<gameaward_t *>( &( *it ) );
 			break;
 		}
 	}
 
-	if( i >= size ) {
-		ga = (gameaward_t *)LA_Alloc( stats->awardAllocator );
-		memset( ga, 0, sizeof( *ga ));
+	if( it == end ) {
+		ga = stats->awardsSequence.New();
 		ga->name = G_RegisterLevelString( awardMsg );
+		ga->count = 0;
 	}
 
-	if( ga ) {
-		ga->count++;
-	}
+	ga->count++;
 }
 
-void G_Match_AddFrag( edict_t *attacker, edict_t *victim, int mod ) {
-	if( game.discardMatchReport ) {
+void StatsowFacade::AddFrag( const edict_t *attacker, const edict_t *victim, int mod ) {
+	if( isDiscarded ) {
 		return;
 	}
 
@@ -971,11 +647,8 @@ void G_Match_AddFrag( edict_t *attacker, edict_t *victim, int mod ) {
 
 	// ch : frag log
 	auto *const stats = &attacker->r.client->level.stats;
-	if( !stats->fragAllocator ) {
-		stats->fragAllocator = LinearAllocator( sizeof( loggedFrag_t ), 0, trap_MemAlloc, trap_MemFree );
-	}
-
-	auto *const lfrag = ( loggedFrag_t * )LA_Alloc( stats->fragAllocator );
+	loggedFrag_t *const lfrag = stats->fragsSequence.New();
+	// TODO: Are these ID's required to be valid? What if there are monsters (not bots)?
 	lfrag->attacker = attacker->r.client->mm_session;
 	lfrag->victim = victim->r.client->mm_session;
 
@@ -996,8 +669,7 @@ void G_Match_AddFrag( edict_t *attacker, edict_t *victim, int mod ) {
 	lfrag->time = game.serverTime - GS_MatchStartTime();
 }
 
-// It is assumed that the writer points to the root object.
-static void G_MatchReport_WriteHeaderFields( QueryWriter &writer, int teamGame ) {
+void StatsowFacade::WriteHeaderFields( JsonWriter &writer, int teamGame ) {
 	// Note: booleans are transmitted as integers due to underlying api limitations
 	writer << "match_id"       << trap_GetConfigString( CS_MATCHUUID );
 	writer << "gametype"       << gs.gametypeName;
@@ -1017,21 +689,17 @@ static void G_MatchReport_WriteHeaderFields( QueryWriter &writer, int teamGame )
 	}
 }
 
-static void G_MatchReport_AddPlayerAwards( QueryWriter &writer, gclient_quit_t *cl );
-static void G_MatchReport_AddPlayerLogFrags( QueryWriter &writer, gclient_quit_t *cl );
-static void G_MatchReport_AddPlayerWeapons( QueryWriter &writer, gclient_quit_t *cl, const char **weaponNames );
-
-static void G_Match_SendRegularReport( void ) {
-	gclient_quit_t *cl;
+void StatsowFacade::SendRegularReport() {
 	int i, teamGame, duelGame;
-	static const char *weapnames[WEAP_TOTAL] = { NULL };
+	static const char *weapnames[WEAP_TOTAL] = { nullptr };
 
 	// Feature: do not report matches with duration less than 1 minute (actually 66 seconds)
 	if( level.finalMatchDuration <= SIGNIFICANT_MATCH_DURATION ) {
 		return;
 	}
 
-	QueryWriter writer( sq_api, "server/matchReport" );
+	QueryObject *query = trap_MM_NewPostQuery( "server/matchReport" );
+	JsonWriter writer( query->ResponseJsonRoot() );
 
 	// ch : race properties through GS_RaceGametype()
 
@@ -1047,7 +715,7 @@ static void G_Match_SendRegularReport( void ) {
 		teamGame = 1;
 	}
 
-	G_MatchReport_WriteHeaderFields( writer, teamGame );
+	WriteHeaderFields( writer, teamGame );
 
 	// Write team properties (if any)
 	if( teamlist[TEAM_ALPHA].numplayers > 0 && teamGame != 0 ) {
@@ -1080,52 +748,70 @@ static void G_Match_SendRegularReport( void ) {
 
 	// Write player properties
 	writer << "players" << '[';
-	for( cl = game.quits; cl; cl = cl->next ) {
+	for( ClientEntry *cl = clientEntriesHead; cl; cl = cl->next ) {
 		writer << '{';
-		{
-			writer << "session_id"  << cl->mm_session;
-			writer << "name"        << cl->netname;
-			writer << "score"       << cl->stats.score;
-			writer << "time_played" << cl->timePlayed;
-			writer << "is_final"    << ( cl->final ? 1 : 0 );
-
-			writer << "various_stats" << '{';
-			{
-				for( const auto &keyAndValue: cl->stats ) {
-					writer << keyAndValue.first << keyAndValue.second;
-				}
-			}
-			writer << '}';
-
-			if( teamGame != 0 ) {
-				writer << "team" << cl->team - TEAM_ALPHA;
-			}
-
-			G_MatchReport_AddPlayerAwards( writer, cl );
-			G_MatchReport_AddPlayerWeapons( writer, cl, weapnames );
-			G_MatchReport_AddPlayerLogFrags( writer, cl );
-		}
+		cl->WriteToReport( writer, teamGame != 0, weapnames );
 		writer << '}';
 	}
 	writer << ']';
 
-	writer.Send();
+	trap_MM_EnqueueReport( query );
 }
 
-static void G_MatchReport_AddPlayerAwards( QueryWriter &writer, gclient_quit_t *cl ) {
-	const auto *stats = &cl->stats;
-	if( !stats->awardAllocator || !LA_Size( stats->awardAllocator ) ) {
+void StatsowFacade::ClientEntry::WriteToReport( JsonWriter &writer, bool teamGame, const char **weaponNames ) {
+	writer << "session_id"  << mm_session;
+	writer << "name"        << netname;
+	writer << "score"       << stats.score;
+	writer << "time_played" << timePlayed;
+	writer << "is_final"    << ( final ? 1 : 0 );
+	if( teamGame != 0 ) {
+		writer << "team" << team - TEAM_ALPHA;
+	}
+
+	writer << "respect_stats" << '{';
+	{
+		writer << "status";
+		if( respectStats.hasViolatedCodex ) {
+			writer << "violated";
+		} else if( respectStats.hasIgnoredCodex ) {
+			writer << "ignored";
+		} else {
+			writer << "followed";
+			writer << "token_stats" << '{';
+			{
+				for( const auto &keyAndValue: respectStats ) {
+					writer << keyAndValue.first << keyAndValue.second;
+				}
+			}
+			writer << '}';
+		}
+	}
+
+	if( respectStats.hasViolatedCodex || respectStats.hasIgnoredCodex ) {
 		return;
 	}
 
+	writer << "various_stats" << '{';
+	{
+		for( const auto &keyAndValue: stats ) {
+			writer << keyAndValue.first << keyAndValue.second;
+		}
+	}
+	writer << '}';
+
+	AddAwards( writer );
+	AddWeapons( writer, weaponNames );
+	AddFrags( writer );
+}
+
+void StatsowFacade::ClientEntry::AddAwards( JsonWriter &writer ) {
 	writer << "awards" << '[';
 	{
-		for( size_t i = 0, size = LA_Size( stats->awardAllocator ); i < size; i++ ) {
-			const auto *ga = (gameaward_t *)LA_Pointer( stats->awardAllocator, i );
+		for( const gameaward_t &award: stats.awardsSequence ) {
 			writer << '{';
 			{
-				writer << "name"  << ga->name;
-				writer << "count" << ga->count;
+				writer << "name"  << award.name;
+				writer << "count" << award.count;
 			}
 			writer << '}';
 		}
@@ -1133,21 +819,15 @@ static void G_MatchReport_AddPlayerAwards( QueryWriter &writer, gclient_quit_t *
 	writer << ']';
 }
 
-static void G_MatchReport_AddPlayerLogFrags( QueryWriter &writer, gclient_quit_t *cl ) {
-	const auto *stats = &cl->stats;
-	if( !stats->fragAllocator || !LA_Size( stats->fragAllocator ) ) {
-		return;
-	}
-
+void StatsowFacade::ClientEntry::AddFrags( JsonWriter &writer ) {
 	writer << "log_frags" << '[';
 	{
-		for( size_t i = 0, size = LA_Size( stats->fragAllocator ); i < size; i++ ) {
-			const auto *frag = (loggedFrag_t *)LA_Pointer( stats->fragAllocator, i );
+		for( const loggedFrag_t &frag: stats.fragsSequence ) {
 			writer << '{';
 			{
-				writer << "victim" << frag->victim;
-				writer << "weapon" << frag->weapon;
-				writer << "time" << frag->time;
+				writer << "victim" << frag.victim;
+				writer << "weapon" << frag.weapon;
+				writer << "time" << frag.time;
 			}
 			writer << '}';
 		}
@@ -1165,16 +845,15 @@ static inline double ComputeAccuracy( int hits, int shots ) {
 	}
 
 	// copied from cg_scoreboard.c, but changed the last -1 to 0 (no hits is zero acc, right??)
-	return ( min( (int)( floor( ( 100.0f * ( hits ) ) / ( (float)( shots ) ) + 0.5f ) ), 99 ) );
+	return ( std::min( (int)( std::floor( ( 100.0f * ( hits ) ) / ( (float)( shots ) ) + 0.5f ) ), 99 ) );
 }
 
-static void G_MatchReport_AddPlayerWeapons( QueryWriter &writer, gclient_quit_t *cl, const char **weaponNames ) {
-	const auto *stats = &cl->stats;
+void StatsowFacade::ClientEntry::AddWeapons( JsonWriter &writer, const char **weaponNames ) {
 	int i;
 
 	// first pass calculate the number of weapons, see if we even need this section
 	for( i = 0; i < ( AMMO_TOTAL - WEAP_TOTAL ); i++ ) {
-		if( stats->accuracy_shots[i] > 0 ) {
+		if( stats.accuracy_shots[i] > 0 ) {
 			break;
 		}
 	}
@@ -1192,7 +871,7 @@ static void G_MatchReport_AddPlayerWeapons( QueryWriter &writer, gclient_quit_t 
 		for( j = 0; j < AMMO_WEAK_GUNBLADE - WEAP_TOTAL; j++ ) {
 			const int weak = j + ( AMMO_WEAK_GUNBLADE - WEAP_TOTAL );
 			// Don't submit unused weapons
-			if( stats->accuracy_shots[j] == 0 && stats->accuracy_shots[weak] == 0 ) {
+			if( stats.accuracy_shots[j] == 0 && stats.accuracy_shots[weak] == 0 ) {
 				continue;
 			}
 
@@ -1203,24 +882,24 @@ static void G_MatchReport_AddPlayerWeapons( QueryWriter &writer, gclient_quit_t 
 				writer << "various_stats" << '{';
 				{
 					// STRONG
-					int hits = stats->accuracy_hits[j];
-					int shots = stats->accuracy_shots[j];
+					int hits = stats.accuracy_hits[j];
+					int shots = stats.accuracy_shots[j];
 
 					writer << "strong_hits"   << hits;
 					writer << "strong_shots"  << shots;
 					writer << "strong_acc"    << ComputeAccuracy( hits, shots );
-					writer << "strong_dmg"    << stats->accuracy_damage[j];
-					writer << "strong_frags"  << stats->accuracy_frags[j];
+					writer << "strong_dmg"    << stats.accuracy_damage[j];
+					writer << "strong_frags"  << stats.accuracy_frags[j];
 
 					// WEAK
-					hits = stats->accuracy_hits[weak];
-					shots = stats->accuracy_shots[weak];
+					hits = stats.accuracy_hits[weak];
+					shots = stats.accuracy_shots[weak];
 
 					writer << "weak_hits"   << hits;
 					writer << "weak_shots"  << shots;
 					writer << "weak_acc"    << ComputeAccuracy( hits, shots );
-					writer << "weak_dmg"    << stats->accuracy_damage[weak];
-					writer << "weak_frags"  << stats->accuracy_frags[weak];
+					writer << "weak_dmg"    << stats.accuracy_damage[weak];
+					writer << "weak_frags"  << stats.accuracy_frags[weak];
 				}
 				writer << '}';
 			}
@@ -1230,82 +909,70 @@ static void G_MatchReport_AddPlayerWeapons( QueryWriter &writer, gclient_quit_t 
 	writer << ']';
 }
 
-/*
-* G_Match_SendReport
-*/
-void G_Match_SendReport( void ) {
-	edict_t *ent;
-
+void StatsowFacade::SendReport() {
 	// TODO: check if MM is enabled
 
-	sq_api = trap_GetStatQueryAPI();
-	if( !sq_api ) {
-		return;
-	}
-
 	if( GS_RaceGametype() ) {
-		G_Match_SendRaceReport();
+		SendRaceReport();
 		return;
 	}
 
-	if( GS_MMCompatible() ) {
-		// merge game.clients with game.quits
-		for( ent = game.edicts + 1; PLAYERNUM( ent ) < gs.maxclients; ent++ ) {
-			G_AddPlayerReport( ent, true );
-		}
+	if( !GS_MMCompatible() ) {
+		ClearEntries();
+		return;
+	}
 
-		if( game.discardMatchReport ) {
-			G_Printf( S_COLOR_YELLOW "G_Match_SendReport(): The match report has been discarded\n" );
-		} else {
-			// check if we have enough players to report (at least 2)
-			if( game.quits && game.quits->next ) {
-				G_Match_SendRegularReport();
-			}
+	// merge game.clients with game.quits
+	for( edict_t *ent = game.edicts + 1; PLAYERNUM( ent ) < gs.maxclients; ent++ ) {
+		AddPlayerReport( ent, true );
+	}
+
+	if( isDiscarded ) {
+		G_Printf( S_COLOR_YELLOW "SendReport(): The match report has been discarded\n" );
+	} else {
+		// check if we have enough players to report (at least 2)
+		if( clientEntriesHead && clientEntriesHead->next ) {
+			SendRegularReport();
 		}
 	}
 
-	G_FreeClientQuits();
+	ClearEntries();
 }
 
-/*
-* G_Match_SendRaceReport
-*/
-static void G_Match_SendRaceReport( void ) {
+void StatsowFacade::SendRaceReport() {
 	if( !GS_RaceGametype() ) {
-		G_Printf( "G_Match_RaceReport.. not race gametype\n" );
+		G_Printf( S_COLOR_YELLOW "G_Match_RaceReport.. not race gametype\n" );
 		return;
 	}
 
-	if( !game.raceruns || !LA_Size( game.raceruns ) ) {
+	if( raceRuns.empty() ) {
 		return;
 	}
 
-	QueryWriter writer( sq_api, "server/matchReport" );
+	QueryObject *query = trap_MM_NewPostQuery( "server/matchReport" );
+	JsonWriter writer( query->ResponseJsonRoot() );
 
-	G_MatchReport_WriteHeaderFields( writer, false );
+	WriteHeaderFields( writer, false );
 
 	writer << "race_runs" << '[';
 	{
-		size_t size = LA_Size( game.raceruns );
-		for( size_t i = 0; i < size; i++ ) {
-			raceRun_t *prr = (raceRun_t*)LA_Pointer( game.raceruns, i );
-
+		for( const auto &rr: raceRuns ) {
 			writer << '{';
 			{
 				// Setting session id and nickname is mutually exclusive
-				if( prr->owner.IsValidSessionId() ) {
-					writer << "session_id" << prr->owner;
+				if( rr.owner.IsValidSessionId() ) {
+					writer << "session_id" << rr.owner;
 				} else {
-					writer << "nickname" << prr->nickname;
+					writer << "nickname" << rr.nickname;
 				}
 
-				writer << "timestamp" << prr->utcTimestamp;
+				writer << "timestamp" << rr.utcTimestamp;
 
 				writer << "times" << '[';
 				{
 					// Accessing the "+1" element is legal (its the final time). Supply it along with other times.
-					for( int j = 0; j < prr->numSectors + 1; j++ )
-						writer << prr->times[j];
+					for( int j = 0; j < rr.numSectors + 1; j++ )
+						writer << rr.times[j];
 				}
 				writer << ']';
 			}
@@ -1314,9 +981,495 @@ static void G_Match_SendRaceReport( void ) {
 	}
 	writer << ']';
 
-	writer.Send();
+	trap_MM_EnqueueReport( query );
+}
 
-	// clear gameruns
-	LinearAllocator_Free( game.raceruns );
-	game.raceruns = NULL;
+#ifndef GAME_HARD_LINKED
+// While most of the stuff is defined inline in the class
+// and some parts that rely on qcommon too much are imported
+// this implementation is specific for a binary we use this stuff in.
+void QueryObject::FailWith( const char *format, ... ) {
+	char buffer[2048];
+
+	va_list va;
+	va_start( va, format );
+	Q_vsnprintfz( buffer, sizeof( buffer ), format, va );
+	va_end( va );
+
+	trap_Error( buffer );
+}
+#endif
+
+RespectHandler::RespectHandler() {
+	for( int i = 0; i < MAX_CLIENTS; ++i ) {
+		entries[i].ent = game.edicts + i + 1;
+	}
+	Reset();
+}
+
+void RespectHandler::Reset() {
+	for( ClientEntry &e: entries ) {
+		e.Reset();
+	}
+
+	matchStartedAt = -1;
+	lastFrameMatchState = MATCH_STATE_NONE;
+}
+
+void RespectHandler::Frame() {
+	const auto matchState = GS_MatchState();
+	// This is not 100% correct but is sufficient for message checks
+	if( matchState == MATCH_STATE_PLAYTIME ) {
+		if( lastFrameMatchState != MATCH_STATE_PLAYTIME ) {
+			matchStartedAt = level.time;
+		}
+	}
+
+	if( !GS_RaceGametype() ) {
+		for( int i = 0; i < gs.maxclients; ++i ) {
+			entries[i].CheckBehaviour( matchStartedAt );
+		}
+	}
+
+	lastFrameMatchState = matchState;
+}
+
+bool RespectHandler::HandleMessage( const edict_t *ent, const char *message ) {
+	// Race is another world...
+	if( GS_RaceGametype() ) {
+		return false;
+	}
+
+	// Allow public chatting in timeouts
+	if( GS_MatchPaused() ) {
+		return false;
+	}
+
+	const auto matchState = GS_MatchState();
+	// Ignore until countdown
+	if( matchState < MATCH_STATE_COUNTDOWN ) {
+		return false;
+	}
+
+	return entries[ENTNUM( ent ) - 1].HandleMessage( message );
+}
+
+void RespectHandler::ClientEntry::Reset() {
+	warnedAt = 0;
+	firstJoinedTeamAt = 0;
+	std::fill_n( firstSaidAt, 0, NUM_TOKENS );
+	std::fill_n( lastSaidAt, 0, NUM_TOKENS );
+	std::fill_n( numSaidTokens, 0, NUM_TOKENS );
+	saidBefore = false;
+	saidAfter = false;
+	hasTakenCountdownHint = false;
+	hasTakenStartHint = false;
+	hasTakenFinalHint = false;
+	hasIgnoredCodex = false;
+	hasViolatedCodex = false;
+}
+
+bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
+	// If has already violated the Codex
+	if( hasViolatedCodex ) {
+		return false;
+	}
+
+	// Now check for RnS tokens...
+	if( CheckForTokens( message ) ) {
+		return false;
+	}
+
+	const char *warning = S_COLOR_GREY "Less talk, let's play!";
+	if( GS_MatchState() < MATCH_STATE_PLAYTIME ) {
+		// Print a warning only to the player
+		PrintToClientScreen( "%s", warning );
+		return false;
+	}
+
+	// Never warned (at start of the level)
+	if( !warnedAt ) {
+		warnedAt = level.time;
+		PrintToClientScreen( "%s", warning );
+		// Let the message be printed by default facilities
+		return false;
+	}
+
+	const int64_t millisSinceLastWarn = level.time - warnedAt;
+	// Don't warn again for occasional flood
+	if( millisSinceLastWarn < 1000 ) {
+		// Swallow messages silently
+		return true;
+	}
+
+	// Allow speaking occasionally once per 5 minutes
+	if( millisSinceLastWarn > 5 * 60 * 1000 ) {
+		warnedAt = level.time;
+		PrintToClientScreen( "%s", warning );
+		return false;
+	}
+
+	hasViolatedCodex = true;
+	// Print the message first
+	G_ChatMsg( nullptr, ent, false, "%s", message );
+	// Then announce
+	AnnounceMisconductBehaviour( "violated" );
+	// Interrupt handing of the message
+	return true;
+}
+
+void RespectHandler::ClientEntry::AnnounceMisconductBehaviour( const char *action ) {
+	// Ignore bots.
+	// We plan to add R&S bot behaviour but do not currently want to touch the game module
+	if( ent->r.svflags & SVF_FAKECLIENT ) {
+		return;
+	}
+
+	const char *subject = S_COLOR_WHITE "Respect and Sportsmanship Codex";
+
+	const char *outcome;
+	if( !StatsowFacade::Instance()->IsMatchReportDiscarded() ) {
+		outcome = S_COLOR_RED "No awards, no rating gain";
+	} else {
+		outcome = S_COLOR_RED "No awards given";
+	}
+
+	constexpr const char *format = S_COLOR_RED "BOOM! " S_COLOR_WHITE "%s" S_COLOR_RED " has %s %s! %s!\n";
+	G_PrintMsg( nullptr, format, ent->r.client->netname, action, subject, outcome );
+
+	PrintToClientScreen( S_COLOR_RED "You have %s R&S Codex...", action );
+}
+
+void RespectHandler::ClientEntry::PrintToClientScreen( const char *format, ... ) {
+	char formatBuffer[MAX_STRING_CHARS];
+	char commandBuffer[MAX_STRING_CHARS];
+
+	va_list va;
+	va_start( va, format );
+	Q_vsnprintfz( formatBuffer, sizeof( formatBuffer ), format, va );
+	va_end( va );
+
+	// Make this message appear as an award at client-side
+	Q_snprintfz( commandBuffer, sizeof( commandBuffer ), "aw \"%s\"", formatBuffer );
+	trap_GameCmd( ent, commandBuffer );
+}
+
+// We still can't use C++17, here's a hack
+class string_view {
+	const char *s;
+	const size_t len;
+public:
+	string_view( const char *s_ ) noexcept : s( s_ ), len( strlen( s ) ) {}
+	const char *data() const { return s; }
+	size_t size() const { return len; }
+};
+
+class RespectTokensRegistry {
+	static const std::array<const string_view *, 10> ALIASES;
+
+	static_assert( RespectHandler::NUM_TOKENS == 10, "" );
+public:
+	// For players staying in game during the match
+	static constexpr auto SAY_AT_START_TOKEN_NUM = 2;
+	static constexpr auto SAY_AT_END_TOKEN_NUM = 3;
+	// For players joining or quitting mid-game
+	static constexpr auto SAY_AT_JOINING_TOKEN_NUM = 0;
+	static constexpr auto SAY_AT_QUITTING_TOKEN_NUM = 1;
+
+	/**
+	 * Finds a number of a token (a number of a token aliases group) the supplied string matches.
+	 * @param p a pointer to a string data. Should not point to a white-space. A successful match advances this token.
+	 * @return a number of token (of a token aliases group), a negative value on failure.
+	 */
+	static int MatchByToken( const char **p );
+
+	static const char *TokenForNum( int num ) {
+		assert( (unsigned )num < ALIASES.size() );
+		return ALIASES[num][0].data();
+	}
+};
+
+// Hack: every chain must end with an empty string that acts as a terminator.
+// Otherwise a runtime crash due to wrong loop upper bounds is expected.
+// Hack: be aware of greedy matching behaviour.
+// Hack: make sure the first alias (that implicitly defines a token) is a valid identifier.
+// Otherwise Statsow rejects reported data as invalid for various reasons.
+
+static const string_view hiAliases[] = { "hi", "hello", "" };
+static const string_view byeAliases[] = { "bb", "bye", "" };
+static const string_view glhfAliases[] = { "glhf", "gl", "hf", "" };
+static const string_view ggAliases[] = { "ggs", "gg", "bgs", "bg", "" };
+static const string_view plzAliases[] = { "plz", "please", "" };
+static const string_view tksAliases[] = { "tks", "thanks", "" };
+static const string_view sozAliases[] = { "soz", "sorry", "" };
+static const string_view smiley1Aliases[] = { "n1", ":)", "" };
+static const string_view smiley2Aliases[] = { "np", ":(", "" };
+static const string_view lolAliases[] = { "lol", "" };
+
+const std::array<const string_view *, 10> RespectTokensRegistry::ALIASES = {{
+	hiAliases, byeAliases, glhfAliases, ggAliases, plzAliases,
+	tksAliases, sozAliases, smiley1Aliases, smiley2Aliases, lolAliases
+}};
+
+int RespectTokensRegistry::MatchByToken( const char **p ) {
+	int tokenNum = 0;
+	for( const string_view *tokenAliases: ALIASES ) {
+		for( const string_view *alias = tokenAliases; alias->size(); alias++ ) {
+			if( !Q_strnicmp( alias->data(), *p, alias->size() ) ) {
+				*p += alias->size();
+				return tokenNum;
+			}
+		}
+		tokenNum++;
+	}
+	return -1;
+}
+
+bool RespectHandler::ClientEntry::CheckForTokens( const char *message ) {
+	// Do not modify tokens count immediately
+	// Either this routine fails completely or stats for all tokens get updated
+	int numFoundTokens[NUM_TOKENS];
+	std::fill_n( numFoundTokens, 0, NUM_TOKENS );
+
+	const int64_t levelTime = level.time;
+
+	const char *p = message;
+	for(;; ) {
+		while( ::isspace( *p ) ) {
+			p++;
+		}
+		if( !*p ) {
+			break;
+		}
+		int tokenNum = RespectTokensRegistry::MatchByToken( &p );
+		if( tokenNum < 0 ) {
+			return false;
+		}
+		numFoundTokens[tokenNum]++;
+	}
+
+	for( int tokenNum = 0; tokenNum < NUM_TOKENS; ++tokenNum ) {
+		int numTokens = numFoundTokens[tokenNum];
+		if( !numTokens ) {
+			continue;
+		}
+		this->numSaidTokens[tokenNum] += numTokens;
+		this->lastSaidAt[tokenNum] = levelTime;
+	}
+
+	return true;
+}
+
+void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime ) {
+	if( !ent->r.inuse ) {
+		return;
+	}
+
+	if( !ent->r.client->level.stats.had_playtime ) {
+		return;
+	}
+
+	if( saidBefore && saidAfter ) {
+		return;
+	}
+
+	const auto levelTime = level.time;
+	const auto matchState = GS_MatchState();
+
+	if( matchState == MATCH_STATE_COUNTDOWN ) {
+		// If has just said "glhf"
+		const int tokenNum = RespectTokensRegistry::SAY_AT_START_TOKEN_NUM;
+		if( levelTime - lastSaidAt[tokenNum] < 64 ) {
+			saidBefore = true;
+		}
+		if( !hasTakenCountdownHint ) {
+			PrintToClientScreen( S_COLOR_CYAN "Say `%s` please!", RespectTokensRegistry::TokenForNum( tokenNum ) );
+			hasTakenCountdownHint = true;
+		}
+		return;
+	}
+
+	if( matchState == MATCH_STATE_PLAYTIME ) {
+		if( saidBefore ) {
+			return;
+		}
+
+		int tokenNum;
+		int64_t countdownStartTime;
+		// Say "glhf" being in-game from the beginning or "hi" when joining
+		if( firstJoinedTeamAt <= matchStartTime ) {
+			countdownStartTime = matchStartTime;
+			tokenNum = RespectTokensRegistry::SAY_AT_START_TOKEN_NUM;
+		} else {
+			countdownStartTime = firstJoinedTeamAt;
+			tokenNum = RespectTokensRegistry::SAY_AT_JOINING_TOKEN_NUM;
+		}
+
+		if( levelTime - lastSaidAt[tokenNum] < 64 ) {
+			saidBefore = true;
+			return;
+		}
+
+		if( levelTime - countdownStartTime < 1500 ) {
+			return;
+		}
+
+		if( !hasTakenStartHint ) {
+			PrintToClientScreen( S_COLOR_CYAN "Say `%s` please!", RespectTokensRegistry::TokenForNum( tokenNum ) );
+			hasTakenStartHint = true;
+			return;
+		}
+
+		if( !hasIgnoredCodex && levelTime - countdownStartTime > 10000 ) {
+			// The misconduct behaviour is going to be detected inevitably.
+			// This is just to prevent massive console spam at the same time.
+			if( random() > 0.95f ) {
+				hasIgnoredCodex = true;
+				AnnounceMisconductBehaviour( "ignored" );
+			}
+			return;
+		}
+	}
+
+	if( matchState != MATCH_STATE_POSTMATCH ) {
+		return;
+	}
+
+	if( levelTime - lastSaidAt[RespectTokensRegistry::SAY_AT_END_TOKEN_NUM] < 64 ) {
+		saidAfter = true;
+		if( saidBefore && !hasViolatedCodex ) {
+			G_PlayerAward( ent, S_COLOR_CYAN "Fair play!" );
+			G_PrintMsg( ent, "Your stats and awards have been confirmed!\n" );
+		}
+	}
+
+	if( !saidAfter && saidBefore && !hasViolatedCodex ) {
+		// TODO: Say this hint 1 second after the match
+		if( !hasTakenFinalHint ) {
+			// Say "gg" at the end regardless of being in-game from the beginning or joining mid-game
+			PrintToClientScreen( S_COLOR_CYAN "Say `gg` please!" );
+			hasTakenFinalHint = true;
+		}
+		return;
+	}
+
+	if( !hasTakenFinalHint ) {
+		if( hasIgnoredCodex || hasViolatedCodex ) {
+			PrintToClientScreen( "Be nice next time please..." );
+		}
+		hasTakenFinalHint = true;
+	}
+}
+
+void RespectHandler::ClientEntry::OnClientDisconnected() {
+	if( GS_MatchState() != MATCH_STATE_PLAYTIME ) {
+		return;
+	}
+
+	if( !ent->r.client->level.stats.had_playtime ) {
+		return;
+	}
+
+	// Skip bots currently
+	if( ent->r.svflags & SVF_FAKECLIENT ) {
+		return;
+	}
+
+	if( !saidBefore || hasViolatedCodex ) {
+		return;
+	}
+
+	constexpr int sayAtQuitting = RespectTokensRegistry::SAY_AT_QUITTING_TOKEN_NUM;
+	constexpr int sayAtEnd = RespectTokensRegistry::SAY_AT_END_TOKEN_NUM;
+
+	int64_t lastByeTokenTime = -1;
+	if( lastSaidAt[sayAtQuitting] > lastByeTokenTime ) {
+		lastByeTokenTime = lastSaidAt[sayAtQuitting];
+	} else if( lastSaidAt[sayAtQuitting] > lastByeTokenTime ) {
+		lastByeTokenTime = lastSaidAt[sayAtQuitting];
+	}
+
+	// Check whether its substantially overridden by other tokens
+	for( int i = 0; i < NUM_TOKENS; ++i ) {
+		if( i == sayAtEnd || i == sayAtQuitting ) {
+			continue;
+		}
+		if( lastSaidAt[i] > lastByeTokenTime + 3000 ) {
+			lastByeTokenTime = -1;
+			break;
+		}
+	}
+
+	if( warnedAt < lastByeTokenTime ) {
+		saidAfter = true;
+		return;
+	}
+
+	assert( !saidAfter );
+	const char *outcome = "";
+	if( !StatsowFacade::Instance()->IsMatchReportDiscarded() ) {
+		outcome = " No rating progress, no awards saved!";
+	}
+
+	const char *format = "%s" S_COLOR_YELLOW " chickened and left the game.%s\n";
+	G_Printf( format, ent->r.client->netname, outcome );
+}
+
+void RespectHandler::ClientEntry::OnClientJoinedTeam( int newTeam ) {
+	if( newTeam == TEAM_SPECTATOR ) {
+		return;
+	}
+
+	if( GS_MatchState() > MATCH_STATE_PLAYTIME ) {
+		return;
+	}
+
+	if( !firstJoinedTeamAt ) {
+		firstJoinedTeamAt = level.time;
+	}
+
+	// Check whether there is already Codex violation recorded for the player during this match
+	mm_uuid_t clientSessionId = this->ent->r.client->mm_session;
+	if( !clientSessionId.IsValidSessionId() ) {
+		return;
+	}
+
+	auto *respectStats = StatsowFacade::Instance()->FindRespectStatsById( clientSessionId );
+	if( !respectStats ) {
+		return;
+	}
+
+	this->hasViolatedCodex = respectStats->hasViolatedCodex;
+	this->hasIgnoredCodex = respectStats->hasIgnoredCodex;
+}
+
+void RespectHandler::ClientEntry::AddToReportStats( StatsowFacade::RespectStats *reportedStats ) {
+	if( reportedStats->hasViolatedCodex ) {
+		return;
+	}
+
+	if( hasViolatedCodex ) {
+		reportedStats->Clear();
+		reportedStats->hasViolatedCodex = true;
+		reportedStats->hasIgnoredCodex = hasIgnoredCodex;
+		return;
+	}
+
+	if( hasIgnoredCodex ) {
+		reportedStats->Clear();
+		reportedStats->hasIgnoredCodex = true;
+		return;
+	}
+
+	if( reportedStats->hasIgnoredCodex ) {
+		return;
+	}
+
+	for( int i = 0; i < NUM_TOKENS; ++i ) {
+		if( !numSaidTokens[i] ) {
+			continue;
+		}
+		const char *token = RespectTokensRegistry::TokenForNum( i );
+		reportedStats->AddToEntry( token, numSaidTokens[i] );
+	}
 }

@@ -349,7 +349,8 @@ void G_Init( unsigned int seed, unsigned int framemsec, int protocol, const char
 		new( game.clients + i )gclient_s;
 	}
 
-	game.quits = NULL;
+	StatsowFacade::Init();
+	ChatHandlersChain::Init();
 
 	game.numentities = gs.maxclients + 1;
 
@@ -395,6 +396,9 @@ void G_Shutdown( void ) {
 	G_RemoveCommands();
 
 	G_FreeCallvotes();
+
+	ChatHandlersChain::Shutdown();
+	StatsowFacade::Shutdown();
 
 	for( i = 0; i < game.numentities; i++ ) {
 		if( game.edicts[i].r.inuse ) {
@@ -632,7 +636,7 @@ void G_ExitLevel( void ) {
 	level.exitNow = false;
 
 	nextmapname = G_SelectNextMapName();
-	timeLimit = g_timelimit->integer > 0 ? max( g_timelimit->integer, 60 ) : 60;
+	timeLimit = g_timelimit->integer > 0 ? std::max( g_timelimit->integer, 60 ) : 60;
 	timeLimit *= 60 * 1000;
 
 	// if it's the same map see if we can restart without loading
