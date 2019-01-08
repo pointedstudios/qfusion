@@ -96,6 +96,7 @@ void QueryObject::HandleHttpSuccess( wswcurl_req *req ) {
 		// Some calls return plain text ok (do they?)
 		if( strcmp( contentType, "text/plain" ) == 0 ) {
 			SetStatus( SUCCEEDED );
+			return;
 		}
 		Com_Printf( S_COLOR_YELLOW "%s: Unexpected content type `%s`\n", tag, contentType );
 		SetStatus( MALFORMED_RESPONSE );
@@ -267,6 +268,7 @@ const char *QueryObject::FindFormParamByName( const char *name ) const {
 
 bool QueryObject::SendForStatusPolling() {
 	if( !Prepare() ) {
+		status.store( OTHER_FAILURE, std::memory_order_relaxed );
 		return false;
 	}
 
@@ -274,13 +276,14 @@ bool QueryObject::SendForStatusPolling() {
 	return true;
 }
 
-bool QueryObject::SendDeletingOnCompletion( CompletionCallback &&callback ) {
+bool QueryObject::SendWithCallback( CompletionCallback &&callback_, bool deleteOnCompletion_ ) {
 	if( !Prepare() ) {
+		status.store( OTHER_FAILURE, std::memory_order_relaxed );
 		return false;
 	}
 
-	this->completionCallback = std::move( callback );
-	this->deleteOnCompletion = true;
+	this->completionCallback = std::move( callback_ );
+	this->deleteOnCompletion = deleteOnCompletion_;
 
 	Fire();
 	return true;
@@ -295,9 +298,13 @@ void QueryObject::Fire() {
 bool QueryObject::Prepare() {
 	assert( status < STARTED );
 
+	::wswcurl_delete( oldReq );
+	oldReq = nullptr;
+
 	// GET request, finish the url and create the object
 	if( !isPostQuery ) {
 		assert( url );
+		assert( !formParamsHead );
 		req = wswcurl_create( outgoingIp, url );
 		return true;
 	}
@@ -309,6 +316,9 @@ bool QueryObject::Prepare() {
 		// Should have been converted
 		assert( !requestRoot );
 	}
+
+	// This is a way to catch very nasty errors (a GET verb is implied if there's no form parameters is set)
+	assert( formParamsHead && "At least a single form parameter must be present for a POST query" );
 
 	req = wswcurl_create( outgoingIp, url );
 	for( FormParam *param = formParamsHead; param; param = param->next ) {

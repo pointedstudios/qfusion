@@ -372,10 +372,6 @@ extern cvar_t *sv_defaultmap;
 
 extern cvar_t *sv_demodir;
 
-extern cvar_t *sv_mm_authkey;
-extern cvar_t *sv_mm_loginonly;
-extern cvar_t *sv_mm_debug_reportbots;
-
 extern cvar_t *sv_snap_aggressive_sound_culling;
 extern cvar_t *sv_snap_raycast_players_culling;
 // "fov" sounds more clear than "view dir" though its not very accurate
@@ -540,31 +536,6 @@ bool SV_IsDemoDownloadRequest( const char *request );
 //
 void SV_MOTD_Update( void );
 void SV_MOTD_Get_f( client_t *client );
-
-//
-// sv_mm.c
-//
-void SV_MM_Init( void );
-void SV_MM_Shutdown( bool logout );
-void SV_MM_Frame( void );
-bool SV_MM_Initialized( void );
-
-mm_uuid_t SV_MM_ClientConnect( client_t *client, const netadr_t *address, char *userinfo, mm_uuid_t ticket, mm_uuid_t session );
-void SV_MM_ClientDisconnect( client_t *client );
-
-int SV_MM_GenerateLocalSession( void );
-
-// match report
-#include "../matchmaker/mm_common.h"
-
-class QueryObject *SV_MM_NewGetQuery( const char *url );
-class QueryObject *SV_MM_NewPostQuery( const char *url );
-void SV_MM_DeleteQuery( class QueryObject *query );
-bool SV_MM_SendQuery( class QueryObject *query );
-void SV_MM_EnqueueReport( class QueryObject *matchReport );
-void SV_MM_GameState( bool state );
-
-void SV_MM_GetMatchUUID( void ( *callback_fn )( const char *uuid ) );
 
 //
 // sv_web.c

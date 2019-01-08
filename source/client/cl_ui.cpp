@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "client.h"
+#include "cl_mm.h"
 #include "../ui/ui_public.h"
 #include "../qcommon/asyncstream.h"
 
@@ -147,6 +148,35 @@ static int CL_UIModule_PlayerNum( void ) {
 		return -1;
 	}
 	return cl.playernum;
+}
+
+// TODO: Remove this useless clutter and link UI statically
+static bool CL_MM_Login( const char *user, const char *password ) {
+	return CLStatsowFacade::Instance()->Login( user, password );
+}
+
+static bool CL_MM_Logout( bool waitForCompletion ) {
+	return CLStatsowFacade::Instance()->Logout( waitForCompletion );
+}
+
+static int CL_MM_GetLoginState() {
+	return CLStatsowFacade::Instance()->GetLoginState();
+}
+
+static const std::string &CL_MM_GetLastErrorMessage() {
+	return CLStatsowFacade::Instance()->GetLastErrorMessage();
+}
+
+static const std::string &CL_MM_GetProfileWebUrl() {
+	return CLStatsowFacade::Instance()->GetProfileWebUrl();
+}
+
+static const std::string &CL_MM_GetProfileRmlUrl() {
+	return CLStatsowFacade::Instance()->GetProfileRmlUrl();
+}
+
+static const std::string &CL_MM_GetBaseWebUrl() {
+	return CLStatsowFacade::Instance()->GetBaseWebUrl();
 }
 
 //==============================================
@@ -299,12 +329,14 @@ void CL_UIModule_Init( void ) {
 	import.ML_GetFullname = ML_GetFullname;
 	import.ML_GetMapByNum = ML_GetMapByNum;
 
+	// TODO: Just link UI statically
 	import.MM_Login = CL_MM_Login;
 	import.MM_Logout = CL_MM_Logout;
 	import.MM_GetLoginState = CL_MM_GetLoginState;
 	import.MM_GetLastErrorMessage = CL_MM_GetLastErrorMessage;
-	import.MM_GetProfileURL = CL_MM_GetProfileURL;
-	import.MM_GetBaseWebURL = CL_MM_GetBaseWebURL;
+	import.MM_GetProfileWebUrl = CL_MM_GetProfileRmlUrl;
+	import.MM_GetProfileRmlUrl = CL_MM_GetProfileWebUrl;
+	import.MM_GetBaseWebUrl = CL_MM_GetBaseWebUrl;
 
 	import.asGetAngelExport = Com_asGetAngelExport;
 

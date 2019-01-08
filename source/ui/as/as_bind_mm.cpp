@@ -55,24 +55,23 @@ public:
 	}
 
 	asstring_t *getProfileURL( bool rml ) const {
-		char buffer[2048];
-
-		trap::MM_GetProfileURL( buffer, sizeof( buffer ), rml ? true : false );
-		return ASSTR( buffer );
+		const char *s;
+		if( rml ) {
+			s = trap::MM_GetProfileRmlUrl().c_str();
+		} else {
+			s = trap::MM_GetProfileWebUrl().c_str();
+		}
+		return ASSTR( s );
 	}
 
 	asstring_t *getBaseWebURL() const {
-		char buffer[2048];
-
-		trap::MM_GetBaseWebURL( buffer, sizeof( buffer ) );
-		return ASSTR( buffer );
+		const char *s = trap::MM_GetBaseWebUrl().c_str();
+		return ASSTR( s );
 	}
 
 	asstring_t *getLastError( void ) const {
-		char buffer[2048];
-
-		trap::MM_GetLastErrorMessage( buffer, sizeof( buffer ) );
-		return ASSTR( buffer );
+		const char *s = trap::MM_GetLastErrorMessage().c_str();
+		return ASSTR( s );
 	}
 
 	void update( void ) {

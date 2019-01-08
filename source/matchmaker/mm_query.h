@@ -69,10 +69,10 @@ public:
 		child = underlying_->child;
 	}
 
-	bool IsDone() const { return child; }
+	bool IsDone() const { return !child; }
 
 	void Next() {
-		assert( IsDone() );
+		assert( !IsDone() );
 		child = child->next;
 	}
 
@@ -96,6 +96,9 @@ class QueryObject final {
 	friend class ObjectReader;
 	friend class ArrayReader;
 	friend class LocalReportsStorage;
+	friend class StatsowNetworkTask;
+	template <typename> friend class StatsowTasksRunner;
+	template <typename> friend class StatsowHeartbeatRunner;
 public:
 	using CompletionCallback = std::function<void( QueryObject * )>;
 private:
@@ -373,6 +376,24 @@ private:
 		}
 		return actualStatus;
 	}
+
+	/**
+	 * Tries to start a network request without a necessity to check
+	 * an individual query status every frame
+	 * (but calling {@code QueryObject::Poll()} is still required).
+	 * This is a specialization for {@code StatsowNetworkTask} use-case.
+	 * @param callback a block of code to call once the object becomes ready.
+	 * @note contrary to {@code SendDeletingOnCompletion()} the object
+	 * does not get deleted automatically on completion.
+	 */
+	bool SendWithOnCompletion( CompletionCallback &&callback_ ) {
+		return SendWithCallback( std::move( callback_ ), false );
+	}
+
+	/**
+	 * A shared implementation for {@code SendDeletingOnCompletion()} and {@code SendWithOnCompletion()}
+	 */
+	bool SendWithCallback( CompletionCallback &&callback_, bool deleteOnCompletion_ );
 public:
 	/**
 	 * Set a key/value request parameter.
@@ -575,7 +596,9 @@ public:
 	 * @param callback a block of code to call once the object becomes ready.
 	 * @note the query object would be deleted automatically on completion.
 	 */
-	bool SendDeletingOnCompletion( CompletionCallback &&callback );
+	bool SendDeletingOnCompletion( CompletionCallback &&callback_ ) {
+		return SendWithCallback( std::move( callback_ ), true );
+	}
 
 	/**
 	 * Should be called (every) frame if there are active queries.
@@ -618,6 +641,11 @@ public:
 		}
 		if( rawResponse ) {
 			::free( rawResponse );
+			rawResponse = nullptr;
+		}
+		if( responseRoot ) {
+			::cJSON_Delete( responseRoot );
+			responseRoot = nullptr;
 		}
 		SetStatus( CREATED );
 	}

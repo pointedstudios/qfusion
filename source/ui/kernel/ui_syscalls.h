@@ -483,20 +483,24 @@ inline bool MM_Logout( bool force ) {
 	return UI_IMPORT.MM_Logout( force );
 }
 
-inline int MM_GetLoginState( void ) {
+inline int MM_GetLoginState() {
 	return UI_IMPORT.MM_GetLoginState();
 }
 
-inline size_t MM_GetLastErrorMessage( char *buffer, size_t buffer_size ) {
-	return UI_IMPORT.MM_GetLastErrorMessage( buffer, buffer_size );
+inline const std::string &MM_GetLastErrorMessage() {
+	return UI_IMPORT.MM_GetLastErrorMessage();
 }
 
-inline size_t MM_GetProfileURL( char *buffer, size_t buffer_size, bool rml ) {
-	return UI_IMPORT.MM_GetProfileURL( buffer, buffer_size, rml );
+inline const std::string &MM_GetProfileWebUrl() {
+	return UI_IMPORT.MM_GetProfileWebUrl();
 }
 
-inline size_t MM_GetBaseWebURL( char *buffer, size_t buffer_size ) {
-	return UI_IMPORT.MM_GetBaseWebURL( buffer, buffer_size );
+inline const std::string &MM_GetProfileRmlUrl() {
+	return UI_IMPORT.MM_GetProfileRmlUrl();
+}
+
+inline const std::string &MM_GetBaseWebUrl() {
+	return UI_IMPORT.MM_GetBaseWebUrl();
 }
 
 inline const char *L10n_TranslateString( const char *string ) {

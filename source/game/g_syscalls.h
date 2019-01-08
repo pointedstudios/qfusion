@@ -321,7 +321,3 @@ inline void trap_MM_SendQuery( class QueryObject *query ) {
 inline void trap_MM_EnqueueReport( class QueryObject *matchReport ) {
 	GAME_IMPORT.MM_EnqueueReport( matchReport );
 }
-
-inline void trap_MM_GameState( bool state ) {
-	GAME_IMPORT.MM_GameState( state == true ? true : false );
-}

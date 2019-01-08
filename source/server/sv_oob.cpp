@@ -19,9 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "server.h"
-#include "../matchmaker/mm_common.h"
-
-#include <algorithm>
+#include "sv_mm.h"
 
 typedef struct sv_master_s {
 	netadr_t address;
@@ -396,7 +394,7 @@ static char *SV_ShortInfoString( void ) {
 		}
 	}
 
-	if( SV_MM_Initialized() ) {
+	if( SVStatsowFacade::Instance()->IsValid() ) {
 		Q_snprintfz( entry, sizeof( entry ), "mm\\\\1\\\\" );
 		if( MAX_SVCINFOSTRING_LEN - len > strlen( entry ) ) {
 			Q_strncatz( string, entry, sizeof( string ) );

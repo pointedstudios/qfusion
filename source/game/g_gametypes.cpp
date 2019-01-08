@@ -835,7 +835,6 @@ void G_Match_LaunchState( int matchState ) {
 		|| ( matchState != MATCH_STATE_POSTMATCH && gs.gameState.stats[GAMESTAT_MATCHSTATE] == MATCH_STATE_POSTMATCH ) ) {
 		// entering postmatch in race or leaving postmatch in normal gt
 		StatsowFacade::Instance()->SendReport();
-		trap_MM_GameState( false );
 	}
 
 	switch( matchState ) {
@@ -848,11 +847,6 @@ void G_Match_LaunchState( int matchState ) {
 			gs.gameState.stats[GAMESTAT_MATCHSTATE] = MATCH_STATE_WARMUP;
 			gs.gameState.stats[GAMESTAT_MATCHDURATION] = (int64_t)( fabs( g_warmup_timelimit->value * 60 ) * 1000 );
 			gs.gameState.stats[GAMESTAT_MATCHSTART] = game.serverTime;
-
-			// race has playtime in warmup too, so flag the matchmaker about this
-			if( GS_RaceGametype() ) {
-				trap_MM_GameState( true );
-			}
 
 			break;
 		}
@@ -881,11 +875,6 @@ void G_Match_LaunchState( int matchState ) {
 
 			// request a new match UUID
 			trap_ConfigString( CS_MATCHUUID, "" );
-
-			// tell matchmaker that the game is on, so if
-			// client disconnects before SendReport, it is flagged
-			// as 'purgable' on MM side
-			trap_MM_GameState( true );
 		}
 		break;
 

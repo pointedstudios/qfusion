@@ -21,12 +21,16 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <time.h>       // just for dev
 
 #include "server.h"
+#include "sv_mm.h"
 #include "../gameshared/q_shared.h"
 
 #include "../matchmaker/mm_common.h"
 #include "../matchmaker/mm_rating.h"
 #include "../matchmaker/mm_query.h"
+#include "../matchmaker/mm_network_task.h"
 #include "../matchmaker/mm_reliable_pipe.h"
+
+#include "../qalgo/SingletonHolder.h"
 
 #ifdef min
 #undef min
@@ -36,585 +40,574 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #endif
 #include <functional>
 
-// interval between successive attempts to get match UUID from the mm
-#define SV_MM_MATCH_UUID_FETCH_INTERVAL     20  // in seconds
+static SingletonHolder<SVStatsowFacade> instanceHolder;
 
-/*
-* private vars
-*/
-static bool sv_mm_initialized = false;
-static mm_uuid_t sv_mm_session;
+void SVStatsowFacade::Init() {
+	::instanceHolder.Init();
+}
 
-// local session counter
-static int64_t sv_mm_last_heartbeat;
-static bool sv_mm_logout_semaphore = false;
+void SVStatsowFacade::Shutdown() {
+	::instanceHolder.Shutdown();
+}
 
-// flag for gamestate = game-on
-static bool sv_mm_gameon = false;
+SVStatsowFacade *SVStatsowFacade::Instance() {
+	return ::instanceHolder.Instance();
+}
 
-static char sv_mm_match_uuid[37];
-static int64_t sv_mm_next_match_uuid_fetch;
-static void (*sv_mm_match_uuid_callback_fn)( const char *uuid );
+/**
+ * A base class for all server-side descendants of {@code StatsowFacadeTask}
+ * that provides some shared server-side-specific utilities.
+ */
+class SVStatsowTask : public StatsowFacadeTask<SVStatsowFacade> {
+protected:
+	SVStatsowTask( SVStatsowFacade *parent_, const char *name_, const char *resource_ )
+		: StatsowFacadeTask( parent_, name_, va( "server/%s", resource_ ), sv_ip->string ) {}
 
-/*
-* public vars
-*/
-cvar_t *sv_mm_authkey;
-cvar_t *sv_mm_enable;
-cvar_t *sv_mm_loginonly;
-
-/*
-* prototypes
-*/
-static bool SV_MM_Login( void );
-static void SV_MM_Logout( bool force );
-static void SV_MM_GetMatchUUIDThink( void );
-
-/*
-* Utilities
-*/
-static client_t *SV_MM_ClientForSession( mm_uuid_t session_id ) {
-	int i;
-	client_t *cl;
-
-	for( i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++ ) {
-		// also ignore zombies?
-		if( cl->state == CS_FREE ) {
-			continue;
-		}
-
-		if( Uuid_Compare( cl->mm_session, session_id ) ) {
-			return cl;
-		}
+	bool CheckResponseStatus( const char *methodTag ) const {
+		return CheckParsedResponse( methodTag ) && CheckStatusField( methodTag );
 	}
 
-	return NULL;
-}
-
-class QueryObject *SV_MM_NewGetQuery( const char *url ) {
-	return QueryObject::NewGetQuery( url, sv_ip->string );
-}
-
-class QueryObject *SV_MM_NewPostQuery( const char *url ) {
-	return QueryObject::NewPostQuery( url, sv_ip->string );
-}
-
-void SV_MM_DeleteQuery( class QueryObject *query ) {
-	QueryObject::DeleteQuery( query );
-}
-
-bool SV_MM_SendQuery( class QueryObject *query ) {
-	// TODO: Check?
-	query->SetServerSession( sv_mm_session );
-	return query->SendForStatusPolling();
-}
-
-void SV_MM_EnqueueReport( class QueryObject *query ) {
-	query->SetServerSession( sv_mm_session );
-	ReliablePipe::Instance()->EnqueueMatchReport( query );
-}
-
-// TODO: instead of this, factor ClientDisconnect to game module which can flag
-// the gamestate in that function
-void SV_MM_GameState( bool gameon ) {
-	sv_mm_gameon = gameon;
-}
-
-void SV_MM_Heartbeat() {
-	if( !sv_mm_initialized || !Uuid_IsValidSessionId( sv_mm_session ) ) {
-		return;
-	}
-
-	QueryObject *query = QueryObject::NewPostQuery( "server/heartbeat", sv_ip->string );
-	if( !query ) {
-		return;
-	}
-
-	query->SetServerSession( sv_mm_session );
-	query->SendDeletingOnCompletion([]( QueryObject * ) {});
-}
-
-void SV_MM_ClientDisconnect( client_t *client ) {
-	if( !sv_mm_initialized || !Uuid_IsValidSessionId( sv_mm_session ) ) {
-		return;
-	}
-
-	// do we need to tell about anonymous clients?
-	if( !Uuid_IsValidSessionId( client->mm_session ) ) {
-		return;
-	}
-
-	QueryObject *query = QueryObject::NewPostQuery( "server/clientDisconnect", sv_ip->string );
-	if( !query ) {
-		return;
-	}
-
-	query->SetServerSession( sv_mm_session );
-	query->SetClientSession( client->mm_session );
-	query->SendDeletingOnCompletion( [=]( QueryObject *query ) {
-		if( query->HasSucceeded() ) {
-			char buffer[UUID_BUFFER_SIZE];
-			Com_Printf( "SV_MM_ClientDisconnect: Acknowledged %s\n", client->mm_session.ToString( buffer ) );
-		} else {
-			Com_Printf( "SV_MM_ClientDisconnect: Error\n" );
-		}
-	});
-}
-
-struct ScopeGuard {
-	const std::function<void()> &atExit;
-	bool suppressed { false };
-
-	explicit ScopeGuard( const std::function<void()> & atExit_ ) : atExit( atExit_ ) {}
-
-	~ScopeGuard() {
-		if( !suppressed ) {
-			atExit();
-		}
-	}
-
-	void Suppress() { suppressed = true; }
+	bool CheckParsedResponse( const char *methodTag ) const;
+	bool CheckStatusField( const char *methodTag ) const;
 };
 
-static void SV_MM_ClientConnectDone( QueryObject *query, client_t *cl ) {
-	bool userinfo_changed;
-	char uuid_buffer[UUID_BUFFER_SIZE];
-
-	// Happens if a game module rejects connection
-	if( !cl->edict ) {
-		Com_Printf( "SV_MM_ClientConnect: The client is no longer valid\n" );
-		return;
+bool SVStatsowTask::CheckParsedResponse( const char *methodTag ) const {
+	assert( query && query->IsReady() && query->HasSucceeded() );
+	if( query->ResponseJsonRoot() ) {
+		return true;
 	}
+	PrintError( methodTag, "Failed to parse a JSON response" );
+	return false;
+}
 
-	auto onAnyOutcome = [&]() {
-		if( userinfo_changed ) {
-			SV_UserinfoChanged( cl );
-		}
+bool SVStatsowTask::CheckStatusField( const char *methodTag ) const {
+	assert( query && query->IsReady() && query->HasSucceeded() );
+	double status = query->GetRootDouble( "status", std::numeric_limits<double>::infinity() );
+	if( !std::isfinite( status ) ) {
+		PrintError( methodTag, "Can't find a numeric `status` field in the response" );
+		return false;
+	}
+	if( status != 0 ) {
+		return true;
+	}
+	const char *error = query->GetRootString( "error", "" );
+	if( *error ) {
+		PrintError( methodTag, "Request error at remote host: `%s`", error );
+	} else {
+		PrintError( methodTag, "Unspecified request error at remote host" );
+	}
+	return false;
+}
 
-		const char *format = "SV_MM_ClientConnect: %s with session id %s\n";
-		Com_Printf( format, cl->name, Uuid_ToString( uuid_buffer, cl->mm_session ) );
-	};
-
-	ScopeGuard scopeGuard( onAnyOutcome );
-
-	auto onFailure = [&]() {
-		// unable to validate client, either kick him out or force local session
-		if( sv_mm_loginonly->integer ) {
-			SV_DropClient( cl, DROP_TYPE_GENERAL, "%s", "Error: This server requires login. Create account at " APP_URL );
+class SVLoginTask : public SVStatsowTask {
+public:
+	explicit SVLoginTask( SVStatsowFacade *parent_ )
+		: SVStatsowTask( parent_, "SVLoginTask", "login" ) {
+		if( !query ) {
 			return;
 		}
 
-		// TODO: Does it have to be unique?
-		mm_uuid_t session_id = Uuid_FFFsUuid();
-		Uuid_ToString( uuid_buffer, session_id );
-		Com_Printf( "SV_MM_ClientConnect: Forcing local_session %s on client %s\n", uuid_buffer, cl->name );
-		cl->mm_session = session_id;
-		userinfo_changed = true;
-	};
+		query->SetAuthKey( parent->sv_mm_authkey->string );
+		query->SetPort( sv_port->integer );
+		query->SetServerName( sv.configstrings[CS_HOSTNAME] );
+		query->SetServerAddress( sv_ip->string );
+		query->SetDemosBaseUrl( sv_uploads_demos_baseurl->string );
+	}
 
-	ScopeGuard failureGuard( onFailure );
+	void OnQuerySuccess() override;
+	void OnQueryFailure() override;
 
-	if( !query->HasSucceeded() ) {
-		Com_Printf( "SV_MM_ClientConnect: Remote or network failure\n" );
+	void OnAnyFailure();
+};
+
+class SVLogoutTask : public SVStatsowTask {
+public:
+	explicit SVLogoutTask( SVStatsowFacade *parent_ )
+		: SVStatsowTask( parent_, "SVLogoutTask", "logout" ) {
+		assert( parent->ourSession.IsValidSessionId() );
+		if( query ) {
+			query->SetServerSession( parent->ourSession );
+		}
+	}
+
+	void OnQuerySuccess() override;
+	void OnQueryFailure() override;
+};
+
+class SVClientConnectTask : public SVStatsowTask {
+	client_t *const client;
+	bool userInfoChanged { false };
+
+	bool CheckClientStillValid( const char *tag );
+	bool TryReadingCredentials();
+	void ReadRatings();
+	void OnAnyOutcome();
+	void OnAnyFailure();
+public:
+	explicit SVClientConnectTask( SVStatsowFacade *parent_,
+								  client_t *client_,
+								  const mm_uuid_t &session,
+								  const mm_uuid_t &ticket,
+								  const char *address )
+		: SVStatsowTask( parent_, "SVClientConnectTask", "clientConnect" ), client( client_ ) {
+		if( !query ) {
+			return;
+		}
+		query->SetServerSession( parent->ourSession );
+		query->SetClientSession( session );
+		query->SetTicket( ticket );
+		query->SetServerAddress( address );
+	}
+
+	void OnQuerySuccess() override;
+	void OnQueryFailure() override;
+};
+
+class SVClientDisconnectTask : public SVStatsowTask {
+	mm_uuid_t clientSession;
+public:
+	SVClientDisconnectTask( SVStatsowFacade *parent_, const mm_uuid_t &clientSession_ )
+		: SVStatsowTask( parent_, "SVClientDisconnectTask", "clientDisconnect" )
+		, clientSession( clientSession_ ) {
+		if( !query ) {
+			return;
+		}
+		query->SetServerSession( parent->ourSession );
+		query->SetClientSession( clientSession_ );
+	}
+
+	void OnQuerySuccess() override {
+		char buffer[UUID_BUFFER_SIZE];
+		PrintMessage( "OnQuerySuccess", "Acknowledged client %s disconnection", clientSession.ToString( buffer ) );
+	}
+
+	void OnQueryFailure() override {
+		char buffer[UUID_BUFFER_SIZE];
+		PrintError( "OnQueryFailure", "Failed to acknowledge client %s disconnection", clientSession.ToString( buffer ) );
+	}
+};
+
+class SVFetchMatchUuidTask : public SVStatsowTask {
+public:
+	explicit SVFetchMatchUuidTask( SVStatsowFacade *parent_ )
+		: SVStatsowTask( parent_, "SVFetchMatchUuidTask", "matchUuid" ) {
+		if( query ) {
+			query->SetServerSession( parent->ourSession );
+		}
+	}
+
+	bool AllowQueryRetry() override {
+		// Retries are handled by SVStatsowFacade::CheckMatchUuid() logic
+		return false;
+	}
+
+	void OnQueryRetry() override {
+		Com_Error( ERR_FATAL, "FetchMatchUuidTask::OnQueryRetry(): Should not be called" );
+	}
+
+	void OnQuerySuccess() override;
+	void OnQueryFailure() override;
+};
+
+SVLoginTask *SVStatsowFacade::NewLoginTask() {
+	return NewTaskStub<SVLoginTask>( this );
+}
+
+SVLogoutTask *SVStatsowFacade::NewLogoutTask() {
+	return NewTaskStub<SVLogoutTask>( this );
+}
+
+SVClientConnectTask *SVStatsowFacade::NewClientConnectTask( client_s *client,
+	                                                        const mm_uuid_t &session,
+	                                                        const mm_uuid_t &ticket,
+	                                                        const char *address ) {
+	return NewTaskStub<SVClientConnectTask>( this, client, session, ticket, address );
+}
+
+SVClientDisconnectTask *SVStatsowFacade::NewClientDisconnectTask( const mm_uuid_t &session ) {
+	return NewTaskStub<SVClientDisconnectTask>( this, session );
+}
+
+SVFetchMatchUuidTask *SVStatsowFacade::NewFetchMatchUuidTask() {
+	return NewTaskStub<SVFetchMatchUuidTask>( this );
+}
+
+bool SVStatsowFacade::SendGameQuery( QueryObject *query ) {
+	query->SetServerSession( ourSession );
+	return query->SendForStatusPolling();
+}
+
+void SVStatsowFacade::EnqueueMatchReport( QueryObject *query ) {
+	ReliablePipe::Instance()->EnqueueMatchReport( query );
+}
+
+void SVStatsowFacade::CheckMatchUuid() {
+	if( sv.configstrings[CS_MATCHUUID][0] != '\0' ) {
 		return;
 	}
 
-	if( !query->ResponseJsonRoot() ) {
-		Com_Printf( "SV_MM_ClientConnect: failed to parse a raw response\n" );
+	// Throttle outgoing requests
+	if( Sys_Milliseconds() < nextMatchUuidCheckAt ) {
+		return;
+	}
+
+	if( isCheckingMatchUuid ) {
+		return;
+	}
+
+	if( TryStartingTask( NewFetchMatchUuidTask() ) ) {
+		isCheckingMatchUuid = true;
+		return;
+	}
+}
+
+void SVFetchMatchUuidTask::OnQuerySuccess() {
+	const char *tag = "OnQuerySuccess";
+
+	ScopeGuard scopeGuard( [=]() {
+		parent->isCheckingMatchUuid = false;
+		parent->nextMatchUuidCheckAt = Sys_Milliseconds() + 1000;
+	});
+
+	if( !CheckResponseStatus( tag ) ) {
+		return;
+	}
+
+	const char *uuidString = query->GetRootString( "uuid", "" );
+	if( !*uuidString ) {
+		PrintError( tag, "Can't find the `uuid` response field" );
+		return;
+	}
+
+	mm_uuid_t tmp;
+	if( !mm_uuid_t::FromString( uuidString, &tmp ) ) {
+		PrintError( tag, "Can't parse UUID string `%s`", uuidString );
+		return;
+	}
+
+	Q_strncpyz( sv.configstrings[CS_MATCHUUID], uuidString, sizeof( sv.configstrings[CS_MATCHUUID] ) );
+}
+
+void SVFetchMatchUuidTask::OnQueryFailure() {
+	PrintError( "OnQueryFailure", "Failed to fetch a match UUID" );
+	// Resetting this flag means automatic retry next frame.
+	// We still are stick to this task design instead of using plain queries
+	// due to convenient response parsing facilities and overall better code structure.
+	parent->isCheckingMatchUuid = false;
+	parent->nextMatchUuidCheckAt = Sys_Milliseconds() + 1000;
+}
+
+void SVStatsowFacade::OnClientDisconnected( client_t *client ) {
+	if( !IsValid() ) {
+		return;
+	}
+
+	if( !client->mm_session.IsValidSessionId() ) {
+		return;
+	}
+
+	if( TryStartingTask( NewClientDisconnectTask( client->mm_session ) ) ) {
+		return;
+	}
+
+	Com_Printf( S_COLOR_RED "SVStatsowFacade::OnClientDisconnected(): Can't launch a task\n" );
+}
+
+void SVClientConnectTask::OnQuerySuccess() {
+	if( !CheckClientStillValid( "OnQuerySuccess" ) ) {
+		return;
+	}
+
+	ScopeGuard scopeGuard( [=]() { OnAnyOutcome(); } );
+	ScopeGuard failureGuard( [=]() { OnAnyFailure(); } );
+
+	const char *tag = "OnQuerySuccess";
+
+	if( !CheckResponseStatus( tag ) ) {
 		return;
 	}
 
 	if( query->GetRootDouble( "banned", 0 ) != 0 ) {
-		const char *reason = query->GetRootString( "reason", "" );
-		if( !*reason ) {
-			reason = "Your account at " APP_URL " has been banned.";
-		}
-
-		SV_DropClient( cl, DROP_TYPE_GENERAL, "Error: %s", reason );
+		const char *reason = query->GetRootString( "reason", "Your account at " APP_URL " has been banned." );
+		SV_DropClient( client, DROP_TYPE_GENERAL, "Error: %s", reason );
 		return;
 	}
 
-	if( query->GetRootDouble( "status", 0 ) == 0 ) {
-		const char *error = query->GetRootString( "error", "" );
-		if( *error ) {
-			Com_Printf( "SV_MM_ClientConnect: Request error at remote host: %s\n", error );
-		} else {
-			Com_Printf( "SV_MM_ClientConnect: Bad or missing response status\n" );
-		}
+	if( !TryReadingCredentials() ) {
 		return;
 	}
 
-	// Note: we have omitted client session id comparisons,
-	// it has to be performed on server anyway and a mismatch yields a failed response.
+	userInfoChanged = true;
+	// Don't call the code for the "failure" path at scope exit
+	failureGuard.Suppress();
+
+	ReadRatings();
+}
+
+void SVClientConnectTask::OnQueryFailure() {
+	if( !CheckClientStillValid( "OnQueryFailure") ) {
+		return;
+	}
+
+	Com_Printf( S_COLOR_YELLOW "%s: Remote or network failure\n", name );
+
+	OnAnyFailure();
+	OnAnyOutcome();
+}
+
+bool SVClientConnectTask::CheckClientStillValid( const char *tag ) {
+	if( client->edict ) {
+		return true;
+	}
+
+	// Happens if the game module rejects connection
+	Com_Printf( "%s::%s(): The client is no longer valid\n", name, tag );
+	return false;
+}
+
+void SVClientConnectTask::OnAnyOutcome() {
+	assert( client->edict );
+
+	if( userInfoChanged ) {
+		SV_UserinfoChanged( client );
+	}
+
+	char buffer[UUID_BUFFER_SIZE];
+	Com_Printf( "SV_MM_ClientConnect: %s with session id %s\n", client->name, client->mm_session.ToString( buffer ) );
+}
+
+void SVClientConnectTask::OnAnyFailure() {
+	// Make sure we have changed game module decision
+	assert( client->edict );
+
+	// unable to validate client, either kick him out or force local session
+	if( parent->sv_mm_loginonly->integer ) {
+		SV_DropClient( client, DROP_TYPE_GENERAL, "%s", "Error: This server requires login. Create account at " APP_URL );
+		return;
+	}
+
+	char buffer[UUID_BUFFER_SIZE];
+	mm_uuid_t session = Uuid_FFFsUuid();
+	Com_Printf( "SV_MM_ClientConnect: Forcing local_session %s on client %s\n", session.ToString( buffer ), client->name );
+	client->mm_session = session;
+	userInfoChanged = true;
+}
+
+bool SVClientConnectTask::TryReadingCredentials() {
+	const char *tag = "OnQuerySuccess()";
 
 	ObjectReader rootReader( query->ResponseJsonRoot() );
 	// TODO: This would have been better if we could rely on std::optional support and just return optional<ObjectReader>
 	cJSON *infoSection = rootReader.GetObject( "player_info" );
 	if( !infoSection ) {
-		Com_Printf( "SV_MM_ParseResponse: Missing `player_info` section\n" );
-		return;
+		PrintError( tag, "Missing `player_info` section" );
+		return false;
 	}
 
 	ObjectReader infoReader( infoSection );
 	const char *login = infoReader.GetString( "login", "" );
 	if( !*login ) {
-		Com_Printf( "SV_MM_ParseResponse: Missing `login` field\n" );
-		return;
+		PrintError( tag, "Missing `login` field" );
+		return false;
 	}
 
-	Q_strncpyz( cl->mm_login, login, sizeof( cl->mm_login ) );
-	if( !Info_SetValueForKey( cl->userinfo, "cl_mm_login", login ) ) {
-		// TODO: What to do in this case?
-		Com_Printf( "Failed to set infokey 'cl_mm_login' for player %s\n", login );
+	Q_strncpyz( client->mm_login, login, sizeof( client->mm_login ) );
+	if( !Info_SetValueForKey( client->userinfo, "cl_mm_login", login ) ) {
+		// TODO: What to do in this case? Just print an error?
+		PrintError( tag, "Failed to set infokey `cl_mm_login` for player `%s`", login );
 	}
 
 	const char *mmflags = query->GetRootString( "mmflags", "" );
 	if( *mmflags ) {
-		if( !Info_SetValueForKey( cl->userinfo, "mmflags", mmflags ) ) {
-			Com_Printf( "Failed to set infokey 'mmflags' for player %s\n", login );
+		// TODO: What to do in this case? Just print an error?
+		if( !Info_SetValueForKey( client->userinfo, "mmflags", mmflags ) ) {
+			PrintError( tag, "Failed to set infokey `mmflags` for player `%s`", login );
 		}
 	}
 
-	userinfo_changed = true;
+	userInfoChanged = true;
+	return true;
+}
 
-	// Don't call the code for the "failure" path at scope exit
-	failureGuard.Suppress();
-
+void SVClientConnectTask::ReadRatings() {
 	// Again this cries for optionals
-	cJSON *ratingsSection = rootReader.GetArray( "ratings" );
-	if( !ratingsSection || !ge ) {
+	cJSON *section = ObjectReader( query->ResponseJsonRoot() ).GetArray( "ratings" );
+	if( !section || !ge ) {
 		return;
 	}
 
-	ArrayReader ratingsReader( ratingsSection );
-	edict_t *const ent = EDICT_NUM( ( cl - svs.clients ) + 1 );
-	while( !ratingsReader.IsDone() ) {
-		// This cries for optionals too
-		if( !ratingsReader.IsAtObject() ) {
-			Com_Printf( "Warning: an entry in ratings array is not a JSON object\n" );
-			break;
-		}
-		ObjectReader entryReader( ratingsReader.GetChildObject() );
-		const char *gametype = entryReader.GetString( "gametype" );
-		const double rating = entryReader.GetDouble( "rating" );
-		const double deviation = entryReader.GetDouble( "deviation" );
-		if( !gametype || std::isnan( rating ) || std::isnan( deviation ) ) {
-			Com_Printf( "Warning: an entry in ratings array is malformed\n" );
-			break;
-		}
+	edict_t *const ent = EDICT_NUM( ( client - svs.clients ) + 1 );
+	const auto consumer = [=]( const char *gametype, float rating, float deviation ) {
+		ge->AddRating( ent, gametype, rating, deviation );
+	};
 
-		ge->AddRating( ent, gametype, (float)rating, (float)deviation );
-		ratingsReader.Next();
-	}
+	StatsowFacadeTask::ParseRatingsSection( section, consumer );
 }
 
-mm_uuid_t SV_MM_ClientConnect( client_t *client, const netadr_t *address, char *, mm_uuid_t ticket, mm_uuid_t session_id ) {
-	// return of -1 is not an error, it just marks a dummy local session
-	if( !sv_mm_initialized || !Uuid_IsValidSessionId( sv_mm_session ) ) {
+inline mm_uuid_t SVStatsowFacade::AnonymousSessionId() const {
+	return sv_mm_loginonly->integer ? Uuid_ZeroUuid() : Uuid_FFFsUuid();
+}
+
+mm_uuid_t SVStatsowFacade::OnClientConnected( client_t *client,
+	                                          const netadr_t *address,
+	                                          const char *userInfo,
+	                                          const mm_uuid_t &ticket,
+	                                          const mm_uuid_t &session ) {
+	if( !IsValid() ) {
+		// Return a local session id that is not valid but is not a zero.
+		// That's what the game module expects in this case.
 		return Uuid_FFFsUuid();
 	}
 
-	if( !Uuid_IsValidSessionId( session_id ) || !Uuid_IsValidSessionId( ticket ) ) {
-		if( sv_mm_loginonly->integer ) {
-			Com_Printf( "SV_MM_ClientConnect: Login-only\n");
-			return Uuid_ZeroUuid();
+	// Allow bots to connect without authentication.
+	// Checking this is a bit tricky as an entity is not assigned yet.
+	// This also allows the supplied user info parameter to serve some utility.
+	if( const char *keyValue = Info_ValueForKey( userInfo, "socket" ) ) {
+		if( !Q_stricmp( keyValue, "loopback" ) ) {
+			return Uuid_FFFsUuid();
 		}
-		Com_Printf( "SV_MM_ClientConnect: Invalid session id or ticket, marking as anonymous\n" );
-		return Uuid_FFFsUuid();
 	}
 
-	// push a request
-	QueryObject *query = QueryObject::NewPostQuery( "/server/clientConnect", sv_ip->string );
-	if( !query ) {
-		return Uuid_ZeroUuid();
+	char buffer1[UUID_BUFFER_SIZE], buffer2[UUID_BUFFER_SIZE];
+	const char *const tag = "SVStatsowFacade::OnClientConnected()";
+
+	if( !session.IsValidSessionId() ) {
+		Com_Printf( S_COLOR_YELLOW "%s: The client session id `%s` is not valid\n", tag, session.ToString( buffer1 ) );
+		return AnonymousSessionId();
 	}
 
-	query->SetServerSession( sv_mm_session );
-	query->SetTicket( ticket );
-	query->SetClientSession( session_id );
-	query->SetClientAddress( NET_AddressToString( address ) );
-	query->SendDeletingOnCompletion( [=]( QueryObject *query ) { SV_MM_ClientConnectDone( query, client ); } );
+	if( !ticket.IsValidSessionId() ) {
+		const char *format = S_COLOR_YELLOW "%s: The ticket `%s` of client `%s` is not valid\n";
+		Com_Printf( format, tag, ticket.ToString( buffer1 ), session.ToString( buffer2 ) );
+		return AnonymousSessionId();
+	}
 
-	return session_id;
+	if( TryStartingTask( NewClientConnectTask( client, session, ticket, NET_AddressToString( address ) ) ) ) {
+		return session;
+	}
+
+	Com_Printf( S_COLOR_RED "%s: Can't launch a ClientConnect task\n", tag );
+	return Uuid_ZeroUuid();
 }
 
-void SV_MM_Frame() {
-	int64_t time;
+void SVStatsowFacade::Frame() {
+	tasksRunner.CheckStatus();
 
-	if( sv_mm_enable->modified ) {
-		if( sv_mm_enable->integer && !sv_mm_initialized ) {
-			SV_MM_Login();
-		} else if( !sv_mm_enable->integer && sv_mm_initialized ) {
-			SV_MM_Logout( false );
-		}
-
-		sv_mm_enable->modified = false;
-	}
-
-	if( sv_mm_initialized ) {
-		if( sv_mm_logout_semaphore ) {
-			// logout process is finished so we can shutdown game
-			SV_MM_Shutdown( false );
-			sv_mm_logout_semaphore = false;
-			return;
-		}
-
-		// heartbeat
-		time = Sys_Milliseconds();
-		if( ( sv_mm_last_heartbeat + MM_HEARTBEAT_INTERVAL ) < time ) {
-			SV_MM_Heartbeat();
-			sv_mm_last_heartbeat = time;
-		}
-
-		SV_MM_GetMatchUUIDThink();
-	}
-}
-
-bool SV_MM_Initialized() {
-	return sv_mm_initialized;
-}
-
-
-/*
-* SV_MM_Logout
-*/
-static void SV_MM_Logout( bool force ) {
-	if( !sv_mm_initialized || !Uuid_IsValidSessionId( sv_mm_session ) ) {
+	if( ourSession.IsValidSessionId() ) {
+		CheckMatchUuid();
+		heartbeatRunner.CheckStatus();
 		return;
 	}
 
-	QueryObject *query = QueryObject::NewPostQuery( "server/logout", sv_ip->string );
-	if( !query ) {
+	if( ourSession.IsZero() && !( isLoggingIn || isLoggingOut ) ) {
+		StartLoggingIn();
+	}
+}
+
+void SVStatsowFacade::LogoutBlocking() {
+	if( isLoggingIn ) {
+		// Just quit in this case
 		return;
 	}
 
-	sv_mm_logout_semaphore = false;
-
-	query->SetServerSession( sv_mm_session );
-	query->SendDeletingOnCompletion( [=]( QueryObject *query ) {
-		Com_Printf( "SV_MM_Logout: Loggin off..\n" );
-		// ignore response-status and just mark us as logged-out
-		sv_mm_logout_semaphore = true;
-	});
-
-	if( !force ) {
+	if( !IsValid() ) {
 		return;
 	}
 
-	const auto startTime = Sys_Milliseconds();
-	while( !sv_mm_logout_semaphore && Sys_Milliseconds() < ( startTime + MM_LOGOUT_TIMEOUT ) ) {
-		QueryObject::Poll();
+	if( !TryStartingTask( NewLogoutTask() ) ) {
+		Com_Printf( S_COLOR_RED "SVStatsowFacade::LogoutBlocking(): Can't launch a LogoutTask\n" );
+		return;
+	}
 
+	isLoggingOut = true;
+	// TODO: Should this be atomic? Was not in the code before.
+	while( isLoggingOut ) {
+		tasksRunner.CheckStatus();
 		Sys_Sleep( 10 );
 	}
-
-	if( !sv_mm_logout_semaphore ) {
-		Com_Printf( "SV_MM_Logout: Failed to force logout\n" );
-	} else {
-		Com_Printf( "SV_MM_Logout: force logout successful\n" );
-	}
-
-	sv_mm_logout_semaphore = false;
-
-	// dont call this, we are coming from shutdown
-	// SV_MM_Shutdown( false );
 }
 
-static QueryObject *sv_login_query = nullptr;
+void SVLogoutTask::OnQueryFailure() {
+	PrintError( "OnQueryFailure", "Logout query has failed" );
+	parent->OnLoggedOut();
+}
 
-static void SV_MM_LoginDone( QueryObject *query ) {
-	char uuid_buffer[UUID_BUFFER_SIZE];
+void SVLogoutTask::OnQuerySuccess() {
+	PrintMessage( "OnQuerySuccess", "Logout query has succeeded" );
+	parent->OnLoggedOut();
+}
 
-	sv_mm_initialized = false;
-	sv_login_query = nullptr;
-
-	if( !query->HasSucceeded() ) {
-		Com_Printf( "SV_MM_Login_Done: Error\n" );
-		Cvar_ForceSet( sv_mm_enable->name, "0" );
+void SVStatsowFacade::CheckLoginOnlyFailure() {
+	if( !sv_mm_loginonly->integer ) {
 		return;
 	}
 
-	Com_DPrintf( "SV_MM_Login: %s\n", query->RawResponse() );
+	Com_Error( ERR_FATAL, "Statsow authentication has failed. sv_mm_loginonly value forbids running the server\n" );
+}
 
-	ScopeGuard failureGuard([&]() {
-		Com_Printf( "SV_MM_Login: Failed, no session id\n" );
-		Cvar_ForceSet( sv_mm_enable->name, "0" );
-	});
+void SVLoginTask::OnAnyFailure() {
+	parent->isLoggingIn =  false;
+	parent->CheckLoginOnlyFailure();
 
-	if( !query->ResponseJsonRoot() ) {
-		Com_Printf( "SV_MM_Login: Failed to parse data\n" );
-		return;
-	}
+	Com_Printf( S_COLOR_YELLOW "Disabling server Statsow services...\n" );
+	Cvar_ForceSet( parent->sv_mm_enable->name, "0" );
+}
 
-	const auto status = query->GetRootDouble( "status", 0.0 );
-	if( status == 0 ) {
-		const char *error = query->GetRootString( "error", "" );
-		if( *error ) {
-			Com_Printf( "SV_MM_Login: Request error at remote host: %s\n", error );
-		} else {
-			Com_Printf( "SV_MM_Login: Unspecified error at remote host\n" );
-		}
+void SVLoginTask::OnQueryFailure() {
+	OnAnyFailure();
+}
+
+void SVLoginTask::OnQuerySuccess() {
+	ScopeGuard failureGuard([=]() { OnAnyFailure(); });
+
+	constexpr const char *const tag = "OnQuerySuccess";
+	if( !CheckResponseStatus( tag ) ) {
 		return;
 	}
 
 	const char *sessionString = query->GetRootString( "session_id", "" );
-	if( !Uuid_FromString( sessionString, &sv_mm_session ) ) {
-		Com_Printf( "SV_MM_Login: Failed to parse session string %s\n", sessionString );
+	if( !*sessionString ) {
+		PrintError( tag, "The `session_id` response field is not specified" );
 		return;
 	}
 
-	sv_mm_initialized = Uuid_IsValidSessionId( sv_mm_session );
-	if( !sv_mm_initialized ) {
+	if( !Uuid_FromString( sessionString, &parent->ourSession ) ) {
+		PrintError( tag, "Failed to parse session string `%s`", sessionString );
 		return;
 	}
 
-	Com_Printf( "SV_MM_Login: Success, session id %s\n", Uuid_ToString( uuid_buffer, sv_mm_session ) );
 	failureGuard.Suppress();
+	parent->isLoggingIn = false;
+	PrintMessage( tag, "Session id is %s", sessionString );
 }
 
-/*
-* SV_MM_Login
-*/
-static bool SV_MM_Login() {
-	if( sv_mm_initialized ) {
-		return false;
-	}
+void SVStatsowFacade::StartLoggingIn() {
+	assert( !isLoggingIn && !isLoggingOut );
 
-	if( sv_login_query ) {
-		return false;
-	}
+	constexpr const char *tag = "SVStatsowFacade::StartLoggingIn()";
 
 	if( sv_mm_authkey->string[0] == '\0' ) {
+		Com_Printf( S_COLOR_RED "%s: The auth key is not specified\n", tag );
+		CheckLoginOnlyFailure();
+
 		Cvar_ForceSet( sv_mm_enable->name, "0" );
-		return false;
+		ourSession = Uuid_FFFsUuid();
+		return;
 	}
 
-	Com_Printf( "SV_MM_Login: Creating query\n" );
-
-	QueryObject *query = QueryObject::NewPostQuery( "server/login", sv_ip->string );
-	if( !query ) {
-		return false;
+	if( TryStartingTask( NewLoginTask() ) ) {
+		isLoggingIn = true;
+		return;
 	}
 
-	query->SetAuthKey( sv_mm_authkey->string );
-	query->SetPort( sv_port->integer );
-	query->SetServerName( sv.configstrings[CS_HOSTNAME] );
-	query->SetServerAddress( sv_ip->string );
-	query->SetDemosBaseUrl( sv_uploads_demos_baseurl->string );
+	Com_Printf( S_COLOR_RED "%s: Can't launch a LoginTask\n", tag );
+	CheckLoginOnlyFailure();
 
-	sv_login_query = query;
-
-	query->SendDeletingOnCompletion( [=]( QueryObject *q ) { SV_MM_LoginDone( q ); } );
-	return true;
+	ourSession = Uuid_FFFsUuid();
 }
 
-static QueryObject *sv_mm_match_uuid_fetch_query = nullptr;
-
-static void SV_MM_MatchUuidDone( QueryObject *query ) {
-	// set the repeat timer, which will be ignored in case we successfully parse the response
-	sv_mm_next_match_uuid_fetch = Sys_Milliseconds() + SV_MM_MATCH_UUID_FETCH_INTERVAL * 1000;
-	sv_mm_match_uuid_fetch_query = nullptr;
-
-	if( !query->HasSucceeded() ) {
-		return;
-	}
-
-	Com_DPrintf( "SV_MM_GetMatchUUID: %s\n", query->RawResponse() );
-
-	const cJSON *root = query->ResponseJsonRoot();
-	if( !root ) {
-		Com_Printf( "SV_MM_GetMatchUUID: Failed to parse data\n" );
-		return;
-	}
-
-	const char *uuidString = cJSON_GetObjectItem( const_cast<cJSON *>(root), "uuid" )->valuestring;
-	Q_strncpyz( sv_mm_match_uuid, uuidString, UUID_BUFFER_SIZE );
-	if( sv_mm_match_uuid_callback_fn ) {
-		// fire the callback function
-		sv_mm_match_uuid_callback_fn( sv_mm_match_uuid );
-	}
-}
-
-/*
-* SV_MM_GetMatchUUIDThink
-*
-* Repeatedly query the matchmaker for match UUID until we get one.
-*/
-static void SV_MM_GetMatchUUIDThink() {
-	if( !sv_mm_initialized || !Uuid_IsValidSessionId( sv_mm_session ) ) {
-		return;
-	}
-
-	if( sv_mm_next_match_uuid_fetch > Sys_Milliseconds() ) {
-		// not ready yet
-		return;
-	}
-
-	if( sv_mm_match_uuid_fetch_query ) {
-		// already in progress
-		return;
-	}
-
-	if( sv_mm_match_uuid[0] != '\0' ) {
-		// we have already queried the server
-		return;
-	}
-
-	// ok, get it now!
-	Com_DPrintf( "SV_MM_GetMatchUUIDThink: Creating query\n" );
-
-	QueryObject *query = QueryObject::NewPostQuery( "server/matchUuid", sv_ip->string );
-	if( !query ) {
-		return;
-	}
-
-	query->SetServerSession( sv_mm_session );
-	sv_mm_match_uuid_fetch_query = query;
-	query->SendDeletingOnCompletion( [=]( QueryObject *q ) { SV_MM_MatchUuidDone( q ); } );
-}
-
-/*
-* SV_MM_GetMatchUUID
-*
-* Start querying the server for match UUID. Fire the callback function
-* upon success.
-*/
-void SV_MM_GetMatchUUID( void ( *callback_fn )( const char *uuid ) ) {
-	if( !sv_mm_initialized ) {
-		return;
-	}
-	if( sv_mm_match_uuid_fetch_query ) {
-		// already in progress
-		return;
-	}
-	if( sv_mm_next_match_uuid_fetch > Sys_Milliseconds() ) {
-		// not ready yet
-		return;
-	}
-
-	sv_mm_match_uuid[0] = '\0';
-	sv_mm_match_uuid_callback_fn = callback_fn;
-
-	// think now!
-	sv_mm_next_match_uuid_fetch = Sys_Milliseconds();
-	SV_MM_GetMatchUUIDThink();
-}
-
-/*
-* SV_MM_Init
-*/
-void SV_MM_Init() {
-	sv_mm_initialized = false;
-	sv_mm_session = Uuid_ZeroUuid();
-	sv_mm_last_heartbeat = 0;
-	sv_mm_logout_semaphore = false;
-
-	sv_mm_gameon = false;
-
-	sv_mm_match_uuid[0] = '\0';
-	sv_mm_next_match_uuid_fetch = Sys_Milliseconds();
-	sv_mm_match_uuid_fetch_query = nullptr;
-	sv_mm_match_uuid_callback_fn = nullptr;
+SVStatsowFacade::SVStatsowFacade()
+	: tasksRunner( this ), heartbeatRunner( this, "server", sv_ip->string ) {
 
 	/*
 	* create cvars
@@ -623,41 +616,16 @@ void SV_MM_Init() {
 	*/
 	sv_mm_enable = Cvar_Get( "sv_mm_enable", "0", CVAR_ARCHIVE | CVAR_NOSET | CVAR_SERVERINFO );
 	sv_mm_loginonly = Cvar_Get( "sv_mm_loginonly", "0", CVAR_ARCHIVE | CVAR_SERVERINFO );
+	sv_mm_authkey = Cvar_Get( "sv_mm_authkey", "", CVAR_ARCHIVE );
 
 	// this is used by game, but to pass it to client, we'll initialize it in sv
 	Cvar_Get( "sv_skillRating", va( "%.0f", MM_RATING_DEFAULT ), CVAR_READONLY | CVAR_SERVERINFO );
 
-	// TODO: remove as cvar
-	sv_mm_authkey = Cvar_Get( "sv_mm_authkey", "", CVAR_ARCHIVE );
-
-	/*
-	* login
-	*/
-	sv_login_query = nullptr;
-	//if( sv_mm_enable->integer )
-	//	SV_MM_Login();
-	sv_mm_enable->modified = true;
+	Com_Printf( "SVStatsowFacade: Initialized\n" );
 }
 
-void SV_MM_Shutdown( bool logout ) {
-	if( !sv_mm_initialized ) {
-		return;
-	}
+SVStatsowFacade::~SVStatsowFacade() {
+	Com_Printf( "SVStatsowFacade: Shutting down...\n" );
 
-	Com_Printf( "SV_MM_Shutdown..\n" );
-
-	if( logout ) {
-		// logout is always force in here
-		SV_MM_Logout( true );
-	}
-
-	Cvar_ForceSet( "sv_mm_enable", "0" );
-
-	sv_mm_gameon = false;
-
-	sv_mm_last_heartbeat = 0;
-	sv_mm_logout_semaphore = false;
-
-	sv_mm_initialized = false;
-	sv_mm_session = Uuid_ZeroUuid();
+	LogoutBlocking();
 }

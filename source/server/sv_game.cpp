@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // sv_game.c -- interface to the game dll
 
 #include "server.h"
+#include "sv_mm.h"
 
 game_export_t *ge;
 
@@ -99,6 +100,25 @@ static int PF_CM_FindTopNodeForSphere( const vec3_t center, float radius, unsign
 	return CM_FindTopNodeForSphere( svs.cms, center, radius, maxValue );
 }
 
+static QueryObject *SV_MM_NewGetQuery( const char *url ) {
+	return QueryObject::NewGetQuery( url, sv_ip->string );
+}
+
+static QueryObject *SV_MM_NewPostQuery( const char *url ) {
+	return QueryObject::NewPostQuery( url, sv_ip->string );
+}
+
+static void SV_MM_DeleteQuery( class QueryObject *query ) {
+	QueryObject::DeleteQuery( query );
+}
+
+static bool SV_MM_SendQuery( class QueryObject *query ) {
+	return SVStatsowFacade::Instance()->SendGameQuery( query );
+}
+
+static void SV_MM_EnqueueReport( class QueryObject *query ) {
+	return SVStatsowFacade::Instance()->EnqueueMatchReport( query );
+}
 //======================================================================
 
 /*
@@ -553,7 +573,6 @@ void SV_InitGameProgs( void ) {
 	import.MM_DeleteQuery = SV_MM_DeleteQuery;
 	import.MM_SendQuery = SV_MM_SendQuery;
 	import.MM_EnqueueReport = SV_MM_EnqueueReport;
-	import.MM_GameState = SV_MM_GameState;
 
 	// clear module manifest string
 	assert( sizeof( manifest ) >= MAX_INFO_STRING );

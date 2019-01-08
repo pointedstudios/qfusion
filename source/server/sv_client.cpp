@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // sv_client.c -- server code for moving users
 
 #include "server.h"
+#include "sv_mm.h"
 
 
 //============================================================================
@@ -81,13 +82,14 @@ bool SV_ClientConnect( const socket_t *socket, const netadr_t *address,
 	// must be called before ge->ClientConnect
 	// ch : rly ignore fakeClient and tvClient here?
 
-	session_id = SV_MM_ClientConnect( client, address, userinfo, ticket_id, session_id );
-	if( Uuid_IsZeroUuid( session_id ) ) {
+	session_id = SVStatsowFacade::Instance()->OnClientConnected( client, address, userinfo, ticket_id, session_id );
+	if( session_id.IsZero() ) {
 		return false;
 	}
 
 	// we need to set local sessions to userinfo ourselves
-	if( Uuid_IsFFFsUuid( session_id ) ) {
+	// TODO: Do this in SVStatsow scope
+	if( session_id.IsFFFs() ) {
 		Info_SetValueForKey( userinfo, "cl_mm_session", Uuid_ToString( uuid_buffer, session_id ) );
 	}
 
@@ -221,7 +223,7 @@ void SV_DropClient( client_t *drop, int type, const char *format, ... ) {
 		}
 	}
 
-	SV_MM_ClientDisconnect( drop );
+	SVStatsowFacade::Instance()->OnClientDisconnected( drop );
 
 	SNAP_FreeClientFrames( drop );
 

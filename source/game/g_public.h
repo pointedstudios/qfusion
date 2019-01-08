@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // g_public.h -- game dll information visible to server
 
-#define GAME_API_VERSION    55
+#define GAME_API_VERSION    56
 
 //===============================================================
 
@@ -188,8 +188,6 @@ typedef struct {
 	void ( *MM_DeleteQuery )( class QueryObject *query );
 	bool ( *MM_SendQuery )( class QueryObject *query );
 	void ( *MM_EnqueueReport )( class QueryObject *query );
-
-	void ( *MM_GameState )( bool state );
 } game_import_t;
 
 //

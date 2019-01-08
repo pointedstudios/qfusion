@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // cl_main.c  -- client main loop
 
 #include "client.h"
+#include "cl_mm.h"
 #include "ftlib.h"
 #include "../qcommon/asyncstream.h"
 #include "../qalgo/hash.h"
@@ -216,14 +217,13 @@ static void CL_Quit_f( void ) {
 * connect.
 */
 static void CL_SendConnectPacket( void ) {
-	char uuid_buffer[UUID_BUFFER_SIZE];
-
 	userinfo_modified = false;
 
-	Uuid_ToString( uuid_buffer, cls.mm_ticket );
-	Com_DPrintf( "CL_MM_Initialized: %d, cls.mm_ticket: %s\n", CL_MM_Initialized(), uuid_buffer );
+	const char *ticketString = CLStatsowFacade::Instance()->GetTicketString();
+
+	Com_DPrintf( "Using ticket `%s`\n", ticketString );
 	Netchan_OutOfBandPrint( cls.socket, &cls.serveraddress, "connect %i %i %i \"%s\" %i %s\n",
-							APP_PROTOCOL_VERSION, Netchan_GamePort(), cls.challenge, Cvar_Userinfo(), 0, uuid_buffer );
+							APP_PROTOCOL_VERSION, Netchan_GamePort(), cls.challenge, Cvar_Userinfo(), 0, ticketString );
 }
 
 /*
@@ -378,9 +378,9 @@ static void CL_Connect( const char *servername, socket_type_t type, netadr_t *ad
 
 	// If the server supports matchmaking and that we are authenticated, try getting a matchmaking ticket before joining the server
 	newstate = CA_CONNECTING;
-	if( CL_MM_Initialized() ) {
+	if( CLStatsowFacade::Instance()->IsValid() ) {
 		// if( MM_GetStatus() == MM_STATUS_AUTHENTICATED && CL_MM_GetTicket( serversession ) )
-		if( CL_MM_Connect( &cls.serveraddress ) ) {
+		if( CLStatsowFacade::Instance()->StartConnecting( &cls.serveraddress ) ) {
 			newstate = CA_GETTING_TICKET;
 		}
 	}
@@ -470,7 +470,7 @@ static void CL_Connect_Cmd_f( socket_type_t socket ) {
 
 	// wait until MM allows us to connect to a server
 	// (not in a middle of login process or anything)
-	CL_MM_WaitForLogin();
+	CLStatsowFacade::Instance()->WaitForConnection();
 
 	servername = TempCopyString( connectstring );
 	CL_Connect( servername, ( serveraddress.type == NA_LOOPBACK ? SOCKET_LOOPBACK : socket ),
@@ -2462,7 +2462,8 @@ void CL_Frame( int realMsec, int gameMsec ) {
 	CL_AdjustServerTime( gameMsec );
 	CL_UserInputFrame( realMsec );
 	CL_NetFrame( realMsec, gameMsec );
-	CL_MM_Frame();
+
+	CLStatsowFacade::Instance()->Frame();
 
 	if( cls.state == CA_CINEMATIC ) {
 #if 1
@@ -2889,6 +2890,8 @@ void CL_Init( void ) {
 	L10n_Init();
 
 	Steam_Init();
+	// Do this before UI initialization!
+	CLStatsowFacade::Init();
 
 	VID_Init();
 
@@ -2929,8 +2932,6 @@ void CL_Init( void ) {
 
 	CL_InitServerList();
 
-	CL_MM_Init();
-
 	ML_Init();
 }
 
@@ -2948,7 +2949,9 @@ void CL_Shutdown( void ) {
 	CL_SoundModule_StopAllSounds( true, true );
 
 	ML_Shutdown();
-	CL_MM_Shutdown( true );
+
+	CLStatsowFacade::Shutdown();
+
 	CL_ShutDownServerList();
 
 	CL_WriteConfiguration( "config.cfg", true );
