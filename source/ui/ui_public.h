@@ -21,7 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __UI_PUBLIC_H__
 #define __UI_PUBLIC_H__
 
-#define UI_API_VERSION      67
+#include "../qalgo/WswStdTypes.h"
+
+#define UI_API_VERSION      68
 
 typedef size_t ( *ui_async_stream_read_cb_t )( const void *buf, size_t numb, float percentage,
 											 int status, const char *contentType, void *privatep );
@@ -185,10 +187,10 @@ typedef struct {
 	bool ( *MM_Login )( const char *user, const char *password );
 	bool ( *MM_Logout )( bool force );
 	int ( *MM_GetLoginState )();
-	const std::string &( *MM_GetLastErrorMessage )();
-	const std::string &( *MM_GetProfileWebUrl )();
-	const std::string &( *MM_GetProfileRmlUrl )();
-	const std::string &( *MM_GetBaseWebUrl )();
+	const wsw::string_view &( *MM_GetLastErrorMessage )();
+	const wsw::string_view &( *MM_GetProfileWebUrl )();
+	const wsw::string_view &( *MM_GetProfileRmlUrl )();
+	const wsw::string_view &( *MM_GetBaseWebUrl )();
 
 	void *( *Mem_Alloc )( size_t size, const char *filename, int fileline );
 	void ( *Mem_Free )( void *data, const char *filename, int fileline );

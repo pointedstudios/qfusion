@@ -29,6 +29,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #endif
 
 #include "../qalgo/SingletonHolder.h"
+#include "../qalgo/WswStdTypes.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1154,18 +1155,8 @@ void RespectHandler::ClientEntry::PrintToClientScreen( const char *format, ... )
 	trap_GameCmd( ent, commandBuffer );
 }
 
-// We still can't use C++17, here's a hack
-class string_view {
-	const char *s;
-	const size_t len;
-public:
-	string_view( const char *s_ ) noexcept : s( s_ ), len( strlen( s ) ) {}
-	const char *data() const { return s; }
-	size_t size() const { return len; }
-};
-
 class RespectTokensRegistry {
-	static const std::array<const string_view *, 10> ALIASES;
+	static const std::array<const wsw::string_view *, 10> ALIASES;
 
 	static_assert( RespectHandler::NUM_TOKENS == 10, "" );
 public:
@@ -1195,26 +1186,26 @@ public:
 // Hack: make sure the first alias (that implicitly defines a token) is a valid identifier.
 // Otherwise Statsow rejects reported data as invalid for various reasons.
 
-static const string_view hiAliases[] = { "hi", "hello", "" };
-static const string_view byeAliases[] = { "bb", "bye", "" };
-static const string_view glhfAliases[] = { "glhf", "gl", "hf", "" };
-static const string_view ggAliases[] = { "ggs", "gg", "bgs", "bg", "" };
-static const string_view plzAliases[] = { "plz", "please", "" };
-static const string_view tksAliases[] = { "tks", "thanks", "" };
-static const string_view sozAliases[] = { "soz", "sorry", "" };
-static const string_view smiley1Aliases[] = { "n1", ":)", "" };
-static const string_view smiley2Aliases[] = { "np", ":(", "" };
-static const string_view lolAliases[] = { "lol", "" };
+static const wsw::string_view hiAliases[] = { "hi", "hello", "" };
+static const wsw::string_view byeAliases[] = { "bb", "bye", "" };
+static const wsw::string_view glhfAliases[] = { "glhf", "gl", "hf", "" };
+static const wsw::string_view ggAliases[] = { "ggs", "gg", "bgs", "bg", "" };
+static const wsw::string_view plzAliases[] = { "plz", "please", "" };
+static const wsw::string_view tksAliases[] = { "tks", "thanks", "" };
+static const wsw::string_view sozAliases[] = { "soz", "sorry", "" };
+static const wsw::string_view smiley1Aliases[] = { "n1", ":)", "" };
+static const wsw::string_view smiley2Aliases[] = { "np", ":(", "" };
+static const wsw::string_view lolAliases[] = { "lol", "" };
 
-const std::array<const string_view *, 10> RespectTokensRegistry::ALIASES = {{
+const std::array<const wsw::string_view *, 10> RespectTokensRegistry::ALIASES = {{
 	hiAliases, byeAliases, glhfAliases, ggAliases, plzAliases,
 	tksAliases, sozAliases, smiley1Aliases, smiley2Aliases, lolAliases
 }};
 
 int RespectTokensRegistry::MatchByToken( const char **p ) {
 	int tokenNum = 0;
-	for( const string_view *tokenAliases: ALIASES ) {
-		for( const string_view *alias = tokenAliases; alias->size(); alias++ ) {
+	for( const wsw::string_view *tokenAliases: ALIASES ) {
+		for( const wsw::string_view *alias = tokenAliases; alias->size(); alias++ ) {
 			if( !Q_strnicmp( alias->data(), *p, alias->size() ) ) {
 				*p += alias->size();
 				return tokenNum;

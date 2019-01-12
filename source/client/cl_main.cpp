@@ -219,7 +219,7 @@ static void CL_Quit_f( void ) {
 static void CL_SendConnectPacket( void ) {
 	userinfo_modified = false;
 
-	const char *ticketString = CLStatsowFacade::Instance()->GetTicketString();
+	const char *ticketString = CLStatsowFacade::Instance()->GetTicketString().data();
 
 	Com_DPrintf( "Using ticket `%s`\n", ticketString );
 	Netchan_OutOfBandPrint( cls.socket, &cls.serveraddress, "connect %i %i %i \"%s\" %i %s\n",

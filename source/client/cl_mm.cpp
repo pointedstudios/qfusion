@@ -624,11 +624,9 @@ int CLStatsowFacade::GetLoginState() const {
 	return isLoggingIn ? MM_LOGIN_STATE_IN_PROGRESS : MM_LOGIN_STATE_LOGGED_OUT;
 }
 
-const std::string &CLStatsowFacade::GetBaseWebUrl() const {
-	// I hope we're going to be able to use string_view
-	// so this is just a dirty temporary stub to get things working
-	static const std::string cachedNonLocal = APP_MATCHMAKER_WEB_URL;
-	return cachedNonLocal;
+const wsw::string_view &CLStatsowFacade::GetBaseWebUrl() const {
+	baseUrlView = wsw::string_view( APP_MATCHMAKER_WEB_URL );
+	return baseUrlView;
 }
 
 bool CLStatsowFacade::Login( const char *user, const char *password ) {

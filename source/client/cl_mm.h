@@ -2,10 +2,10 @@
 #define QFUSION_CL_MM_H
 
 #include "../matchmaker/mm_facade.h"
+#include "../qalgo/WswStdTypes.h"
 
 #include <functional>
 #include <memory>
-#include <string>
 
 /**
  * Provides a Statsow services facade for a game client.
@@ -29,11 +29,19 @@ class CLStatsowFacade {
 	mm_uuid_t ticket { Uuid_ZeroUuid() };
 	mm_uuid_t handle { Uuid_ZeroUuid() };
 
-	std::string lastErrorMessage;
-	std::string profileWebUrl;
-	std::string profileRmlUrl;
+	wsw::string lastErrorMessage;
+	mutable wsw::string_view lastErrorMessageView;
+
+	wsw::string profileWebUrl;
+	mutable wsw::string_view profileWebUrlView;
+
+	wsw::string profileRmlUrl;
+	mutable wsw::string_view profileRmlUrlView;
+
+	mutable wsw::string_view baseUrlView;
 
 	mutable char ticketStringBuffer[UUID_BUFFER_SIZE];
+	mutable wsw::string_view ticketStringView;
 
 	struct cvar_s *cl_mm_user;
 	struct cvar_s *cl_mm_session;
@@ -120,6 +128,11 @@ class CLStatsowFacade {
 	bool TryStartingTask( Task *task ) {
 		return tasksRunner.TryStartingTask( task );
 	}
+
+	const wsw::string_view &GetStringAsView( const wsw::string &s, wsw::string_view *view ) const {
+		*view = wsw::string_view( s.data(), s.length() );
+		return *view;
+	}
 public:
 	static void Init();
 	static void Shutdown();
@@ -139,20 +152,24 @@ public:
 
 	int GetLoginState() const;
 
-	// TODO: Prefer returning string_view
-	const std::string &GetLastErrorMessage() const { return lastErrorMessage; }
-	// TODO: Prefer returning string_view
-	const std::string &GetProfileWebUrl() const { return profileWebUrl; }
-	// TODO: Prefer returning string_view
-	const std::string &GetProfileRmlUrl() const { return profileRmlUrl; }
+	const wsw::string_view &GetLastErrorMessage() const {
+		return GetStringAsView( lastErrorMessage, &lastErrorMessageView );
+	}
 
-	// TODO: Prefer returning string_view
-	const std::string &GetBaseWebUrl() const;
+	const wsw::string_view &GetProfileWebUrl() const {
+		return GetStringAsView( profileWebUrl, &profileWebUrlView );
+	}
 
-	// TODO: We should return a string_view for consistency as well
-	const char *GetTicketString() const {
+	const wsw::string_view &GetProfileRmlUrl() const {
+		return GetStringAsView( profileRmlUrl, &profileRmlUrlView );
+	}
+
+	const wsw::string_view &GetBaseWebUrl() const;
+
+	const wsw::string_view &GetTicketString() const {
 		ticket.ToString( ticketStringBuffer );
-		return ticketStringBuffer;
+		ticketStringView = wsw::string_view( ticketStringBuffer, UUID_DATA_LENGTH );
+		return ticketStringView;
 	}
 };
 

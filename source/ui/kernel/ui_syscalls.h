@@ -487,19 +487,19 @@ inline int MM_GetLoginState() {
 	return UI_IMPORT.MM_GetLoginState();
 }
 
-inline const std::string &MM_GetLastErrorMessage() {
+inline const wsw::string_view &MM_GetLastErrorMessage() {
 	return UI_IMPORT.MM_GetLastErrorMessage();
 }
 
-inline const std::string &MM_GetProfileWebUrl() {
+inline const wsw::string_view &MM_GetProfileWebUrl() {
 	return UI_IMPORT.MM_GetProfileWebUrl();
 }
 
-inline const std::string &MM_GetProfileRmlUrl() {
+inline const wsw::string_view &MM_GetProfileRmlUrl() {
 	return UI_IMPORT.MM_GetProfileRmlUrl();
 }
 
-inline const std::string &MM_GetBaseWebUrl() {
+inline const wsw::string_view &MM_GetBaseWebUrl() {
 	return UI_IMPORT.MM_GetBaseWebUrl();
 }
 
