@@ -8,13 +8,12 @@
 #include <functional>
 #include <random>
 
-using DbConnection = struct sqlite3 *;
+using DBConnection = struct sqlite3 *;
 
 /**
- * Represents a reliable ACID storage for match reports.
- * This allows dumping many partial match reports produced by
- * several gametypes to the storage and send them sequentially later.
- * (A network call has to wait for a report confirmation from a remote host
+ * Represents a reliable ACID storage for serialized queries.
+ * This allows dumping queries to the storage and send them sequentially later.
+ * (A network call has to wait for a query reply/confirmation from a remote host
  * and throughput of network pipeline is severely limited).
  */
 class LocalReliableStorage {
@@ -29,74 +28,80 @@ class LocalReliableStorage {
 		::free( databasePath );
 	}
 
-	/**
-	 * An utility method that creates one of report tables ("pending_reports" or "failed_reports").
-	 */
-	bool CreateTableIfNeeded( DbConnection connection, const char *table );
+	bool CreateTablesIfNeeded( DBConnection connection );
 
 	/**
 	 * Creates a new database connection.
 	 * Connections allows to perform operations on database and act as a transaction context.
 	 * @return a non-zero (non-null) value if a new connection has been created successfully.
 	 */
-	DbConnection NewConnection();
+	DBConnection NewConnection();
 
 	/**
 	 * Deletes a database connection.
 	 * All resources tied to it (like statements, bound parameters, etc.)
 	 * must have been released to the moment of this call.
 	 */
-	void DeleteConnection( DbConnection connection );
+	void DeleteConnection( DBConnection connection );
 
 	/**
-	 * An utility method to get "report_id" field from a report.
-	 * It must be already present for all reports kept in this storage.
+	 * An utility method to get "query_id" field from a query.
+	 * It must be already present for all queries kept in this storage.
 	 */
-	static const char *GetReportId( const QueryObject *matchReport );
+	static const char *GetQueryId( const QueryObject *query );
+
+	/**
+	 * A {@code Push(DBConnection, QueryObject *, int)} implementation helper
+	 */
+	bool InsertPendingQuery( DBConnection connection, const QueryObject *query, int priority );
+	/**
+	 * A {@code Push(DBConnection, QueryObject *, int)} implementation helper
+	 */
+	bool InsertQueryFields( DBConnection connection, const QueryObject *query );
 public:
 	/**
-	 * Tries to store a report in a database.
+	 * Tries to store a query in a database.
 	 * @param connection a connection that acts as a transaction context.
-	 * @param query a match report object (that could be sent via network).
-	 * @return true if the report has been successfully added to database.
+	 * @param query a {@code QueryObject} that could be sent later via network.
+	 * @param priority a numeric priority of a query, zero by default.
+	 * Queries that have larger priorities get sent first.
+	 * @return true if the query has been successfully added to database.
 	 * @note this method is assumed to be called within transaction.
-	 * @note the report object lifecycle should be managed entirely by caller.
+	 * @note the query object lifecycle should be managed entirely by caller.
 	 */
-	bool Push( DbConnection connection, QueryObject *matchReport );
+	bool Push( DBConnection connection, QueryObject *query, int priority = 0 );
 
 	/**
-	 * Tries to fetch a random not-sent match report.
-	 * @param connection a connection that acts as a transaction context.
-	 * @param reportToFill a {@code QueryObject} to set form parameters loaded from the storage.
-	 * @return true if some not sent yet report has been found and form parameters have been retrieved successfully.
-	 * @note this method is assumed to be called within transaction.
+	 * Tries to fetch a random not-sent query.
+	 * @param connection a connection that acts as a transaction context. Must be in transaction.
+	 * @param queryOutgoingIp an outgoing IP to use for the query.
+	 * @return a query to send, null if nothing is retrieved.
+	 * The query should be released by a caller by using {@code QueryObject::DeleteQuery()}.
 	 */
-	bool FetchNextReport( DbConnection connection, QueryObject *reportToFill );
+	QueryObject *FetchNext( DBConnection connection, const char *queryOutgoingIp = nullptr );
 
 	/**
-	 * Marks a match report as sent (actually deletes it from pending reports).
-	 * @param connection a connection that acts as a transaction context.
-	 * @param matchReport a match report to mark as sent.
-	 * @note this method is assumed to be called within transaction.
-	 * Call it if the network service confirmed successful report delivery and processing of report at remote host.
+	 * Marks a query as sent (actually deletes it from pending queries).
+	 * @param connection a connection that acts as a transaction context. Must be in transaction.
+	 * @param query a query to mark as sent.
+	 * @note call it if the network service confirmed successful query delivery and processing of query at remote host.
 	 */
-	bool MarkReportAsSent( DbConnection connection, const QueryObject *matchReport );
+	bool MarkAsSent( DBConnection connection, const QueryObject *query );
 	/**
-	 * Marks a match report as failed (moves it from pending reports to sent reports table)
-	 * @param connection a connection that acts as a transaction context.
-	 * @param matchReport a match report to mark as failed.
-	 * @note this method is assumed to be called within transaction.
-	 * Do not call it on network failure or temporary remote host failure.
-	 * Call this only if there is a certain schema or logic error tied to the report has been detected.
+	 * Marks a query as failed (moves it from pending queries to failed queries table)
+	 * @param connection a connection that acts as a transaction context. Must be in transaction.
+	 * @param query a query to mark as failed.
+	 * @note do not call it on network failure or temporary remote host failure.
+	 * Call this only if there is a certain schema or logic error tied to the query has been detected.
 	 */
-	bool MarkReportAsFailed( DbConnection connection, const QueryObject *matchReport );
+	bool MarkAsFailed( DBConnection connection, const QueryObject *queryToFill );
 
 	/**
-	 * Executes a block of a code within transaction
+	 * Executes a block of a code within transaction.
 	 * @param block a block of a code that should return true if a transaction should be committed.
 	 * @return true if a transaction lifecycle has been completed successfully (begin/commit/rollback calls succeeded).
 	 */
-	bool WithinTransaction( std::function<bool( DbConnection )> &&block );
+	bool WithinTransaction( std::function<bool( DBConnection )> &&block );
 };
 
 #endif

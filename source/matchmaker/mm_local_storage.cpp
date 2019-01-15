@@ -14,24 +14,24 @@
  */
 struct ScopedConnectionGuard {
 	LocalReliableStorage *const parent;
-	DbConnection connection;
+	DBConnection connection;
 
 	/**
 	 * Accepts already (maybe) existing connection.
 	 */
-	ScopedConnectionGuard( LocalReliableStorage *parent_, DbConnection connection_ )
+	ScopedConnectionGuard( LocalReliableStorage *parent_, DBConnection connection_ )
 		: parent( parent_ ), connection( connection_ ) {}
 
 	/**
-	 * Requests the {@code LocalReportStorage} parent to create a connection.
+	 * Requests the {@code LocalReliableStorage} parent to create a connection.
 	 */
 	explicit ScopedConnectionGuard( LocalReliableStorage *parent_ )
 		: parent( parent_ ), connection( parent_->NewConnection() ) {}
 
 	/**
-	 * Allows passing this object as a {@code DbConnection} without explicit casts.
+	 * Allows passing this object as a {@code DBConnection} without explicit casts.
 	 */
-	operator DbConnection() {
+	operator DBConnection() {
 		return connection;
 	}
 
@@ -40,7 +40,7 @@ struct ScopedConnectionGuard {
 	 */
 	void ForceClosing() {
 		if( connection ) {
-			(void)sqlite3_close( connection );
+			(void)::sqlite3_close( connection );
 			connection = nullptr;
 		}
 	}
@@ -57,9 +57,16 @@ struct ScopedConnectionGuard {
  */
 class SQLiteAdapter {
 protected:
-	DbConnection const connection;
+	DBConnection const connection;
 
-	explicit SQLiteAdapter( DbConnection connection_ ): connection( connection_ ) {}
+	explicit SQLiteAdapter( DBConnection connection_ ): connection( connection_ ) {}
+public:
+	/**
+	 * Checks whether the active connection has entered a transaction
+	 */
+	bool IsInTransaction() const {
+		return ::sqlite3_get_autocommit( connection ) == 0;
+	}
 };
 
 /**
@@ -69,7 +76,7 @@ class SQLiteExecAdapter: public SQLiteAdapter {
 	bool ExecImpl( const char *sql );
 	void ExecOrFailImpl( const char *sql );
 public:
-	explicit SQLiteExecAdapter( DbConnection connection ) : SQLiteAdapter( connection ) {}
+	explicit SQLiteExecAdapter( DBConnection connection ) : SQLiteAdapter( connection ) {}
 
 	bool Exec( const char *sql ) { return ExecImpl( sql ); }
 	bool ExecV( const char *sql, ... );
@@ -154,6 +161,39 @@ template <> bool SQLiteBindArg( sqlite3_stmt *stmt, int index, const wsw::string
 	return false;
 }
 
+static inline bool SQLiteBindCStringArg( sqlite3_stmt *stmt, int index, const char *value ) {
+	const int code = ::sqlite3_bind_text( stmt, index, value, -1, SQLITE_STATIC );
+	if( code == SQLITE_OK ) {
+		return true;
+	}
+
+	const char *format = S_COLOR_RED "A binding of arg #%d `%s` failed with `%s`\n";
+	Com_Printf( format, index, value, ::sqlite3_errstr( code ) );
+	return false;
+}
+
+using ConstCharPtr = const char *;
+using CharPtr = char *;
+
+template <> bool SQLiteBindArg( sqlite3_stmt *stmt, int index, const ConstCharPtr &value ) {
+	return SQLiteBindCStringArg( stmt, index, value );
+}
+
+template <> bool SQLiteBindArg( sqlite3_stmt *stmt, int index, const CharPtr &value ) {
+	return SQLiteBindCStringArg( stmt, index, value );
+}
+
+template <> bool SQLiteBindArg( sqlite3_stmt *stmt, int index, const int &value ) {
+	const int code = ::sqlite3_bind_int( stmt, index, value );
+	if( code == SQLITE_OK ) {
+		return true;
+	}
+
+	const char *format = S_COLOR_RED "A binding of arg #%d = %d failed with `%s`";
+	Com_Printf( format, index, value, ::sqlite3_errstr( code ) );
+	return false;
+}
+
 /**
  * Defines a helper for insertion of multiple rows sequentially
  * given a statement for instertion of a single row.
@@ -161,7 +201,7 @@ template <> bool SQLiteBindArg( sqlite3_stmt *stmt, int index, const wsw::string
 class SQLiteInsertAdapter : public SQLiteAdapter {
 	sqlite3_stmt *stmt { nullptr };
 public:
-	SQLiteInsertAdapter( DbConnection connection_, const char *sql_ )
+	SQLiteInsertAdapter( DBConnection connection_, const char *sql_ )
 		: SQLiteAdapter( connection_ ) {
 		const int code = ::sqlite3_prepare_v2( connection_, sql_, -1, &stmt, nullptr );
 		if( code == SQLITE_OK ) {
@@ -247,16 +287,11 @@ class SQLiteSelectAdapter : public SQLiteAdapter {
 public:
 	using RowConsumer = std::function<bool(const SQLiteRowReader &)>;
 
-	SQLiteSelectAdapter( DbConnection connection_, const char *sql_ )
-		: SQLiteAdapter( connection_ ) {
-		const int code = sqlite3_prepare_v2( connection, sql_, -1, &stmt, nullptr );
-		if( code == SQLITE_OK ) {
-			return;
-		}
-
-		const char *format = S_COLOR_RED "SQLiteSelectAdapter(): Can't prepare `%s` statement: `%s`\n";
-		Com_Printf( format, sql_, ::sqlite3_errstr( code ) );
-	}
+#ifndef _MSC_VER
+	SQLiteSelectAdapter( DBConnection connection, const char *format, ... ) __attribute__( ( format( printf, 3, 4 ) ) );
+#else
+	SQLiteSelectAdapter( DBConnection connection, _Printf_format_string_ const char *format, ... );
+#endif
 
 	~SQLiteSelectAdapter() {
 		if( stmt ) {
@@ -311,6 +346,23 @@ public:
 	}
 };
 
+SQLiteSelectAdapter::SQLiteSelectAdapter( DBConnection connection_, const char *format, ... )
+	: SQLiteAdapter( connection_ ) {
+	char sql[2048];
+	va_list va;
+	va_start( va, format );
+	Q_vsnprintfz( sql, sizeof( sql ), format, va );
+	va_end( va );
+
+	const int code = sqlite3_prepare_v2( connection, sql, -1, &stmt, nullptr );
+	if( code == SQLITE_OK ) {
+		return;
+	}
+
+	const char *messageFormat = S_COLOR_RED "SQLiteSelectAdapter(): Can't prepare `%s` statement: `%s`\n";
+	Com_Printf( messageFormat, sql, ::sqlite3_errstr( code ) );
+}
+
 LocalReliableStorage::LocalReliableStorage( const char *databasePath_ ) {
 	// Actually never fails... or a failure is discovered immediately
 	this->databasePath = ::strdup( databasePath_ );
@@ -323,21 +375,19 @@ LocalReliableStorage::LocalReliableStorage( const char *databasePath_ ) {
 		Com_Error( ERR_FATAL, format, tag, databasePath_ );
 	}
 
-	for( const char *tableName : { "pending_reports", "failed_reports" } ) {
-		if( !CreateTableIfNeeded( connection, tableName ) ) {
-			// Close the connection before triggering a failure.
-			// We do not know what kind of locks SQLite uses.
-			connection.ForceClosing();
-			Com_Error( ERR_FATAL, "%s: Can't create or check existence of %s table\n", tag, tableName );
-		}
+	if( !CreateTablesIfNeeded( connection ) ) {
+		// Close the connection before triggering a failure.
+		// We do not know what kind of locks SQLite uses.
+		connection.ForceClosing();
+		Com_Error( ERR_FATAL, "%s: Can't create or check existence of tables\n", tag );
 	}
 
-	Com_Printf( "A local match reports storage has been successfully initialized at `%s`\n", databasePath_ );
+	Com_Printf( "A local reliable storage has been successfully initialized at `%s`\n", databasePath_ );
 }
 
-DbConnection LocalReliableStorage::NewConnection() {
-	DbConnection connection = nullptr;
-	const char *const tag = "LocalReportsStorage::NewConnection()";
+DBConnection LocalReliableStorage::NewConnection() {
+	DBConnection connection = nullptr;
+	const char *const tag = "LocalReliableStorage::NewConnection()";
 	const int flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;
 	if( ::sqlite3_open_v2( databasePath, &connection, flags, nullptr ) == SQLITE_OK ) {
 		Com_DPrintf( "%s: An SQLite connection %p has been successfully opened\n", tag, (const void *)connection );
@@ -350,13 +400,13 @@ DbConnection LocalReliableStorage::NewConnection() {
 	return nullptr;
 }
 
-void LocalReliableStorage::DeleteConnection( DbConnection connection ) {
+void LocalReliableStorage::DeleteConnection( DBConnection connection ) {
 	const int code = ::sqlite3_close( connection );
 	if( code == SQLITE_OK ) {
 		return;
 	}
 
-	constexpr const char *tag = "LocalReportsStorage::DeleteConnection";
+	constexpr const char *tag = "LocalReliableStorage::DeleteConnection";
 
 	if( code == SQLITE_BUSY ) {
 		const char *format =
@@ -368,17 +418,29 @@ void LocalReliableStorage::DeleteConnection( DbConnection connection ) {
 	Com_Error( ERR_FATAL, "%s: Unknown ::sqlite3_close() error for %p. Aborting...\n", tag, (const void *)connection );
 }
 
-bool LocalReliableStorage::CreateTableIfNeeded( DbConnection connection, const char *table ) {
-	constexpr const char *format =
+bool LocalReliableStorage::CreateTablesIfNeeded( DBConnection connection ) {
+	constexpr const char *const queriesFormat =
 		"create table if not exists %s ("
-		"	report_id text not null,"
-		"	field_name text not null,"
-		"	field_value text not null);";
+		"   query_priority integer not null,"
+		"	query_id text not null,"
+		"   query_url text not null);";
 
-	return SQLiteExecAdapter( connection ).ExecV( format, table );
+	constexpr const char *const fieldsTable =
+		"create table if not exists query_fields ("
+		"	query_id text not null,"
+		"   field_name text not null,"
+		"   field_value text not null);";
+
+	SQLiteExecAdapter adapter( connection );
+	// We can execute this first (no foreign constraints are defined) actually to fit line limit
+	if( !adapter.ExecV( fieldsTable ) ) {
+		return false;
+	}
+
+	return adapter.ExecV( queriesFormat, "pending_queries" ) && adapter.ExecV( queriesFormat, "failed_queries" );
 }
 
-bool LocalReliableStorage::WithinTransaction( std::function<bool( DbConnection )> &&block ) {
+bool LocalReliableStorage::WithinTransaction( std::function<bool( DBConnection )> &&block ) {
 	ScopedConnectionGuard connection( this );
 	if( !connection ) {
 		return false;
@@ -402,32 +464,42 @@ bool LocalReliableStorage::WithinTransaction( std::function<bool( DbConnection )
 	return true;
 }
 
-bool LocalReliableStorage::Push( DbConnection connection, QueryObject *matchReport ) {
-	// Sanity check...
-	assert( matchReport->isPostQuery );
-	assert( strstr( matchReport->url, "server/matchReport" ) );
-
-	// We add a "synthetic" report_id field for partial reports.
-	// They are purely for this reports storage system
-	// to mark entries of different reports.
-	// Even if they may be transmitted along with reports occasionally
+bool LocalReliableStorage::Push( DBConnection connection, QueryObject *query, int priority ) {
+	// We add a "synthetic" query_id field to queries.
+	// They are purely for this query serialization system
+	// to mark entries/fields of different queries.
+	// Even if they may be transmitted along with queries occasionally
 	// they are meaningless for the Statsow server and get omitted.
-	if( matchReport->FindFormParamByName( "report_id" ) ) {
-		Com_Error( ERR_FATAL, "A `report_id` field is already present in the query object\n" );
+	if( query->FindFormParamByName( "query_id" ) ) {
+		Com_Error( ERR_FATAL, "A `query_id` field is already present in the query object\n" );
 	}
 
-	// We may use an arbitrary random character sequence but let's use UUID's for consistency with the rest of the codebase.
-	char reportIdAsString[UUID_BUFFER_SIZE];
-	mm_uuid_t::Random().ToString( reportIdAsString );
+	// We may use an arbitrary random character sequence
+	// but let's use UUID's for consistency with the rest of the codebase.
+	char queryIdAsString[UUID_BUFFER_SIZE];
+	mm_uuid_t::Random().ToString( queryIdAsString );
 
-	// We must set this to be able to recover report_id from query results
-	matchReport->SetField( "report_id", reportIdAsString );
+	// We must set this to be able to recover query_id from query results
+	query->SetField( "query_id", queryIdAsString );
 
-	const char *sql = "insert into pending_reports(report_id, field_name, field_value) values (?, ?, ?);";
+	return InsertPendingQuery( connection, query, priority ) && InsertQueryFields( connection, query );
+}
+
+bool LocalReliableStorage::InsertPendingQuery( DBConnection connection, const QueryObject *query, int priority ) {
+	const char *sql = "insert into pending_queries (query_priority, query_id, query_url) values (?, ?, ?);";
 	SQLiteInsertAdapter adapter( connection, sql );
+	assert( adapter.IsInTransaction() );
+	return adapter.InsertNextRow( priority, query->FindFormParamByName( "query_id" ), query->url );
+}
 
-	for( auto formParam = matchReport->formParamsHead; formParam; formParam = formParam->next ) {
-		const wsw::string_view id( reportIdAsString, UUID_DATA_LENGTH );
+bool LocalReliableStorage::InsertQueryFields( DBConnection connection, const QueryObject *query ) {
+	const char *sql = "insert into query_fields(query_id, field_name, field_value) values (?, ?, ?);";
+	SQLiteInsertAdapter adapter( connection, sql );
+	assert( adapter.IsInTransaction() );
+
+	const char *queryId = GetQueryId( query );
+	for( auto formParam = query->formParamsHead; formParam; formParam = formParam->next ) {
+		const wsw::string_view id( queryId, UUID_DATA_LENGTH );
 		const wsw::string_view name( formParam->name, formParam->nameLen );
 		const wsw::string_view value( formParam->value, formParam->valueLen );
 		if( !adapter.InsertNextRow( id, name, value ) ) {
@@ -438,38 +510,57 @@ bool LocalReliableStorage::Push( DbConnection connection, QueryObject *matchRepo
 	return true;
 }
 
-bool LocalReliableStorage::FetchNextReport( DbConnection connection, QueryObject *reportToFill ) {
-	reportToFill->ClearFormData();
+QueryObject *LocalReliableStorage::FetchNext( DBConnection connection, const char *queryOutgoingIp ) {
+	// This CTE selects a best numeric query priority value in the table
+	const char *priorityCte =
+		"select distinct query_priority from pending_queries order by query_priority desc limit 1";
 
-	// 1) Chose a random id in the CTE
-	// 2) Select all rows that have ids matching the chosen id (ids are not really primary/potential keys).
-	const char *sql =
-		"with chosen as (select report_id as chosen_id from pending_reports order by random() limit 1) "
-		"select field_name, field_value "
-		"from pending_reports join chosen "
-		"on pending_reports.report_id = chosen.chosen_id;";
+	// This CTE selects id and url of a random query that has the previously selected priority
+	const char *chosenCte =
+		"select query_id, query_url from pending_queries "
+		"where exists (select 1 from top_priority where top_priority.query_id = pending_queries.query_id) "
+		"order by random() limit 1";
+
+	// Select all fields that belong to the chosen query.
+	// Return the url in the first row.
+	const char *sqlFormat =
+		"with top_priority as (%s), chosen as (%s) "
+		"select query_url, field_name, field_value "
+		"from query_fields join chosen "
+		"on query_fields.query_id = chosen.query_id";
+
+	QueryObject *query = nullptr;
 
 	const auto rowConsumer = [&]( const SQLiteRowReader &reader ) -> bool {
-		assert( reader.NumColumns() == 2 );
-		const auto name( reader.GetString( 0 ) );
-		const auto value( reader.GetString( 1 ) );
-		reportToFill->SetField( name.data(), name.size(), value.data(), value.size() );
+		assert( reader.NumColumns() == 3 );
+		if( !query ) {
+			query = QueryObject::PostQueryForUrl( reader.GetString( 0 ).data(), queryOutgoingIp );
+			if( !query ) {
+				return false;
+			}
+		}
+		const auto name( reader.GetString( 1 ) );
+		const auto value( reader.GetString( 2 ) );
+		query->SetField( name.data(), name.size(), value.data(), value.size() );
 		return true;
 	};
 
-	SQLiteSelectAdapter adapter( connection, sql );
+	SQLiteSelectAdapter adapter( connection, sqlFormat, priorityCte, chosenCte );
+	assert( adapter.IsInTransaction() );
 	if( adapter.TryReadAll( rowConsumer ) > 0 ) {
-		reportToFill->hasConveredJsonToFormParam = true;
-		return true;
+		assert( query );
+		query->hasConveredJsonToFormParam = true;
+		return query;
 	}
 
-	return false;
+	QueryObject::DeleteQuery( query );
+	return nullptr;
 }
 
-const char *LocalReliableStorage::GetReportId( const QueryObject *matchReport ) {
-	const char *reportIdAsString = matchReport->FindFormParamByName( "report_id" );
-	if( !reportIdAsString ) {
-		Com_Error( ERR_FATAL, "The match report object is missing `report_id` field\n" );
+const char *LocalReliableStorage::GetQueryId( const QueryObject *query ) {
+	const char *queryIdAsString = query->FindFormParamByName( "query_id" );
+	if( !queryIdAsString ) {
+		Com_Error( ERR_FATAL, "The query object is missing `query_id` field\n" );
 	}
 
 	// Check whether it is a valid UUID for consistency
@@ -477,28 +568,37 @@ const char *LocalReliableStorage::GetReportId( const QueryObject *matchReport ) 
 	// (we would have to convert this back to string in that case)
 
 	mm_uuid_t tmp;
-	if( !Uuid_FromString( reportIdAsString, &tmp ) ) {
-		Com_Error( ERR_FATAL, "The match report id string `%s` is not a valid UUID\n", reportIdAsString );
+	if( !Uuid_FromString( queryIdAsString, &tmp ) ) {
+		Com_Error( ERR_FATAL, "The query id string `%s` is not a valid UUID\n", queryIdAsString );
 	}
 
-	return reportIdAsString;
+	return queryIdAsString;
 }
 
-bool LocalReliableStorage::MarkReportAsSent( DbConnection connection, const QueryObject *matchReport ) {
+bool LocalReliableStorage::MarkAsSent( DBConnection connection, const QueryObject *query ) {
 	SQLiteExecAdapter adapter( connection );
-	const char *reportId = GetReportId( matchReport );
-	return adapter.ExecV( "delete from pending_reports where report_id = '%s'", reportId );
+	assert( adapter.IsInTransaction() );
+
+	const char *queryId = GetQueryId( query );
+	// No foreign constraints are defined for various reasons
+	// (namely query id can refer to 2 different tables)
+	// so we have to execute two delete queries...
+	// Custom triggers are not really maintainable in this environment.
+	constexpr const char *format1 = "delete from pending_queries where query_id = '%s'";
+	constexpr const char *format2 = "delete from query_fields where query_id = '%s'";
+	return adapter.ExecV( format1, queryId ) && adapter.ExecV( format2, queryId );
 }
 
-bool LocalReliableStorage::MarkReportAsFailed( DbConnection connection, const QueryObject *matchReport ) {
+bool LocalReliableStorage::MarkAsFailed( DBConnection connection, const QueryObject *query ) {
 	// We could try using a CTE but that would look horrible.
 	// Just execute 2 queries given we're in a transaction context.
 	SQLiteExecAdapter adapter( connection );
+	assert( adapter.IsInTransaction() );
 
-	const char *reportId = GetReportId( matchReport );
-	if( !adapter.ExecV( "insert into failed_reports select * from pending_reports where report_id = '%s'", reportId ) ) {
+	const char *queryId = GetQueryId( query );
+	if( !adapter.ExecV( "insert into failed_queries select * from pending_queries where query_id = '%s'", queryId ) ) {
 		return false;
 	}
 
-	return adapter.ExecV( "delete from pending_reports where report_id = '%s'", reportId );
+	return adapter.ExecV( "delete from pending_queries where query_id = '%s'", queryId );
 }

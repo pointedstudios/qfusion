@@ -235,6 +235,13 @@ private:
 	 */
 	static QueryObject *NewQuery( const char *outgoingIp, char *combinedUrl );
 
+	/**
+	 * A helper for query deserialization by the {@code ReliablePipe}.
+	 * @param url_ an URL string that must be a valid url
+	 * @return a new {@code QueryObject} for the url, null on failure.
+	 */
+	static QueryObject *PostQueryForUrl( const char *url_, const char *outgoingIp_ = nullptr );
+
 	~QueryObject();
 
 	const char *FindFormParamByName( const char *name ) const;

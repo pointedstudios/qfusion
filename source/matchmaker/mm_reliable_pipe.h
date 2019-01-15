@@ -71,31 +71,31 @@ class ReliablePipe {
 
 	/**
 	 * A {@code BackgroundRunner} that wraps in a transaction
-	 * reading non-sent reports from a storage, sending reports
+	 * reading non-sent queries from a storage, sending queries
 	 * over network and marking report delivery status in the storage.
 	 */
 	class BackgroundSender final : public BackgroundRunner {
 		/**
-		 * A report we try to fill using form name-value pairs stored in database.
+		 * A query we try to fill using form name-value pairs stored in database.
 		 * @note do not confuse with {@code BackgroundWriter::activeReport}.
 		 */
-		QueryObject *activeReport { nullptr };
+		QueryObject *activeQuery { nullptr };
 	public:
 		explicit BackgroundSender( LocalReliableStorage *reliableStorage_ )
 			: BackgroundRunner( "BackgroundSender", reliableStorage_ ) {}
 
 		~BackgroundSender() override {
-			if( activeReport ) {
-				QueryObject::DeleteQuery( activeReport );
+			if( activeQuery ) {
+				QueryObject::DeleteQuery( activeQuery );
 			}
 		}
 
 		void RunStep() override;
 
-		void DeleteActiveReport() {
-			assert( activeReport );
-			QueryObject::DeleteQuery( activeReport );
-			activeReport = nullptr;
+		void DeleteActiveQuery() {
+			assert( activeQuery );
+			QueryObject::DeleteQuery( activeQuery );
+			activeQuery = nullptr;
 		}
 	};
 
