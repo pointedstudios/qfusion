@@ -500,8 +500,30 @@ void SVStatsowFacade::Frame() {
 		return;
 	}
 
-	if( ourSession.IsZero() && !( isLoggingIn || isLoggingOut ) ) {
-		StartLoggingIn();
+	// Check whether we have a valid session or using a fake "FFFs" session
+	if( !ourSession.IsZero() ) {
+		return;
+	}
+
+	// Skip if we're changing "logged-in" status
+	if( isLoggingIn || isLoggingOut ) {
+		return;
+	}
+
+	if( Cvar_Value( "dedicated" ) == 0 ) {
+		return;
+	}
+
+	if( !StartLoggingIn() ) {
+		OnLoginFailure();
+		return;
+	}
+
+	assert( isLoggingIn );
+	// Wait for logging in
+	while( isLoggingIn ) {
+		Sys_Sleep( 16 );
+		tasksRunner.CheckStatus();
 	}
 }
 
@@ -538,20 +560,26 @@ void SVLogoutTask::OnQuerySuccess() {
 	parent->OnLoggedOut();
 }
 
-void SVStatsowFacade::CheckLoginOnlyFailure() {
-	if( !sv_mm_loginonly->integer ) {
-		return;
+void SVStatsowFacade::OnLoginFailure() {
+	if( sv_mm_loginonly->integer ) {
+		Com_Error( ERR_FATAL, "Statsow authentication has failed. sv_mm_loginonly value forbids running the server\n" );
 	}
 
-	Com_Error( ERR_FATAL, "Statsow authentication has failed. sv_mm_loginonly value forbids running the server\n" );
+	Com_Printf( S_COLOR_YELLOW "Statsow login has failed. Disabling server Statsow services" );
+	Cvar_ForceSet( sv_mm_enable->name, "0" );
+	ourSession = Uuid_FFFsUuid();
+	isLoggingIn = false;
+}
+
+void SVStatsowFacade::OnLoginSuccess() {
+	Com_Printf( "Starting server Statsow services\n" );
+	assert( !reliablePipe );
+	reliablePipe = new( ::malloc( sizeof( ReliablePipe ) ) )ReliablePipe;
+	isLoggingIn = false;
 }
 
 void SVLoginTask::OnAnyFailure() {
-	parent->isLoggingIn =  false;
-	parent->CheckLoginOnlyFailure();
-
-	Com_Printf( S_COLOR_YELLOW "Disabling server Statsow services...\n" );
-	Cvar_ForceSet( parent->sv_mm_enable->name, "0" );
+	parent->OnLoginFailure();
 }
 
 void SVLoginTask::OnQueryFailure() {
@@ -578,33 +606,26 @@ void SVLoginTask::OnQuerySuccess() {
 	}
 
 	failureGuard.Suppress();
-	parent->isLoggingIn = false;
 	PrintMessage( tag, "Session id is %s", sessionString );
 }
 
-void SVStatsowFacade::StartLoggingIn() {
+bool SVStatsowFacade::StartLoggingIn() {
 	assert( !isLoggingIn && !isLoggingOut );
 
 	constexpr const char *tag = "SVStatsowFacade::StartLoggingIn()";
 
 	if( sv_mm_authkey->string[0] == '\0' ) {
 		Com_Printf( S_COLOR_RED "%s: The auth key is not specified\n", tag );
-		CheckLoginOnlyFailure();
-
-		Cvar_ForceSet( sv_mm_enable->name, "0" );
-		ourSession = Uuid_FFFsUuid();
-		return;
+		return false;
 	}
 
 	if( TryStartingTask( NewLoginTask() ) ) {
 		isLoggingIn = true;
-		return;
+		return true;
 	}
 
 	Com_Printf( S_COLOR_RED "%s: Can't launch a LoginTask\n", tag );
-	CheckLoginOnlyFailure();
-
-	ourSession = Uuid_FFFsUuid();
+	return false;
 }
 
 SVStatsowFacade::SVStatsowFacade()
@@ -619,10 +640,6 @@ SVStatsowFacade::SVStatsowFacade()
 	sv_mm_loginonly = Cvar_Get( "sv_mm_loginonly", "0", CVAR_ARCHIVE | CVAR_SERVERINFO );
 	sv_mm_authkey = Cvar_Get( "sv_mm_authkey", "", CVAR_ARCHIVE );
 
-	if( sv_mm_enable->integer && ( Cvar_Value( "dedicated" ) != 0 ) ) {
-		reliablePipe = new( ::malloc( sizeof( ReliablePipe ) ) )ReliablePipe;
-	}
-
 	// this is used by game, but to pass it to client, we'll initialize it in sv
 	Cvar_Get( "sv_skillRating", va( "%.0f", MM_RATING_DEFAULT ), CVAR_READONLY | CVAR_SERVERINFO );
 
@@ -632,10 +649,10 @@ SVStatsowFacade::SVStatsowFacade()
 SVStatsowFacade::~SVStatsowFacade() {
 	Com_Printf( "SVStatsowFacade: Shutting down...\n" );
 
-	LogoutBlocking();
-
 	if( reliablePipe ) {
 		reliablePipe->~ReliablePipe();
 		::free( reliablePipe );
 	}
+
+	LogoutBlocking();
 }

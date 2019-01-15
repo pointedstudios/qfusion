@@ -45,9 +45,8 @@ class SVStatsowFacade {
 	bool isLoggingOut { false };
 	bool isCheckingMatchUuid { false };
 
-	void StartLoggingIn();
+	bool StartLoggingIn();
 	void LogoutBlocking();
-	void CheckLoginOnlyFailure();
 
 	void CheckMatchUuid();
 
@@ -107,6 +106,9 @@ class SVStatsowFacade {
 		ourSession = Uuid_ZeroUuid();
 		isLoggingOut = false;
 	}
+
+	void OnLoginFailure();
+	void OnLoginSuccess();
 public:
 	static void Init();
 	static void Shutdown();
