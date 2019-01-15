@@ -1,6 +1,7 @@
 #include "../qcommon/qcommon.h"
 #include "mm_local_storage.h"
 #include "../qalgo/SingletonHolder.h"
+#include "../qalgo/WswStdTypes.h"
 
 #include "../../third-party/sqlite-amalgamation/sqlite3.h"
 
@@ -138,23 +139,11 @@ void SQLiteExecAdapter::ExecOrFailV( const char *format, ... ) {
 	ExecOrFailImpl( buffer );
 }
 
-// Unfortunately we still have to limit ourselves to C++14
-// Just temporarily copy-paste this string_view stub from g_mm.cpp.
-class string_view {
-	const char *s;
-	const size_t len;
-public:
-	string_view( const char *s_ ) noexcept : s( s_ ), len( strlen( s ) ) {}
-	string_view( const char *s_, size_t len_ ): s( s_ ), len( len_ ) {}
-	const char *data() const { return s; }
-	size_t size() const { return len; }
-};
-
 template <typename T> bool SQLiteBindArg( sqlite3_stmt *stmt, int index, const T &value ) {
 	return T::implement_specialization_for_this_type();
 }
 
-template <> bool SQLiteBindArg( sqlite3_stmt *stmt, int index, const string_view &value ) {
+template <> bool SQLiteBindArg( sqlite3_stmt *stmt, int index, const wsw::string_view &value ) {
 	const int code = ::sqlite3_bind_text( stmt, index, value.data(), (int)value.size(), SQLITE_STATIC );
 	if( code == SQLITE_OK ) {
 		return true;
@@ -241,12 +230,12 @@ public:
 		return ::sqlite3_data_count( stmt );
 	}
 
-	const string_view GetString( int num ) const {
+	const wsw::string_view GetString( int num ) const {
 		assert( (unsigned)num < (unsigned)NumColumns() );
 		auto *data = (const char *)::sqlite3_column_text( stmt, num );
 		assert( data && "Nullable columns are not supported\n" );
 		int numBytes = ::sqlite3_column_bytes( stmt, num );
-		return string_view( data, (size_t)numBytes );
+		return wsw::string_view( data, (size_t)numBytes );
 	}
 };
 
@@ -438,9 +427,9 @@ bool LocalReliableStorage::Push( DbConnection connection, QueryObject *matchRepo
 	SQLiteInsertAdapter adapter( connection, sql );
 
 	for( auto formParam = matchReport->formParamsHead; formParam; formParam = formParam->next ) {
-		const string_view id( reportIdAsString, UUID_DATA_LENGTH );
-		const string_view name( formParam->name, formParam->nameLen );
-		const string_view value( formParam->value, formParam->valueLen );
+		const wsw::string_view id( reportIdAsString, UUID_DATA_LENGTH );
+		const wsw::string_view name( formParam->name, formParam->nameLen );
+		const wsw::string_view value( formParam->value, formParam->valueLen );
 		if( !adapter.InsertNextRow( id, name, value ) ) {
 			return false;
 		}
