@@ -201,8 +201,8 @@ public:
 		return false;
 	}
 
-	void OnQueryRetry() override {
-		Com_Error( ERR_FATAL, "FetchMatchUuidTask::OnQueryRetry(): Should not be called" );
+	bool ScheduleForRetry() override {
+		Com_Error( ERR_FATAL, "FetchMatchUuidTask::ScheduleForRetry(): Should not be called" );
 	}
 
 	void OnQuerySuccess() override;

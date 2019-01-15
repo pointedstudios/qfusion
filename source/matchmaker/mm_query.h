@@ -615,6 +615,14 @@ public:
 	}
 
 	/**
+	 * Checks whether the query execution has not been fired yet.
+	 * This is safe to call in any state.
+	 */
+	bool HasStarted() const {
+		return status.load( std::memory_order_seq_cst ) >= STARTED;
+	}
+
+	/**
 	 * Indicates that the query has been executed successfully
 	 * and response retrieval (if any) is now can be performed.
 	 * @warning an object must be in "ready" state to call this.
