@@ -66,8 +66,10 @@ static void CL_MM_Login_f() {
  */
 class CLStatsowTask : public StatsowFacadeTask<CLStatsowFacade> {
 protected:
-	CLStatsowTask( CLStatsowFacade *parent_, const char *name_, const char *resource_ )
-		: StatsowFacadeTask( parent_, name_, va( "client/%s", resource_ ) ) {}
+	CLStatsowTask( CLStatsowFacade *parent_, const char *name_, const char *resource_, unsigned retryDelay_ = 0 )
+		: StatsowFacadeTask( parent_, name_, va( "client/%s", resource_ ) ) {
+		this->retryDelay = retryDelay_;
+	}
 
 	bool CheckResponseStatus( const char *methodTag, bool displayInUi = false ) const {
 		return CheckParsedResponse( methodTag, displayInUi ) && CheckStatusField( methodTag, displayInUi );
@@ -157,7 +159,7 @@ class CLStartLoggingInTask : public CLStatsowTask {
 	}
 public:
 	CLStartLoggingInTask( CLStatsowFacade *parent_, const char *user_, const char *password_ )
-		: CLStatsowTask( parent_, "CLStartLoggingInTask", "login" ) {
+		: CLStatsowTask( parent_, "CLStartLoggingInTask", "login", 333 ) {
 		assert( user_ && *user_ );
 		assert( password_ && *password_ );
 		if( !query ) {
@@ -185,7 +187,7 @@ class CLContinueLoggingInTask : public CLStatsowTask {
 	}
 public:
 	CLContinueLoggingInTask( CLStatsowFacade *parent_, const mm_uuid_t &handle_ )
-		: CLStatsowTask( parent_, "CLContinueLoggingInTask", "login" ) {
+		: CLStatsowTask( parent_, "CLContinueLoggingInTask", "login", 333 ) {
 		assert( handle_.IsValidSessionId() );
 		if( query ) {
 			query->SetHandle( handle_ );
@@ -199,7 +201,7 @@ public:
 class CLLogoutTask : public CLStatsowTask {
 public:
 	explicit CLLogoutTask( CLStatsowFacade *parent_ )
-		: CLStatsowTask( parent_, "CLLogoutTask", "logout" ) {
+		: CLStatsowTask( parent_, "CLLogoutTask", "logout", 1000 ) {
 		assert( parent->ourSession.IsValidSessionId() );
 		if( query ) {
 			query->SetClientSession( parent->ourSession );
@@ -223,7 +225,7 @@ class CLConnectTask : public CLStatsowTask {
 	}
 public:
 	CLConnectTask( CLStatsowFacade *parent_, const char *address_ )
-		: CLStatsowTask( parent_, "CLConnectTask", "connect" ) {
+		: CLStatsowTask( parent_, "CLConnectTask", "connect", 333 ) {
 		if( !query ) {
 			return;
 		}

@@ -60,8 +60,10 @@ SVStatsowFacade *SVStatsowFacade::Instance() {
  */
 class SVStatsowTask : public StatsowFacadeTask<SVStatsowFacade> {
 protected:
-	SVStatsowTask( SVStatsowFacade *parent_, const char *name_, const char *resource_ )
-		: StatsowFacadeTask( parent_, name_, va( "server/%s", resource_ ), sv_ip->string ) {}
+	SVStatsowTask( SVStatsowFacade *parent_, const char *name_, const char *resource_, unsigned retryDelay_ = 0 )
+		: StatsowFacadeTask( parent_, name_, va( "server/%s", resource_ ), sv_ip->string ) {
+		this->retryDelay = retryDelay_;
+	}
 
 	bool CheckResponseStatus( const char *methodTag ) const {
 		return CheckParsedResponse( methodTag ) && CheckStatusField( methodTag );
@@ -102,7 +104,7 @@ bool SVStatsowTask::CheckStatusField( const char *methodTag ) const {
 class SVLoginTask : public SVStatsowTask {
 public:
 	explicit SVLoginTask( SVStatsowFacade *parent_ )
-		: SVStatsowTask( parent_, "SVLoginTask", "login" ) {
+		: SVStatsowTask( parent_, "SVLoginTask", "login", 1000 ) {
 		if( !query ) {
 			return;
 		}
@@ -123,7 +125,7 @@ public:
 class SVLogoutTask : public SVStatsowTask {
 public:
 	explicit SVLogoutTask( SVStatsowFacade *parent_ )
-		: SVStatsowTask( parent_, "SVLogoutTask", "logout" ) {
+		: SVStatsowTask( parent_, "SVLogoutTask", "logout", 1000 ) {
 		assert( parent->ourSession.IsValidSessionId() );
 		if( query ) {
 			query->SetServerSession( parent->ourSession );
@@ -149,7 +151,7 @@ public:
 								  const mm_uuid_t &session,
 								  const mm_uuid_t &ticket,
 								  const char *address )
-		: SVStatsowTask( parent_, "SVClientConnectTask", "clientConnect" ), client( client_ ) {
+		: SVStatsowTask( parent_, "SVClientConnectTask", "clientConnect", 333 ), client( client_ ) {
 		if( !query ) {
 			return;
 		}
@@ -167,7 +169,7 @@ class SVClientDisconnectTask : public SVStatsowTask {
 	mm_uuid_t clientSession;
 public:
 	SVClientDisconnectTask( SVStatsowFacade *parent_, const mm_uuid_t &clientSession_ )
-		: SVStatsowTask( parent_, "SVClientDisconnectTask", "clientDisconnect" )
+		: SVStatsowTask( parent_, "SVClientDisconnectTask", "clientDisconnect", 333 )
 		, clientSession( clientSession_ ) {
 		if( !query ) {
 			return;
@@ -190,15 +192,14 @@ public:
 class SVFetchMatchUuidTask : public SVStatsowTask {
 public:
 	explicit SVFetchMatchUuidTask( SVStatsowFacade *parent_ )
-		: SVStatsowTask( parent_, "SVFetchMatchUuidTask", "matchUuid" ) {
+		: SVStatsowTask( parent_, "SVFetchMatchUuidTask", "matchUuid", 2500 ) {
 		if( query ) {
 			query->SetServerSession( parent->ourSession );
 		}
 	}
 
 	bool AllowQueryRetry() override {
-		// Retries are handled by SVStatsowFacade::CheckMatchUuid() logic
-		return false;
+		return parent->doFetchUuid;
 	}
 
 	bool ScheduleForRetry() override {
@@ -244,31 +245,30 @@ void SVStatsowFacade::EnqueueMatchReport( QueryObject *query ) {
 
 void SVStatsowFacade::CheckMatchUuid() {
 	if( sv.configstrings[CS_MATCHUUID][0] != '\0' ) {
+		// Cancel tasks if any
+		doFetchUuid = false;
 		return;
 	}
 
-	// Throttle outgoing requests
-	if( Sys_Milliseconds() < nextMatchUuidCheckAt ) {
+	// Check whether the task is already running
+	if( doFetchUuid ) {
 		return;
 	}
 
-	if( isCheckingMatchUuid ) {
-		return;
-	}
-
+	// Set this prior to launching the task
+	doFetchUuid = true;
 	if( TryStartingTask( NewFetchMatchUuidTask() ) ) {
-		isCheckingMatchUuid = true;
 		return;
 	}
+
+	// Try again next frame
+	doFetchUuid = false;
 }
 
 void SVFetchMatchUuidTask::OnQuerySuccess() {
 	const char *tag = "OnQuerySuccess";
 
-	ScopeGuard scopeGuard( [=]() {
-		parent->isCheckingMatchUuid = false;
-		parent->nextMatchUuidCheckAt = Sys_Milliseconds() + 1000;
-	});
+	ScopeGuard scopeGuard( [=]() { parent->doFetchUuid = false; } );
 
 	if( !CheckResponseStatus( tag ) ) {
 		return;
@@ -294,8 +294,7 @@ void SVFetchMatchUuidTask::OnQueryFailure() {
 	// Resetting this flag means automatic retry next frame.
 	// We still are stick to this task design instead of using plain queries
 	// due to convenient response parsing facilities and overall better code structure.
-	parent->isCheckingMatchUuid = false;
-	parent->nextMatchUuidCheckAt = Sys_Milliseconds() + 1000;
+	parent->doFetchUuid = false;
 }
 
 void SVStatsowFacade::OnClientDisconnected( client_t *client ) {

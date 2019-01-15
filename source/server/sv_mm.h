@@ -34,7 +34,6 @@ class SVStatsowFacade {
 	StatsowHeartbeatRunner<SVStatsowFacade> heartbeatRunner;
 
 	mm_uuid_t ourSession { 0, 0 };
-	int64_t nextMatchUuidCheckAt { 0 };
 
 	struct cvar_s *sv_mm_authkey;
 	struct cvar_s *sv_mm_enable;
@@ -43,7 +42,7 @@ class SVStatsowFacade {
 	// TODO: Should this stuff be atomic? Investigate threads that really modify these fields
 	bool isLoggingIn { false };
 	bool isLoggingOut { false };
-	bool isCheckingMatchUuid { false };
+	bool doFetchUuid { false };
 
 	bool StartLoggingIn();
 	void LogoutBlocking();
