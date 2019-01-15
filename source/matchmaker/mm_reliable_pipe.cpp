@@ -5,20 +5,6 @@
 #include "../qcommon/qthreads.h"
 #include "../qcommon/qcommon.h"
 
-static SingletonHolder<ReliablePipe> uploaderInstanceHolder;
-
-void ReliablePipe::Init() {
-	uploaderInstanceHolder.Init();
-}
-
-void ReliablePipe::Shutdown() {
-	uploaderInstanceHolder.Shutdown();
-}
-
-ReliablePipe *ReliablePipe::Instance() {
-	return uploaderInstanceHolder.Instance();
-}
-
 const char *ReliablePipe::MakeLocalStoragePath() {
 	return va( "%s/mm_db_for_port_%d", FS_CacheDirectory(), (unsigned)Cvar_Value( "sv_port" ) );
 }

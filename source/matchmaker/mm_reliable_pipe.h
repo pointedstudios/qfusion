@@ -4,7 +4,7 @@
 #include "mm_reports_storage.h"
 
 class ReliablePipe {
-	template <typename T> friend class SingletonHolder;
+	friend class SVStatsowFacade;
 
 	/**
 	 * A common supertype for things that run in a background thread
@@ -112,10 +112,6 @@ class ReliablePipe {
 
 	ReliablePipe();
 	~ReliablePipe();
-public:
-	static void Init();
-	static void Shutdown();
-	static ReliablePipe *Instance();
 
 	void EnqueueMatchReport( QueryObject *matchReport );
 };

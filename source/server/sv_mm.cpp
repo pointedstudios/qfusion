@@ -238,7 +238,8 @@ bool SVStatsowFacade::SendGameQuery( QueryObject *query ) {
 }
 
 void SVStatsowFacade::EnqueueMatchReport( QueryObject *query ) {
-	ReliablePipe::Instance()->EnqueueMatchReport( query );
+	assert( reliablePipe );
+	reliablePipe->EnqueueMatchReport( query );
 }
 
 void SVStatsowFacade::CheckMatchUuid() {
@@ -618,6 +619,10 @@ SVStatsowFacade::SVStatsowFacade()
 	sv_mm_loginonly = Cvar_Get( "sv_mm_loginonly", "0", CVAR_ARCHIVE | CVAR_SERVERINFO );
 	sv_mm_authkey = Cvar_Get( "sv_mm_authkey", "", CVAR_ARCHIVE );
 
+	if( sv_mm_enable->integer ) {
+		reliablePipe = new( ::malloc( sizeof( ReliablePipe ) ) )ReliablePipe;
+	}
+
 	// this is used by game, but to pass it to client, we'll initialize it in sv
 	Cvar_Get( "sv_skillRating", va( "%.0f", MM_RATING_DEFAULT ), CVAR_READONLY | CVAR_SERVERINFO );
 
@@ -628,4 +633,9 @@ SVStatsowFacade::~SVStatsowFacade() {
 	Com_Printf( "SVStatsowFacade: Shutting down...\n" );
 
 	LogoutBlocking();
+
+	if( reliablePipe ) {
+		reliablePipe->~ReliablePipe();
+		::free( reliablePipe );
+	}
 }

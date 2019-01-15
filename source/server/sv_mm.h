@@ -2,6 +2,7 @@
 #define QFUSION_SV_MM_H
 
 #include "../matchmaker/mm_facade.h"
+#include "../matchmaker/mm_reliable_pipe.h"
 
 struct client_s;
 struct netadr_s;
@@ -20,6 +21,14 @@ class SVStatsowFacade {
 	template <typename> friend class StatsowFacadeTask;
 	template <typename> friend class StatsowTasksRunner;
 	template <typename> friend class StatsowHeartbeatRunner;
+
+	/**
+	 * An instance of a {@code ReliablePipe} used by this Statsow facade.
+	 * As running a {@code ReliablePipe} is not zero-cost it's instantiated on demand.
+	 * Gets initialized on demand (after logging in).
+	 * Gets destroyed on a forceful shutdown or before logging out.
+	 */
+	ReliablePipe *reliablePipe { nullptr };
 
 	StatsowTasksRunner<SVStatsowFacade> tasksRunner;
 	StatsowHeartbeatRunner<SVStatsowFacade> heartbeatRunner;
