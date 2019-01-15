@@ -28,13 +28,13 @@ void ReliablePipe::BackgroundRunner::RunMessageLoop() {
 }
 
 ReliablePipe::ReliablePipe()
-	: reportsStorage( MakeLocalStoragePath() ) {
+	: reliableStorage( MakeLocalStoragePath() ) {
 	// Never actually fails?
 	this->reportsPipe = QBufPipe_Create( 128, 1 );
 
 	// Never actually fails?
-	this->backgroundWriter = new( ::malloc( sizeof( BackgroundWriter ) ) )BackgroundWriter( &reportsStorage, reportsPipe );
-	this->backgroundSender = new( ::malloc( sizeof( BackgroundSender ) ) )BackgroundSender( &reportsStorage );
+	this->backgroundWriter = new( ::malloc( sizeof( BackgroundWriter ) ) )BackgroundWriter( &reliableStorage, reportsPipe );
+	this->backgroundSender = new( ::malloc( sizeof( BackgroundSender ) ) )BackgroundSender( &reliableStorage );
 
 	// Never returns on fail?
 	this->writerThread = QThread_Create( &BackgroundWriter::ThreadFunc, backgroundWriter );
@@ -50,6 +50,9 @@ ReliablePipe::~ReliablePipe() {
 
 	backgroundWriter->~BackgroundWriter();
 	backgroundSender->~BackgroundSender();
+
+	::free( backgroundWriter );
+	::free( backgroundSender );
 
 	QBufPipe_Destroy( &reportsPipe );
 }
@@ -94,13 +97,13 @@ void ReliablePipe::BackgroundWriter::RunMessageLoop() {
 void ReliablePipe::BackgroundWriter::AddReport( QueryObject *report ) {
 	bool hasInsertionSucceeded = false;
 	auto block = [&]( DbConnection connection ) {
-		hasInsertionSucceeded = reportsStorage->Push( connection, report );
+		hasInsertionSucceeded = reliableStorage->Push( connection, report );
 		// Returning true means the transaction should be committed
 		return true;
 	};
 
 	for(;; ) {
-		bool hasTransactionSucceeded = reportsStorage->WithinTransaction( block );
+		bool hasTransactionSucceeded = reliableStorage->WithinTransaction( block );
 		// TODO: investigate SQLite behaviour... this code is based purely on MVCC RDBMS habits...
 		if( hasTransactionSucceeded ) {
 			// TODO: can insertion really fail?
@@ -129,8 +132,8 @@ void ReliablePipe::BackgroundSender::RunStep() {
 	}
 
 	unsigned sleepInterval = 667;
-	reportsStorage->WithinTransaction([&]( DbConnection connection ) {
-		if( !( reportsStorage->FetchNextReport( connection, activeReport ) ) ) {
+	reliableStorage->WithinTransaction( [&]( DbConnection connection ) {
+		if( !( reliableStorage->FetchNextReport( connection, activeReport ) ) ) {
 			// No active report is present in the database yet.
 			// Writer threads have plenty of time for performing their transactions in this case
 			sleepInterval = 1500;
@@ -147,7 +150,7 @@ void ReliablePipe::BackgroundSender::RunStep() {
 		if( activeReport->HasSucceeded() ) {
 			sleepInterval = 1500;
 			// Request committing or rolling back depending of result of this call
-			bool result = reportsStorage->MarkReportAsSent( connection, activeReport );
+			bool result = reliableStorage->MarkReportAsSent( connection, activeReport );
 			DeleteActiveReport();
 			return result;
 		}
@@ -166,7 +169,7 @@ void ReliablePipe::BackgroundSender::RunStep() {
 		assert( activeReport->IsReady() && !activeReport->HasSucceeded() && !activeReport->ShouldRetry() );
 
 		// Request committing or rolling back depending of result of this call
-		bool result = reportsStorage->MarkReportAsFailed( connection, activeReport );
+		bool result = reliableStorage->MarkReportAsFailed( connection, activeReport );
 		DeleteActiveReport();
 		return result;
 	});

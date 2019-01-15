@@ -17,15 +17,15 @@ using DbConnection = struct sqlite3 *;
  * (A network call has to wait for a report confirmation from a remote host
  * and throughput of network pipeline is severely limited).
  */
-class LocalReportsStorage {
+class LocalReliableStorage {
 	friend class ReliablePipe;
 	friend struct ScopedConnectionGuard;
 
 	char *databasePath { nullptr };
 
-	explicit LocalReportsStorage( const char *databasePath_ );
+	explicit LocalReliableStorage( const char *databasePath_ );
 
-	~LocalReportsStorage() {
+	~LocalReliableStorage() {
 		::free( databasePath );
 	}
 

@@ -1,5 +1,5 @@
 #include "../qcommon/qcommon.h"
-#include "mm_reports_storage.h"
+#include "mm_local_storage.h"
 #include "../qalgo/SingletonHolder.h"
 
 #include "../../third-party/sqlite-amalgamation/sqlite3.h"
@@ -12,19 +12,19 @@
  * Allows to tie a connection lifecycle to a lexical scope.
  */
 struct ScopedConnectionGuard {
-	LocalReportsStorage *const parent;
+	LocalReliableStorage *const parent;
 	DbConnection connection;
 
 	/**
 	 * Accepts already (maybe) existing connection.
 	 */
-	ScopedConnectionGuard( LocalReportsStorage *parent_, DbConnection connection_ )
+	ScopedConnectionGuard( LocalReliableStorage *parent_, DbConnection connection_ )
 		: parent( parent_ ), connection( connection_ ) {}
 
 	/**
 	 * Requests the {@code LocalReportStorage} parent to create a connection.
 	 */
-	explicit ScopedConnectionGuard( LocalReportsStorage *parent_ )
+	explicit ScopedConnectionGuard( LocalReliableStorage *parent_ )
 		: parent( parent_ ), connection( parent_->NewConnection() ) {}
 
 	/**
@@ -322,11 +322,11 @@ public:
 	}
 };
 
-LocalReportsStorage::LocalReportsStorage( const char *databasePath_ ) {
+LocalReliableStorage::LocalReliableStorage( const char *databasePath_ ) {
 	// Actually never fails... or a failure is discovered immediately
 	this->databasePath = ::strdup( databasePath_ );
 
-	const char *tag = "LocalReportsStorage::LocalReportsStorage()";
+	const char *tag = "LocalReliableStorage::LocalReliableStorage()";
 
 	ScopedConnectionGuard connection( this );
 	if( !connection ) {
@@ -346,7 +346,7 @@ LocalReportsStorage::LocalReportsStorage( const char *databasePath_ ) {
 	Com_Printf( "A local match reports storage has been successfully initialized at `%s`\n", databasePath_ );
 }
 
-DbConnection LocalReportsStorage::NewConnection() {
+DbConnection LocalReliableStorage::NewConnection() {
 	DbConnection connection = nullptr;
 	const char *const tag = "LocalReportsStorage::NewConnection()";
 	const int flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;
@@ -361,7 +361,7 @@ DbConnection LocalReportsStorage::NewConnection() {
 	return nullptr;
 }
 
-void LocalReportsStorage::DeleteConnection( DbConnection connection ) {
+void LocalReliableStorage::DeleteConnection( DbConnection connection ) {
 	const int code = ::sqlite3_close( connection );
 	if( code == SQLITE_OK ) {
 		return;
@@ -379,7 +379,7 @@ void LocalReportsStorage::DeleteConnection( DbConnection connection ) {
 	Com_Error( ERR_FATAL, "%s: Unknown ::sqlite3_close() error for %p. Aborting...\n", tag, (const void *)connection );
 }
 
-bool LocalReportsStorage::CreateTableIfNeeded( DbConnection connection, const char *table ) {
+bool LocalReliableStorage::CreateTableIfNeeded( DbConnection connection, const char *table ) {
 	constexpr const char *format =
 		"create table if not exists %s ("
 		"	report_id text not null,"
@@ -389,7 +389,7 @@ bool LocalReportsStorage::CreateTableIfNeeded( DbConnection connection, const ch
 	return SQLiteExecAdapter( connection ).ExecV( format, table );
 }
 
-bool LocalReportsStorage::WithinTransaction( std::function<bool( DbConnection )> &&block ) {
+bool LocalReliableStorage::WithinTransaction( std::function<bool( DbConnection )> &&block ) {
 	ScopedConnectionGuard connection( this );
 	if( !connection ) {
 		return false;
@@ -413,7 +413,7 @@ bool LocalReportsStorage::WithinTransaction( std::function<bool( DbConnection )>
 	return true;
 }
 
-bool LocalReportsStorage::Push( DbConnection connection, QueryObject *matchReport ) {
+bool LocalReliableStorage::Push( DbConnection connection, QueryObject *matchReport ) {
 	// Sanity check...
 	assert( matchReport->isPostQuery );
 	assert( strstr( matchReport->url, "server/matchReport" ) );
@@ -449,7 +449,7 @@ bool LocalReportsStorage::Push( DbConnection connection, QueryObject *matchRepor
 	return true;
 }
 
-bool LocalReportsStorage::FetchNextReport( DbConnection connection, QueryObject *reportToFill ) {
+bool LocalReliableStorage::FetchNextReport( DbConnection connection, QueryObject *reportToFill ) {
 	reportToFill->ClearFormData();
 
 	// 1) Chose a random id in the CTE
@@ -477,7 +477,7 @@ bool LocalReportsStorage::FetchNextReport( DbConnection connection, QueryObject 
 	return false;
 }
 
-const char *LocalReportsStorage::GetReportId( const QueryObject *matchReport ) {
+const char *LocalReliableStorage::GetReportId( const QueryObject *matchReport ) {
 	const char *reportIdAsString = matchReport->FindFormParamByName( "report_id" );
 	if( !reportIdAsString ) {
 		Com_Error( ERR_FATAL, "The match report object is missing `report_id` field\n" );
@@ -495,13 +495,13 @@ const char *LocalReportsStorage::GetReportId( const QueryObject *matchReport ) {
 	return reportIdAsString;
 }
 
-bool LocalReportsStorage::MarkReportAsSent( DbConnection connection, const QueryObject *matchReport ) {
+bool LocalReliableStorage::MarkReportAsSent( DbConnection connection, const QueryObject *matchReport ) {
 	SQLiteExecAdapter adapter( connection );
 	const char *reportId = GetReportId( matchReport );
 	return adapter.ExecV( "delete from pending_reports where report_id = '%s'", reportId );
 }
 
-bool LocalReportsStorage::MarkReportAsFailed( DbConnection connection, const QueryObject *matchReport ) {
+bool LocalReliableStorage::MarkReportAsFailed( DbConnection connection, const QueryObject *matchReport ) {
 	// We could try using a CTE but that would look horrible.
 	// Just execute 2 queries given we're in a transaction context.
 	SQLiteExecAdapter adapter( connection );
