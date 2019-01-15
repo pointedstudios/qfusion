@@ -353,8 +353,8 @@ StatsowFacade *StatsowFacade::Instance() {
 }
 
 StatsowFacade::~StatsowFacade() {
-	if( !raceRuns.empty() ) {
-		SendRaceReport();
+	if( IsValid() && !raceRuns.empty() ) {
+        SendRaceReport();
 	}
 }
 
@@ -373,18 +373,7 @@ void StatsowFacade::ClearEntries() {
 }
 
 void StatsowFacade::OnClientHadPlaytime( const gclient_t *client ) {
-	if( isDiscarded ) {
-		return;
-	}
-
-	if( !sv_mm_enable->integer ) {
-		isDiscarded = true;
-		return;
-	}
-
-	// TODO: Did we forget something else? What if sv_mm_enable is true but the session is not valid?
-	if( !GS_MMCompatible() ) {
-		isDiscarded = true;
+	if( !IsValid() ) {
 		return;
 	}
 
@@ -447,6 +436,10 @@ void StatsowFacade::OnClientDisconnected( edict_t *ent ) {
 void StatsowFacade::OnClientJoinedTeam( edict_t *ent, int newTeam ) {
 	ChatHandlersChain::Instance()->OnClientJoinedTeam( ent, newTeam );
 
+	if( !IsValid() ) {
+		return;
+	}
+
 	if( ent->r.client->team == TEAM_SPECTATOR ) {
 		return;
 	}
@@ -458,7 +451,6 @@ void StatsowFacade::OnClientJoinedTeam( edict_t *ent, int newTeam ) {
 		return;
 	}
 
-	G_Printf( "Sending teamchange to MM, team %d to team %d\n", ent->r.client->team, newTeam );
 	StatsowFacade::Instance()->AddPlayerReport( ent, false );
 }
 
@@ -472,12 +464,7 @@ void StatsowFacade::AddPlayerReport( edict_t *ent, bool final ) {
 	// This code path should not be entered by race gametypes
 	assert( !GS_RaceGametype() );
 
-	if( !GS_MMCompatible() ) {
-		return;
-	}
-
-	// Do not try to add player report if the match report has been discarded
-	if( isDiscarded ) {
+	if( !IsValid() ) {
 		return;
 	}
 
@@ -603,7 +590,7 @@ void StatsowFacade::AddMetaAward( const edict_t *ent, const char *awardMsg ) {
 }
 
 void StatsowFacade::AddAward( const edict_t *ent, const char *awardMsg ) {
-	if( isDiscarded ) {
+	if( !IsValid() ) {
 		return;
 	}
 
@@ -638,7 +625,7 @@ void StatsowFacade::AddAward( const edict_t *ent, const char *awardMsg ) {
 }
 
 void StatsowFacade::AddFrag( const edict_t *attacker, const edict_t *victim, int mod ) {
-	if( isDiscarded ) {
+	if( !IsValid() ) {
 		return;
 	}
 
@@ -911,15 +898,13 @@ void StatsowFacade::ClientEntry::AddWeapons( JsonWriter &writer, const char **we
 }
 
 void StatsowFacade::SendReport() {
-	// TODO: check if MM is enabled
-
-	if( GS_RaceGametype() ) {
-		SendRaceReport();
+	if( !IsValid() ) {
+		ClearEntries();
 		return;
 	}
 
-	if( !GS_MMCompatible() ) {
-		ClearEntries();
+	if( GS_RaceGametype() ) {
+		SendRaceReport();
 		return;
 	}
 

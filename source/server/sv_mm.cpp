@@ -619,7 +619,7 @@ SVStatsowFacade::SVStatsowFacade()
 	sv_mm_loginonly = Cvar_Get( "sv_mm_loginonly", "0", CVAR_ARCHIVE | CVAR_SERVERINFO );
 	sv_mm_authkey = Cvar_Get( "sv_mm_authkey", "", CVAR_ARCHIVE );
 
-	if( sv_mm_enable->integer ) {
+	if( sv_mm_enable->integer && ( Cvar_Value( "dedicated" ) != 0 ) ) {
 		reliablePipe = new( ::malloc( sizeof( ReliablePipe ) ) )ReliablePipe;
 	}
 
