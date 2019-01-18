@@ -199,11 +199,7 @@ public:
 	}
 
 	bool AllowQueryRetry() override {
-		return parent->doFetchUuid;
-	}
-
-	bool ScheduleForRetry() override {
-		Com_Error( ERR_FATAL, "FetchMatchUuidTask::ScheduleForRetry(): Should not be called" );
+		return parent->continueFetchUuidTask;
 	}
 
 	void OnQuerySuccess() override;
@@ -246,29 +242,29 @@ void SVStatsowFacade::EnqueueMatchReport( QueryObject *query ) {
 void SVStatsowFacade::CheckMatchUuid() {
 	if( sv.configstrings[CS_MATCHUUID][0] != '\0' ) {
 		// Cancel tasks if any
-		doFetchUuid = false;
+		continueFetchUuidTask = false;
 		return;
 	}
 
 	// Check whether the task is already running
-	if( doFetchUuid ) {
+	if( continueFetchUuidTask ) {
 		return;
 	}
 
 	// Set this prior to launching the task
-	doFetchUuid = true;
+	continueFetchUuidTask = true;
 	if( TryStartingTask( NewFetchMatchUuidTask() ) ) {
 		return;
 	}
 
 	// Try again next frame
-	doFetchUuid = false;
+	continueFetchUuidTask = false;
 }
 
 void SVFetchMatchUuidTask::OnQuerySuccess() {
 	const char *tag = "OnQuerySuccess";
 
-	ScopeGuard scopeGuard( [=]() { parent->doFetchUuid = false; } );
+	ScopeGuard scopeGuard( [=]() { parent->continueFetchUuidTask = false; } );
 
 	if( !CheckResponseStatus( tag ) ) {
 		return;
@@ -294,7 +290,7 @@ void SVFetchMatchUuidTask::OnQueryFailure() {
 	// Resetting this flag means automatic retry next frame.
 	// We still are stick to this task design instead of using plain queries
 	// due to convenient response parsing facilities and overall better code structure.
-	parent->doFetchUuid = false;
+	parent->continueFetchUuidTask = false;
 }
 
 void SVStatsowFacade::OnClientDisconnected( client_t *client ) {

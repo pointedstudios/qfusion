@@ -27,7 +27,7 @@ class CLStatsowFacade {
 
 	mm_uuid_t ourSession { Uuid_ZeroUuid() };
 	mm_uuid_t ticket { Uuid_ZeroUuid() };
-	mm_uuid_t handle { Uuid_ZeroUuid() };
+	mm_uuid_t loginHandle { Uuid_ZeroUuid() };
 
 	wsw::string lastErrorMessage;
 	mutable wsw::string_view lastErrorMessageView;
@@ -52,8 +52,8 @@ class CLStatsowFacade {
 
 	bool isLoggingIn { false };
 	bool isLoggingOut { false };
-	bool isPollingLoginHandle { false };
-	bool hasNeverLoggedIn { true };
+	bool continueLogin2ndStageTask { false };
+	bool hasTriedLoggingIn { false };
 
 	CLStatsowFacade();
 	~CLStatsowFacade();
@@ -117,7 +117,7 @@ class CLStatsowFacade {
 
 	void SaveErrorString( const char *format, va_list args );
 
-	void ContinueLoggingIn();
+	bool ContinueLoggingIn();
 	bool StartLoggingIn( const char *user, const char *password );
 
 	void OnLoginSuccess();
@@ -145,6 +145,8 @@ public:
 
 	void Frame();
 	bool WaitForConnection();
+	void CheckOrWaitForAutoLogin();
+	void PollLoginStatus();
 	bool StartConnecting( const struct netadr_s *address );
 
 	bool Login( const char *user, const char *password );

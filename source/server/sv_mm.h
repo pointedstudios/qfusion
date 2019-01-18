@@ -42,7 +42,7 @@ class SVStatsowFacade {
 	// TODO: Should this stuff be atomic? Investigate threads that really modify these fields
 	bool isLoggingIn { false };
 	bool isLoggingOut { false };
-	bool doFetchUuid { false };
+	bool continueFetchUuidTask { false };
 
 	bool StartLoggingIn();
 	void LogoutBlocking();

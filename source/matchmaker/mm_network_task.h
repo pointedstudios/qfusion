@@ -42,6 +42,13 @@ protected:
 	QueryObject *query;
 
 	/**
+	 * The flag may be set by {@code OnQuerySuccess()} implementations.
+	 * This is useful for waiting for a server action result
+	 * if the Statsow server has returned "not yet available, wait for it" status.
+	 */
+	 bool hasRequestedRetry { true };
+
+	/**
 	 * Creates a task object. Accepts a query (maybe) provided by a caller.
 	 * An ownership of the query lifecycle is transferred to this task.
 	 * @param query_ a {@code QueryObject} to use.
@@ -72,6 +79,10 @@ protected:
 		return query->SendForStatusPolling();
 	};
 
+	virtual bool HandleExplicitRetryRequest() {
+		return query->SendForStatusPolling();
+	}
+
 	/**
 	 * Should delete the task once the retry loop is stopped.
 	 */
@@ -91,6 +102,17 @@ protected:
 
 		if( query->HasSucceeded() ) {
 			OnQueryResult( true );
+			// Check whether we've decided to retry the query.
+			if( hasRequestedRetry ) {
+				query->ResetForRetry();
+				if( HandleExplicitRetryRequest() ) {
+					deleteGuard.Suppress();
+				} else {
+					OnQueryResult( false );
+				}
+				hasRequestedRetry = false;
+				return;
+			}
 			return;
 		}
 
@@ -220,6 +242,17 @@ protected:
 		}
 
 		Com_Printf( "%s: Deferring a retry for %" PRIi64 " millis\n", name, retryDelay );
+		nextRetryAt = Sys_Milliseconds() + retryDelay;
+		return true;
+	}
+
+	bool HandleExplicitRetryRequest() override {
+		if( !retryDelay ) {
+			Com_Printf( "%s: About to perform an explicit retry request\n", name );
+			return query->SendForStatusPolling();
+		}
+
+		Com_Printf( "%s: Deferring an explicitly requested retry for %" PRIi64 " millis\n", name, retryDelay );
 		nextRetryAt = Sys_Milliseconds() + retryDelay;
 		return true;
 	}

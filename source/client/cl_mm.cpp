@@ -185,9 +185,13 @@ class CLContinueLoggingInTask : public CLStatsowTask {
 			CLStatsowTask::OnQueryResult( succeeded );
 		}
 	}
+
+	bool AllowQueryRetry() override {
+		return parent->continueLogin2ndStageTask;
+	}
 public:
 	CLContinueLoggingInTask( CLStatsowFacade *parent_, const mm_uuid_t &handle_ )
-		: CLStatsowTask( parent_, "CLContinueLoggingInTask", "login", 333 ) {
+		: CLStatsowTask( parent_, "CLContinueLoggingInTask", "login", 1000 ) {
 		assert( handle_.IsValidSessionId() );
 		if( query ) {
 			query->SetHandle( handle_ );
@@ -316,12 +320,64 @@ bool CLStatsowFacade::StartConnecting( const netadr_t *address ) {
 }
 
 bool CLStatsowFacade::WaitForConnection() {
-	while( IsValid() && ( isLoggingIn || isLoggingOut ) ) {
+	while( IsValid() && !( isLoggingIn || isLoggingOut ) ) {
 		Frame();
 		Sys_Sleep( 20 );
 	}
 
 	return ticket.IsValidSessionId();
+}
+
+void CLStatsowFacade::CheckOrWaitForAutoLogin() {
+	if( hasTriedLoggingIn ) {
+		return;
+	}
+
+	const int autoLogin = cl_mm_autologin->integer;
+	if( !autoLogin ) {
+		return;
+	}
+
+	Login( nullptr, nullptr );
+	if( autoLogin == 1 ) {
+		return;
+	}
+
+	while( isLoggingIn ) {
+		tasksRunner.CheckStatus();
+		PollLoginStatus();
+		Sys_Sleep( 16 );
+	}
+}
+
+void CLStatsowFacade::PollLoginStatus() {
+	if( !isLoggingIn ) {
+		return;
+	}
+
+	// Wait for obtaining a valid handle
+	if( !loginHandle.IsValidSessionId() ) {
+		return;
+	}
+
+	// Check whether this continuation flag for the task is not set yet.
+	// This means the task has not been launched yet.
+	if( !continueLogin2ndStageTask ) {
+		if( ContinueLoggingIn() ) {
+			assert( continueLogin2ndStageTask );
+		}
+		return;
+	}
+
+	// The task is still running.
+	assert( continueLogin2ndStageTask );
+	// Check whether logging in process has timed out.
+	if( Sys_Milliseconds() + 10 * 1000 > loginStartedAt ) {
+		return;
+	}
+
+	ErrorMessage( "CLStatsowFacade", "Frame", "Login timed out" );
+	OnLoginFailure();
 }
 
 void CLStatsowFacade::Frame() {
@@ -335,35 +391,11 @@ void CLStatsowFacade::Frame() {
 	}
 
 	if( !isLoggingIn ) {
-		if( hasNeverLoggedIn && cl_mm_autologin->integer ) {
-			Login( nullptr, nullptr );
-		}
+		CheckOrWaitForAutoLogin();
 		return;
 	}
 
-	// Wait for getting handle
-	if( !handle.IsValidSessionId() ) {
-		return;
-	}
-
-	// Prevent launching multiple second-stage tasks at once
-	if( isPollingLoginHandle ) {
-		return;
-	}
-
-	const auto now = Sys_Milliseconds();
-	// Use a cooldown between attempts that reported credentials check result is yet unknown
-	if( now < nextLoginAttemptAt ) {
-		return;
-	}
-
-	if( loginStartedAt + 10 * 1000 > now ) {
-		ContinueLoggingIn();
-		return;
-	}
-
-	ErrorMessage( "CLStatsowFacade", "Frame", "Login timed out" );
-	OnLoginFailure();
+	PollLoginStatus();
 }
 
 void CLLogoutTask::OnQueryFailure() {
@@ -386,7 +418,7 @@ void CLStatsowFacade::OnLogoutCompleted() {
 	isLoggingOut = false;
 	ourSession = Uuid_ZeroUuid();
 	ticket = Uuid_ZeroUuid();
-	handle = Uuid_ZeroUuid();
+	loginHandle = Uuid_ZeroUuid();
 }
 
 bool CLStatsowFacade::Logout( bool waitForCompletion ) {
@@ -438,16 +470,17 @@ void CLStatsowFacade::OnLoginSuccess() {
 	assert( lastErrorMessage.empty() );
 	assert( ourSession.IsValidSessionId() );
 
-	handle = Uuid_ZeroUuid();
+	loginHandle = Uuid_ZeroUuid();
 	ticket = Uuid_ZeroUuid();
 
 	char buffer[UUID_BUFFER_SIZE];
 	ourSession.ToString( buffer );
 	Com_Printf( "CLStatsowFacade::OnLoginSuccess(): The session id is %s\n", buffer );
 	Cvar_ForceSet( cl_mm_session->name, buffer );
-	hasNeverLoggedIn = false;
+
+	hasTriedLoggingIn = true;
 	isLoggingIn = false;
-	isPollingLoginHandle = false;
+	continueLogin2ndStageTask = false;
 	nextLoginAttemptAt = std::numeric_limits<int64_t>::max();
 }
 
@@ -458,10 +491,12 @@ void CLStatsowFacade::OnLoginFailure() {
 
 	Cvar_ForceSet( cl_mm_session->name, "" );
 	ourSession = Uuid_FFFsUuid();
-	handle = Uuid_ZeroUuid();
+	loginHandle = Uuid_ZeroUuid();
 	ticket = Uuid_ZeroUuid();
+
+	hasTriedLoggingIn = true;
 	isLoggingIn = false;
-	isPollingLoginHandle = false;
+	continueLogin2ndStageTask = false;
 	nextLoginAttemptAt = std::numeric_limits<int64_t>::max();
 }
 
@@ -483,7 +518,7 @@ void CLStartLoggingInTask::OnQuerySuccess() {
 	}
 
 	const char *handleString = "";
-	if( !GetResponseUuid( tag, "handle", &parent->handle, &handleString ) ) {
+	if( !GetResponseUuid( tag, "handle", &parent->loginHandle, &handleString ) ) {
 		return;
 	}
 
@@ -520,9 +555,8 @@ void CLContinueLoggingInTask::OnQuerySuccess() {
 	}
 
 	if( ready == 1 ) {
-		// Allow launching a next second-stage task later
-		parent->isPollingLoginHandle = false;
-		parent->nextLoginAttemptAt = Sys_Milliseconds() + 16;
+		// Request an explicit task retry on success
+		hasRequestedRetry = true;
 		failureGuard.Suppress();
 		return;
 	}
@@ -580,17 +614,20 @@ void CLContinueLoggingInTask::ParsePlayerInfoSection( const cJSON *section ) {
 	Com_Printf( "Last logged in from `%s` at `%s`\n", lastLoginAddress, lastLoginTimestamp );
 }
 
-void CLStatsowFacade::ContinueLoggingIn() {
+bool CLStatsowFacade::ContinueLoggingIn() {
 	assert( isLoggingIn );
-	assert( handle.IsValidSessionId() );
+	assert( loginHandle.IsValidSessionId() );
 
-	if( TryStartingTask( NewContinueLoggingInTask( handle ) ) ) {
-		isPollingLoginHandle = true;
-		return;
+	// Set this prior to launching the task
+	continueLogin2ndStageTask = true;
+	if( TryStartingTask( NewContinueLoggingInTask( loginHandle ) ) ) {
+		return true;
 	}
 
+	continueLogin2ndStageTask = false;
 	Com_Printf( S_COLOR_RED "CLStatsowFacade::ContinueLoggingIn(): Can't launch a task\n" );
 	OnLoginFailure();
+	return false;
 }
 
 bool CLStatsowFacade::StartLoggingIn( const char *user, const char *password ) {
@@ -610,7 +647,7 @@ bool CLStatsowFacade::StartLoggingIn( const char *user, const char *password ) {
 
 	if( TryStartingTask( NewStartLoggingInTask( user, password ) ) ) {
 		loginStartedAt = Sys_Milliseconds();
-		hasNeverLoggedIn = false;
+		hasTriedLoggingIn = true;
 		isLoggingIn = true;
 		return true;
 	}
