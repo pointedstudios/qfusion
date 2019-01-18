@@ -239,6 +239,73 @@ public:
 	}
 };
 
+class CLMatchMakerTask : public CLStatsowTask {
+	bool *const continueRunning;
+
+	void OnQueryResult( bool success ) override;
+	void OnQueryFailure() override;
+
+	bool AllowQueryRetry() override {
+		return *continueRunning;
+	}
+protected:
+	CLMatchMakerTask( CLStatsowFacade *parent_, bool *continueRunning_, const char *name_, const char *resource_ )
+		: CLStatsowTask( parent_, name_, resource_ ), continueRunning( continueRunning_ ) {}
+
+	void OnAnyFailure() {
+		parent->OnPendingMatchFailure();
+	}
+
+	bool GetMatchPresentStatus( const char *tag, int *presentStatus ) {
+		double value = query->GetRootDouble( "present", std::numeric_limits<double>::infinity() );
+		if( !std::isfinite( value ) ) {
+			PrintError( tag, "A `present` field of the response is missing" );
+			return false;
+		}
+		*presentStatus = Q_sign( value );
+		return true;
+	}
+};
+
+class CLCheckMatchTask : public CLMatchMakerTask {
+	void OnQuerySuccess() override;
+public:
+	CLCheckMatchTask( CLStatsowFacade *parent_, bool *continueRunning_ )
+		: CLMatchMakerTask( parent_, continueRunning_, "CLCheckMatchTask", "mm/checkMatch" ) {
+		if( query ) {
+			query->SetClientSession( parent->ourSession );
+		}
+	}
+};
+
+class CLCheckServerTask : public CLMatchMakerTask {
+	void OnQuerySuccess() override;
+public:
+	CLCheckServerTask( CLStatsowFacade *parent_, bool *continueRunning_ )
+		: CLMatchMakerTask( parent_, continueRunning_, "CLCheckServerTask", "mm/checkServer" ) {
+		if( !query ) {
+			return;
+		}
+		query->SetClientSession( parent->ourSession );
+		query->SetMatchId( parent->matchHandle );
+	}
+};
+
+class CLAcceptMatchTask : public CLMatchMakerTask {
+	void OnQuerySuccess() override;
+public:
+	CLAcceptMatchTask( CLStatsowFacade *parent_, bool *continueRunning_ )
+		: CLMatchMakerTask( parent_, continueRunning_, "CLAcceptMatchTask", "mm/acceptOrReject" ) {
+		if( !query ) {
+			return;
+		}
+		query->SetClientSession( parent->ourSession );
+		query->SetMatchId( parent->matchHandle );
+		// Currently just set "accepted" status by default
+		query->SetAccepted( true );
+	}
+};
+
 static SingletonHolder<CLStatsowFacade> instanceHolder;
 
 void CLStatsowFacade::Init() {
@@ -267,6 +334,18 @@ CLLogoutTask *CLStatsowFacade::NewLogoutTask() {
 
 CLConnectTask *CLStatsowFacade::NewConnectTask( const char *address ) {
 	return NewTaskStub<CLConnectTask>( this, address );
+}
+
+CLCheckMatchTask *CLStatsowFacade::NewCheckMatchTask( bool *continueRunning ) {
+	return NewTaskStub<CLCheckMatchTask>( this, continueRunning );
+}
+
+CLCheckServerTask *CLStatsowFacade::NewCheckServerTask( bool *continueRunning ) {
+	return NewTaskStub<CLCheckServerTask>( this, continueRunning );
+}
+
+CLAcceptMatchTask *CLStatsowFacade::NewAcceptTask( bool *continueRunning ) {
+	return NewTaskStub<CLAcceptMatchTask>( this, continueRunning );
 }
 
 void CLConnectTask::OnQueryFailure() {
@@ -347,6 +426,64 @@ void CLStatsowFacade::CheckOrWaitForAutoLogin() {
 		tasksRunner.CheckStatus();
 		PollLoginStatus();
 		Sys_Sleep( 16 );
+	}
+}
+
+void CLStatsowFacade::OnPendingMatchSuccess() {
+	Cbuf_ExecuteText( EXEC_APPEND, va( "connect %s", matchAddress.c_str() ) );
+}
+
+void CLStatsowFacade::OnPendingMatchFailure() {
+	matchAddress.clear();
+}
+
+void CLStatsowFacade::CheckOrWaitForPendingMatch() {
+	assert( !isLoggingIn && !isLoggingOut );
+	assert( ourSession.IsValidSessionId() );
+
+	constexpr const char *const tag = "CLStatsowFacade::CheckOrWaitForPendingMatch";
+	ScopeGuard failureGuard( [&]() { OnPendingMatchFailure(); } );
+
+	matchHandle = Uuid_ZeroUuid();
+	bool continueRunning = true;
+	if( !TryStartingTask( NewCheckMatchTask( &continueRunning ) ) ) {
+		Com_Printf( S_COLOR_YELLOW "%s: Can't spawn a `check match` task", tag );
+		return;
+	}
+
+	while( continueRunning && !matchHandle.IsValidSessionId() ) {
+		Sys_Sleep( 16 );
+		tasksRunner.CheckStatus();
+	}
+
+	if( !matchHandle.IsValidSessionId() ) {
+		return;
+	}
+
+	continueRunning = true;
+	if( !TryStartingTask( NewCheckServerTask( &continueRunning ) ) ) {
+		Com_Printf( S_COLOR_YELLOW "%s: Can't spawn a `check server` task", tag );
+		return;
+	}
+
+	while( continueRunning && matchAddress.empty() ) {
+		Sys_Sleep( 16 );
+		tasksRunner.CheckStatus();
+	}
+
+	if( matchAddress.empty() ) {
+		return;
+	}
+
+	continueRunning = true;
+	if( !TryStartingTask( NewAcceptTask( &continueRunning ) ) ) {
+		Com_Printf( S_COLOR_YELLOW "%s: Can't spawn an `accept` task", tag );
+		return;
+	}
+
+	while( continueRunning ) {
+		Sys_Sleep( 16 );
+		tasksRunner.CheckStatus();
 	}
 }
 
@@ -481,7 +618,6 @@ void CLStatsowFacade::OnLoginSuccess() {
 	hasTriedLoggingIn = true;
 	isLoggingIn = false;
 	continueLogin2ndStageTask = false;
-	nextLoginAttemptAt = std::numeric_limits<int64_t>::max();
 }
 
 void CLStatsowFacade::OnLoginFailure() {
@@ -497,7 +633,6 @@ void CLStatsowFacade::OnLoginFailure() {
 	hasTriedLoggingIn = true;
 	isLoggingIn = false;
 	continueLogin2ndStageTask = false;
-	nextLoginAttemptAt = std::numeric_limits<int64_t>::max();
 }
 
 void CLStartLoggingInTask::OnQueryFailure() {
@@ -525,7 +660,6 @@ void CLStartLoggingInTask::OnQuerySuccess() {
 	PrintMessage( tag, "Got login process handle %s", handleString );
 	// Allow the second state of the login process
 	// (this field is set to a huge value by default)
-	parent->nextLoginAttemptAt = Sys_Milliseconds() + 16;
 	failureGuard.Suppress();
 }
 
@@ -654,6 +788,98 @@ bool CLStatsowFacade::StartLoggingIn( const char *user, const char *password ) {
 
 	ErrorMessage( classTag, methodTag, "Can't launch a login task" );
 	return false;
+}
+
+void CLMatchMakerTask::OnQueryResult( bool success ) {
+	CLStatsowTask::OnQueryResult( success );
+	*continueRunning = false;
+}
+
+void CLMatchMakerTask::OnQueryFailure() {
+	PrintError( "OnQueryFailure", "The query has failed" );
+	OnAnyFailure();
+}
+
+void CLCheckMatchTask::OnQuerySuccess() {
+	ScopeGuard failureGuard( [&]() { OnAnyFailure(); } );
+
+	constexpr const char *const tag = "OnQuerySuccess";
+	if( !CheckResponseStatus( tag ) ) {
+		return;
+	}
+
+	int presentStatus = 0;
+	if( !GetMatchPresentStatus( tag, &presentStatus ) ) {
+		return;
+	}
+
+	if( presentStatus <= 0 ) {
+		failureGuard.Suppress();
+		parent->OnPendingMatchSuccess();
+		return;
+	}
+
+	const char *stringToShow = nullptr;
+	if( !this->GetResponseUuid( tag, "match_id", &parent->matchHandle, &stringToShow ) ) {
+		return;
+	}
+
+	PrintMessage( tag, "Got pending match handle %s\n", stringToShow );
+	failureGuard.Suppress();
+}
+
+void CLCheckServerTask::OnQuerySuccess() {
+	ScopeGuard failureGuard( [&]() { parent->OnPendingMatchFailure(); } );
+
+	constexpr const char *const tag = "OnQuerySuccess";
+	if( !CheckResponseStatus( tag ) ) {
+		return;
+	}
+
+	int presentStatus;
+	if( !GetMatchPresentStatus( tag, &presentStatus ) ) {
+		return;
+	}
+
+	// If the match has been canceled
+	if( presentStatus < 0 ) {
+		parent->OnPendingMatchSuccess();
+		failureGuard.Suppress();
+		return;
+	}
+
+	// Keep waiting for server address assignation
+	if( presentStatus == 0 ) {
+		failureGuard.Suppress();
+		return;
+	}
+
+	const char *const addressString = query->GetRootString( "server_address", "" );
+	if( !*addressString ) {
+		PrintError( tag, "A `server_address` field of the response is missing" );
+		return;
+	}
+
+	netadr_t tmp;
+	if( !NET_StringToAddress( addressString, &tmp ) ) {
+		PrintError( tag, "The `server_address` value `%s` is not a valid address", addressString );
+		return;
+	}
+
+	PrintMessage( tag, "Got a server address %s", addressString );
+	parent->matchAddress.assign( addressString );
+	failureGuard.Suppress();
+}
+
+void CLAcceptMatchTask::OnQuerySuccess() {
+	constexpr const char *const tag = "OnQuerySuccess";
+	if( !CheckResponseStatus( tag ) ) {
+		parent->OnPendingMatchFailure();
+		return;
+	}
+
+	PrintMessage( tag, "An offer reply has been successfully confirmed" );
+	parent->OnPendingMatchSuccess();
 }
 
 int CLStatsowFacade::GetLoginState() const {

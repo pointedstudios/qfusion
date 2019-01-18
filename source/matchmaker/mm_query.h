@@ -546,6 +546,20 @@ public:
 	}
 
 	/**
+	 * Sets a well-known predefined "matchmaker match id" form parameter.
+	 */
+	QueryObject &SetMatchId( const mm_uuid_t &value ) {
+		return SetField( "match_id", value );
+	}
+
+	/**
+	 * Sets a well-known predefined "has accepted a match" form parameter.
+	 */
+	QueryObject &SetAccepted( bool value ) {
+		return SetField( "accepted", value ? "true" : "false" );
+	}
+
+	/**
 	 * Gets a JSON response root to attach fields to.
 	 * Creates it if it is necessary. The query must be a POST query.
 	 * The query object should not be in "started" state.
