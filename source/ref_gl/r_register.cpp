@@ -22,6 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "r_local.h"
 #include "../qalgo/hash.h"
 
+#include <algorithm>
+
 glconfig_t glConfig;
 
 r_shared_t rsh;
@@ -42,7 +44,6 @@ cvar_t *r_brightness;
 cvar_t *r_sRGB;
 
 cvar_t *r_dynamiclight;
-cvar_t *r_coronascale;
 cvar_t *r_detailtextures;
 cvar_t *r_subdivisions;
 cvar_t *r_showtris;
@@ -1081,8 +1082,7 @@ static void R_Register( const char *screenshotsPrefix ) {
 
 	r_detailtextures = ri.Cvar_Get( "r_detailtextures", "1", CVAR_ARCHIVE );
 
-	r_dynamiclight = ri.Cvar_Get( "r_dynamiclight", "1", CVAR_ARCHIVE );
-	r_coronascale = ri.Cvar_Get( "r_coronascale", "0.4", 0 );
+	r_dynamiclight = ri.Cvar_Get( "r_dynamiclight", "-1", CVAR_ARCHIVE );
 	r_subdivisions = ri.Cvar_Get( "r_subdivisions", STR_TOSTR( SUBDIVISIONS_DEFAULT ), CVAR_ARCHIVE | CVAR_LATCH_VIDEO );
 	r_shownormals = ri.Cvar_Get( "r_shownormals", "0", CVAR_CHEAT );
 	r_draworder = ri.Cvar_Get( "r_draworder", "0", CVAR_CHEAT );
@@ -1443,6 +1443,8 @@ static rserr_t R_PostInit( void ) {
 
 	R_InitModels();
 
+	Scene::Init();
+
 	R_ClearScene();
 
 	R_InitVolatileAssets();
@@ -1483,8 +1485,9 @@ rserr_t R_SetMode( int x, int y, int width, int height, int displayFrequency, bo
 static void R_InitVolatileAssets( void ) {
 	// init volatile data
 	R_InitSkeletalCache();
-	R_InitCoronas();
 	R_InitCustomColors();
+
+	Scene::Instance()->InitVolatileAssets();
 
 	rsh.envShader = R_LoadShader( "$environment", SHADER_TYPE_OPAQUE_ENV, true, NULL );
 	rsh.skyShader = R_LoadShader( "$skybox", SHADER_TYPE_SKYBOX, true, NULL );
@@ -1508,9 +1511,10 @@ static void R_InitVolatileAssets( void ) {
 * R_DestroyVolatileAssets
 */
 static void R_DestroyVolatileAssets( void ) {
+	Scene::Instance()->DestroyVolatileAssets();
+
 	// kill volatile data
 	R_ShutdownCustomColors();
-	R_ShutdownCoronas();
 	R_ShutdownSkeletalCache();
 }
 
@@ -1578,6 +1582,8 @@ void R_Shutdown( bool verbose ) {
 	// free shaders, models, etc.
 
 	R_DestroyVolatileAssets();
+
+	Scene::Shutdown();
 
 	R_ShutdownModels();
 

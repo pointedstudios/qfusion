@@ -115,7 +115,7 @@ static void _LaserImpact( trace_t *trace, vec3_t dir ) {
 
 	vec3_t lightOrigin;
 	// Offset the light origin from the impact surface
-	VectorMA( trace->endpos, 2.0f, trace->plane.normal, lightOrigin );
+	VectorMA( trace->endpos, 4.0f, trace->plane.normal, lightOrigin );
 
 	// it's a brush model
 	if( trace->ent == 0 || !( cg_entities[trace->ent].current.effects & EF_TAKEDAMAGE ) ) {
@@ -126,7 +126,7 @@ static void _LaserImpact( trace_t *trace, vec3_t dir ) {
 		// TODO: add player-impact model
 	}
 
-	CG_AddLightToScene( trace->endpos, 150, 0.75f, 0.75f, 0.375f );
+	CG_AddLightToScene( lightOrigin, 144.0f, 0.0f, 0.75f, 0.75f, 0.375f );
 }
 
 void CG_LaserBeamEffect( centity_t *cent ) {

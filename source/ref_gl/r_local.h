@@ -43,12 +43,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #define ALIGN( x, a ) ( ( ( x ) + ( ( size_t )( a ) - 1 ) ) & ~( ( size_t )( a ) - 1 ) )
 
-#include <algorithm>
-#include <functional>
-#include <memory>
-#include <new>
-#include <utility>
-
 typedef struct { const char *name; void **funcPointer; } dllfunc_t;
 
 typedef struct mempool_s mempool_t;
@@ -75,11 +69,13 @@ enum {
 #include "r_public.h"
 #include "r_vattribs.h"
 
-typedef struct {
-	vec3_t origin;
-	vec3_t color;
-	float intensity;
-} dlight_t;
+#ifdef min
+#undef min
+#endif
+
+#ifdef max
+#undef max
+#endif
 
 typedef struct superLightStyle_s {
 	vattribmask_t vattribs;
@@ -100,6 +96,14 @@ typedef struct superLightStyle_s {
 #include "r_trace.h"
 #include "r_program.h"
 #include "r_jobs.h"
+
+#ifdef min
+#undef min
+#endif
+
+#ifdef max
+#undef max
+#endif
 
 #ifdef CGAMEGETLIGHTORIGIN
 #define SHADOW_MAPPING          2
@@ -287,9 +291,6 @@ typedef struct {
 	entity_t        *polyent;
 	entity_t        *skyent;
 
-	unsigned int numDlights;
-	dlight_t dlights[MAX_DLIGHTS];
-
 	unsigned int numPolys;
 	drawSurfacePoly_t polys[MAX_POLYS];
 
@@ -310,6 +311,104 @@ typedef struct {
 
 	refdef_t refdef;
 } r_scene_t;
+
+class Scene {
+	template <typename> friend class SingletonHolder;
+
+	shader_t *coronaShader { nullptr };
+
+	Scene() {
+		for( int i = 0; i < MAX_CORONA_LIGHTS; ++i ) {
+			coronaSurfs[i] = ST_CORONA;
+		}
+	}
+public:
+	using LightNumType = uint8_t;
+
+	class Light {
+		friend class Scene;
+	public:
+		vec3_t color;
+		float radius;
+		vec4_t center;
+	private:
+		Light() {}
+
+		Light( const float *center_, const float *color_, float radius_ ) {
+			VectorCopy( color_, this->color );
+			this->radius = radius_;
+			VectorCopy( center_, this->center );
+			this->center[3] = 0;
+		}
+	};
+
+private:
+	enum { MAX_CORONA_LIGHTS = 255 };
+	enum { MAX_PROGRAM_LIGHTS = 255 };
+
+	Light coronaLights[MAX_CORONA_LIGHTS];
+	Light programLights[MAX_PROGRAM_LIGHTS];
+
+	int numCoronaLights { 0 };
+	int numProgramLights { 0 };
+
+	LightNumType drawnCoronaLightNums[MAX_CORONA_LIGHTS];
+	LightNumType drawnProgramLightNums[MAX_PROGRAM_LIGHTS];
+
+	int numDrawnCoronaLights { 0 };
+	int numDrawnProgramLights { 0 };
+
+	drawSurfaceType_t coronaSurfs[MAX_CORONA_LIGHTS];
+
+	uint32_t BitsForNumberOfLights( int numLights ) {
+		assert( numLights <= 32 );
+		return (uint32_t)( ( 1ull << (uint64_t)( numLights ) ) - 1 );
+	}
+public:
+	static void Init();
+	static void Shutdown();
+	static Scene *Instance();
+
+	void Clear() {
+		numCoronaLights = 0;
+		numProgramLights = 0;
+
+		numDrawnCoronaLights = 0;
+		numDrawnProgramLights = 0;
+	}
+
+	void InitVolatileAssets() {
+		coronaShader = R_LoadShader( "$corona", SHADER_TYPE_CORONA, true, NULL );
+	}
+
+	void DestroyVolatileAssets() {
+		coronaShader = nullptr;
+	}
+
+	void AddLight( const vec3_t origin, float programIntensity, float coronaIntensity, float r, float g, float b );
+
+	void DynLightDirForOrigin( const vec3_t origin, float radius, vec3_t dir, vec3_t diffuseLocal, vec3_t ambientLocal );
+
+	const Light *LightForCoronaSurf( const drawSurfaceType_t *surf ) const {
+		return &coronaLights[surf - coronaSurfs];
+	}
+
+	// CAUTION: The meaning of dlight bits has been changed:
+	// a bit correspond to an index of a light num in drawnProgramLightNums
+	uint32_t CullLights( unsigned clipFlags );
+
+	void DrawCoronae();
+
+	const Light *ProgramLightForNum( LightNumType num ) const {
+		assert( (unsigned)num < (unsigned)MAX_PROGRAM_LIGHTS );
+		return &programLights[num];
+	}
+
+	void GetDrawnProgramLightNums( const LightNumType **rangeBegin, const LightNumType **rangeEnd ) const {
+		*rangeBegin = drawnProgramLightNums;
+		*rangeEnd = drawnProgramLightNums + numDrawnProgramLights;
+	}
+};
 
 // global frontend variables are stored here
 // the backend should never attempt reading or modifying them
@@ -391,7 +490,6 @@ extern cvar_t *r_brightness;
 extern cvar_t *r_sRGB;
 
 extern cvar_t *r_dynamiclight;
-extern cvar_t *r_coronascale;
 extern cvar_t *r_detailtextures;
 extern cvar_t *r_subdivisions;
 extern cvar_t *r_showtris;
@@ -577,7 +675,6 @@ void        RFB_Shutdown( void );
 //
 // r_light.c
 //
-#define DLIGHT_SCALE        0.5f
 #define MAX_SUPER_STYLES    128
 
 unsigned int R_AddSurfaceDlighbits( const msurface_t *surf, unsigned int checkDlightBits );
@@ -591,10 +688,7 @@ superLightStyle_t   *R_AddSuperLightStyle( model_t *mod, const int *lightmaps,
 void        R_SortSuperLightStyles( model_t *mod );
 void        R_TouchLightmapImages( model_t *mod );
 
-void        R_InitCoronas( void );
 void        R_BatchCoronaSurf(  const entity_t *e, const shader_t *shader, const mfog_t *fog, const portalSurface_t *portalSurface, unsigned int shadowBits, drawSurfaceType_t *drawSurf );
-void        R_DrawCoronas( void );
-void        R_ShutdownCoronas( void );
 
 //
 // r_main.c
@@ -762,7 +856,6 @@ extern drawList_t r_worldlist, r_portalmasklist;
 void R_AddDebugBounds( const vec3_t mins, const vec3_t maxs, const byte_vec4_t color );
 void R_ClearScene( void );
 void R_AddEntityToScene( const entity_t *ent );
-void R_AddLightToScene( const vec3_t org, float intensity, float r, float g, float b );
 void R_AddPolyToScene( const poly_t *poly );
 void R_AddLightStyleToScene( int style, float r, float g, float b );
 void R_RenderScene( const refdef_t *fd );

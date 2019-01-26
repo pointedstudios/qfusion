@@ -337,7 +337,7 @@ static void CG_TestLights( void ) {
 
 		for( j = 0; j < 3; j++ )
 			origin[j] = cg.view.origin[j] /* + cg.view.axis[FORWARD][j]*f + cg.view.axis[RIGHT][j]*r*/;
-		CG_AddLightToScene( origin, 200, ( ( i % 6 ) + 1 ) & 1, ( ( ( i % 6 ) + 1 ) & 2 ) >> 1, ( ( ( i % 6 ) + 1 ) & 4 ) >> 2 );
+		CG_AddLightToScene( origin, 200, 200, ( ( i % 6 ) + 1 ) & 1, ( ( ( i % 6 ) + 1 ) & 2 ) >> 1, ( ( ( i % 6 ) + 1 ) & 4 ) >> 2 );
 	}
 }
 

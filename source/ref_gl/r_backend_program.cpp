@@ -21,6 +21,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "r_local.h"
 #include "r_backend_local.h"
 
+#include <algorithm>
+
 #define FTABLE_SIZE_POW 12
 #define FTABLE_SIZE ( 1 << FTABLE_SIZE_POW )
 #define FTABLE_CLAMP( x ) ( ( (int)( ( x ) * FTABLE_SIZE ) & ( FTABLE_SIZE - 1 ) ) )

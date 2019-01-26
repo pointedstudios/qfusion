@@ -56,6 +56,7 @@ typedef struct lentity_s
 
 	float light;
 	vec3_t lightcolor;
+	vec3_t lightOrigin;
 
 	vec3_t velocity;
 	vec3_t avelocity;
@@ -192,6 +193,7 @@ static lentity_t *CG_AllocModel( letype_t type, const vec3_t origin, const vec3_
 	VectorCopy( angles, le->angles );
 	AnglesToAxis( angles, le->ent.axis );
 	VectorCopy( origin, le->ent.origin );
+	VectorCopy( origin, le->lightOrigin );
 
 	return le;
 }
@@ -219,6 +221,7 @@ static lentity_t *CG_AllocSprite( letype_t type, const vec3_t origin, float radi
 
 	Matrix3_Identity( le->ent.axis );
 	VectorCopy( origin, le->ent.origin );
+	VectorCopy( origin, le->lightOrigin );
 
 	return le;
 }
@@ -482,7 +485,7 @@ void CG_PlasmaExplosion( const vec3_t pos, const vec3_t dir, int fire_mode, floa
 	if( fire_mode == FIRE_MODE_STRONG ) {
 		le = CG_AllocModel( LE_ALPHA_FADE, pos, angles, 4,
 							1, 1, 1, 1,
-							150, 0, 0.75, 0,
+							150, 0, 0.99f, 0.5f,
 							CG_MediaModel( cgs.media.modPlasmaExplosion ),
 							NULL );
 		le->ent.scale = radius / model_radius;
@@ -490,11 +493,14 @@ void CG_PlasmaExplosion( const vec3_t pos, const vec3_t dir, int fire_mode, floa
 
 		le = CG_AllocModel( LE_ALPHA_FADE, pos, angles, 4,
 							1, 1, 1, 1,
-							80, 0, 0.75, 0,
+							80, 0, 0.99f, 0.5f,
 							CG_MediaModel( cgs.media.modPlasmaExplosion ),
 							NULL );
 		le->ent.scale = radius / model_radius;
 	}
+
+	// Additional offset from the impact point
+	VectorMA( le->lightOrigin, 4.0f, dir, le->lightOrigin );
 
 	le->ent.rotation = rand() % 360;
 
@@ -524,8 +530,11 @@ void CG_BoltExplosionMode( const vec3_t pos, const vec3_t dir, int fire_mode, in
 
 	le = CG_AllocModel( LE_INVERSESCALE_ALPHA_FADE, origin, angles, 6, // 6 is time
 						1, 1, 1, 1, //full white no inducted alpha
-						250, 0.75, 0.75, 0.75, //white dlight
+						250, 0.90f, 0.90f, 0.99f, // dlight
 						CG_MediaModel( cgs.media.modElectroBoltWallHit ), NULL );
+
+	// Additional offset from the impact point
+	VectorMA( le->lightOrigin, 4.0f, dir, le->lightOrigin );
 
 	le->ent.rotation = rand() % 360;
 	le->ent.scale = ( fire_mode == FIRE_MODE_STRONG ) ? 1.5f : 1.0f;
@@ -571,8 +580,11 @@ void CG_InstaExplosionMode( const vec3_t pos, const vec3_t dir, int fire_mode, i
 
 	le = CG_AllocModel( LE_ALPHA_FADE, origin, angles, 6, // 6 is time
 						tcolor[0], tcolor[1], tcolor[2], 1,
-						250, 0.65, 0.65, 0.65, //white dlight
+						250, 0.99f, 0.30f, 0.75f, // dlight
 						CG_MediaModel( cgs.media.modInstagunWallHit ), NULL );
+
+	// Additional offset from the impact point
+	VectorMA( le->lightOrigin, 4.0f, dir, le->lightOrigin );
 
 	le->ent.rotation = rand() % 360;
 	le->ent.scale = ( fire_mode == FIRE_MODE_STRONG ) ? 1.5f : 1.0f;
@@ -663,8 +675,11 @@ void CG_WaveExplosionMode( const vec3_t pos, const vec3_t dir, int fire_mode, fl
 	VectorMA( pos, radius * 0.12f, dir, origin );
 	le = CG_AllocModel( LE_INVERSESCALE_ALPHA_FADE, origin, vec3_origin, 3,
 						1, 1, 1, 1,
-						450.0f, 0.9f, 0.9f, 1.0f,
+						300.0f, 0.9f, 0.9f, 1.0f,
 						CG_MediaModel( cgs.media.modWaveExplosion ), NULL );
+
+	// Additional offset from the impact point
+	VectorMA( le->lightOrigin, 4.0f, dir, le->lightOrigin );
 
 	le->ent.rotation = rand() % 360;
 
@@ -794,9 +809,13 @@ void CG_GunBladeBlastImpact( const vec3_t pos, const vec3_t dir, float radius ) 
 
 	le_explo = CG_AllocModel( LE_ALPHA_FADE, origin, angles, 2 + ( radius / 16.1f ),
 							  1, 1, 1, 1, //full white no inducted alpha
-							  0.9, 0.7, 0, 0, //dlight
+							  128.0f, 0.9f, 0.7f, 0.0f, //dlight
 							  CG_MediaModel( cgs.media.modBladeWallExplo ),
 							  NULL );
+
+	// Additional offset from the impact point
+	VectorMA( le->lightOrigin, 4.0f, dir, le->lightOrigin );
+
 	le_explo->ent.rotation = rand() % 360;
 	le_explo->ent.scale = radius / model_radius;
 
@@ -1260,32 +1279,6 @@ void CG_GenericExplosion( const vec3_t pos, const vec3_t dir, int fire_mode, flo
 }
 
 /*
-* CG_FlagFlareTrail
-*/
-void CG_FlagTrail( const vec3_t origin, const vec3_t start, const vec3_t end, float r, float g, float b ) {
-	lentity_t *le;
-	float len, mass = 20;
-	vec3_t dir;
-
-	VectorSubtract( end, start, dir );
-	len = VectorNormalize( dir );
-	if( !len ) {
-		return;
-	}
-
-	le = CG_AllocSprite( LE_SCALE_ALPHA_FADE, origin, 8, 50 + 50 * random(),
-						 r, g, b, 0.7f,
-						 0, 0, 0, 0,
-						 CG_MediaShader( cgs.media.shaderTeleporterSmokePuff ) );
-	VectorSet( le->velocity, -dir[0] * 5 + crandom() * 5, -dir[1] * 5 + crandom() * 5, -dir[2] * 5 + crandom() * 5 + 3 );
-	le->ent.rotation = rand() % 360;
-
-	//friction and gravity
-	VectorSet( le->accel, -0.2f, -0.2f, -9.8f * mass );
-	le->bounce = 50;
-}
-
-/*
 * CG_Explosion1
 */
 void CG_Explosion1( const vec3_t pos ) {
@@ -1621,7 +1614,7 @@ void CG_AddLocalEntities( void ) {
 		ent = &le->ent;
 
 		if( le->light && scale ) {
-			CG_AddLightToScene( ent->origin, le->light * scale, le->lightcolor[0], le->lightcolor[1], le->lightcolor[2] );
+			CG_AddLightToScene( le->lightOrigin, le->light * scale, 0, le->lightcolor[0], le->lightcolor[1], le->lightcolor[2] );
 		}
 
 		if( le->type == LE_LASER ) {

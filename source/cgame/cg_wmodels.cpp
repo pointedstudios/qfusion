@@ -549,7 +549,7 @@ struct weaponinfo_s *CG_GetWeaponInfo( int weapon ) {
 *
 * Add weapon model(s) positioned at the tag
 */
-void CG_AddWeaponOnTag( entity_t *ent, orientation_t *tag, int weaponid, int effects, orientation_t *projectionSource, int64_t flash_time, int64_t barrel_time ) {
+void CG_AddWeaponOnTag( entity_t *ent, orientation_t *tag, int weaponid, int effects, bool addCoronaLight, orientation_t *projectionSource, int64_t flash_time, int64_t barrel_time ) {
 	entity_t weapon;
 	weaponinfo_t *weaponInfo;
 	float intensity;
@@ -705,7 +705,10 @@ void CG_AddWeaponOnTag( entity_t *ent, orientation_t *tag, int weaponid, int eff
 			CG_AddEntityToScene( &flash );
 		}
 
-		CG_AddLightToScene( flash.origin, weaponInfo->flashRadius * intensity,
-							weaponInfo->flashColor[0], weaponInfo->flashColor[1], weaponInfo->flashColor[2] );
+		// TODO: Does flash get drawn underwater?
+		const float programRadius = weaponInfo->flashRadius * intensity;
+		const float coronaRadius = 0.5f * programRadius * addCoronaLight;
+		const auto *flashColor = weaponInfo->flashColor;
+		CG_AddLightToScene( flash.origin, programRadius, coronaRadius, flashColor[0], flashColor[1], flashColor[2] );
 	}
 }

@@ -366,8 +366,22 @@ void RF_AddEntityToScene( const entity_t *ent ) {
 	rrf.frame->AddEntityToScene( rrf.frame, ent );
 }
 
-void RF_AddLightToScene( const vec3_t org, float intensity, float r, float g, float b ) {
-	rrf.frame->AddLightToScene( rrf.frame, org, intensity, r, g, b );
+void RF_AddLightToScene( const vec3_t org, float programIntensity, float coronaIntensity, float r, float g, float b ) {
+	if( !r_dynamiclight->integer ) {
+		return;
+	}
+
+	// Do a sanity check before submitting the command
+
+	if( !( ( (bool)programIntensity | (bool)coronaIntensity ) ) ) {
+		return;
+	}
+
+	if( !( (bool)r | (bool)g | (bool)b ) ) {
+		return;
+	}
+
+	rrf.frame->AddLightToScene( rrf.frame, org, programIntensity, coronaIntensity, r, g, b );
 }
 
 void RF_AddPolyToScene( const poly_t *poly ) {

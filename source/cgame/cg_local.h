@@ -60,7 +60,6 @@ enum {
 	, LOCALEFFECT_WAVETRAIL_LAST_DROP
 	, LOCALEFFECT_BLASTER_SPARK_LAST_DROP
 	, LOCALEFFECT_BLOODTRAIL_LAST_DROP
-	, LOCALEFFECT_FLAGTRAIL_LAST_DROP
 	, LOCALEFFECT_LASERBEAM
 	, LOCALEFFECT_LASERBEAM_SMOKE_TRAIL
 	, LOCALEFFECT_EV_WEAPONBEAM
@@ -1052,7 +1051,6 @@ void CG_ProjectileTrail( centity_t *cent );
 void CG_NewBloodTrail( centity_t *cent );
 void CG_BloodDamageEffect( const vec3_t origin, const vec3_t dir, int damage );
 void CG_CartoonHitEffect( const vec3_t origin, const vec3_t dir, int damage );
-void CG_FlagTrail( const vec3_t origin, const vec3_t start, const vec3_t end, float r, float g, float b );
 void CG_GreenLaser( const vec3_t start, const vec3_t end );
 void CG_SmallPileOfGibs( const vec3_t origin, int damage, const vec3_t initialVelocity, int team );
 void CG_PlasmaExplosion( const vec3_t pos, const vec3_t dir, int fire_mode, float radius );
@@ -1115,8 +1113,10 @@ void CG_WaveSpark( const vec3_t emitterOrigin );
 //
 void CG_ClearEffects( void );
 
-void CG_AddLightToScene( vec3_t org, float radius, float r, float g, float b );
-void CG_AddDlights( void );
+inline void CG_AddLightToScene( const vec3_t org, float programRadius, float coronaRadius, float r, float g, float b ) {
+	trap_R_AddLightToScene( org, programRadius, coronaRadius, r, g, b );
+}
+
 void CG_AllocShadeBox( int entNum, const vec3_t origin, const vec3_t mins, const vec3_t maxs, struct shader_s *shader );
 void CG_AddShadeBoxes( void );
 void CG_ClearLightStyles( void );

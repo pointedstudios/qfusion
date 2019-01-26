@@ -23,6 +23,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "r_local.h"
 #include "../qalgo/q_trie.h"
 
+#include <algorithm>
+
 #define MAX_GLSL_PROGRAMS           1024
 #define GLSL_PROGRAMS_HASH_SIZE     256
 
@@ -2280,7 +2282,6 @@ void RP_UpdateFogUniforms( int elem, byte_vec4_t color, float clearDist, float o
 unsigned int RP_UpdateDynamicLightsUniforms( int elem, const superLightStyle_t *superLightStyle,
 											 const vec3_t entOrigin, const mat3_t entAxis, unsigned int dlightbits ) {
 	int i, n, c;
-	dlight_t *dl;
 	vec3_t dlorigin, tvec;
 	glsl_program_t *program = r_glslprograms + elem - 1;
 	bool identityAxis = Matrix3_Compare( entAxis, axis_identity );
@@ -2310,16 +2311,17 @@ unsigned int RP_UpdateDynamicLightsUniforms( int elem, const superLightStyle_t *
 		memset( shaderColor, 0, sizeof( vec4_t ) * 3 );
 		Vector4Set( shaderColor[3], 1.0f, 1.0f, 1.0f, 1.0f );
 		n = 0;
-		for( i = 0; i < MAX_DLIGHTS; i++ ) {
-			dl = rsc.dlights + i;
-			if( !dl->intensity ) {
-				continue;
-			}
+
+		const auto *scene = Scene::Instance();
+		const Scene::LightNumType *rangeBegin, *rangeEnd;
+		scene->GetDrawnProgramLightNums( &rangeBegin, &rangeEnd );
+		for( const auto *iter = rangeBegin; iter < rangeEnd; ++iter ) {
 			if( program->loc.DynamicLightsPosition[n] < 0 ) {
 				break;
 			}
 
-			VectorSubtract( dl->origin, entOrigin, dlorigin );
+			const auto *light = scene->ProgramLightForNum( *iter );
+			VectorSubtract( light->center, entOrigin, dlorigin );
 			if( !identityAxis ) {
 				VectorCopy( dlorigin, tvec );
 				Matrix3_TransformVector( entAxis, tvec, dlorigin );
@@ -2328,10 +2330,10 @@ unsigned int RP_UpdateDynamicLightsUniforms( int elem, const superLightStyle_t *
 			qglUniform3fvARB( program->loc.DynamicLightsPosition[n], 1, dlorigin );
 
 			c = n & 3;
-			shaderColor[0][c] = dl->color[0];
-			shaderColor[1][c] = dl->color[1];
-			shaderColor[2][c] = dl->color[2];
-			shaderColor[3][c] = 1.0f / dl->intensity;
+			shaderColor[0][c] = light->color[0];
+			shaderColor[1][c] = light->color[1];
+			shaderColor[2][c] = light->color[2];
+			shaderColor[3][c] = 1.0f / light->radius;
 
 			// DynamicLightsDiffuseAndInvRadius is transposed for SIMD, but it's still 4x4
 			if( c == 3 ) {
@@ -2341,10 +2343,6 @@ unsigned int RP_UpdateDynamicLightsUniforms( int elem, const superLightStyle_t *
 			}
 
 			n++;
-			dlightbits &= ~( 1 << i );
-			if( !dlightbits ) {
-				break;
-			}
 		}
 
 		if( n & 3 ) {

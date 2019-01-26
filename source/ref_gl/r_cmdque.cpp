@@ -101,7 +101,8 @@ typedef struct {
 typedef struct {
 	int id;
 	vec3_t origin;
-	float intensity;
+	float programIntensity;
+	float coronaIntensity;
 	float r, g, b;
 } refCmdAddLightToScene_t;
 
@@ -220,7 +221,7 @@ static unsigned R_HandleAddEntityToSceneCmd( uint8_t *pcmd ) {
 
 static unsigned R_HandleAddLightToSceneCmd( uint8_t *pcmd ) {
 	auto *cmd = (refCmdAddLightToScene_t *)pcmd;
-	R_AddLightToScene( cmd->origin, cmd->intensity, cmd->r, cmd->g, cmd->b );
+	Scene::Instance()->AddLight( cmd->origin, cmd->programIntensity, cmd->coronaIntensity, cmd->r, cmd->g, cmd->b );
 	return sizeof( *cmd );
 }
 
@@ -460,12 +461,13 @@ static void RF_IssueAddEntityToSceneCmd( ref_cmdbuf_t *cmdbuf, const entity_t *e
 	RF_IssueAbstractCmd( cmdbuf, &cmd, sizeof( cmd ), cmd_len );
 }
 
-static void RF_IssueAddLightToSceneCmd( ref_cmdbuf_t *cmdbuf, const vec3_t org, float intensity, float r, float g, float b ) {
+static void RF_IssueAddLightToSceneCmd( ref_cmdbuf_t *cmdbuf, const vec3_t org, float programIntensity, float coronaIntensity, float r, float g, float b ) {
 	refCmdAddLightToScene_t cmd;
 
 	cmd.id = REF_CMD_ADD_LIGHT_TO_SCENE;
 	VectorCopy( org, cmd.origin );
-	cmd.intensity = intensity;
+	cmd.programIntensity = programIntensity;
+	cmd.coronaIntensity = coronaIntensity;
 	cmd.r = r;
 	cmd.g = g;
 	cmd.b = b;

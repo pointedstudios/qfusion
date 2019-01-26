@@ -43,7 +43,7 @@ typedef void ( *cg_fdrawchar_t )( int x, int y, int w, int h, float s1, float t1
 
 // cg_public.h -- client game dll information visible to engine
 
-#define CGAME_API_VERSION   101
+#define CGAME_API_VERSION   102
 
 //
 // structs and variables shared with the main engine
@@ -159,7 +159,7 @@ typedef struct {
 	int ( *R_GetClippedFragments )( const vec3_t origin, float radius, vec3_t axis[3], int maxfverts, vec4_t *fverts, int maxfragments, struct fragment_s *fragments );
 	void ( *R_ClearScene )( void );
 	void ( *R_AddEntityToScene )( const struct entity_s *ent );
-	void ( *R_AddLightToScene )( const vec3_t org, float intensity, float r, float g, float b );
+	void ( *R_AddLightToScene )( const vec3_t org, float programIntensity, float coronaIntensity, float r, float g, float b );
 	void ( *R_AddPolyToScene )( const struct poly_s *poly );
 	void ( *R_AddLightStyleToScene )( int style, float r, float g, float b );
 	void ( *R_RenderScene )( const struct refdef_s *fd );

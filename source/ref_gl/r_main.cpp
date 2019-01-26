@@ -23,6 +23,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_local.h"
 
+#include <algorithm>
+
 r_globals_t rf;
 
 mapconfig_t mapConfig;
@@ -1223,7 +1225,7 @@ void R_RenderView( const refdef_t *fd ) {
 			rn.hdrExposure = R_LightExposureForOrigin( rn.viewOrigin );
 		}
 
-		R_DrawCoronas();
+		Scene::Instance()->DrawCoronae();
 
 		if( r_speeds->integer ) {
 			msec = ri.Sys_Milliseconds();

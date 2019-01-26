@@ -105,70 +105,6 @@ void CG_AddLightStyles( void ) {
 /*
 ==============================================================
 
-DLIGHT MANAGEMENT
-
-==============================================================
-*/
-
-typedef struct cdlight_s
-{
-	vec3_t color;
-	vec3_t origin;
-	float radius;
-} cdlight_t;
-
-static cdlight_t cg_dlights[MAX_DLIGHTS];
-static int cg_numDlights;
-
-/*
-* CG_ClearDlights
-*/
-static void CG_ClearDlights( void ) {
-	memset( cg_dlights, 0, sizeof( cg_dlights ) );
-	cg_numDlights = 0;
-}
-
-/*
-* CG_AllocDlight
-*/
-static void CG_AllocDlight( vec3_t origin, float radius, float r, float g, float b ) {
-	cdlight_t *dl;
-
-	if( radius <= 0 ) {
-		return;
-	}
-	if( cg_numDlights == MAX_DLIGHTS ) {
-		return;
-	}
-
-	dl = &cg_dlights[cg_numDlights++];
-	dl->radius = radius;
-	VectorCopy( origin, dl->origin );
-	dl->color[0] = r;
-	dl->color[1] = g;
-	dl->color[2] = b;
-}
-
-void CG_AddLightToScene( vec3_t org, float radius, float r, float g, float b ) {
-	CG_AllocDlight( org, radius, r, g, b );
-}
-
-/*
-* CG_AddDlights
-*/
-void CG_AddDlights( void ) {
-	int i;
-	cdlight_t *dl;
-
-	for( i = 0, dl = cg_dlights; i < cg_numDlights; i++, dl++ )
-		trap_R_AddLightToScene( dl->origin, dl->radius, dl->color[0], dl->color[1], dl->color[2] );
-
-	cg_numDlights = 0;
-}
-
-/*
-==============================================================
-
 BLOB SHADOWS MANAGEMENT
 
 ==============================================================
@@ -1078,6 +1014,5 @@ void CG_AddParticles( void ) {
 void CG_ClearEffects( void ) {
 	CG_ClearFragmentedDecals();
 	CG_ClearParticles();
-	CG_ClearDlights();
 	CG_ClearShadeBoxes();
 }

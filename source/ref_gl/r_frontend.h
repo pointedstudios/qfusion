@@ -68,7 +68,7 @@ void RF_EndRegistration( void );
 void RF_RegisterWorldModel( const char *model );
 void RF_ClearScene( void );
 void RF_AddEntityToScene( const entity_t *ent );
-void RF_AddLightToScene( const vec3_t org, float intensity, float r, float g, float b );
+void RF_AddLightToScene( const vec3_t org, float programIntensity, float coronaIntensity, float r, float g, float b );
 void RF_AddPolyToScene( const poly_t *poly );
 void RF_AddLightStyleToScene( int style, float r, float g, float b );
 void RF_RenderScene( const refdef_t *fd );

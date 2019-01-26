@@ -22,6 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_local.h"
 
+#include <algorithm>
+
 #define WORLDSURF_DIST 1024.0f                  // hack the draw order for world surfaces
 
 static vec3_t modelOrg;                         // relative to view point
@@ -85,8 +87,6 @@ bool R_CullSurface( const entity_t *e, const msurface_t *surf, unsigned int clip
 * R_SurfaceDlightBits
 */
 static unsigned int R_SurfaceDlightBits( const msurface_t *surf, unsigned int checkDlightBits ) {
-	unsigned int i, bit;
-	dlight_t *lt;
 	float dist;
 	unsigned int surfDlightBits = 0;
 
@@ -94,24 +94,34 @@ static unsigned int R_SurfaceDlightBits( const msurface_t *surf, unsigned int ch
 		return 0;
 	}
 
-	for( i = 0, bit = 1, lt = rsc.dlights; i < rsc.numDlights; i++, bit <<= 1, lt++ ) {
-		if( checkDlightBits & bit ) {
+	// TODO: This is totally wrong! Lights should mark affected surfaces in their radius on their own!
+
+	const auto *scene = Scene::Instance();
+	const Scene::LightNumType *rangeBegin, *rangeEnd;
+	scene->GetDrawnProgramLightNums( &rangeBegin, &rangeEnd );
+	// Caution: bits correspond to indices in range now!
+	uint32_t mask = 1;
+	for( const auto *iter = rangeBegin; iter < rangeEnd; ++iter, mask <<= 1 ) {
+		// TODO: This condition seems to be pointless
+		if( checkDlightBits & mask ) {
+			const auto *__restrict lt = scene->ProgramLightForNum( *iter );
+			// TODO: Avoid doing this and keep separate lists of planar and other surfaces
 			switch( surf->facetype ) {
 				case FACETYPE_PLANAR:
-					dist = DotProduct( lt->origin, surf->plane ) - surf->plane[3];
-					if( dist > -lt->intensity && dist < lt->intensity ) {
-						surfDlightBits |= bit;
+					dist = DotProduct( lt->center, surf->plane ) - surf->plane[3];
+					if( dist > -lt->radius && dist < lt->radius ) {
+						surfDlightBits |= mask;
 					}
 					break;
 				case FACETYPE_PATCH:
 				case FACETYPE_TRISURF:
 				case FACETYPE_FOLIAGE:
-					if( BoundsAndSphereIntersect( surf->mins, surf->maxs, lt->origin, lt->intensity ) ) {
-						surfDlightBits |= bit;
+					if( BoundsAndSphereIntersect( surf->mins, surf->maxs, lt->center, lt->radius ) ) {
+						surfDlightBits |= mask;
 					}
 					break;
 			}
-			checkDlightBits &= ~bit;
+			checkDlightBits &= ~mask;
 			if( !checkDlightBits ) {
 				break;
 			}
@@ -383,7 +393,7 @@ static void R_UpdateSurfaceInDrawList( drawSurfaceBSP_t *drawSurf, unsigned int 
 	dlightFrame = drawSurf->dlightFrame;
 	shadowFrame = drawSurf->shadowFrame;
 
-	curDlightBits = dlightFrame == rsc.frameCount ? drawSurf->dlightBits : 0;
+	curDlightBits = dlightFrame = 0;
 	curShadowBits = shadowFrame == rsc.frameCount ? drawSurf->shadowBits : 0;
 
 	end = drawSurf->firstWorldSurface + drawSurf->numWorldSurfaces;
@@ -558,20 +568,26 @@ bool R_AddBrushModelToDrawList( const entity_t *e ) {
 	VectorAdd( e->model->mins, e->model->maxs, origin );
 	VectorMA( e->origin, 0.5, origin, origin );
 
+	// TODO: Unused?
 	fog = R_FogForBounds( bmins, bmaxs );
 
 	R_TransformPointToModelSpace( e, rotated, rn.refdef.vieworg, modelOrg );
 
+	const auto *scene = Scene::Instance();
+	// TODO: Lights should mark models they affect on their own!
+
 	// check dynamic lights that matter in the instance against the model
 	dlightBits = 0;
-	for( i = 0, fullBits = rn.dlightBits, bit = 1; fullBits; i++, fullBits &= ~bit, bit <<= 1 ) {
-		if( !( fullBits & bit ) ) {
+
+	const Scene::LightNumType *rangeBegin, *rangeEnd;
+	scene->GetDrawnProgramLightNums( &rangeBegin, &rangeEnd );
+	unsigned mask = 1;
+	for( const auto *iter = rangeBegin; iter < rangeEnd; ++iter, mask <<= 1 ) {
+		const auto *light = scene->ProgramLightForNum( *iter );
+		if( !BoundsAndSphereIntersect( bmins, bmaxs, light->center, light->radius ) ) {
 			continue;
 		}
-		if( !BoundsAndSphereIntersect( bmins, bmaxs, rsc.dlights[i].origin, rsc.dlights[i].intensity ) ) {
-			continue;
-		}
-		dlightBits |= bit;
+		dlightBits |= mask;
 	}
 
 	// check shadowmaps that matter in the instance against the model
@@ -885,16 +901,7 @@ void R_DrawWorld( void ) {
 	}
 
 	// cull dynamic lights
-	if( !( rn.renderFlags & RF_ENVVIEW ) ) {
-		if( r_dynamiclight->integer == 1 && !r_fullbright->integer ) {
-			for( i = 0; i < rsc.numDlights; i++ ) {
-				if( R_CullSphere( rsc.dlights[i].origin, rsc.dlights[i].intensity, clipFlags ) ) {
-					continue;
-				}
-				dlightBits |= 1 << i;
-			}
-		}
-	}
+	dlightBits = Scene::Instance()->CullLights( clipFlags );
 
 	// cull shadowmaps
 	if( !( rn.renderFlags & RF_ENVVIEW ) ) {

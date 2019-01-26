@@ -65,6 +65,15 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #if !defined ( __MACOSX__ ) && !defined ( __ANDROID__ )
 #ifdef _WIN32
 #include <windows.h>
+
+#ifdef min
+#undef min
+#endif
+
+#ifdef max
+#undef max
+#endif
+
 #endif
 #include <GL/gl.h>
 #endif

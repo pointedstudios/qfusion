@@ -23,29 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_local.h"
 
-/*
-=============================================================================
-
-DYNAMIC LIGHTS BLEND RENDERING
-
-=============================================================================
-*/
-
-static shader_t *r_coronaShader;
-static drawSurfaceType_t r_coronaSurfs[MAX_DLIGHTS];
-
-/*
-* R_InitCoronas
-*/
-void R_InitCoronas( void ) {
-	int i;
-
-	r_coronaShader = R_LoadShader( "$corona", SHADER_TYPE_CORONA, true, NULL );
-
-	for( i = 0; i < MAX_DLIGHTS; i++ ) {
-		r_coronaSurfs[i] = ST_CORONA;
-	}
-}
+#include <algorithm>
 
 /*
 * R_BatchCoronaSurf
@@ -55,8 +33,10 @@ void R_BatchCoronaSurf( const entity_t *e, const shader_t *shader,
 	int i;
 	vec3_t origin, point;
 	vec3_t v_left, v_up;
-	dlight_t *light = rsc.dlights + ( drawSurf - r_coronaSurfs );
-	float radius = light->intensity, colorscale;
+
+	auto *const light = Scene::Instance()->LightForCoronaSurf( drawSurf );
+
+	float radius = light->radius;
 	elem_t elems[6] = { 0, 1, 2, 0, 2, 3 };
 	vec4_t xyz[4] = { {0,0,0,1}, {0,0,0,1}, {0,0,0,1}, {0,0,0,1} };
 	vec4_t normals[4] = { {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0} };
@@ -64,7 +44,7 @@ void R_BatchCoronaSurf( const entity_t *e, const shader_t *shader,
 	vec2_t texcoords[4] = { {0, 1}, {0, 0}, {1,0}, {1,1} };
 	mesh_t mesh;
 
-	VectorCopy( light->origin, origin );
+	VectorCopy( light->center, origin );
 
 	VectorCopy( &rn.viewAxis[AXIS_RIGHT], v_left );
 	VectorCopy( &rn.viewAxis[AXIS_UP], v_up );
@@ -81,11 +61,10 @@ void R_BatchCoronaSurf( const entity_t *e, const shader_t *shader,
 	VectorMA( point, radius, v_left, xyz[1] );
 	VectorMA( point, -radius, v_left, xyz[2] );
 
-	colorscale = 255.0 * bound( 0, r_coronascale->value, 1.0 );
 	Vector4Set( colors[0],
-				bound( 0, light->color[0] * colorscale, 255 ),
-				bound( 0, light->color[1] * colorscale, 255 ),
-				bound( 0, light->color[2] * colorscale, 255 ),
+				bound( 0, light->color[0] * 96, 255 ),
+				bound( 0, light->color[1] * 96, 255 ),
+				bound( 0, light->color[2] * 96, 255 ),
 				255 );
 	for( i = 1; i < 4; i++ )
 		Vector4Copy( colors[0], colors[i] );
@@ -102,47 +81,7 @@ void R_BatchCoronaSurf( const entity_t *e, const shader_t *shader,
 	RB_AddDynamicMesh( e, shader, fog, portalSurface, 0, &mesh, GL_TRIANGLES, 0.0f, 0.0f );
 }
 
-/*
-* R_DrawCoronas
-*/
-void R_DrawCoronas( void ) {
-	unsigned int i;
-	float dist;
-	dlight_t *light;
-	rtrace_t tr;
 
-	if( r_dynamiclight->integer != 2 ) {
-		return;
-	}
-
-	for( i = 0; i < rsc.numDlights; i++ ) {
-		light = rsc.dlights + i;
-		dist =
-			rn.viewAxis[AXIS_FORWARD + 0] * ( light->origin[0] - rn.viewOrigin[0] ) +
-			rn.viewAxis[AXIS_FORWARD + 1] * ( light->origin[1] - rn.viewOrigin[1] ) +
-			rn.viewAxis[AXIS_FORWARD + 2] * ( light->origin[2] - rn.viewOrigin[2] ) - light->intensity;
-		if( dist < 0 ) {
-			continue;
-		}
-
-		R_TraceLine( &tr, light->origin, rn.viewOrigin, SURF_NONSOLID );
-		if( tr.fraction != 1.0f ) {
-			continue;
-		}
-
-		R_AddSurfToDrawList( rn.meshlist, rsc.polyent,
-							 R_FogForSphere( light->origin, 1 ),
-							 r_coronaShader,
-							 Distance( rn.viewOrigin, light->origin ), 0, NULL, &r_coronaSurfs[i] );
-	}
-}
-
-/*
-* R_ShutdownCoronas
-*/
-void R_ShutdownCoronas( void ) {
-	r_coronaShader = NULL;
-}
 
 //===================================================================
 
@@ -153,7 +92,7 @@ void R_LightForOrigin( const vec3_t origin, vec3_t dir, vec4_t ambient, vec4_t d
 	int i, j;
 	int k, s;
 	int vi[3], elem[4];
-	float dot, t[8];
+	float t[8];
 	vec3_t vf, vf2, tdir;
 	vec3_t ambientLocal, diffuseLocal;
 	vec_t *gridSize, *gridMins;
@@ -269,40 +208,8 @@ void R_LightForOrigin( const vec3_t origin, vec3_t dir, vec4_t ambient, vec4_t d
 
 dynamic:
 	// add dynamic lights
-	if( radius && r_dynamiclight->integer ) {
-		unsigned int lnum;
-		dlight_t *dl;
-		float dist, dist2, add;
-		vec3_t direction;
-		bool anyDlights = false;
-
-		for( lnum = 0; lnum < rsc.numDlights; lnum++ ) {
-			dl = rsc.dlights + lnum;
-			if( Distance( dl->origin, origin ) > dl->intensity + radius ) {
-				continue;
-			}
-
-			VectorSubtract( dl->origin, origin, direction );
-			dist = VectorLength( direction );
-
-			if( !dist || dist > dl->intensity + radius ) {
-				continue;
-			}
-
-			if( !anyDlights ) {
-				VectorNormalizeFast( dir );
-				anyDlights = true;
-			}
-
-			add = 1.0 - ( dist / ( dl->intensity + radius ) );
-			dist2 = add * 0.5 / dist;
-			for( i = 0; i < 3; i++ ) {
-				dot = dl->color[i] * add;
-				diffuseLocal[i] += dot;
-				ambientLocal[i] += dot * 0.05;
-				dir[i] += direction[i] * dist2;
-			}
-		}
+	if( radius ) {
+		Scene::Instance()->DynLightDirForOrigin( origin, radius, dir, diffuseLocal, ambientLocal );
 	}
 
 	VectorNormalizeFast( dir );

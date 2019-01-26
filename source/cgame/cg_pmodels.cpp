@@ -1272,8 +1272,17 @@ void CG_AddPModel( centity_t *cent ) {
 	// add teleporter sfx if needed
 	CG_PModel_SpawnTeleportEffect( cent );
 
-	// add weapon model
-	if( cent->current.weapon && CG_GrabTag( &tag_weapon, &cent->ent, "tag_weapon" ) ) {
-		CG_AddWeaponOnTag( &cent->ent, &tag_weapon, cent->current.weapon, cent->effects, &pmodel->projectionSource, pmodel->flash_time, pmodel->barrel_time );
+	if( !cent->current.weapon ) {
+		return;
 	}
+
+	if( !CG_GrabTag( &tag_weapon, &cent->ent, "tag_weapon" ) ) {
+		return;
+	}
+
+	const bool addCoronaLight = !ISVIEWERENTITY( cent->current.number ) || cg.view.thirdperson;
+
+	// add weapon model
+	CG_AddWeaponOnTag( &cent->ent, &tag_weapon, cent->current.weapon, cent->effects, addCoronaLight,
+		&pmodel->projectionSource, pmodel->flash_time, pmodel->barrel_time );
 }

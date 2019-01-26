@@ -22,6 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_local.h"
 
+#include <algorithm>
+
 drawList_t r_worldlist;
 drawList_t r_shadowlist;
 drawList_t r_portalmasklist;

@@ -23,6 +23,8 @@
 #include "../ref_gl/r_local.h"
 #include "sdl_glw.h"
 
+#include <algorithm>
+
 glwstate_t glw_state = {NULL, NULL};
 cvar_t *vid_fullscreen;
 

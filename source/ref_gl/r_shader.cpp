@@ -24,6 +24,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "r_local.h"
 #include "../qalgo/hash.h"
 
+#include <algorithm>
+
 #define SHADERS_HASH_SIZE   128
 #define SHADERCACHE_HASH_SIZE   128
 

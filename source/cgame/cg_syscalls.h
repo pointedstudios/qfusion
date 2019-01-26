@@ -213,8 +213,8 @@ static inline void trap_R_AddEntityToScene( const entity_t *ent ) {
 	CGAME_IMPORT.R_AddEntityToScene( ent );
 }
 
-static inline void trap_R_AddLightToScene( const vec3_t org, float intensity, float r, float g, float b ) {
-	CGAME_IMPORT.R_AddLightToScene( org, intensity, r, g, b );
+static inline void trap_R_AddLightToScene( const vec3_t org, float programIntensity, float coronaIntensity, float r, float g, float b ) {
+	CGAME_IMPORT.R_AddLightToScene( org, programIntensity, coronaIntensity, r, g, b );
 }
 
 static inline void trap_R_AddPolyToScene( const poly_t *poly ) {

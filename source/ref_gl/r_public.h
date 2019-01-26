@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "../cgame/ref.h"
 
-#define REF_API_VERSION 24
+#define REF_API_VERSION 25
 
 //
 // these are the functions exported by the refresh module
@@ -166,7 +166,7 @@ typedef struct {
 
 	void ( *ClearScene )( void );
 	void ( *AddEntityToScene )( const entity_t *ent );
-	void ( *AddLightToScene )( const vec3_t org, float intensity, float r, float g, float b );
+	void ( *AddLightToScene )( const vec3_t org, float programIntensity, float coronaIntensity, float r, float g, float b );
 	void ( *AddPolyToScene )( const poly_t *poly );
 	void ( *AddLightStyleToScene )( int style, float r, float g, float b );
 	void ( *RenderScene )( const refdef_t *fd );

@@ -23,6 +23,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_local.h"
 
+#include <algorithm>
+
 typedef struct {
 	vec3_t mins, maxs;
 	int flatness[2];

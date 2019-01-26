@@ -68,7 +68,7 @@ inline void R_AddEntityToScene( entity_t *ent ) {
 }
 
 inline void R_AddLightToScene( vec3_t org, float intensity, float r, float g, float b ) {
-	UI_IMPORT.R_AddLightToScene( org, intensity, r, g, b );
+	UI_IMPORT.R_AddLightToScene( org, intensity, 0, r, g, b );
 }
 
 inline void R_AddLightStyleToScene( int style, float r, float g, float b ) {
