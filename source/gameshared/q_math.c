@@ -371,24 +371,6 @@ float DistanceFromLineSquared( const vec3_t p, const vec3_t lp1, const vec3_t lp
 
 //============================================================================
 
-float Q_RSqrt( float number ) {
-	int i;
-	float x2, y;
-
-	if( number == 0.0 ) {
-		return 0.0;
-	}
-
-	x2 = number * 0.5f;
-	y = number;
-	i = *(int *) &y;    // evil floating point bit level hacking
-	i = 0x5f3759df - ( i >> 1 ); // what the fuck?
-	y = *(float *) &i;
-	y = y * ( 1.5f - ( x2 * y * y ) ); // this can be done a second time
-
-	return y;
-}
-
 int Q_rand( int *seed ) {
 	*seed = *seed * 1103515245 + 12345;
 	return ( (unsigned int)( *seed / 65536 ) % 32768 );

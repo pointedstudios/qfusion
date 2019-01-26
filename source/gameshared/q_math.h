@@ -144,7 +144,30 @@ int Q_rand( int *seed );
 #define Q_brandom( seed, a, b ) ( ( a ) + Q_random( seed ) * ( ( b ) - ( a ) ) )                      // a..b
 #define Q_crandom( seed )     Q_brandom( seed, -1, 1 )
 
-float   Q_RSqrt( float number );
+#if ( defined ( __i386__ ) || defined ( __x86_64__ ) || defined( _M_IX86 ) || defined( _M_AMD64 ) || defined( _M_X64 ) )
+
+static inline float Q_RSqrt( float number ) {
+	assert( number >= 0 );
+	return _mm_cvtss_f32( _mm_rsqrt_ss( _mm_set_ss( number ) ) );
+}
+
+static inline float Q_Rcp( float number ) {
+	return _mm_cvtss_f32( _mm_rcp_ss( _mm_set_ss( number ) ) );
+}
+
+#else
+
+static inline float Q_RSqrt( float number ) {
+	assert( number >= 0 );
+	return 1.0f / sqrtf( number );
+}
+
+static inline float Q_Rcp( float number ) {
+	return 1.0f / number;
+}
+
+#endif
+
 int Q_log2( int val );
 
 int Q_bitcount( int v );
