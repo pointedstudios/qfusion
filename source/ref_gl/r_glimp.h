@@ -21,13 +21,21 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define R_GLIMP_H
 
 #ifdef __cplusplus
-#define QGL_EXTERN extern "C"
+#define QGL_EXTERN extern
 #else
 #define QGL_EXTERN extern
 #endif
 
 #ifdef _WIN32
 #include <windows.h>
+
+#ifdef min
+#undef min
+#endif
+
+#ifdef max
+#undef max
+#endif
 
 #define QGL_WGL( type, name, params ) QGL_EXTERN type( APIENTRY * q ## name ) params;
 #define QGL_WGL_EXT( type, name, params ) QGL_EXTERN type( APIENTRY * q ## name ) params;

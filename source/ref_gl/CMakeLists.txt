@@ -19,7 +19,7 @@ file(GLOB REF_GL_HEADERS
 )
 
 file(GLOB REF_GL_COMMON_SOURCES
-    "*.c"
+    "*.cpp"
     "../gameshared/q_*.c"
     "../qalgo/*.c"
     "../qcommon/bsp.c"
@@ -28,17 +28,16 @@ file(GLOB REF_GL_COMMON_SOURCES
 
 if (USE_SDL2)
    	file(GLOB REF_GL_PLATFORM_SOURCES
-       	"../sdl/sdl_glw.c"
-		"../sdl/sdl_glw_icon.c"
-       	"../sdl/sdl_qgl.c"
+       	"../sdl/sdl_glw.cpp"
+       	"../sdl/sdl_qgl.cpp"
    	)
 
     set(REF_GL_PLATFORM_LIBRARIES ${SDL2_LIBRARY})
 else()
     if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
         file(GLOB REF_GL_PLATFORM_SOURCES
-            "../win32/win_glw.c"
-            "../win32/win_qgl.c"
+            "../win32/win_glw.cpp"
+            "../win32/win_qgl.cpp"
         )
 
         set(REF_GL_PLATFORM_LIBRARIES "")
@@ -46,9 +45,8 @@ else()
 
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         file(GLOB REF_GL_PLATFORM_SOURCES
-            "../unix/unix_glw.c"
-            "../unix/unix_qgl.c"
-            "../unix/unix_xpm.c"
+            "../unix/unix_glw.cpp"
+            "../unix/unix_qgl.cpp"
         )
 
         set(REF_GL_PLATFORM_LIBRARIES "X11" "Xext" "Xinerama" "Xrandr" "Xxf86vm" "m")

@@ -29,7 +29,27 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../qcommon/bsp.h"
 #include "../qcommon/patch.h"
 
-typedef struct { char *name; void **funcPointer; } dllfunc_t;
+#ifdef min
+#undef min
+#endif
+
+#ifdef max
+#undef max
+#endif
+
+#ifdef ALIGN
+#undef ALIGN
+#endif
+
+#define ALIGN( x, a ) ( ( ( x ) + ( ( size_t )( a ) - 1 ) ) & ~( ( size_t )( a ) - 1 ) )
+
+#include <algorithm>
+#include <functional>
+#include <memory>
+#include <new>
+#include <utility>
+
+typedef struct { const char *name; void **funcPointer; } dllfunc_t;
 
 typedef struct mempool_s mempool_t;
 typedef struct cinematics_s cinematics_t;

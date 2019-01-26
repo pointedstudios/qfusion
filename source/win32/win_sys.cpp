@@ -33,8 +33,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../win32/conproc.h"
 
 #if !defined( DEDICATED_ONLY )
-QF_DLL_EXPORT DWORD NvOptimusEnablement = 0x00000001;
-QF_DLL_EXPORT int AmdPowerXpressRequestHighPerformance = 1;
+extern "C" QF_DLL_EXPORT DWORD NvOptimusEnablement = 0x00000001;
+extern "C" QF_DLL_EXPORT int AmdPowerXpressRequestHighPerformance = 1;
 #endif
 
 #if !defined( USE_SDL2 ) || defined( DEDICATED_ONLY )
