@@ -22,8 +22,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "client.h"
 #include "cl_mm.h"
 #include "ftlib.h"
+
 #include "../qcommon/asyncstream.h"
 #include "../qalgo/hash.h"
+
+#include <random>
 
 cvar_t *cl_stereo_separation;
 cvar_t *cl_stereo;
@@ -1997,7 +2000,18 @@ static void CL_InitLocal( void ) {
 		*steamnameOut = '\0';
 
 		if( !( COM_RemoveColorTokens( steamname )[0] ) ) {
-			Q_strncpyz( steamname, "Player", sizeof( steamname ) );
+			// Avoid using the default random() macro as it has a default seed.
+			std::minstd_rand0 randomEngine( (std::minstd_rand0::result_type)time( nullptr ) );
+			// Avoid using black and grey colors.
+			int colorNum;
+			do {
+				colorNum = (int)( randomEngine() % 10 );
+			} while( colorNum == 0 || colorNum == 9 );
+			int parts[3];
+			for( int &part: parts ) {
+				part = (int)( randomEngine() % 100 );
+			}
+			Q_snprintfz( steamname, sizeof( steamname ), "^%dplayer%02d%02d%02d", colorNum, parts[0], parts[1], parts[2] );
 		}
 
 		Cvar_Set( name->name, steamname );
