@@ -71,8 +71,6 @@ static const modelFormatDescr_t mod_supportedformats[] =
 * Mod_PointInLeaf
 */
 mleaf_t *Mod_PointInLeaf( vec3_t p, model_t *model ) {
-	mnode_t *node;
-	cplane_t *plane;
 	mbrushmodel_t *bmodel;
 
 	if( !model || !( bmodel = ( mbrushmodel_t * )model->extradata ) || !bmodel->nodes ) {
@@ -80,13 +78,16 @@ mleaf_t *Mod_PointInLeaf( vec3_t p, model_t *model ) {
 		return NULL;
 	}
 
-	node = bmodel->nodes;
-	do {
-		plane = node->plane;
-		node = node->children[PlaneDiff( p, plane ) < 0];
-	} while( node->plane != NULL );
+	const auto *__restrict nodes = bmodel->nodes;
 
-	return ( mleaf_t * )node;
+	int nodeNum = 0;
+	do {
+		const auto *__restrict node = nodes + nodeNum;
+		const auto *__restrict plane = &node->plane;
+		nodeNum = node->children[PlaneDiff( p, plane ) < 0];
+	} while( nodeNum >= 0 );
+
+	return bmodel->leafs + ( -1 - nodeNum );
 }
 
 /*

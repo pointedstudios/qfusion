@@ -1026,7 +1026,7 @@ static void Mod_LoadPatchGroups( const lump_t *l ) {
 * Mod_LoadNodes
 */
 static void Mod_LoadNodes( const lump_t *l ) {
-	int i, j, count, p;
+	int i, j, count;
 	dnode_t *in;
 	mnode_t *out;
 
@@ -1041,15 +1041,10 @@ static void Mod_LoadNodes( const lump_t *l ) {
 	loadbmodel->numnodes = count;
 
 	for( i = 0; i < count; i++, in++, out++ ) {
-		out->plane = loadbmodel->planes + LittleLong( in->planenum );
+		out->plane = loadbmodel->planes[LittleLong( in->planenum )];
 
 		for( j = 0; j < 2; j++ ) {
-			p = LittleLong( in->children[j] );
-			if( p >= 0 ) {
-				out->children[j] = loadbmodel->nodes + p;
-			} else {
-				out->children[j] = ( mnode_t * )( loadbmodel->leafs + ( -1 - p ) );
-			}
+			out->children[j] = LittleLong( in->children[j] );
 		}
 	}
 }
@@ -1203,7 +1198,6 @@ static void Mod_LoadLeafs( const lump_t *l, const lump_t *msLump ) {
 			out->cluster = -1;
 		}
 
-		out->plane = NULL;
 		out->area = LittleLong( in->area );
 		if( out->area >= loadbmodel->numareas ) {
 			loadbmodel->numareas = out->area + 1;

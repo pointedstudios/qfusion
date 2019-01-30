@@ -397,34 +397,37 @@ bool R_SurfPotentiallyFragmented( const msurface_t *surf ) {
 /*
 * R_RecursiveFragmentNode
 */
-static void R_RecursiveFragmentNode( void ) {
-	unsigned i;
+static void R_RecursiveFragmentNode() {
 	int stackdepth = 0;
-	float dist;
-	bool inside;
-	mnode_t *node, *localstack[2048];
-	mleaf_t *leaf;
-	msurface_t *surf;
+	int localstack[2048];
 
-	for( node = rsh.worldBrushModel->nodes, stackdepth = 0; node != NULL; ) {
-		if( node->plane == NULL ) {
-			leaf = ( mleaf_t * )node;
+	const auto *__restrict nodes = rsh.worldBrushModel->nodes;
+	const auto *__restrict leaves = rsh.worldBrushModel->leafs;
+	const auto *__restrict surfaces = rsh.worldBrushModel->surfaces;
 
-			for( i = 0; i < leaf->numFragmentSurfaces; i++ ) {
+	const int counter = r_fragmentframecount;
+
+	int nodeNum = 0;
+	for(;; ) {
+		if( nodeNum < 0 ) {
+			const auto *__restrict leaf = leaves + ( -1 - nodeNum );
+
+			for( unsigned i = 0; i < leaf->numFragmentSurfaces; i++ ) {
 				if( numFragmentVerts == maxFragmentVerts || numClippedFragments == maxClippedFragments ) {
 					return; // already reached the limit
 
 				}
-				surf = rsh.worldBrushModel->surfaces + leaf->fragmentSurfaces[i];
-				if( surf->fragmentframe == r_fragmentframecount ) {
+				const auto *__restrict surf = surfaces + leaf->fragmentSurfaces[i];
+				if( surf->fragmentframe == counter ) {
 					continue;
 				}
-				surf->fragmentframe = r_fragmentframecount;
+				surf->fragmentframe = counter;
 
 				if( !BoundsAndSphereIntersect( surf->mins, surf->maxs, fragmentOrigin, fragmentRadius ) ) {
 					continue;
 				}
 
+				bool inside;
 				if( surf->facetype == FACETYPE_PATCH ) {
 					inside = R_PatchSurfClipFragment( surf, fragmentNormal );
 				} else {
@@ -445,20 +448,22 @@ static void R_RecursiveFragmentNode( void ) {
 			if( !stackdepth ) {
 				break;
 			}
-			node = localstack[--stackdepth];
+			nodeNum = localstack[--stackdepth];
 			continue;
 		}
 
-		dist = PlaneDiff( fragmentOrigin, node->plane );
+		const auto *__restrict node = nodes + nodeNum;
+
+		const float dist = PlaneDiff( fragmentOrigin, &node->plane );
 		if( dist > fragmentRadius ) {
-			node = node->children[0];
+			nodeNum = node->children[0];
 			continue;
 		}
 
 		if( ( dist >= -fragmentRadius ) && ( stackdepth < sizeof( localstack ) / sizeof( mnode_t * ) ) ) {
 			localstack[stackdepth++] = node->children[0];
 		}
-		node = node->children[1];
+		nodeNum = node->children[1];
 	}
 }
 
@@ -499,11 +504,11 @@ int R_GetClippedFragments( const vec3_t origin, float radius, vec3_t axis[3],
 
 		VectorCopy( axis[i], fragmentPlanes[i * 2].normal );
 		fragmentPlanes[i * 2].dist = d - radius0;
-		fragmentPlanes[i * 2].type = PlaneTypeForNormal( fragmentPlanes[i * 2].normal );
+		fragmentPlanes[i * 2].type = (short)PlaneTypeForNormal( fragmentPlanes[i * 2].normal );
 
 		VectorNegate( axis[i], fragmentPlanes[i * 2 + 1].normal );
 		fragmentPlanes[i * 2 + 1].dist = -d - radius0;
-		fragmentPlanes[i * 2 + 1].type = PlaneTypeForNormal( fragmentPlanes[i * 2 + 1].normal );
+		fragmentPlanes[i * 2 + 1].type = (short)PlaneTypeForNormal( fragmentPlanes[i * 2 + 1].normal );
 	}
 
 	R_RecursiveFragmentNode();

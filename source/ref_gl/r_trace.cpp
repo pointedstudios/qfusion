@@ -190,20 +190,18 @@ static int R_TraceAgainstBmodel( mbrushmodel_t *bmodel ) {
 /*
 * R_RecursiveHullCheck
 */
-static int R_RecursiveHullCheck( mnode_t *node, const vec3_t start, const vec3_t end ) {
-	int side, r;
-	float t1, t2;
-	float frac;
-	vec3_t mid;
+static int R_RecursiveHullCheck( const mbrushmodel_t *__restrict bmodel, int num, const vec3_t start, const vec3_t end ) {
 	const vec_t *p1 = start, *p2 = end;
-	cplane_t *plane;
 
 loc0:
-	plane = node->plane;
-	if( !plane ) {
-		return R_TraceAgainstLeaf( ( mleaf_t * )node );
+	if( num < 0 ) {
+		return R_TraceAgainstLeaf( bmodel->leafs + ( -1 - num ) );
 	}
 
+	const auto *__restrict node = bmodel->nodes + num;
+	const auto *__restrict plane = &node->plane;
+
+	float t1, t2;
 	if( plane->type < 3 ) {
 		t1 = p1[plane->type] - plane->dist;
 		t2 = p2[plane->type] - plane->dist;
@@ -213,25 +211,26 @@ loc0:
 	}
 
 	if( t1 >= -ON_EPSILON && t2 >= -ON_EPSILON ) {
-		node = node->children[0];
+		num = node->children[0];
 		goto loc0;
 	}
 
 	if( t1 < ON_EPSILON && t2 < ON_EPSILON ) {
-		node = node->children[1];
+		num = node->children[1];
 		goto loc0;
 	}
 
-	side = t1 < 0;
-	frac = t1 / ( t1 - t2 );
+	const int side = t1 < 0;
+	const float frac = t1 / ( t1 - t2 );
+
+	vec3_t mid;
 	VectorLerp( p1, frac, p2, mid );
 
-	r = R_RecursiveHullCheck( node->children[side], p1, mid );
-	if( r ) {
+	if( const int r = R_RecursiveHullCheck( bmodel, node->children[side], p1, mid ) ) {
 		return r;
 	}
 
-	return R_RecursiveHullCheck( node->children[!side], mid, p2 );
+	return R_RecursiveHullCheck( bmodel, node->children[!side], mid, p2 );
 }
 
 /*
@@ -280,7 +279,7 @@ static msurface_t *R_TransformedTraceLine( rtrace_t *tr, const vec3_t start, con
 			// world uses a recursive approach using BSP tree, submodels
 			// just walk the list of surfaces linearly
 			if( test->model == rsh.worldModel ) {
-				R_RecursiveHullCheck( bmodel->nodes, start_l, end_l );
+				R_RecursiveHullCheck( bmodel, 0, start_l, end_l );
 			} else if( BoundsIntersect( model->mins, model->maxs, trace_absmins, trace_absmaxs ) ) {
 				R_TraceAgainstBmodel( bmodel );
 			}

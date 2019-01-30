@@ -188,7 +188,7 @@ bool R_CullSphere( const vec3_t centre, const float radius, const unsigned int c
 bool R_VisCullBox( const vec3_t mins, const vec3_t maxs ) {
 	int s, stackdepth = 0;
 	vec3_t extmins, extmaxs;
-	mnode_t *node, *localstack[2048];
+	int localstack[2048];
 
 	if( !rsh.worldModel || ( rn.refdef.rdflags & RDF_NOWORLDMODEL ) ) {
 		return false;
@@ -202,8 +202,12 @@ bool R_VisCullBox( const vec3_t mins, const vec3_t maxs ) {
 		extmaxs[s] = maxs[s] + 4;
 	}
 
-	for( node = rsh.worldBrushModel->nodes;; ) {
-		if( !node->plane ) {
+	const auto *__restrict nodes = rsh.worldBrushModel->nodes;
+
+	int nodeNum = 0;
+	for(;; ) {
+		if( nodeNum < 0 ) {
+			// TODO: Implement/reorder cull/vis cull calls
 			/*if( !rf.worldLeafVis[(mleaf_t *)node - rsh.worldBrushModel->leafs] )
 			{
 			    if( !stackdepth )
@@ -214,9 +218,11 @@ bool R_VisCullBox( const vec3_t mins, const vec3_t maxs ) {
 			return false;
 		}
 
-		s = BOX_ON_PLANE_SIDE( extmins, extmaxs, node->plane ) - 1;
+		const auto *__restrict node = nodes + nodeNum;
+
+		s = BOX_ON_PLANE_SIDE( extmins, extmaxs, &node->plane ) - 1;
 		if( s < 2 ) {
-			node = node->children[s];
+			nodeNum = node->children[s];
 			continue;
 		}
 
@@ -224,10 +230,8 @@ bool R_VisCullBox( const vec3_t mins, const vec3_t maxs ) {
 		if( stackdepth < sizeof( localstack ) / sizeof( mnode_t * ) ) {
 			localstack[stackdepth++] = node->children[0];
 		}
-		node = node->children[1];
+		nodeNum = node->children[1];
 	}
-
-	return true;
 }
 
 /*
@@ -236,7 +240,7 @@ bool R_VisCullBox( const vec3_t mins, const vec3_t maxs ) {
 bool R_VisCullSphere( const vec3_t origin, float radius ) {
 	float dist;
 	int stackdepth = 0;
-	mnode_t *node, *localstack[2048];
+	int localstack[2048];
 
 	if( !rsh.worldModel || ( rn.refdef.rdflags & RDF_NOWORLDMODEL ) ) {
 		return false;
@@ -246,8 +250,13 @@ bool R_VisCullSphere( const vec3_t origin, float radius ) {
 	}
 
 	radius += 4;
-	for( node = rsh.worldBrushModel->nodes;; ) {
-		if( !node->plane ) {
+
+	const auto *__restrict nodes = rsh.worldBrushModel->nodes;
+
+	int nodeNum = 0;
+	for(;; ) {
+		if( nodeNum < 0 ) {
+			// TODO: Implement/reorder cull/vis cull calls
 			/*if( !rf.worldLeafVis[(mleaf_t *)node - rsh.worldBrushModel->leafs] )
 			{
 			    if( !stackdepth )
@@ -258,12 +267,14 @@ bool R_VisCullSphere( const vec3_t origin, float radius ) {
 			return false;
 		}
 
-		dist = PlaneDiff( origin, node->plane );
+		const auto *__restrict node = nodes + nodeNum;
+
+		dist = PlaneDiff( origin, &node->plane );
 		if( dist > radius ) {
-			node = node->children[0];
+			nodeNum = node->children[0];
 			continue;
 		} else if( dist < -radius ) {
-			node = node->children[1];
+			nodeNum = node->children[1];
 			continue;
 		}
 
@@ -273,10 +284,8 @@ bool R_VisCullSphere( const vec3_t origin, float radius ) {
 		} else {
 			assert( 0 );
 		}
-		node = node->children[1];
+		nodeNum = node->children[1];
 	}
-
-	return true;
 }
 
 /*
