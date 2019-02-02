@@ -155,6 +155,23 @@ static inline float Q_Rcp( float number ) {
 	return _mm_cvtss_f32( _mm_rcp_ss( _mm_set_ss( number ) ) );
 }
 
+static inline float Q_Sqrt( float number ) {
+	assert( number >= 0 );
+
+	// jal : The expression a * rsqrt(b) is intended as a higher performance alternative to a / sqrt(b).
+	// The two expressions are comparably accurate, but do not compute exactly the same value in every case.
+	// For example, a * rsqrt(a*a + b*b) can be just slightly greater than 1, in rare cases.
+
+	// We have to check for zero or else a NAN is produced (0 times infinity)
+
+	// Force an eager computation of result for further branch-less selection.
+	// Note that modern x86 handle infinities/NANs without penalties.
+	// Supplying zeroes is rare anyway.
+	float maybeSqrt = number * _mm_cvtss_f32( _mm_rsqrt_ss( _mm_set_ss( number ) ) );
+	// This should be a CMOV
+	return number ? maybeSqrt : 0.0f;
+}
+
 #else
 
 static inline float Q_RSqrt( float number ) {
@@ -166,6 +183,11 @@ static inline float Q_Rcp( float number ) {
 	return 1.0f / number;
 }
 
+static inline float Q_Sqrt( float number ) {
+	assert( number >= 0 );
+	return sqrtf( number );
+}
+
 #endif
 
 int Q_log2( int val );
@@ -174,7 +196,7 @@ int Q_bitcount( int v );
 
 #define ISPOWOF2( x ) ( !( ( x ) & ( ( x ) - 1 ) ) )
 
-#define SQRTFAST( x ) ( ( x ) * Q_RSqrt( x ) ) // jal : //The expression a * rsqrt(b) is intended as a higher performance alternative to a / sqrt(b). The two expressions are comparably accurate, but do not compute exactly the same value in every case. For example, a * rsqrt(a*a + b*b) can be just slightly greater than 1, in rare cases.
+#define SQRTFAST( x ) ( Q_Sqrt( x ) )
 
 #define DotProduct( x, y )     ( ( x )[0] * ( y )[0] + ( x )[1] * ( y )[1] + ( x )[2] * ( y )[2] )
 #define CrossProduct( v1, v2, cross ) ( ( cross )[0] = ( v1 )[1] * ( v2 )[2] - ( v1 )[2] * ( v2 )[1], ( cross )[1] = ( v1 )[2] * ( v2 )[0] - ( v1 )[0] * ( v2 )[2], ( cross )[2] = ( v1 )[0] * ( v2 )[1] - ( v1 )[1] * ( v2 )[0] )
