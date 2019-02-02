@@ -49,12 +49,11 @@ BaseMovementAction *MovementPredictionContext::GetCachedActionAndRecordForCurrTi
 		return nullptr;
 	}
 
-	const auto *self = game.edicts + bot->EntNum();
-
 	if( !prevPredictedAction ) {
 		// If there were no activated actions, the next state must be recently computed for current level time.
 		Assert( nextPredictedAction->timestamp == realTime );
 		// These assertions have already spotted a bug
+		const auto *self = game.edicts + bot->EntNum();
 		Assert( VectorCompare( nextPredictedAction->entityPhysicsState.Origin(), self->s.origin ) );
 		Assert( VectorCompare( nextPredictedAction->entityPhysicsState.Velocity(), self->velocity ) );
 		// If there is a modified velocity, it will be copied with this record and then applied
@@ -73,100 +72,160 @@ BaseMovementAction *MovementPredictionContext::GetCachedActionAndRecordForCurrTi
 		}
 	}
 
-	// Check whether predicted action is valid for an actual bot entity physics state
-	float stateLerpFrac = (float)( realTime - prevPredictedAction->timestamp );
-	stateLerpFrac *= 1.0f / ( nextPredictedAction->timestamp - prevPredictedAction->timestamp );
-	Assert( stateLerpFrac > 0 && stateLerpFrac <= 1.0f );
-	const char *format =
-		"Prev predicted action timestamp is " PRId64 ", next predicted action is " PRId64 ", level.time is %" PRId64 "\n";
-	Debug( format, prevPredictedAction->timestamp, nextPredictedAction->timestamp, level.time );
-	Debug( "Should interpolate entity physics state using fraction %f\n", stateLerpFrac );
+	return TryCheckAndLerpActions( prevPredictedAction, nextPredictedAction, record_ );
+}
 
-	const auto &prevPhysicsState = prevPredictedAction->entityPhysicsState;
-	const auto &nextPhysicsState = nextPredictedAction->entityPhysicsState;
+BaseMovementAction *MovementPredictionContext::TryCheckAndLerpActions( PredictedMovementAction *prevAction,
+	                                                                   PredictedMovementAction *nextAction,
+	                                                                   MovementActionRecord *record_ ) {
+	const int64_t realTime = game.realtime;
+
+	// Check whether predicted action is valid for an actual bot entity physics state
+	auto checkLerpFrac = (float)( realTime - prevAction->timestamp );
+	checkLerpFrac *= 1.0f / ( nextAction->timestamp - prevAction->timestamp );
+	Assert( checkLerpFrac > 0 && checkLerpFrac <= 1.0f );
+
+	const char *format =
+		"Prev predicted action timestamp is " PRId64 ", "
+		"next predicted action is " PRId64 ", real time is %" PRId64 "\n";
+
+	Debug( format, prevAction->timestamp, nextAction->timestamp, level.time );
+	Debug( "Should interpolate entity physics state using fraction %f\n", checkLerpFrac );
 
 	// Prevent cache invalidation on each frame if bot is being hit by a continuous fire weapon and knocked back.
 	// Perform misprediction test only on the 3rd frame after a last knockback timestamp.
-	if( level.time - bot->lastKnockbackAt > 32 ) {
-		vec3_t expectedOrigin;
-		VectorLerp( prevPhysicsState.Origin(), stateLerpFrac, nextPhysicsState.Origin(), expectedOrigin );
-		float squaredDistanceMismatch = DistanceSquared( self->s.origin, expectedOrigin );
-		if( squaredDistanceMismatch > 3.0f * 3.0f ) {
-			float distanceMismatch = SQRTFAST( squaredDistanceMismatch );
-			const char *format_ = "Cannot use predicted movement action: distance mismatch %f is too high for lerp frac %f\n";
-			Debug( format_, distanceMismatch, stateLerpFrac );
-			return nullptr;
-		}
-
-		float expectedSpeed = ( 1.0f - stateLerpFrac ) * prevPhysicsState.Speed() + stateLerpFrac * nextPhysicsState.Speed();
-		float actualSpeed = bot->EntityPhysicsState()->Speed();
-		float speedMismatch = fabsf( actualSpeed - expectedSpeed );
-		if( speedMismatch > 0.005f * expectedSpeed ) {
-			Debug( "Expected speed: %.1f, actual speed: %.1f, speed mismatch: %.1f\n", expectedSpeed, actualSpeed,
-				   speedMismatch );
-			Debug( "Cannot use predicted movement action: speed mismatch is too high\n" );
-			return nullptr;
-		}
-
-		if( actualSpeed > 30.0f ) {
-			vec3_t expectedVelocity;
-			VectorLerp( prevPhysicsState.Velocity(), stateLerpFrac, nextPhysicsState.Velocity(), expectedVelocity );
-			Vec3 expectedVelocityDir( expectedVelocity );
-			expectedVelocityDir *= 1.0f / expectedSpeed;
-			Vec3 actualVelocityDir( self->velocity );
-			actualVelocityDir *= 1.0f / actualSpeed;
-			float cosine = expectedVelocityDir.Dot( actualVelocityDir );
-			static const float MIN_COSINE = cosf( (float) DEG2RAD( 5.0f ) );
-			if( cosine < MIN_COSINE ) {
-				Debug( "An angle between expected and actual velocities is %f degrees\n",(float) RAD2DEG( acosf( cosine ) ) );
-				Debug( "Cannot use predicted movement action:  expected and actual velocity directions differ significantly\n" );
-				return nullptr;
-			}
-		}
-
-		if( !nextPredictedAction->record.botInput.canOverrideLookVec ) {
-			Vec3 prevStateAngles( prevPhysicsState.Angles() );
-			Vec3 nextStateAngles( nextPhysicsState.Angles() );
-
-			vec3_t expectedAngles;
-			for( int i : { YAW, ROLL } )
-				expectedAngles[i] = LerpAngle( prevStateAngles.Data()[i], nextStateAngles.Data()[i], stateLerpFrac );
-
-			if( !nextPredictedAction->record.botInput.canOverridePitch ) {
-				expectedAngles[PITCH] = LerpAngle( prevStateAngles.Data()[PITCH], nextStateAngles.Data()[PITCH],
-												   stateLerpFrac );
-			} else {
-				expectedAngles[PITCH] = self->s.angles[PITCH];
-			}
-
-			vec3_t expectedLookDir;
-			AngleVectors( expectedAngles, expectedLookDir, nullptr, nullptr );
-			float cosine = bot->EntityPhysicsState()->ForwardDir().Dot( expectedLookDir );
-			static const float MIN_COSINE = cosf( (float) DEG2RAD( 5.0f ) );
-			if( cosine < MIN_COSINE ) {
-				Debug( "An angle between and actual look directions is %f degrees\n", (float) RAD2DEG( acosf( cosine ) ) );
-				Debug( "Cannot use predicted movement action: expected and actual look directions differ significantly\n" );
-				return nullptr;
-			}
-		}
+	if( level.time - bot->lastKnockbackAt <= 32 ) {
+		return LerpActionRecords( prevAction, nextAction, record_ );
 	}
+
+	if( !CheckPredictedOrigin( prevAction, nextAction, checkLerpFrac ) ) {
+		return nullptr;
+	}
+
+	if( !CheckPredictedVelocity( prevAction, nextAction, checkLerpFrac ) ) {
+		return nullptr;
+	}
+
+	if( !CheckPredictedAngles( prevAction, nextAction, checkLerpFrac ) ) {
+		return nullptr;
+	}
+
+	return LerpActionRecords( prevAction, nextAction, record_ );
+}
+
+bool MovementPredictionContext::CheckPredictedOrigin( PredictedMovementAction *prevAction,
+													  PredictedMovementAction *nextAction,
+													  float checkLerpFrac ) {
+	const auto &prevPhysicsState = prevAction->entityPhysicsState;
+	const auto &nextPhysicsState = nextAction->entityPhysicsState;
+
+	vec3_t expectedOrigin;
+	VectorLerp( prevPhysicsState.Origin(), checkLerpFrac, nextPhysicsState.Origin(), expectedOrigin );
+	float squareDistanceMismatch = DistanceSquared( bot->Origin(), expectedOrigin );
+	if( squareDistanceMismatch < 3.0f * 3.0f ) {
+		return true;
+	}
+
+	float distanceMismatch = SQRTFAST( squareDistanceMismatch );
+	const char *format_ = "Cannot use predicted movement action: distance mismatch %f is too high for lerp frac %f\n";
+	Debug( format_, distanceMismatch, checkLerpFrac );
+	return false;
+}
+
+bool MovementPredictionContext::CheckPredictedVelocity( PredictedMovementAction *prevAction,
+														PredictedMovementAction *nextAction,
+														float checkLerpFrac ) {
+	const auto &prevPhysicsState = prevAction->entityPhysicsState;
+	const auto &nextPhysicsState = nextAction->entityPhysicsState;
+
+	float expectedSpeed = ( 1.0f - checkLerpFrac ) * prevPhysicsState.Speed() + checkLerpFrac * nextPhysicsState.Speed();
+	float actualSpeed = bot->EntityPhysicsState()->Speed();
+	float mismatch = std::abs( actualSpeed - expectedSpeed );
+
+	if( mismatch > 5.0f ) {
+		Debug( "Expected speed: %.1f, actual speed: %.1f, speed mismatch: %.1f\n", expectedSpeed, actualSpeed, mismatch );
+		Debug( "Cannot use predicted movement action: speed mismatch is too high\n" );
+		return false;
+	}
+
+	if( actualSpeed < 30.0f ) {
+		return true;
+	}
+
+	vec3_t expectedVelocity;
+	VectorLerp( prevPhysicsState.Velocity(), checkLerpFrac, nextPhysicsState.Velocity(), expectedVelocity );
+	Vec3 expectedVelocityDir( expectedVelocity );
+	expectedVelocityDir.Normalize();
+	Vec3 actualVelocityDir( bot->Velocity() );
+	actualVelocityDir.Normalize();
+
+	float cosine = expectedVelocityDir.Dot( actualVelocityDir );
+	static const float MIN_COSINE = std::cos( (float) DEG2RAD( 3.0f ) );
+	if( cosine > MIN_COSINE ) {
+		return true;
+	}
+
+	Debug( "An angle between expected and actual velocities is %f degrees\n", RAD2DEG( std::acos( cosine ) ) );
+	Debug( "Cannot use predicted movement action:  expected and actual velocity directions differ significantly\n" );
+	return false;
+}
+
+bool MovementPredictionContext::CheckPredictedAngles( PredictedMovementAction *prevAction,
+													  PredictedMovementAction *nextAction,
+													  float checkLerpFrac ) {
+	if( nextAction->record.botInput.canOverrideLookVec ) {
+		return true;
+	}
+
+	Vec3 prevStateAngles( prevAction->entityPhysicsState.Angles() );
+	Vec3 nextStateAngles( nextAction->entityPhysicsState.Angles() );
+
+	vec3_t expectedAngles;
+	for( int i : { YAW, ROLL } ) {
+		expectedAngles[i] = LerpAngle( prevStateAngles.Data()[i], nextStateAngles.Data()[i], checkLerpFrac );
+	}
+
+	if( !nextAction->record.botInput.canOverridePitch ) {
+		expectedAngles[PITCH] = LerpAngle( prevStateAngles.Data()[PITCH], nextStateAngles.Data()[PITCH], checkLerpFrac );
+	} else {
+		expectedAngles[PITCH] = game.edicts[bot->EntNum()].s.angles[PITCH];
+	}
+
+	vec3_t expectedLookDir;
+	AngleVectors( expectedAngles, expectedLookDir, nullptr, nullptr );
+	float cosine = bot->EntityPhysicsState()->ForwardDir().Dot( expectedLookDir );
+	static const float MIN_COSINE = std::cos( (float)DEG2RAD( 3.0f ) );
+	if( cosine > MIN_COSINE ) {
+		return true;
+	}
+
+	Debug( "An angle between and actual look directions is %f degrees\n", RAD2DEG( std::acos( cosine ) ) );
+	Debug( "Cannot use predicted movement action: expected and actual look directions differ significantly\n" );
+	return false;
+}
+
+BaseMovementAction *MovementPredictionContext::LerpActionRecords( PredictedMovementAction *prevAction,
+																  PredictedMovementAction *nextAction,
+																  MovementActionRecord *record_ ) {
+	const int64_t realTime = game.realtime;
 
 	// If next predicted state is likely to be completed next frame, use its input as-is (except the velocity)
-	if( nextPredictedAction->timestamp - realTime <= game.frametime ) {
-		*record_ = nextPredictedAction->record;
+	if( nextAction->timestamp - realTime <= game.frametime ) {
+		*record_ = nextAction->record;
 		// Apply modified velocity only once for an exact timestamp
-		if( nextPredictedAction->timestamp != realTime ) {
+		if( nextAction->timestamp != realTime ) {
 			record_->hasModifiedVelocity = false;
 		}
-		return nextPredictedAction->action;
+		return nextAction->action;
 	}
 
-	float inputLerpFrac = game.frametime / ( (float)( nextPredictedAction->timestamp - realTime ) );
+	const float inputLerpFrac = game.frametime / ( (float)( nextAction->timestamp - realTime ) );
 	Assert( inputLerpFrac > 0 && inputLerpFrac <= 1.0f );
 	// If next predicted time is likely to be pending next frame again, interpolate input for a single frame ahead
-	*record_ = nextPredictedAction->record;
+	*record_ = nextAction->record;
 	// Prevent applying a modified velocity from the new state
 	record_->hasModifiedVelocity = false;
+
 	if( !record_->botInput.canOverrideLookVec ) {
 		Vec3 actualLookDir( bot->EntityPhysicsState()->ForwardDir() );
 		Vec3 intendedLookVec( record_->botInput.IntendedLookDir() );
@@ -174,11 +233,11 @@ BaseMovementAction *MovementPredictionContext::GetCachedActionAndRecordForCurrTi
 		record_->botInput.SetIntendedLookDir( intendedLookVec );
 	}
 
-	auto prevRotationMask = (unsigned)prevPredictedAction->record.botInput.allowedRotationMask;
-	auto nextRotationMask = (unsigned)nextPredictedAction->record.botInput.allowedRotationMask;
+	auto prevRotationMask = (unsigned)prevAction->record.botInput.allowedRotationMask;
+	auto nextRotationMask = (unsigned)nextAction->record.botInput.allowedRotationMask;
 	record_->botInput.allowedRotationMask = (BotInputRotation)( prevRotationMask & nextRotationMask );
 
-	return nextPredictedAction->action;
+	return nextAction->action;
 }
 
 BaseMovementAction *MovementPredictionContext::GetActionAndRecordForCurrTime( MovementActionRecord *record_ ) {

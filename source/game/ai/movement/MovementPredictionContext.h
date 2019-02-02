@@ -365,6 +365,18 @@ public:
 
 	class BaseMovementAction *GetCachedActionAndRecordForCurrTime( MovementActionRecord *record_ );
 
+	class BaseMovementAction *TryCheckAndLerpActions( PredictedMovementAction *prevAction,
+													  PredictedMovementAction *nextAction,
+													  MovementActionRecord *record_ );
+
+	class BaseMovementAction *LerpActionRecords( PredictedMovementAction *prevAction,
+		                                         PredictedMovementAction *nextAction,
+		                                         MovementActionRecord *record_ );
+
+	bool CheckPredictedOrigin( PredictedMovementAction *prevAction, PredictedMovementAction *nextAction, float frac );
+	bool CheckPredictedVelocity( PredictedMovementAction *prevAction, PredictedMovementAction *nextAction, float frac );
+	bool CheckPredictedAngles( PredictedMovementAction *prevAction, PredictedMovementAction *nextAction, float frac );
+
 	void SetDefaultBotInput();
 
 	void Debug( const char *format, ... ) const;
