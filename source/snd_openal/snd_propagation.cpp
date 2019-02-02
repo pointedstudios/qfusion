@@ -353,9 +353,15 @@ float LeafToLeafDirBuilder::Build( int leaf1, int leaf2, vec3_t resultDir ) {
 		return std::numeric_limits<float>::infinity();
 	}
 
+	const vec3_t *const leafBounds[2] = { trap_GetLeafBounds( leaf1 ), trap_GetLeafBounds( leaf2 ) };
+
+	// Add a protection against bogus leaves
+	if( VectorCompare( leafBounds[0][0], leafBounds[1][0] ) && VectorCompare( leafBounds[1][0], leafBounds[1][1] ) ) {
+		return std::numeric_limits<float>::infinity();
+	}
+
 	vec3_t nodeHintBounds[2];
 	ClearBounds( nodeHintBounds[0], nodeHintBounds[1] );
-	const vec3_t *const leafBounds[2] = { trap_GetLeafBounds( leaf1 ), trap_GetLeafBounds( leaf2 ) };
 	for( int i = 0; i < 2; ++i ) {
 		// Get dimensions
 		VectorSubtract( leafBounds[i][1], leafBounds[i][0], leafCenters[i] );
@@ -367,7 +373,7 @@ float LeafToLeafDirBuilder::Build( int leaf1, int leaf2, vec3_t resultDir ) {
 
 		// Build bounds for top node hint
 		AddPointToBounds( leafBounds[i][0], nodeHintBounds[0], nodeHintBounds[1] );
-		AddPointToBounds( leafBounds[i][1], nodeHintBounds[1], nodeHintBounds[1] );
+		AddPointToBounds( leafBounds[i][1], nodeHintBounds[0], nodeHintBounds[1] );
 	}
 
 	// Prepare for adding dir contributions
