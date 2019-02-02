@@ -308,7 +308,7 @@ void BotWeaponSelector::SuggestFarRangeWeapon( const WorldState &worldState ) {
 	Vec3 targetMoveDir( selectedEnemies.LastSeenVelocity() );
 	float enemySpeed = targetMoveDir.SquaredLength();
 	if( enemySpeed > 0.1f ) {
-		enemySpeed = 1.0f / Q_RSqrt( enemySpeed );
+		enemySpeed = SQRTFAST( enemySpeed );
 	}
 	if( enemySpeed > DEFAULT_DASHSPEED ) {
 		targetMoveDir *= 1.0f / enemySpeed;

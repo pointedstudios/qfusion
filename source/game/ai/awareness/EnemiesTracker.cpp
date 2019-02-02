@@ -607,8 +607,9 @@ const TrackedEnemy *AiEnemiesTracker::ChooseLostOrHiddenEnemy( const edict_t *ch
 		float distanceFactor = 1.0f;
 		float squareDistance = botToSpotDirection.SquaredLength();
 		if( squareDistance > 1 ) {
-			float distance = 1.0f / Q_RSqrt( squareDistance );
-			botToSpotDirection *= 1.0f / distance;
+			float invDistance = Q_RSqrt( squareDistance );
+			float distance = squareDistance * invDistance;
+			botToSpotDirection *= invDistance;
 			directionFactor = 0.3f + 0.7f * botToSpotDirection.Dot( forward );
 			distanceFactor = 1.0f - 0.9f * BoundedFraction( distance, 2000.0f );
 		}

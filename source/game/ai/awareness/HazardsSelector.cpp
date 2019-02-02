@@ -414,7 +414,12 @@ void HazardsSelector::FindWaveHazards( const EntNumsVector &entNums ) {
 
 		// Compute a distance from wave linear movement line to bot
 		Vec3 lineDir( wave->velocity );
-		float waveSpeed = lineDir.NormalizeFast();
+		float squareSpeed = lineDir.SquaredLength();
+		if( squareSpeed < 1 ) {
+			continue;
+		}
+
+		float waveSpeed = SQRTFAST( squareSpeed );
 		Vec3 botToLinePoint( wave->s.origin );
 		botToLinePoint -= self->s.origin;
 		Vec3 projection( lineDir );

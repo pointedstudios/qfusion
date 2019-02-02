@@ -45,7 +45,7 @@ void AlertTracker::CheckAlertSpots( const StaticVector<uint16_t, MAX_CLIENTS> &v
 			if( squareDistance > squareRadius ) {
 				continue;
 			}
-			float distance = Q_RSqrt( squareDistance + 0.001f );
+			float distance = SQRTFAST( squareDistance + 0.001f );
 			score += 1.0f - distance * invRadius;
 			// Put likely case first
 			if( !( ent->s.effects & EF_CARRIER ) ) {

@@ -595,7 +595,7 @@ MovementPredictionContext::HitWhileRunningTestResult MovementPredictionContext::
 	botLookDir.Z() = botToEnemyDir.Z();
 	// Normalize again
 	float lookDirSquareLength = botLookDir.SquaredLength();
-	if( lookDirSquareLength < 0.000001f ) {
+	if( lookDirSquareLength < 0.01f ) {
 		mayHitWhileRunningCachesStack.SetCachedValue( HitWhileRunningTestResult::Failure() );
 		return HitWhileRunningTestResult::Failure();
 	}

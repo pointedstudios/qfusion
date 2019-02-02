@@ -83,13 +83,8 @@ class BotItemsSelector
 		float overriddenEntityWeight = overriddenEntityWeights[entNum];
 		// Make goal weight based on overridden entity weight
 		if( overriddenEntityWeight != 0 ) {
-			float goalWeight = BoundedFraction( overriddenEntityWeight, 10.0f );
-			if( goalWeight > 0 ) {
-				goalWeight = 1.0f / Q_RSqrt( goalWeight );
-			}
 			// High weight items would have 2.0f goal weight
-			goalWeight *= 2.0f;
-			return goalWeight;
+			return 2.0f * SQRTFAST( BoundedFraction( overriddenEntityWeight, 10.0f ) );
 		}
 		return internalPickupGoalWeights[entNum];
 	}

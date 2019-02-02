@@ -384,7 +384,7 @@ void BotTacticalSpotsCache::FindReachableClassEntities( const Vec3 &origin, floa
 			}
 
 			// AAS travel time is in seconds^-2
-			float factor = 1.0f / Q_RSqrt( 1.0001f - BoundedFraction( travelTime, 200 ) );
+			float factor = SQRTFAST( 1.01f - BoundedFraction( travelTime, 200 ) );
 			result.push_back( EntAndScore( candidate.entNum, candidate.score * factor ) );
 		}
 	} else {
@@ -401,7 +401,7 @@ void BotTacticalSpotsCache::FindReachableClassEntities( const Vec3 &origin, floa
 				continue;
 			}
 
-			float factor = 1.0f / Q_RSqrt( 1.0001f - BoundedFraction( travelTime, 200 ) );
+			float factor = SQRTFAST( 1.01f - BoundedFraction( travelTime, 200 ) );
 			result.push_back( EntAndScore( candidate.entNum, candidate.score * factor ) );
 		}
 	}

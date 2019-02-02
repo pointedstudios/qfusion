@@ -37,7 +37,7 @@ public:
 	float Distance2DTo( const Vec3 &that ) const { return Distance2DTo( that.vec ); }
 	float Distance2DTo( const vec3_t that ) const { return sqrtf( SquareDistance2DTo( that ) ); }
 	float FastDistance2DTo( const Vec3 &that ) const { return FastDistance2DTo( that.vec ); }
-	float FastDistance2DTo( const vec3_t that ) const { return 1.0f / Q_RSqrt( SquareDistance2DTo( that ) ); }
+	float FastDistance2DTo( const vec3_t that ) const { return SQRTFAST( SquareDistance2DTo( that ) ); }
 	float SquareDistance2DTo( const Vec3 &that ) const { return SquareDistanceTo( that.vec ); }
 	float SquareDistance2DTo( const vec3_t that ) const {
 		float dx = vec[0] - that[0];
@@ -54,10 +54,15 @@ public:
 		}
 		return 0.0f;
 	}
+
 	float NormalizeFast() {
-		float invLength = Q_RSqrt( VectorLengthSquared( vec ) );
-		VectorScale( vec, invLength, vec );
-		return 1.0f / invLength;
+		float squareLength = VectorLengthSquared( vec );
+		if( squareLength > 0 ) {
+			float invLength = Q_RSqrt( squareLength );
+			VectorScale( vec, invLength, vec );
+			return squareLength * invLength;
+		}
+		return 0.0f;
 	}
 
 	float *Data() { return vec; }

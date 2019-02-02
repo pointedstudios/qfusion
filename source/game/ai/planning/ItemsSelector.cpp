@@ -93,7 +93,7 @@ BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeWeaponWeights( con
 
 		float ammoQuantityFactor = 1.0f - Inventory()[ammo->tag] / (float)ammo->inventory_max;
 		if( ammoQuantityFactor > 0 ) {
-			ammoQuantityFactor = 1.0f / Q_RSqrt( ammoQuantityFactor );
+			ammoQuantityFactor = SQRTFAST( ammoQuantityFactor );
 		}
 
 		switch( item->tag ) {
@@ -135,7 +135,7 @@ BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeAmmoWeights( const
 	if( Inventory()[item->tag] < item->inventory_max ) {
 		float quantityFactor = 1.0f - Inventory()[item->tag] / (float)item->inventory_max;
 		if( quantityFactor > 0 ) {
-			quantityFactor = 1.0f / Q_RSqrt( quantityFactor );
+			quantityFactor = SQRTFAST( quantityFactor );
 		}
 
 		for( int weapon = WEAP_GUNBLADE; weapon < WEAP_TOTAL; weapon++ ) {

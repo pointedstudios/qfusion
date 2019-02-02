@@ -10,13 +10,13 @@
 #include <cmath>
 #include <cstdlib>
 
-#ifndef PUBLIC_BUILD
+//#ifndef PUBLIC_BUILD
 #define CHECK_ACTION_SUGGESTION_LOOPS
 #define ENABLE_MOVEMENT_ASSERTIONS
 #define CHECK_INFINITE_NEXT_STEP_LOOPS
 extern int nextStepIterationsCounter;
 static constexpr int NEXT_STEP_INFINITE_LOOP_THRESHOLD = 10000;
-#endif
+//#endif
 
 // Useful for debugging but freezes even Release version
 #if 0

@@ -207,8 +207,8 @@ void BotAwarenessModule::OnHurtByNewThreat( const edict_t *newThreat, const AiFr
 		return;
 	}
 
-	float distance = 1.0f / Q_RSqrt( squareDistance );
-	toEnemyDir *= 1.0f / distance;
+	float invDistance = Q_RSqrt( squareDistance );
+	toEnemyDir *= invDistance;
 	if( toEnemyDir.Dot( botLookDir ) >= 0 ) {
 		return;
 	}
@@ -219,7 +219,7 @@ void BotAwarenessModule::OnHurtByNewThreat( const edict_t *newThreat, const AiFr
 	toEnemyDir.NormalizeFast();
 	hurtEvent.inflictor = newThreat;
 	hurtEvent.lastHitTimestamp = level.time;
-	hurtEvent.possibleOrigin = distance * toEnemyDir + self->s.origin;
+	hurtEvent.possibleOrigin = ( 1.0f / invDistance ) * toEnemyDir + self->s.origin;
 	hurtEvent.totalDamage = totalInflictedDamage;
 	// Force replanning on new threat
 	if( !hadValidThreat ) {

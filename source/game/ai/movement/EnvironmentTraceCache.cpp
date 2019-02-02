@@ -64,7 +64,7 @@ void EnvironmentTraceCache::MakeRandomizedKeyMovesToTarget( Context *context, co
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	const Vec3 forwardDir( entityPhysicsState.ForwardDir() );
 	const Vec3 rightDir( entityPhysicsState.RightDir() );
-	assert( ( intendedMoveDir.Length() - 1.0f ) < 0.0001f );
+	assert( ( intendedMoveDir.Length() - 1.0f ) < 0.01f );
 
 	// Choose randomly from all non-blocked dirs based on scores
 	// For each non - blocked area make an interval having a corresponding to the area score length.
@@ -105,7 +105,7 @@ void EnvironmentTraceCache::MakeKeyMovesToTarget( Context *context, const Vec3 &
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	const Vec3 forwardDir( entityPhysicsState.ForwardDir() );
 	const Vec3 rightDir( entityPhysicsState.RightDir() );
-	assert( ( intendedMoveDir.Length() - 1.0f ) < 0.0001f );
+	assert( ( intendedMoveDir.Length() - 1.0f ) < 0.01f );
 
 	float bestScore = 0.0f;
 	auto bestDirIndex = std::numeric_limits<unsigned>::max();

@@ -178,7 +178,7 @@ void AdvantageProblemSolver::SortByVisAndOtherFactors( SpotsAndScoreVector &resu
 
 		// The maximum possible visibility score for a pair of spots is 255
 		float visFactor = visibilitySum / ( ( result.size() - 1 ) * 255.0f );
-		visFactor = 1.0f / Q_RSqrt( visFactor );
+		visFactor = SQRTFAST( visFactor );
 		score *= visFactor;
 
 		float heightOverOrigin = testedSpot.absMins[2] - originZ - minHeightAdvantageOverOrigin;
@@ -189,11 +189,11 @@ void AdvantageProblemSolver::SortByVisAndOtherFactors( SpotsAndScoreVector &resu
 		float heightOverEntityFactor = BoundedFraction( heightOverEntity, searchRadius - minHeightAdvantageOverEntity );
 		score = ApplyFactor( score, heightOverEntityFactor, heightOverEntityInfluence );
 
-		float originDistance = 1.0f / Q_RSqrt( 0.001f + DistanceSquared( testedSpot.origin, origin.Data() ) );
+		float originDistance = SQRTFAST( 0.001f + DistanceSquared( testedSpot.origin, origin.Data() ) );
 		float originDistanceFactor = ComputeDistanceFactor( originDistance, originWeightFalloffDistanceRatio, searchRadius );
 		score = ApplyFactor( score, originDistanceFactor, originDistanceInfluence );
 
-		float entityDistance = 1.0f / Q_RSqrt( 0.001f + DistanceSquared( testedSpot.origin, entityOrigin.Data() ) );
+		float entityDistance = SQRTFAST( 0.001f + DistanceSquared( testedSpot.origin, entityOrigin.Data() ) );
 		entityDistance -= minSpotDistanceToEntity;
 		float entityDistanceFactor = ComputeDistanceFactor( entityDistance,
 															entityWeightFalloffDistanceRatio,

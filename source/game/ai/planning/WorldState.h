@@ -826,7 +826,9 @@ inline float WorldState::OriginVar::DistanceTo( const OriginVar &that ) const {
 	VectorCopy( that.Data(), unpackedThat );
 	VectorScale( unpackedThis, 4.0f, unpackedThis );
 	VectorScale( unpackedThat, 4.0f, unpackedThat );
-	return DistanceFast( unpackedThis, unpackedThat );
+	float result = DistanceFast( unpackedThis, unpackedThat );
+	assert( std::isfinite( result ) );
+	return result;
 }
 
 inline WorldState::OriginVar &WorldState::OriginVar::SetSatisfyOp( WorldState::SatisfyOp op, float epsilon ) {

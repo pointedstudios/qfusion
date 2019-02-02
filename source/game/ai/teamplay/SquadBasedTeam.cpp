@@ -748,8 +748,9 @@ bool AiSquad::ShouldNotDropItemsNow() const {
 			continue;
 		}
 
-		float enemySpeed = 1.0f / Q_RSqrt( squareEnemySpeed );
-		enemyVelocityDir *= 1.0f / enemySpeed;
+		float invEnemySpeed = Q_RSqrt( squareEnemySpeed );
+		float enemySpeed = 1.0f / invEnemySpeed;
+		enemyVelocityDir *= invEnemySpeed;
 
 		// Extrapolate last seen position but not more for 1 second
 		// TODO: Test for collisions with the solid (it may be expensive)
