@@ -25,8 +25,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 cvar_t *mm_url;
 
-static bool mm_initialized = false;
-
 // returns static internal string
 static const char *MM_PasswordFilename( const char *user ) {
 	static char filename[MAX_STRING_CHARS];
@@ -90,23 +88,9 @@ void MM_Frame( int ) {
 }
 
 void MM_Init() {
-	mm_initialized = false;
-
 	mm_url = Cvar_Get( "mm_url", APP_MATCHMAKER_URL, CVAR_ARCHIVE | CVAR_NOSET );
-
-	// Check whether MM is going to be used at all before creating the reliable pipe
-	// that spawns its own threads and performs a database IO on regular basis.
-	if( Cvar_Value( "sv_mm_enable" ) != 0.0f ) {
-		ReliablePipe::Init();
-	}
-
-	mm_initialized = true;
 }
 
 void MM_Shutdown() {
-	// This is safe to call regardless whether Init() was called or not.
-	ReliablePipe::Shutdown();
-
 	mm_url = NULL;
-	mm_initialized = false;
 }

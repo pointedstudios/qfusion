@@ -4,6 +4,14 @@
 #include "mm_query.h"
 #include "../qcommon/qcommon.h"
 
+#ifdef min
+#undef min
+#endif
+
+#ifdef max
+#undef max
+#endif
+
 // TODO: Lift this to an application-global scope
 class ScopeGuard {
 	const std::function<void()> *atExit;
@@ -34,6 +42,13 @@ protected:
 	QueryObject *query;
 
 	/**
+	 * The flag may be set by {@code OnQuerySuccess()} implementations.
+	 * This is useful for waiting for a server action result
+	 * if the Statsow server has returned "not yet available, wait for it" status.
+	 */
+	 bool hasRequestedRetry { true };
+
+	/**
 	 * Creates a task object. Accepts a query (maybe) provided by a caller.
 	 * An ownership of the query lifecycle is transferred to this task.
 	 * @param query_ a {@code QueryObject} to use.
@@ -57,8 +72,16 @@ protected:
 	}
 
 	virtual void OnQuerySuccess() = 0;
-	virtual void OnQueryRetry() = 0;
 	virtual void OnQueryFailure() = 0;
+
+	virtual bool ScheduleForRetry() {
+		// Just re-send the query by default
+		return query->SendForStatusPolling();
+	};
+
+	virtual bool HandleExplicitRetryRequest() {
+		return query->SendForStatusPolling();
+	}
 
 	/**
 	 * Should delete the task once the retry loop is stopped.
@@ -79,6 +102,17 @@ protected:
 
 		if( query->HasSucceeded() ) {
 			OnQueryResult( true );
+			// Check whether we've decided to retry the query.
+			if( hasRequestedRetry ) {
+				query->ResetForRetry();
+				if( HandleExplicitRetryRequest() ) {
+					deleteGuard.Suppress();
+				} else {
+					OnQueryResult( false );
+				}
+				hasRequestedRetry = false;
+				return;
+			}
 			return;
 		}
 
@@ -88,8 +122,7 @@ protected:
 		}
 
 		query->ResetForRetry();
-		OnQueryRetry();
-		if( !query->SendForStatusPolling() ) {
+		if( !ScheduleForRetry() ) {
 			OnQueryResult( false );
 			return;
 		}
@@ -126,9 +159,10 @@ class StatsowFacadeTask : public StatsowNetworkTask {
 	int64_t startedAt { 0 };
 
 	/**
-	 * A maximal difference of a current timestamp and {@code startedAt} that allows retries.
+	 * A timestamp of next scheduled retry attempt.
+	 * A value of zero means that a retry is not scheduled yet or is not going to be scheduled.
 	 */
-	int64_t maxRetryDuration { 10 * 1000 };
+	int64_t nextRetryAt { 0 };
 
 	/**
 	 * A next link in active tasks list of parent
@@ -168,6 +202,16 @@ protected:
 	const char *const name;
 
 	/**
+	 * A maximal difference of a current timestamp and {@code startedAt} that allows retries.
+	 */
+	int64_t maxRetryDuration { 10 * 1000 };
+
+	/**
+	 * A query retry should be deferred for this value on an unsuccessful attempt.
+	 */
+	int64_t retryDelay { 0 };
+
+	/**
 	 * Creates a task object and tries to create an underlying {@code QueryObject}.
 	 * @param parent_ a parent app Statsow facade instance
 	 * @param name_ a class name of an actually implemented subclass
@@ -191,8 +235,26 @@ protected:
 		return now - startedAt <= maxRetryDuration;
 	}
 
-	void OnQueryRetry() override {
-		Com_Printf( "%s: About to retry\n", name );
+	bool ScheduleForRetry() override {
+		if( !retryDelay ) {
+			Com_Printf( "%s: About to retry\n", name );
+			return query->SendForStatusPolling();
+		}
+
+		Com_Printf( "%s: Deferring a retry for %" PRIi64 " millis\n", name, retryDelay );
+		nextRetryAt = Sys_Milliseconds() + retryDelay;
+		return true;
+	}
+
+	bool HandleExplicitRetryRequest() override {
+		if( !retryDelay ) {
+			Com_Printf( "%s: About to perform an explicit retry request\n", name );
+			return query->SendForStatusPolling();
+		}
+
+		Com_Printf( "%s: Deferring an explicitly requested retry for %" PRIi64 " millis\n", name, retryDelay );
+		nextRetryAt = Sys_Milliseconds() + retryDelay;
+		return true;
 	}
 
 	bool Start() override {
@@ -201,6 +263,31 @@ protected:
 			return true;
 		}
 		return false;
+	}
+
+	void CheckStatus() override {
+		// Check whether a retry is not specified
+		if( !nextRetryAt ) {
+			// Fall back to the super method
+			StatsowNetworkTask::CheckStatus();
+			return;
+		}
+
+		// Wait for the retry
+		if( nextRetryAt > Sys_Milliseconds() ) {
+			return;
+		}
+
+		// Check whether we have not fired the query again
+		if( !query->HasStarted() ) {
+			if( !query->SendForStatusPolling() ) {
+				OnQueryFailure();
+			}
+			return;
+		}
+
+		// Fall back to the super method
+		StatsowNetworkTask::CheckStatus();
 	}
 
 #ifndef _MSC_VER

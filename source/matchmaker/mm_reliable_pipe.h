@@ -1,10 +1,10 @@
 #ifndef QFUSION_MM_REPORTS_UPLOADER_H
 #define QFUSION_MM_REPORTS_UPLOADER_H
 
-#include "mm_reports_storage.h"
+#include "mm_local_storage.h"
 
 class ReliablePipe {
-	template <typename T> friend class SingletonHolder;
+	friend class SVStatsowFacade;
 
 	/**
 	 * A common supertype for things that run in a background thread
@@ -16,10 +16,10 @@ class ReliablePipe {
 	protected:
 		std::atomic<bool> signaledForTermination { false };
 		const char *const logTag;
-		LocalReportsStorage *const reportsStorage;
+		LocalReliableStorage *const reliableStorage;
 
-		BackgroundRunner( const char *logTag_, LocalReportsStorage *reportsStorage_ )
-			: logTag( logTag_ ), reportsStorage( reportsStorage_ ) {}
+		BackgroundRunner( const char *logTag_, LocalReliableStorage *reliableStorage_ )
+			: logTag( logTag_ ), reliableStorage( reliableStorage_ ) {}
 
 		virtual ~BackgroundRunner() = default;
 
@@ -45,8 +45,8 @@ class ReliablePipe {
 	class BackgroundWriter final : public BackgroundRunner {
 		struct qbufPipe_s *const pipe;
 	public:
-		BackgroundWriter( LocalReportsStorage *reportsStorage_, struct qbufPipe_s *pipe_ )
-			: BackgroundRunner( "BackgroundWriter", reportsStorage_ ), pipe( pipe_ ) {}
+		BackgroundWriter( LocalReliableStorage *reliableStorage_, struct qbufPipe_s *pipe_ )
+			: BackgroundRunner( "BackgroundWriter", reliableStorage_ ), pipe( pipe_ ) {}
 
 		struct AddReportCmd {
 			int id;
@@ -71,35 +71,35 @@ class ReliablePipe {
 
 	/**
 	 * A {@code BackgroundRunner} that wraps in a transaction
-	 * reading non-sent reports from a storage, sending reports
+	 * reading non-sent queries from a storage, sending queries
 	 * over network and marking report delivery status in the storage.
 	 */
 	class BackgroundSender final : public BackgroundRunner {
 		/**
-		 * A report we try to fill using form name-value pairs stored in database.
+		 * A query we try to fill using form name-value pairs stored in database.
 		 * @note do not confuse with {@code BackgroundWriter::activeReport}.
 		 */
-		QueryObject *activeReport { nullptr };
+		QueryObject *activeQuery { nullptr };
 	public:
-		explicit BackgroundSender( LocalReportsStorage *reportsStorage_ )
-			: BackgroundRunner( "BackgroundSender", reportsStorage_ ) {}
+		explicit BackgroundSender( LocalReliableStorage *reliableStorage_ )
+			: BackgroundRunner( "BackgroundSender", reliableStorage_ ) {}
 
 		~BackgroundSender() override {
-			if( activeReport ) {
-				QueryObject::DeleteQuery( activeReport );
+			if( activeQuery ) {
+				QueryObject::DeleteQuery( activeQuery );
 			}
 		}
 
 		void RunStep() override;
 
-		void DeleteActiveReport() {
-			assert( activeReport );
-			QueryObject::DeleteQuery( activeReport );
-			activeReport = nullptr;
+		void DeleteActiveQuery() {
+			assert( activeQuery );
+			QueryObject::DeleteQuery( activeQuery );
+			activeQuery = nullptr;
 		}
 	};
 
-	LocalReportsStorage reportsStorage;
+	LocalReliableStorage reliableStorage;
 
 	BackgroundWriter *backgroundWriter { nullptr };
 	BackgroundSender *backgroundSender { nullptr };
@@ -112,10 +112,6 @@ class ReliablePipe {
 
 	ReliablePipe();
 	~ReliablePipe();
-public:
-	static void Init();
-	static void Shutdown();
-	static ReliablePipe *Instance();
 
 	void EnqueueMatchReport( QueryObject *matchReport );
 };

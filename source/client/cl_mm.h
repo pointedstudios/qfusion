@@ -16,6 +16,10 @@ class CLStatsowFacade {
 	friend class CLContinueLoggingInTask;
 	friend class CLLogoutTask;
 	friend class CLConnectTask;
+	friend class CLMatchMakerTask;
+	friend class CLCheckMatchTask;
+	friend class CLCheckServerTask;
+	friend class CLAcceptMatchTask;
 
 	template <typename> friend class SingletonHolder;
 	template <typename> friend class StatsowFacadeTask;
@@ -27,7 +31,10 @@ class CLStatsowFacade {
 
 	mm_uuid_t ourSession { Uuid_ZeroUuid() };
 	mm_uuid_t ticket { Uuid_ZeroUuid() };
-	mm_uuid_t handle { Uuid_ZeroUuid() };
+	mm_uuid_t loginHandle { Uuid_ZeroUuid() };
+	mm_uuid_t matchHandle { Uuid_ZeroUuid() };
+
+	wsw::string matchAddress;
 
 	wsw::string lastErrorMessage;
 	mutable wsw::string_view lastErrorMessageView;
@@ -48,12 +55,11 @@ class CLStatsowFacade {
 	struct cvar_s *cl_mm_autologin;
 
 	int64_t loginStartedAt { 0 };
-	int64_t nextLoginAttemptAt { std::numeric_limits<int64_t>::max() };
 
 	bool isLoggingIn { false };
 	bool isLoggingOut { false };
-	bool isPollingLoginHandle { false };
-	bool hasNeverLoggedIn { true };
+	bool continueLogin2ndStageTask { false };
+	bool hasTriedLoggingIn { false };
 
 	CLStatsowFacade();
 	~CLStatsowFacade();
@@ -62,6 +68,9 @@ class CLStatsowFacade {
 	class CLContinueLoggingInTask *NewContinueLoggingInTask( const mm_uuid_t &handle );
 	class CLLogoutTask *NewLogoutTask();
 	class CLConnectTask *NewConnectTask( const char *address );
+	class CLCheckMatchTask *NewCheckMatchTask( bool *continueRunning );
+	class CLCheckServerTask *NewCheckServerTask( bool *continueRunning );
+	class CLAcceptMatchTask *NewAcceptTask( bool *continueRunning );
 
 	// Just to get the code working ... use caching for a final implementation
 	template <typename Task, typename... Args>
@@ -117,12 +126,15 @@ class CLStatsowFacade {
 
 	void SaveErrorString( const char *format, va_list args );
 
-	void ContinueLoggingIn();
+	bool ContinueLoggingIn();
 	bool StartLoggingIn( const char *user, const char *password );
 
 	void OnLoginSuccess();
 	void OnLoginFailure();
 	void OnLogoutCompleted();
+
+	void OnPendingMatchFailure();
+	void OnPendingMatchSuccess();
 
 	template <typename Task>
 	bool TryStartingTask( Task *task ) {
@@ -145,6 +157,9 @@ public:
 
 	void Frame();
 	bool WaitForConnection();
+	void CheckOrWaitForAutoLogin();
+	void CheckOrWaitForPendingMatch();
+	void PollLoginStatus();
 	bool StartConnecting( const struct netadr_s *address );
 
 	bool Login( const char *user, const char *password );

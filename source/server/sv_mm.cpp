@@ -60,8 +60,10 @@ SVStatsowFacade *SVStatsowFacade::Instance() {
  */
 class SVStatsowTask : public StatsowFacadeTask<SVStatsowFacade> {
 protected:
-	SVStatsowTask( SVStatsowFacade *parent_, const char *name_, const char *resource_ )
-		: StatsowFacadeTask( parent_, name_, va( "server/%s", resource_ ), sv_ip->string ) {}
+	SVStatsowTask( SVStatsowFacade *parent_, const char *name_, const char *resource_, unsigned retryDelay_ = 0 )
+		: StatsowFacadeTask( parent_, name_, va( "server/%s", resource_ ), sv_ip->string ) {
+		this->retryDelay = retryDelay_;
+	}
 
 	bool CheckResponseStatus( const char *methodTag ) const {
 		return CheckParsedResponse( methodTag ) && CheckStatusField( methodTag );
@@ -102,7 +104,7 @@ bool SVStatsowTask::CheckStatusField( const char *methodTag ) const {
 class SVLoginTask : public SVStatsowTask {
 public:
 	explicit SVLoginTask( SVStatsowFacade *parent_ )
-		: SVStatsowTask( parent_, "SVLoginTask", "login" ) {
+		: SVStatsowTask( parent_, "SVLoginTask", "login", 1000 ) {
 		if( !query ) {
 			return;
 		}
@@ -123,7 +125,7 @@ public:
 class SVLogoutTask : public SVStatsowTask {
 public:
 	explicit SVLogoutTask( SVStatsowFacade *parent_ )
-		: SVStatsowTask( parent_, "SVLogoutTask", "logout" ) {
+		: SVStatsowTask( parent_, "SVLogoutTask", "logout", 1000 ) {
 		assert( parent->ourSession.IsValidSessionId() );
 		if( query ) {
 			query->SetServerSession( parent->ourSession );
@@ -149,7 +151,7 @@ public:
 								  const mm_uuid_t &session,
 								  const mm_uuid_t &ticket,
 								  const char *address )
-		: SVStatsowTask( parent_, "SVClientConnectTask", "clientConnect" ), client( client_ ) {
+		: SVStatsowTask( parent_, "SVClientConnectTask", "clientConnect", 333 ), client( client_ ) {
 		if( !query ) {
 			return;
 		}
@@ -167,7 +169,7 @@ class SVClientDisconnectTask : public SVStatsowTask {
 	mm_uuid_t clientSession;
 public:
 	SVClientDisconnectTask( SVStatsowFacade *parent_, const mm_uuid_t &clientSession_ )
-		: SVStatsowTask( parent_, "SVClientDisconnectTask", "clientDisconnect" )
+		: SVStatsowTask( parent_, "SVClientDisconnectTask", "clientDisconnect", 333 )
 		, clientSession( clientSession_ ) {
 		if( !query ) {
 			return;
@@ -190,19 +192,14 @@ public:
 class SVFetchMatchUuidTask : public SVStatsowTask {
 public:
 	explicit SVFetchMatchUuidTask( SVStatsowFacade *parent_ )
-		: SVStatsowTask( parent_, "SVFetchMatchUuidTask", "matchUuid" ) {
+		: SVStatsowTask( parent_, "SVFetchMatchUuidTask", "matchUuid", 2500 ) {
 		if( query ) {
 			query->SetServerSession( parent->ourSession );
 		}
 	}
 
 	bool AllowQueryRetry() override {
-		// Retries are handled by SVStatsowFacade::CheckMatchUuid() logic
-		return false;
-	}
-
-	void OnQueryRetry() override {
-		Com_Error( ERR_FATAL, "FetchMatchUuidTask::OnQueryRetry(): Should not be called" );
+		return parent->continueFetchUuidTask;
 	}
 
 	void OnQuerySuccess() override;
@@ -238,36 +235,36 @@ bool SVStatsowFacade::SendGameQuery( QueryObject *query ) {
 }
 
 void SVStatsowFacade::EnqueueMatchReport( QueryObject *query ) {
-	ReliablePipe::Instance()->EnqueueMatchReport( query );
+	assert( reliablePipe );
+	reliablePipe->EnqueueMatchReport( query );
 }
 
 void SVStatsowFacade::CheckMatchUuid() {
 	if( sv.configstrings[CS_MATCHUUID][0] != '\0' ) {
+		// Cancel tasks if any
+		continueFetchUuidTask = false;
 		return;
 	}
 
-	// Throttle outgoing requests
-	if( Sys_Milliseconds() < nextMatchUuidCheckAt ) {
+	// Check whether the task is already running
+	if( continueFetchUuidTask ) {
 		return;
 	}
 
-	if( isCheckingMatchUuid ) {
-		return;
-	}
-
+	// Set this prior to launching the task
+	continueFetchUuidTask = true;
 	if( TryStartingTask( NewFetchMatchUuidTask() ) ) {
-		isCheckingMatchUuid = true;
 		return;
 	}
+
+	// Try again next frame
+	continueFetchUuidTask = false;
 }
 
 void SVFetchMatchUuidTask::OnQuerySuccess() {
 	const char *tag = "OnQuerySuccess";
 
-	ScopeGuard scopeGuard( [=]() {
-		parent->isCheckingMatchUuid = false;
-		parent->nextMatchUuidCheckAt = Sys_Milliseconds() + 1000;
-	});
+	ScopeGuard scopeGuard( [=]() { parent->continueFetchUuidTask = false; } );
 
 	if( !CheckResponseStatus( tag ) ) {
 		return;
@@ -293,8 +290,7 @@ void SVFetchMatchUuidTask::OnQueryFailure() {
 	// Resetting this flag means automatic retry next frame.
 	// We still are stick to this task design instead of using plain queries
 	// due to convenient response parsing facilities and overall better code structure.
-	parent->isCheckingMatchUuid = false;
-	parent->nextMatchUuidCheckAt = Sys_Milliseconds() + 1000;
+	parent->continueFetchUuidTask = false;
 }
 
 void SVStatsowFacade::OnClientDisconnected( client_t *client ) {
@@ -499,8 +495,30 @@ void SVStatsowFacade::Frame() {
 		return;
 	}
 
-	if( ourSession.IsZero() && !( isLoggingIn || isLoggingOut ) ) {
-		StartLoggingIn();
+	// Check whether we have a valid session or using a fake "FFFs" session
+	if( !ourSession.IsZero() ) {
+		return;
+	}
+
+	// Skip if we're changing "logged-in" status
+	if( isLoggingIn || isLoggingOut ) {
+		return;
+	}
+
+	if( Cvar_Value( "dedicated" ) == 0 ) {
+		return;
+	}
+
+	if( !StartLoggingIn() ) {
+		OnLoginFailure();
+		return;
+	}
+
+	assert( isLoggingIn );
+	// Wait for logging in
+	while( isLoggingIn ) {
+		Sys_Sleep( 16 );
+		tasksRunner.CheckStatus();
 	}
 }
 
@@ -537,20 +555,26 @@ void SVLogoutTask::OnQuerySuccess() {
 	parent->OnLoggedOut();
 }
 
-void SVStatsowFacade::CheckLoginOnlyFailure() {
-	if( !sv_mm_loginonly->integer ) {
-		return;
+void SVStatsowFacade::OnLoginFailure() {
+	if( sv_mm_loginonly->integer ) {
+		Com_Error( ERR_FATAL, "Statsow authentication has failed. sv_mm_loginonly value forbids running the server\n" );
 	}
 
-	Com_Error( ERR_FATAL, "Statsow authentication has failed. sv_mm_loginonly value forbids running the server\n" );
+	Com_Printf( S_COLOR_YELLOW "Statsow login has failed. Disabling server Statsow services" );
+	Cvar_ForceSet( sv_mm_enable->name, "0" );
+	ourSession = Uuid_FFFsUuid();
+	isLoggingIn = false;
+}
+
+void SVStatsowFacade::OnLoginSuccess() {
+	Com_Printf( "Starting server Statsow services\n" );
+	assert( !reliablePipe );
+	reliablePipe = new( ::malloc( sizeof( ReliablePipe ) ) )ReliablePipe;
+	isLoggingIn = false;
 }
 
 void SVLoginTask::OnAnyFailure() {
-	parent->isLoggingIn =  false;
-	parent->CheckLoginOnlyFailure();
-
-	Com_Printf( S_COLOR_YELLOW "Disabling server Statsow services...\n" );
-	Cvar_ForceSet( parent->sv_mm_enable->name, "0" );
+	parent->OnLoginFailure();
 }
 
 void SVLoginTask::OnQueryFailure() {
@@ -577,33 +601,26 @@ void SVLoginTask::OnQuerySuccess() {
 	}
 
 	failureGuard.Suppress();
-	parent->isLoggingIn = false;
 	PrintMessage( tag, "Session id is %s", sessionString );
 }
 
-void SVStatsowFacade::StartLoggingIn() {
+bool SVStatsowFacade::StartLoggingIn() {
 	assert( !isLoggingIn && !isLoggingOut );
 
 	constexpr const char *tag = "SVStatsowFacade::StartLoggingIn()";
 
 	if( sv_mm_authkey->string[0] == '\0' ) {
 		Com_Printf( S_COLOR_RED "%s: The auth key is not specified\n", tag );
-		CheckLoginOnlyFailure();
-
-		Cvar_ForceSet( sv_mm_enable->name, "0" );
-		ourSession = Uuid_FFFsUuid();
-		return;
+		return false;
 	}
 
 	if( TryStartingTask( NewLoginTask() ) ) {
 		isLoggingIn = true;
-		return;
+		return true;
 	}
 
 	Com_Printf( S_COLOR_RED "%s: Can't launch a LoginTask\n", tag );
-	CheckLoginOnlyFailure();
-
-	ourSession = Uuid_FFFsUuid();
+	return false;
 }
 
 SVStatsowFacade::SVStatsowFacade()
@@ -626,6 +643,11 @@ SVStatsowFacade::SVStatsowFacade()
 
 SVStatsowFacade::~SVStatsowFacade() {
 	Com_Printf( "SVStatsowFacade: Shutting down...\n" );
+
+	if( reliablePipe ) {
+		reliablePipe->~ReliablePipe();
+		::free( reliablePipe );
+	}
 
 	LogoutBlocking();
 }

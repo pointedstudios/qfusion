@@ -95,7 +95,7 @@ class QueryObject final {
 	friend class NodeReader;
 	friend class ObjectReader;
 	friend class ArrayReader;
-	friend class LocalReportsStorage;
+	friend class LocalReliableStorage;
 	friend class StatsowNetworkTask;
 	template <typename> friend class StatsowTasksRunner;
 	template <typename> friend class StatsowHeartbeatRunner;
@@ -234,6 +234,13 @@ private:
 	 * Another helper for multiphase construction
 	 */
 	static QueryObject *NewQuery( const char *outgoingIp, char *combinedUrl );
+
+	/**
+	 * A helper for query deserialization by the {@code ReliablePipe}.
+	 * @param url_ an URL string that must be a valid url
+	 * @return a new {@code QueryObject} for the url, null on failure.
+	 */
+	static QueryObject *PostQueryForUrl( const char *url_, const char *outgoingIp_ = nullptr );
 
 	~QueryObject();
 
@@ -539,6 +546,20 @@ public:
 	}
 
 	/**
+	 * Sets a well-known predefined "matchmaker match id" form parameter.
+	 */
+	QueryObject &SetMatchId( const mm_uuid_t &value ) {
+		return SetField( "match_id", value );
+	}
+
+	/**
+	 * Sets a well-known predefined "has accepted a match" form parameter.
+	 */
+	QueryObject &SetAccepted( bool value ) {
+		return SetField( "accepted", value ? "true" : "false" );
+	}
+
+	/**
 	 * Gets a JSON response root to attach fields to.
 	 * Creates it if it is necessary. The query must be a POST query.
 	 * The query object should not be in "started" state.
@@ -612,6 +633,14 @@ public:
 	 */
 	bool IsReady() const {
 		return status.load( std::memory_order_seq_cst ) >= SUCCEEDED;
+	}
+
+	/**
+	 * Checks whether the query execution has not been fired yet.
+	 * This is safe to call in any state.
+	 */
+	bool HasStarted() const {
+		return status.load( std::memory_order_seq_cst ) >= STARTED;
 	}
 
 	/**

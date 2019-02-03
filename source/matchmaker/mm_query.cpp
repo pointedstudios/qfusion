@@ -224,6 +224,18 @@ QueryObject *QueryObject::NewPostQuery( const char *resource, const char *outgoi
 	return nullptr;
 }
 
+QueryObject *QueryObject::PostQueryForUrl( const char *url_, const char *outgoingIp_ ) {
+	size_t len = ::strlen( url_ );
+	if( auto *const url = (char *)::malloc( len + 1 ) ) {
+		::memcpy( url, url_, len + 1 );
+		if( QueryObject *query = NewQuery( outgoingIp_, url ) ) {
+			query->isPostQuery = true;
+			return query;
+		}
+	}
+	return nullptr;
+}
+
 QueryObject::~QueryObject() {
 	::wswcurl_delete( req );
 	::wswcurl_delete( oldReq );

@@ -1367,8 +1367,7 @@ class StatsowFacade {
 
 	StatsSequence<raceRun_t> raceRuns;
 
-	bool hasPendingResults { false };
-
+	bool isDisabled { !trap_Cvar_Value( "sv_mm_enable" ) || !trap_Cvar_Value( "dedicated" ) || !GS_MMCompatible() };
 	bool isDiscarded { false };
 
 	void AddPlayerReport( edict_t *ent, bool final );
@@ -1387,6 +1386,8 @@ public:
 	static StatsowFacade *Instance();
 
 	~StatsowFacade();
+
+	bool IsValid() const { return !isDisabled && !isDiscarded; }
 
 	void Frame();
 

@@ -2,6 +2,7 @@
 #define QFUSION_SV_MM_H
 
 #include "../matchmaker/mm_facade.h"
+#include "../matchmaker/mm_reliable_pipe.h"
 
 struct client_s;
 struct netadr_s;
@@ -21,11 +22,18 @@ class SVStatsowFacade {
 	template <typename> friend class StatsowTasksRunner;
 	template <typename> friend class StatsowHeartbeatRunner;
 
+	/**
+	 * An instance of a {@code ReliablePipe} used by this Statsow facade.
+	 * As running a {@code ReliablePipe} is not zero-cost it's instantiated on demand.
+	 * Gets initialized on demand (after logging in).
+	 * Gets destroyed on a forceful shutdown or before logging out.
+	 */
+	ReliablePipe *reliablePipe { nullptr };
+
 	StatsowTasksRunner<SVStatsowFacade> tasksRunner;
 	StatsowHeartbeatRunner<SVStatsowFacade> heartbeatRunner;
 
 	mm_uuid_t ourSession { 0, 0 };
-	int64_t nextMatchUuidCheckAt { 0 };
 
 	struct cvar_s *sv_mm_authkey;
 	struct cvar_s *sv_mm_enable;
@@ -34,11 +42,10 @@ class SVStatsowFacade {
 	// TODO: Should this stuff be atomic? Investigate threads that really modify these fields
 	bool isLoggingIn { false };
 	bool isLoggingOut { false };
-	bool isCheckingMatchUuid { false };
+	bool continueFetchUuidTask { false };
 
-	void StartLoggingIn();
+	bool StartLoggingIn();
 	void LogoutBlocking();
-	void CheckLoginOnlyFailure();
 
 	void CheckMatchUuid();
 
@@ -98,6 +105,9 @@ class SVStatsowFacade {
 		ourSession = Uuid_ZeroUuid();
 		isLoggingOut = false;
 	}
+
+	void OnLoginFailure();
+	void OnLoginSuccess();
 public:
 	static void Init();
 	static void Shutdown();
