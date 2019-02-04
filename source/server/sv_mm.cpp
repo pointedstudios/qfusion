@@ -246,6 +246,15 @@ void SVStatsowFacade::CheckMatchUuid() {
 		return;
 	}
 
+	// Provide an arbitrary non-empty UUID for the game module in this case
+	if( !ourSession.IsValidSessionId() ) {
+		assert( !continueFetchUuidTask );
+
+		mm_uuid_t::Random().ToString( sv.configstrings[CS_MATCHUUID] );
+		Com_Printf( "SVStatsowFacade::CheckMatchUuid(): Using dummy UUID %s\n", sv.configstrings[CS_MATCHUUID] );
+		return;
+	}
+
 	// Check whether the task is already running
 	if( continueFetchUuidTask ) {
 		return;
@@ -489,8 +498,11 @@ mm_uuid_t SVStatsowFacade::OnClientConnected( client_t *client,
 void SVStatsowFacade::Frame() {
 	tasksRunner.CheckStatus();
 
+	// Call this regardless of the logged-in status
+	// as the game module expects a non-empty UUID to start a match
+	CheckMatchUuid();
+
 	if( ourSession.IsValidSessionId() ) {
-		CheckMatchUuid();
 		heartbeatRunner.CheckStatus();
 		return;
 	}

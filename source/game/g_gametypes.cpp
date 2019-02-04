@@ -414,6 +414,50 @@ static void G_Match_CheckStateAbort( void ) {
 void G_Match_LaunchState( int matchState ) {
 	static bool advance_queue = false;
 
+	if( matchState == MATCH_STATE_PLAYTIME ) {
+		if( !*trap_GetConfigString( CS_MATCHUUID ) ) {
+			const auto countdownTime = game.serverTime - gs.gameState.stats[GAMESTAT_MATCHSTART];
+			if( countdownTime < 5000 ) {
+				return;
+			}
+			if( countdownTime < 10000 ) {
+				if( !( countdownTime % 2000 ) ) {
+					G_PrintMsg( nullptr, "Awaiting for match id...\n" );
+				}
+				return;
+			}
+
+			// Hacks... abort countdown in this case
+			G_PrintMsg( nullptr, S_COLOR_YELLOW "Can't get a match id from the matchmaker server. Countdown aborted.\n" );
+			G_CenterPrintMsg( nullptr, "COUNTDOWN ABORTED" );
+			matchState = MATCH_STATE_WARMUP;
+
+			G_Match_Autorecord_Cancel();
+
+			auto *const edicts = game.edicts;
+			for( int i = 0; i < gs.maxclients; ++i ) {
+				auto *const ent = edicts + i + 1;
+				if( !ent->r.inuse || !ent->r.client ) {
+					continue;
+				}
+
+				if( ent->s.team == TEAM_SPECTATOR ) {
+					continue;
+				}
+
+				if( trap_GetClientState( i ) < CS_SPAWNED ) {
+					continue;
+				}
+
+				level.ready[PLAYERNUM( ent )] = false;
+
+				G_PrintMsg( nullptr, "%s%s is no longer ready.\n", ent->r.client->netname, S_COLOR_WHITE );
+
+				G_UpdatePlayerMatchMsg( ent );
+			}
+		}
+	}
+
 	// give the gametype a chance to refuse the state change, or to set up things for it
 	if( !GT_asCallMatchStateFinished( matchState ) ) {
 		return;
@@ -451,6 +495,8 @@ void G_Match_LaunchState( int matchState ) {
 			gs.gameState.stats[GAMESTAT_MATCHDURATION] = (int64_t)( fabs( g_countdown_time->value ) * 1000 );
 			gs.gameState.stats[GAMESTAT_MATCHSTART] = game.serverTime;
 
+			// request a new match UUID
+			trap_ConfigString( CS_MATCHUUID, "" );
 			break;
 		}
 
@@ -465,8 +511,7 @@ void G_Match_LaunchState( int matchState ) {
 			gs.gameState.stats[GAMESTAT_MATCHDURATION] = (int64_t)( fabs( 60 * g_timelimit->value ) * 1000 );
 			gs.gameState.stats[GAMESTAT_MATCHSTART] = game.serverTime;
 
-			// request a new match UUID
-			trap_ConfigString( CS_MATCHUUID, "" );
+
 		}
 		break;
 
