@@ -454,6 +454,20 @@ void StatsowFacade::OnClientJoinedTeam( edict_t *ent, int newTeam ) {
 	StatsowFacade::Instance()->AddPlayerReport( ent, false );
 }
 
+void StatsowFacade::OnMatchStateLaunched( int oldState, int newState ) {
+	// Send race reports (if needed) having entered post-match state
+	if( oldState != MATCH_STATE_POSTMATCH && newState == MATCH_STATE_POSTMATCH ) {
+		if( GS_RaceGametype() ) {
+			SendRaceReport();
+		}
+	}
+
+	// Send any reports (if needed) on transition from "post-match" state
+	if( newState != MATCH_STATE_POSTMATCH && oldState == MATCH_STATE_POSTMATCH ) {
+		SendReport();
+	}
+}
+
 void StatsowFacade::AddPlayerReport( edict_t *ent, bool final ) {
 	char uuid_buffer[UUID_BUFFER_SIZE];
 

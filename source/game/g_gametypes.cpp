@@ -831,11 +831,8 @@ void G_Match_LaunchState( int matchState ) {
 		level.finalMatchDuration = game.serverTime - GS_MatchStartTime();
 	}
 
-	if( ( matchState == MATCH_STATE_POSTMATCH && GS_RaceGametype() )
-		|| ( matchState != MATCH_STATE_POSTMATCH && gs.gameState.stats[GAMESTAT_MATCHSTATE] == MATCH_STATE_POSTMATCH ) ) {
-		// entering postmatch in race or leaving postmatch in normal gt
-		StatsowFacade::Instance()->SendReport();
-	}
+	const auto oldState = (int)gs.gameState.stats[GAMESTAT_MATCHSTATE];
+	StatsowFacade::Instance()->OnMatchStateLaunched( oldState, matchState );
 
 	switch( matchState ) {
 		default:

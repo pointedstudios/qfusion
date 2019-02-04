@@ -1419,6 +1419,7 @@ public:
 
 	void OnClientDisconnected( edict_t *ent );
 	void OnClientJoinedTeam( edict_t *ent, int newTeam );
+	void OnMatchStateLaunched( int oldState, int newState );
 
 	void UpdateAverageRating();
 
