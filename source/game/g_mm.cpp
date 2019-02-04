@@ -317,7 +317,7 @@ void StatsowFacade::SetRaceTime( edict_t *owner, int sector, int64_t time ) {
 			if( !cl->mm_session.IsValidSessionId() ) {
 				Q_strncpyz( rr->nickname, cl->netname, MAX_NAME_BYTES );
 			}
-			SendReport();
+			SendFinalReport();
 
 			// double-check this for memory-leaks
 			raceRuns.Clear();
@@ -354,7 +354,7 @@ StatsowFacade *StatsowFacade::Instance() {
 
 StatsowFacade::~StatsowFacade() {
 	if( IsValid() && !raceRuns.empty() ) {
-        SendRaceReport();
+		SendRaceRunReport();
 	}
 }
 
@@ -410,12 +410,13 @@ void StatsowFacade::OnClientHadPlaytime( const gclient_t *client ) {
 	// TODO:!!!!!!!! clear other data as well
 
 	isDiscarded = true;
+	SendMatchAbortedReport();
 }
 
 void StatsowFacade::OnClientDisconnected( edict_t *ent ) {
 	if( GS_RaceGametype() ) {
 		// Force sending race reports if somebody disconnects
-		SendReport();
+		SendRaceRunReport();
 		return;
 	}
 
@@ -458,14 +459,94 @@ void StatsowFacade::OnMatchStateLaunched( int oldState, int newState ) {
 	// Send race reports (if needed) having entered post-match state
 	if( oldState != MATCH_STATE_POSTMATCH && newState == MATCH_STATE_POSTMATCH ) {
 		if( GS_RaceGametype() ) {
-			SendRaceReport();
+			SendRaceRunReport();
 		}
+	}
+
+	if( isDiscarded ) {
+		return;
 	}
 
 	// Send any reports (if needed) on transition from "post-match" state
 	if( newState != MATCH_STATE_POSTMATCH && oldState == MATCH_STATE_POSTMATCH ) {
-		SendReport();
+		SendFinalReport();
 	}
+
+	if( newState == MATCH_STATE_PLAYTIME && oldState != MATCH_STATE_PLAYTIME ) {
+		SendMatchStartedReport();
+	}
+}
+
+void StatsowFacade::SendGenericMatchStateEventReport( const char *event ) {
+	char url[MAX_STRING_CHARS];
+	va_r( url, sizeof( url ), "server/match/%s", event );
+
+	QueryObject *query = trap_MM_NewPostQuery( url );
+	if( !query ) {
+		return;
+	}
+
+	// Get session ids of all players that had playtime
+
+	const auto *edicts = game.edicts;
+
+	int numActiveClients = 0;
+	int activeClientNums[MAX_CLIENTS];
+	for( int i = 0; i < gs.maxclients; ++i ) {
+		const edict_t *ent = edicts + i + 1;
+		if( !ent->r.inuse || !ent->r.client ) {
+			continue;
+		}
+		if( ent->s.team == TEAM_SPECTATOR ) {
+			continue;
+		}
+		if( trap_GetClientState( i ) < CS_SPAWNED ) {
+			continue;
+		}
+		// TODO: This is a sequential search
+		if( FindEntryById( ent->r.client->mm_session ) ) {
+			continue;
+		}
+		activeClientNums[numActiveClients++] = i;
+	}
+
+	int numParticipants = numActiveClients;
+	// TODO: Cache number of entries?
+	for( ClientEntry *entry = clientEntriesHead; entry; entry = entry->next ) {
+		numParticipants++;
+	}
+
+	// Chosen having bomb in mind
+	mm_uuid_t idsLocalBuffer[10];
+	mm_uuid_t *idsBuffer = idsLocalBuffer;
+	if( numParticipants > 10 ) {
+		idsBuffer = (mm_uuid_t *)::malloc( numParticipants * sizeof( mm_uuid_t ) );
+	}
+
+	int numIds = 0;
+	for( int i = 0; i < numActiveClients; ++i ) {
+		const edict_t *ent = edicts + 1 + activeClientNums[i];
+		idsBuffer[numIds++] = ent->r.client->mm_session;
+	}
+
+	for( ClientEntry *entry = clientEntriesHead; entry; entry = entry->next ) {
+		idsBuffer[numIds++] = entry->mm_session;
+	}
+
+	assert( numIds == numParticipants );
+
+	// Check clients that are currently in-game
+	// Check clients that have quit the game
+
+	query->SetMatchId( trap_GetConfigString( CS_MATCHUUID ) );
+	query->SetGametype( gs.gametypeName );
+	query->SetParticipants( idsBuffer, idsBuffer + numIds );
+
+	if( idsBuffer != idsLocalBuffer ) {
+		::free( idsBuffer );
+	}
+
+	trap_MM_SendQuery( query );
 }
 
 void StatsowFacade::AddPlayerReport( edict_t *ent, bool final ) {
@@ -691,7 +772,7 @@ void StatsowFacade::WriteHeaderFields( JsonWriter &writer, int teamGame ) {
 	}
 }
 
-void StatsowFacade::SendRegularReport() {
+void StatsowFacade::SendMatchFinishedReport() {
 	int i, teamGame, duelGame;
 	static const char *weapnames[WEAP_TOTAL] = { nullptr };
 
@@ -700,7 +781,7 @@ void StatsowFacade::SendRegularReport() {
 		return;
 	}
 
-	QueryObject *query = trap_MM_NewPostQuery( "server/matchReport" );
+	QueryObject *query = trap_MM_NewPostQuery( "server/match/completed" );
 	JsonWriter writer( query->ResponseJsonRoot() );
 
 	// ch : race properties through GS_RaceGametype()
@@ -911,14 +992,14 @@ void StatsowFacade::ClientEntry::AddWeapons( JsonWriter &writer, const char **we
 	writer << ']';
 }
 
-void StatsowFacade::SendReport() {
+void StatsowFacade::SendFinalReport() {
 	if( !IsValid() ) {
 		ClearEntries();
 		return;
 	}
 
 	if( GS_RaceGametype() ) {
-		SendRaceReport();
+		SendRaceRunReport();
 		return;
 	}
 
@@ -928,18 +1009,20 @@ void StatsowFacade::SendReport() {
 	}
 
 	if( isDiscarded ) {
-		G_Printf( S_COLOR_YELLOW "SendReport(): The match report has been discarded\n" );
+		G_Printf( S_COLOR_YELLOW "SendFinalReport(): The match report has been discarded\n" );
 	} else {
 		// check if we have enough players to report (at least 2)
 		if( clientEntriesHead && clientEntriesHead->next ) {
-			SendRegularReport();
+			SendMatchFinishedReport();
+		} else {
+			SendMatchAbortedReport();
 		}
 	}
 
 	ClearEntries();
 }
 
-void StatsowFacade::SendRaceReport() {
+void StatsowFacade::SendRaceRunReport() {
 	if( !GS_RaceGametype() ) {
 		G_Printf( S_COLOR_YELLOW "G_Match_RaceReport.. not race gametype\n" );
 		return;
@@ -949,7 +1032,7 @@ void StatsowFacade::SendRaceReport() {
 		return;
 	}
 
-	QueryObject *query = trap_MM_NewPostQuery( "server/matchReport" );
+	QueryObject *query = trap_MM_NewPostQuery( "server/match/raceReport" );
 	JsonWriter writer( query->ResponseJsonRoot() );
 
 	WriteHeaderFields( writer, false );

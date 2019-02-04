@@ -1379,6 +1379,16 @@ class StatsowFacade {
 	RespectStats *FindRespectStatsById( const mm_uuid_t &playerSessionId );
 
 	ClientEntry *NewPlayerEntry( edict_t *ent, bool final );
+
+	void SendMatchStartedReport() {
+		SendGenericMatchStateEventReport( "started" );
+	}
+
+	void SendMatchAbortedReport() {
+		SendGenericMatchStateEventReport( "aborted" );
+	}
+
+	void SendGenericMatchStateEventReport( const char *event );
 public:
 	static void Init();
 	static void Shutdown();
@@ -1402,16 +1412,16 @@ public:
 	 * Triggers sending of a race report if necessarily.
 	 * Race reports are sent in a non-blocking fashion.
 	 */
-	void SendRaceReport();
+	void SendRaceRunReport();
 
 	/**
 	 * Triggers sending of a match report if necessarily.
 	 * Currently blocks for a few seconds trying to get a confirmation.
 	 * @todo implement a local storage for stats so we do not have to wait for this.
 	 */
-	void SendRegularReport();
+	void SendMatchFinishedReport();
 
-	void SendReport();
+	void SendFinalReport();
 
 	void AddAward( const edict_t *ent, const char *awardMsg );
 	void AddMetaAward( const edict_t *ent, const char *awardMsg );

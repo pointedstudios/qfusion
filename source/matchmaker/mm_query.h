@@ -546,10 +546,70 @@ public:
 	}
 
 	/**
+	 * Sets a well-known predefined "matchmaker match id" form parameter
+	 */
+	QueryObject &SetMatchId( const char *value ) {
+		// Validate...
+		mm_uuid_t tmp;
+		mm_uuid_t *id = mm_uuid_t::FromString( value, &tmp );
+		assert( id );
+		return SetMatchId( *id );
+	}
+
+	/**
 	 * Sets a well-known predefined "matchmaker match id" form parameter.
 	 */
 	QueryObject &SetMatchId( const mm_uuid_t &value ) {
 		return SetField( "match_id", value );
+	}
+
+	/**
+	 * Sets a well-known predefined "gametype" form parameter.
+	 */
+	QueryObject &SetGametype( const char *value ) {
+		return SetField( "gametype", value );
+	}
+
+	/**
+	 * Sets a well-known predefined "participants" form parameter
+	 */
+	template <typename Iter>
+	QueryObject &SetParticipants( Iter begin_, Iter end_ ) {
+		const auto count = (int)std::distance( begin_, end_ );
+
+#ifdef MAX_CLIENTS
+		assert( count >= 0 && count < MAX_CLIENTS );
+#endif
+
+		if( !count ) {
+			return SetField( "participants", "{}" );
+		}
+
+		char localBuffer[UUID_DATA_LENGTH * 2 + 4u];
+		char *buffer = localBuffer;
+		if( count > 2 ) {
+			// Account for "{}", '\0' and (',' * count)
+			buffer = (char *)::malloc( count * UUID_DATA_LENGTH + count + 4u );
+		}
+
+		char *p = buffer;
+		*p++ = '{';
+		for( Iter iter = begin_; iter != end_; ++iter ) {
+			( *iter ).ToString( p );
+			p += UUID_DATA_LENGTH;
+			*p++ = ',';
+		}
+
+		p[-1] = '}';
+		p[+0] = '\0';
+
+		(void)SetField( "participants", buffer );
+
+		if( buffer != localBuffer ) {
+			::free( buffer );
+		}
+
+		return *this;
 	}
 
 	/**
