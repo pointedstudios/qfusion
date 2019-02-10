@@ -95,6 +95,9 @@ public:
 };
 
 bool SQLiteExecAdapter::ExecImpl( const char *sql ) {
+	const char *tag = "SQLiteExecAdapter::ExecImpl";
+	Com_DPrintf( "%s: About to execute `%s`\n", tag, sql );
+
 	char *err = nullptr;
 	const int code = ::sqlite3_exec( connection, sql, nullptr, nullptr, &err );
 	if( code == SQLITE_OK || code == SQLITE_DONE ) {
@@ -105,24 +108,29 @@ bool SQLiteExecAdapter::ExecImpl( const char *sql ) {
 		return false;
 	}
 
-	Com_Printf( S_COLOR_RED "SQLite error: %s\n", err );
+	Com_Printf( S_COLOR_RED "%s: An error `%s` occurred while executing `%s`\n", tag, err, sql );
 	::sqlite3_free( err );
 	return false;
 }
 
 void SQLiteExecAdapter::ExecOrFailImpl( const char *sql ) {
+	const char *tag = "SQLiteExecAdapter::ExecOrFailImpl()";
+	Com_DPrintf( "%s: About to execute `%s`\n", tag, sql );
+
 	char *err = nullptr;
 	if( ::sqlite3_exec( connection, sql, nullptr, nullptr, &err ) == SQLITE_OK ) {
 		return;
 	}
 
 	if( !err ) {
-		Com_Error( ERR_FATAL, "An error occurred while executing `%s`\n", sql );
+		Com_Error( ERR_FATAL, "%s: An error occurred while executing `%s`\n", tag, sql );
 	}
 
-	char buffer[1024];
-	Q_snprintfz( buffer, sizeof( buffer ), "An error occurred while executing `%s`: `%s`", sql, err );
+	char buffer[2048];
+	// Assemble a message in a local buffer and call Com_Error() only after ::sqlite3_free() call is performed
+	Q_snprintfz( buffer, sizeof( buffer ), "%s: An error `%s` occurred while executing `%s`", tag, err, sql );
 	::sqlite3_free( err );
+
 	Com_Error( ERR_FATAL, "%s\n", buffer );
 }
 
@@ -189,7 +197,7 @@ template <> bool SQLiteBindArg( sqlite3_stmt *stmt, int index, const int &value 
 		return true;
 	}
 
-	const char *format = S_COLOR_RED "A binding of arg #%d = %d failed with `%s`";
+	const char *format = S_COLOR_RED "A binding of arg #%d = %d failed with `%s`\n";
 	Com_Printf( format, index, value, ::sqlite3_errstr( code ) );
 	return false;
 }
@@ -208,8 +216,9 @@ public:
 			return;
 		}
 
-		const char *format = S_COLOR_RED "SQLiteInsertAdapter(): Can't prepare `%s` statement: `%s`\n";
-		Com_Printf( format, sql_, ::sqlite3_errstr( code ) );
+		const char *tag = "SQLiteInsertAdapter::SQLiteInsertAdapter()";
+		const char *format = S_COLOR_RED "%s: An error `%s` occurred while trying to prepare `%s`\n";
+		Com_Printf( format, tag, ::sqlite3_errstr( code ), sql_ );
 	}
 
 	~SQLiteInsertAdapter() {
@@ -222,8 +231,9 @@ public:
 			return;
 		}
 
-		const char *format = S_COLOR_RED "~SQLiteInsertAdapter(): a statement finalization returned with `%s`\n";
-		Com_Printf( format, ::sqlite3_errstr( code ) );
+		const char *tag = "SQLiteInsertAdapter::~SQLiteInsertAdapter()";
+		const char *format = S_COLOR_RED "%s: An error `%s` occurred while trying to finalize a statement\n";
+		Com_Printf( format, tag, ::sqlite3_errstr( code ) );
 	}
 
 	// OK lets just add a specialization for the actually used call singature...
@@ -236,22 +246,30 @@ public:
 
 		const char *tag = "SQLiteInsertHelper::InsertNextRow()";
 
-		if( !SQLiteBindArg( stmt, 0, arg0 ) ) return false;
-		if( !SQLiteBindArg( stmt, 1, arg1 ) ) return false;
-		if( !SQLiteBindArg( stmt, 2, arg2 ) ) return false;
+		const int numBoundParams = ::sqlite3_bind_parameter_count( stmt );
+		if( numBoundParams != 3 ) {
+			Com_Printf( S_COLOR_RED "%s: Illegal number of bound parameters: %d (3 is expected)\n", tag, numBoundParams );
+			return false;
+		}
+
+		// Query parameter indices are 1-based
+		if( !SQLiteBindArg( stmt, 1, arg0 ) ) return false;
+		if( !SQLiteBindArg( stmt, 2, arg1 ) ) return false;
+		if( !SQLiteBindArg( stmt, 3, arg2 ) ) return false;
 
 		int code;
 		if( ( code = ::sqlite3_step( stmt ) ) != SQLITE_DONE ) {
-			Com_Printf( S_COLOR_RED "%s: An insertion step returned with `%s`\n", tag, ::sqlite3_errstr( code ) );
+			Com_Printf( S_COLOR_RED "%s: An error `%s` occurred while performing a step\n", tag, ::sqlite3_errstr( code ) );
 			return false;
 		}
 
 		if( ( code = ::sqlite3_reset( stmt ) ) != SQLITE_OK ) {
-			Com_Printf( S_COLOR_YELLOW "%s: A statement reset returned with `%s`\n", tag, ::sqlite3_errstr( code ) );
+			Com_Printf( S_COLOR_YELLOW "%s: An error `%s` occurred while resetting a stmt\n", tag, ::sqlite3_errstr( code ) );
 		}
 		if( ( code = ::sqlite3_clear_bindings( stmt ) ) != SQLITE_OK ) {
-			Com_Printf( S_COLOR_YELLOW "%s: A bindings clearing returned with `%s`\n", tag, ::sqlite3_errstr( code ) );
+			Com_Printf( S_COLOR_YELLOW "%s: An error `%s` occurred while clearing bindings\n", tag, ::sqlite3_errstr( code ) );
 		}
+
 		return true;
 	}
 };
@@ -319,7 +337,7 @@ public:
 			return 0;
 		}
 
-		const char *format = S_COLOR_RED "SQLiteSelectAdapter::Next(): a statement step returned with `%s`\n";
+		const char *format = S_COLOR_RED "SQLiteSelectAdapter::Next(): An error `%s` occurred while performing a step\n";
 		Com_Printf( format, ::sqlite3_errstr( code ) );
 		(void)::sqlite3_finalize( stmt );
 		stmt = nullptr;
@@ -332,7 +350,7 @@ public:
 	 * @param rowConsumer a {@code RowConsumer} that could process a row.
 	 * @return a number of read rows on success, a negative value on failure
 	 */
-	int TryReadAll( const RowConsumer &rowConsumer ) {
+	int TryReadingAll( const RowConsumer &rowConsumer ) {
 		int numRows = 0;
 		for(;; ) {
 			int stepResult = Next( rowConsumer );
@@ -354,13 +372,16 @@ SQLiteSelectAdapter::SQLiteSelectAdapter( DBConnection connection_, const char *
 	Q_vsnprintfz( sql, sizeof( sql ), format, va );
 	va_end( va );
 
+	const char *tag = "SQLiteSelectAdapter::SQLiteSelectAdapter()";
+	Com_DPrintf( "%s: About to prepare `%s`\n", tag, sql );
+
 	const int code = sqlite3_prepare_v2( connection, sql, -1, &stmt, nullptr );
 	if( code == SQLITE_OK ) {
 		return;
 	}
 
-	const char *messageFormat = S_COLOR_RED "SQLiteSelectAdapter(): Can't prepare `%s` statement: `%s`\n";
-	Com_Printf( messageFormat, sql, ::sqlite3_errstr( code ) );
+	const char *messageFormat = S_COLOR_RED "%s: An error `%s` occurred while trying to prepare `%s`\n";
+	Com_Printf( messageFormat, tag, sql, ::sqlite3_errstr( code ) );
 }
 
 LocalReliableStorage::LocalReliableStorage( const char *databasePath_ ) {
@@ -421,15 +442,15 @@ void LocalReliableStorage::DeleteConnection( DBConnection connection ) {
 bool LocalReliableStorage::CreateTablesIfNeeded( DBConnection connection ) {
 	constexpr const char *const queriesFormat =
 		"create table if not exists %s ("
-		"   query_priority integer not null,"
-		"	query_id text not null,"
-		"   query_url text not null);";
+		"	query_priority integer not null,"
+		"	query_id text not null primary key,"
+		"	query_url text not null);";
 
 	constexpr const char *const fieldsTable =
 		"create table if not exists query_fields ("
 		"	query_id text not null,"
-		"   field_name text not null,"
-		"   field_value text not null);";
+		"	field_name text not null,"
+		"	field_value text not null);";
 
 	SQLiteExecAdapter adapter( connection );
 	// We can execute this first (no foreign constraints are defined) actually to fit line limit
@@ -497,11 +518,16 @@ bool LocalReliableStorage::InsertQueryFields( DBConnection connection, const Que
 	SQLiteInsertAdapter adapter( connection, sql );
 	assert( adapter.IsInTransaction() );
 
+	const char *tag = "LocalReliableStorage::InsertQueryFields()";
+
 	const char *queryId = GetQueryId( query );
 	for( auto formParam = query->formParamsHead; formParam; formParam = formParam->next ) {
 		const wsw::string_view id( queryId, UUID_DATA_LENGTH );
+		Com_DPrintf( "%s: writing (`query id`, `%s`)\n", tag, queryId );
 		const wsw::string_view name( formParam->name, formParam->nameLen );
+		Com_DPrintf( "%s: writing (`name`, `%s`)\n", tag, formParam->name );
 		const wsw::string_view value( formParam->value, formParam->valueLen );
+		Com_DPrintf( "%s: writing (`value`, `%s`)\n", tag, formParam->value );
 		if( !adapter.InsertNextRow( id, name, value ) ) {
 			return false;
 		}
@@ -513,47 +539,62 @@ bool LocalReliableStorage::InsertQueryFields( DBConnection connection, const Que
 QueryObject *LocalReliableStorage::FetchNext( DBConnection connection, const char *queryOutgoingIp ) {
 	// This CTE selects a best numeric query priority value in the table
 	const char *priorityCte =
-		"select distinct query_priority from pending_queries order by query_priority desc limit 1";
+		"select distinct query_priority as priority from pending_queries order by query_priority desc limit 1";
 
 	// This CTE selects id and url of a random query that has the previously selected priority
 	const char *chosenCte =
 		"select query_id, query_url from pending_queries "
-		"where exists (select 1 from top_priority where top_priority.query_id = pending_queries.query_id) "
+		"where exists (select 1 from top_priority where top_priority.priority = pending_queries.query_priority) "
 		"order by random() limit 1";
 
 	// Select all fields that belong to the chosen query.
 	// Return the url in the first row.
 	const char *sqlFormat =
 		"with top_priority as (%s), chosen as (%s) "
-		"select query_url, field_name, field_value "
+		"select chosen.query_url, query_fields.field_name, query_fields.field_value "
 		"from query_fields join chosen "
 		"on query_fields.query_id = chosen.query_id";
 
 	QueryObject *query = nullptr;
 
+	auto printReadRow = [&]( const char *name, const wsw::string_view &value ) {
+		// TODO: This is quite error-prone (string views currently point to zero-terminated data
+		// but there's no strict guarantee). Introduce and use streams instead.
+		Com_DPrintf( "LocalReliableStorage::FetchNext(): read (`%s`, `%s`)\n", name, value.data() );
+	};
+
 	const auto rowConsumer = [&]( const SQLiteRowReader &reader ) -> bool {
 		assert( reader.NumColumns() == 3 );
 		if( !query ) {
-			query = QueryObject::PostQueryForUrl( reader.GetString( 0 ).data(), queryOutgoingIp );
+			auto url( reader.GetString( 0 ) );
+			printReadRow( "url", url );
+			query = QueryObject::PostQueryForUrl( url.data(), queryOutgoingIp );
 			if( !query ) {
 				return false;
 			}
 		}
 		const auto name( reader.GetString( 1 ) );
+		printReadRow( "field name", name );
 		const auto value( reader.GetString( 2 ) );
+		printReadRow( "field value", value );
 		query->SetField( name.data(), name.size(), value.data(), value.size() );
 		return true;
 	};
 
 	SQLiteSelectAdapter adapter( connection, sqlFormat, priorityCte, chosenCte );
 	assert( adapter.IsInTransaction() );
-	if( adapter.TryReadAll( rowConsumer ) > 0 ) {
+	if( adapter.TryReadingAll( rowConsumer ) > 0 ) {
+		// At least a single row has been read so the query must have been created
 		assert( query );
 		query->hasConveredJsonToFormParam = true;
 		return query;
 	}
 
-	QueryObject::DeleteQuery( query );
+	// The query does not get created if no rows are retrieved
+	if( query ) {
+		QueryObject::DeleteQuery( query );
+	}
+
 	return nullptr;
 }
 
@@ -580,6 +621,8 @@ bool LocalReliableStorage::MarkAsSent( DBConnection connection, const QueryObjec
 	assert( adapter.IsInTransaction() );
 
 	const char *queryId = GetQueryId( query );
+	Com_Printf( "LocalReliableStorage::MarkAsFailed(): query id is %s\n", queryId );
+
 	// No foreign constraints are defined for various reasons
 	// (namely query id can refer to 2 different tables)
 	// so we have to execute two delete queries...
@@ -596,6 +639,8 @@ bool LocalReliableStorage::MarkAsFailed( DBConnection connection, const QueryObj
 	assert( adapter.IsInTransaction() );
 
 	const char *queryId = GetQueryId( query );
+	Com_Printf( "LocalReliableStorage::MarkAsFailed(): query id is %s\n", queryId );
+
 	if( !adapter.ExecV( "insert into failed_queries select * from pending_queries where query_id = '%s'", queryId ) ) {
 		return false;
 	}

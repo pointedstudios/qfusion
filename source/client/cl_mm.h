@@ -156,7 +156,7 @@ public:
 	bool IsValid() { return ourSession.IsValidSessionId(); }
 
 	void Frame();
-	bool WaitForConnection();
+	bool WaitUntilConnectionAllowed();
 	void CheckOrWaitForAutoLogin();
 	void CheckOrWaitForPendingMatch();
 	void PollLoginStatus();

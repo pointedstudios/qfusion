@@ -478,6 +478,11 @@ void StatsowFacade::OnMatchStateLaunched( int oldState, int newState ) {
 }
 
 void StatsowFacade::SendGenericMatchStateEventReport( const char *event ) {
+	// This should be changed if a stateful competitive race gametype is really implemented
+	if( GS_RaceGametype() ) {
+		return;
+	}
+
 	char url[MAX_STRING_CHARS];
 	va_r( url, sizeof( url ), "server/match/%s", event );
 
@@ -782,7 +787,7 @@ void StatsowFacade::SendMatchFinishedReport() {
 	}
 
 	QueryObject *query = trap_MM_NewPostQuery( "server/match/completed" );
-	JsonWriter writer( query->ResponseJsonRoot() );
+	JsonWriter writer( query->RequestJsonRoot() );
 
 	// ch : race properties through GS_RaceGametype()
 
@@ -992,6 +997,19 @@ void StatsowFacade::ClientEntry::AddWeapons( JsonWriter &writer, const char **we
 	writer << ']';
 }
 
+bool StatsowFacade::IsValid() const {
+	// This has to be computed on demand as the server starts logging in
+	// at the first ran frame and not at the SVStatsowFacade instance creation
+
+	if( isDiscarded ) {
+		return false;
+	}
+	if( !( GS_MMCompatible() ) ) {
+		return false;
+	}
+	return trap_Cvar_Value( "sv_mm_enable" ) && trap_Cvar_Value( "dedicated" );
+}
+
 void StatsowFacade::SendFinalReport() {
 	if( !IsValid() ) {
 		ClearEntries();
@@ -1033,7 +1051,7 @@ void StatsowFacade::SendRaceRunReport() {
 	}
 
 	QueryObject *query = trap_MM_NewPostQuery( "server/match/raceReport" );
-	JsonWriter writer( query->ResponseJsonRoot() );
+	JsonWriter writer( query->RequestJsonRoot() );
 
 	WriteHeaderFields( writer, false );
 

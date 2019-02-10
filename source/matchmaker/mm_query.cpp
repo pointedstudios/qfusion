@@ -335,11 +335,17 @@ bool QueryObject::Prepare() {
 	req = wswcurl_create( outgoingIp, url );
 	for( FormParam *param = formParamsHead; param; param = param->next ) {
 		// Hack for encoded JSON that is stored along other parameters
+		int result;
 		if( Q_stricmp( param->name, "json_attachment" ) != 0 ) {
-			assert( !wswcurl_formadd( req, param->name, param->value ) );
+			result = wswcurl_formadd( req, param->name, param->value );
 		} else {
-			assert( !wswcurl_formadd_raw( req, "json_attachment", (void *)param->value, param->valueLen ) );
+			result = wswcurl_formadd_raw( req, "json_attachment", (void *)param->value, param->valueLen );
 		}
+		if( !result ) {
+			continue;
+		}
+		Com_Printf( S_COLOR_RED "QueryObject::Prepare(): Failed to add form parameter `%s`\n", param->name );
+		return false;
 	}
 
 	return true;
@@ -380,10 +386,12 @@ bool QueryObject::ConvertJsonToEncodedForm() {
 		return false;
 	}
 
-	SetField( "json_attachment", strlen( "json_attachment"), (const char *)base64Encoded.get(), b64Size );
+	SetField( "json_attachment", ::strlen( "json_attachment" ), (const char *)base64Encoded.get(), b64Size );
+	hasConveredJsonToFormParam = true;
 
 	// Release no longer needed JSON root
 	cJSON_Delete( requestRoot );
+	requestRoot = nullptr;
 	return true;
 }
 

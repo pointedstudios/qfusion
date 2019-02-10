@@ -58,6 +58,18 @@ ReliablePipe::~ReliablePipe() {
 }
 
 void ReliablePipe::EnqueueMatchReport( QueryObject *matchReport ) {
+	// Make sure we have set the server session having obtained the object ownership over the game module
+	assert( matchReport->FindFormParamByName( "server_session" ) );
+	// Force conversion of the JSON request root to the form parameter a JSON root is present
+	if( matchReport->requestRoot ) {
+		assert( !matchReport->hasConveredJsonToFormParam );
+		assert( !matchReport->FindFormParamByName( "json_attachment" ) );
+		matchReport->ConvertJsonToEncodedForm();
+		assert( !matchReport->requestRoot );
+		assert( matchReport->hasConveredJsonToFormParam );
+		assert( matchReport->FindFormParamByName( "json_attachment" ) );
+	}
+
 	BackgroundWriter::AddReportCmd cmd( backgroundWriter, matchReport );
 	QBufPipe_WriteCmd( reportsPipe, &cmd, sizeof( cmd ) );
 }
@@ -102,13 +114,15 @@ void ReliablePipe::BackgroundWriter::AddReport( QueryObject *report ) {
 		return true;
 	};
 
+	constexpr const char *tag = "ReliablePipe::BackgroundWriter::AddReport()";
+
 	for(;; ) {
 		bool hasTransactionSucceeded = reliableStorage->WithinTransaction( block );
 		// TODO: investigate SQLite behaviour... this code is based purely on MVCC RDBMS habits...
 		if( hasTransactionSucceeded ) {
 			// TODO: can insertion really fail?
 			if( !hasInsertionSucceeded ) {
-				Com_Printf( S_COLOR_RED "ReliablePipe::BackgroundWriter::AddReport(): Dropping a report\n" );
+				Com_Printf( S_COLOR_RED "%s: Dropping a report\n", tag );
 			}
 			QueryObject::DeleteQuery( report );
 			return;
@@ -116,12 +130,15 @@ void ReliablePipe::BackgroundWriter::AddReport( QueryObject *report ) {
 
 		// Wait for an opportunity for writing given us by the uploader thread time-to-time.
 		// There should not be a substantial database lock contention.
-		Sys_Sleep( 16 );
+		Com_Printf( "%s: Awaiting for a database write access\n", tag );
+		Sys_Sleep( 72 );
 	}
 }
 
 void ReliablePipe::BackgroundSender::RunStep() {
 	Sys_Sleep( 16 );
+
+	constexpr const char *tag = "ReliablePipe::BackgroundSender::RunStep()";
 
 	unsigned sleepInterval = 667;
 	reliableStorage->WithinTransaction( [&]( DBConnection connection ) {
@@ -140,11 +157,16 @@ void ReliablePipe::BackgroundSender::RunStep() {
 		}
 
 		if( activeQuery->HasSucceeded() ) {
-			sleepInterval = 1500;
+			bool transactionResult;
+			if( CheckQueryResponse() ) {
+				transactionResult = reliableStorage->MarkAsSent( connection, activeQuery );
+			} else {
+				transactionResult = reliableStorage->MarkAsFailed( connection, activeQuery );
+			}
+			sleepInterval = transactionResult ? 1500 : 750;
 			// Request committing or rolling back depending of result of this call
-			bool result = reliableStorage->MarkAsSent( connection, activeQuery );
 			DeleteActiveQuery();
-			return result;
+			return transactionResult;
 		}
 
 		// This is more useful for non-persistent/reliable queries like client login.
@@ -154,6 +176,7 @@ void ReliablePipe::BackgroundSender::RunStep() {
 		// This is to give a breathe for writer thread that is possibly tries
 		// to open a transaction while we're still holding a database exclusive lock.
 		if( activeQuery->ShouldRetry() ) {
+			Com_Printf( "%s: A query retry is scheduled\n", tag );
 			DeleteActiveQuery();
 			return true;
 		}
@@ -161,10 +184,37 @@ void ReliablePipe::BackgroundSender::RunStep() {
 		assert( activeQuery->IsReady() && !activeQuery->HasSucceeded() && !activeQuery->ShouldRetry() );
 
 		// Request committing or rolling back depending of result of this call
+		Com_Printf( "%s: A query execution has failed\n", tag );
 		bool result = reliableStorage->MarkAsFailed( connection, activeQuery );
 		DeleteActiveQuery();
 		return result;
 	});
 
 	Sys_Sleep( sleepInterval );
+}
+
+bool ReliablePipe::BackgroundSender::CheckQueryResponse() {
+	assert( activeQuery && activeQuery->HasSucceeded() );
+
+	constexpr const char *tag = "ReliablePipe::BackgroundSender::CheckQueryResponse()";
+
+	const double status = activeQuery->GetRootDouble( "status", std::numeric_limits<double>::infinity() );
+	if( !std::isfinite( status ) ) {
+		Com_Printf( S_COLOR_RED "%s: The query field `status` is missing or has an invalid format", tag );
+		return false;
+	}
+
+	if( status != 0 ) {
+		Com_Printf( "%s: A query remote execution has succeeded", tag );
+		return true;
+	}
+
+	const char *errorString = activeQuery->GetRootString( "error", "" );
+	if( !*errorString ) {
+		Com_Printf( S_COLOR_RED "%s: A query remote execution has failed\n", tag );
+		return false;
+	}
+
+	Com_Printf( S_COLOR_RED "%s: A query remote execution has failed with `%s`\n", tag, errorString );
+	return false;
 }

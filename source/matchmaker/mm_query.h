@@ -96,6 +96,7 @@ class QueryObject final {
 	friend class ObjectReader;
 	friend class ArrayReader;
 	friend class LocalReliableStorage;
+	friend class ReliablePipe;
 	friend class StatsowNetworkTask;
 	template <typename> friend class StatsowTasksRunner;
 	template <typename> friend class StatsowHeartbeatRunner;

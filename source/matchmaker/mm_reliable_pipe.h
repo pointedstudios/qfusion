@@ -90,6 +90,13 @@ class ReliablePipe {
 			}
 		}
 
+		/**
+		 * An active query could fail even if the network call result is successful.
+		 * @return true if the server has really accepted the query.
+		 * Otherwise the query should be considered failed.
+		 */
+		bool CheckQueryResponse();
+
 		void RunStep() override;
 
 		void DeleteActiveQuery() {

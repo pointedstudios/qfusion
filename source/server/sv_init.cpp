@@ -214,6 +214,9 @@ void SV_SetServerConfigStrings( void ) {
 	Q_strncpyz( sv.configstrings[CS_TVSERVER], "0", sizeof( sv.configstrings[0] ) );
 	Q_strncpyz( sv.configstrings[CS_HOSTNAME], Cvar_String( "sv_hostname" ), sizeof( sv.configstrings[0] ) );
 	Q_strncpyz( sv.configstrings[CS_MODMANIFEST], Cvar_String( "sv_modmanifest" ), sizeof( sv.configstrings[0] ) );
+	// Set a zero UUID at server spawn so no attempt to fetch a match UUID is performed
+	// until the game module actually requests doing this by clearing the config string.
+	Q_snprintfz( sv.configstrings[CS_MATCHUUID], sizeof( sv.configstrings[0] ), "00000000-0000-0000-0000-000000000000" );
 }
 
 /*

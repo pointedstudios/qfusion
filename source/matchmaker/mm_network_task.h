@@ -46,7 +46,7 @@ protected:
 	 * This is useful for waiting for a server action result
 	 * if the Statsow server has returned "not yet available, wait for it" status.
 	 */
-	 bool hasRequestedRetry { true };
+	 bool hasRequestedRetry { false };
 
 	/**
 	 * Creates a task object. Accepts a query (maybe) provided by a caller.

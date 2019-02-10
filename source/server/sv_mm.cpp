@@ -158,7 +158,7 @@ public:
 		query->SetServerSession( parent->ourSession );
 		query->SetClientSession( session );
 		query->SetTicket( ticket );
-		query->SetServerAddress( address );
+		query->SetClientAddress( address );
 	}
 
 	void OnQuerySuccess() override;
@@ -235,8 +235,16 @@ bool SVStatsowFacade::SendGameQuery( QueryObject *query ) {
 }
 
 void SVStatsowFacade::EnqueueMatchReport( QueryObject *query ) {
-	assert( reliablePipe );
-	reliablePipe->EnqueueMatchReport( query );
+	if( reliablePipe ) {
+		query->SetServerSession( ourSession );
+		reliablePipe->EnqueueMatchReport( query );
+		return;
+	}
+
+	// TODO: Disallow creation of queries for "match started" and "match aborted" events
+	// if they are not expected by Statsow for this match (as well as if the server session is not valid)
+	Com_Printf( S_COLOR_YELLOW "SVStatsowFacade::EnqueueMatchReport(): this event won't be sent\n" );
+	QueryObject::DeleteQuery( query );
 }
 
 void SVStatsowFacade::CheckMatchUuid() {
@@ -246,11 +254,18 @@ void SVStatsowFacade::CheckMatchUuid() {
 		return;
 	}
 
+	// Wait for logging instead of assigning a dummy UUID
+	if( isLoggingIn || isLoggingOut ) {
+		return;
+	}
+
 	// Provide an arbitrary non-empty UUID for the game module in this case
 	if( !ourSession.IsValidSessionId() ) {
 		assert( !continueFetchUuidTask );
 
-		mm_uuid_t::Random().ToString( sv.configstrings[CS_MATCHUUID] );
+		// Set another dummy UUID (aside from zero one that is always used at server spawn)
+		// so we do not confuse valid UUIDs supplied by the Statsow server and dummy ones
+		Q_snprintfz( sv.configstrings[CS_MATCHUUID], MAX_CONFIGSTRING_CHARS, "ffffffff-ffff-ffff-ffff-ffffffffffff" );
 		Com_Printf( "SVStatsowFacade::CheckMatchUuid(): Using dummy UUID %s\n", sv.configstrings[CS_MATCHUUID] );
 		return;
 	}
@@ -614,6 +629,7 @@ void SVLoginTask::OnQuerySuccess() {
 
 	failureGuard.Suppress();
 	PrintMessage( tag, "Session id is %s", sessionString );
+	parent->OnLoginSuccess();
 }
 
 bool SVStatsowFacade::StartLoggingIn() {

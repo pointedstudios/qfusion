@@ -159,7 +159,7 @@ class CLStartLoggingInTask : public CLStatsowTask {
 	}
 public:
 	CLStartLoggingInTask( CLStatsowFacade *parent_, const char *user_, const char *password_ )
-		: CLStatsowTask( parent_, "CLStartLoggingInTask", "login", 333 ) {
+		: CLStatsowTask( parent_, "CLStartLoggingInTask", "login", 750 ) {
 		assert( user_ && *user_ );
 		assert( password_ && *password_ );
 		if( !query ) {
@@ -225,11 +225,12 @@ class CLConnectTask : public CLStatsowTask {
 		// The client connection is likely to be rejected
 		// (unless the server allows non-authorized players)
 		// but we should stop holding the client in "getting ticket" state.
+		Com_Printf( "CLConnectTask::OnAnyOutcome(): Using ticket %s\n", parent->GetTicketString().data() );
 		CL_SetClientState( CA_CONNECTING );
 	}
 public:
 	CLConnectTask( CLStatsowFacade *parent_, const char *address_ )
-		: CLStatsowTask( parent_, "CLConnectTask", "connect", 333 ) {
+		: CLStatsowTask( parent_, "CLConnectTask", "connect", 750 ) {
 		if( !query ) {
 			return;
 		}
@@ -370,7 +371,7 @@ void CLConnectTask::OnQuerySuccess() {
 
 	const char *ticketString = query->GetRootString( "ticket", "" );
 	if( !*ticketString ) {
-		parent->ErrorMessage( name, tag, "The server have not supply a ticket" );
+		parent->ErrorMessage( name, tag, "The server have not supplied a ticket" );
 		return;
 	}
 
@@ -378,8 +379,6 @@ void CLConnectTask::OnQuerySuccess() {
 		parent->ErrorMessage( name, tag, "The ticket `%s` is malformed", ticketString );
 		return;
 	}
-
-	PrintMessage( tag, "Using ticket %s", ticketString );
 }
 
 bool CLStatsowFacade::StartConnecting( const netadr_t *address ) {
@@ -398,8 +397,8 @@ bool CLStatsowFacade::StartConnecting( const netadr_t *address ) {
 	return false;
 }
 
-bool CLStatsowFacade::WaitForConnection() {
-	while( IsValid() && !( isLoggingIn || isLoggingOut ) ) {
+bool CLStatsowFacade::WaitUntilConnectionAllowed() {
+	while( isLoggingIn || isLoggingOut ) {
 		Frame();
 		Sys_Sleep( 20 );
 	}
@@ -578,8 +577,11 @@ bool CLStatsowFacade::Logout( bool waitForCompletion ) {
 		return false;
 	}
 
+	// Set this before starting the task
+	isLoggingOut = true;
 	if( !TryStartingTask( NewLogoutTask() ) ) {
 		ErrorMessage( name, tag, "Failed to start a logout task" );
+		isLoggingOut = false;
 		return false;
 	}
 
@@ -1023,6 +1025,18 @@ CLStatsowFacade::CLStatsowFacade()
 }
 
 CLStatsowFacade::~CLStatsowFacade() {
+	// Check whether we have already initiated background logout.
+	// Try starting non-blocking logging out otherwise so we can use the same code path
+	if( !isLoggingOut ) {
+		Logout( false );
+	}
+
+	// If we continue logging out or we have just initiated logging out successfully wait for it
+	while( isLoggingOut ) {
+		Sys_Sleep( 16 );
+		tasksRunner.CheckStatus();
+	}
+
 	Cvar_ForceSet( cl_mm_session->name, "0" );
 
 	Cmd_RemoveCommand( "mm_login" );

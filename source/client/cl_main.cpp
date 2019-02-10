@@ -223,8 +223,6 @@ static void CL_SendConnectPacket( void ) {
 	userinfo_modified = false;
 
 	const char *ticketString = CLStatsowFacade::Instance()->GetTicketString().data();
-
-	Com_DPrintf( "Using ticket `%s`\n", ticketString );
 	Netchan_OutOfBandPrint( cls.socket, &cls.serveraddress, "connect %i %i %i \"%s\" %i %s\n",
 							APP_PROTOCOL_VERSION, Netchan_GamePort(), cls.challenge, Cvar_Userinfo(), 0, ticketString );
 }
@@ -473,7 +471,7 @@ static void CL_Connect_Cmd_f( socket_type_t socket ) {
 
 	// wait until MM allows us to connect to a server
 	// (not in a middle of login process or anything)
-	CLStatsowFacade::Instance()->WaitForConnection();
+	CLStatsowFacade::Instance()->WaitUntilConnectionAllowed();
 
 	servername = TempCopyString( connectstring );
 	CL_Connect( servername, ( serveraddress.type == NA_LOOPBACK ? SOCKET_LOOPBACK : socket ),
