@@ -245,16 +245,14 @@ class CLMatchMakerTask : public CLStatsowTask {
 
 	void OnQueryResult( bool success ) override;
 	void OnQueryFailure() override;
-
-	bool AllowQueryRetry() override {
-		return *continueRunning;
-	}
 protected:
 	CLMatchMakerTask( CLStatsowFacade *parent_, bool *continueRunning_, const char *name_, const char *resource_ )
 		: CLStatsowTask( parent_, name_, resource_ ), continueRunning( continueRunning_ ) {}
 
 	void OnAnyFailure() {
-		parent->OnPendingMatchFailure();
+		parent->matchHandle = Uuid_ZeroUuid();
+		parent->matchAddress.clear();
+		*continueRunning = false;
 	}
 
 	bool GetMatchPresentStatus( const char *tag, int *presentStatus ) {
@@ -411,29 +409,27 @@ void CLStatsowFacade::CheckOrWaitForAutoLogin() {
 		return;
 	}
 
+	hasTriedLoggingIn = true;
+
 	const int autoLogin = cl_mm_autologin->integer;
 	if( !autoLogin ) {
 		return;
 	}
 
 	Login( nullptr, nullptr );
-	if( autoLogin == 1 ) {
-		return;
-	}
 
 	while( isLoggingIn ) {
 		tasksRunner.CheckStatus();
 		PollLoginStatus();
 		Sys_Sleep( 16 );
 	}
-}
 
-void CLStatsowFacade::OnPendingMatchSuccess() {
-	Cbuf_ExecuteText( EXEC_APPEND, va( "connect %s", matchAddress.c_str() ) );
-}
+	// Interrupt if we have not logged in successfully or checking for pending match is not specified
+	if( !ourSession.IsValidSessionId() || autoLogin > 0 ) {
+		return;
+	}
 
-void CLStatsowFacade::OnPendingMatchFailure() {
-	matchAddress.clear();
+	CheckOrWaitForPendingMatch();
 }
 
 void CLStatsowFacade::CheckOrWaitForPendingMatch() {
@@ -441,7 +437,10 @@ void CLStatsowFacade::CheckOrWaitForPendingMatch() {
 	assert( ourSession.IsValidSessionId() );
 
 	constexpr const char *const tag = "CLStatsowFacade::CheckOrWaitForPendingMatch";
-	ScopeGuard failureGuard( [&]() { OnPendingMatchFailure(); } );
+	ScopeGuard failureGuard( [&]() {
+		this->matchHandle = Uuid_ZeroUuid();
+		this->matchAddress.clear();
+	});
 
 	matchHandle = Uuid_ZeroUuid();
 	bool continueRunning = true;
@@ -450,7 +449,7 @@ void CLStatsowFacade::CheckOrWaitForPendingMatch() {
 		return;
 	}
 
-	while( continueRunning && !matchHandle.IsValidSessionId() ) {
+	while( continueRunning ) {
 		Sys_Sleep( 16 );
 		tasksRunner.CheckStatus();
 	}
@@ -465,7 +464,7 @@ void CLStatsowFacade::CheckOrWaitForPendingMatch() {
 		return;
 	}
 
-	while( continueRunning && matchAddress.empty() ) {
+	while( continueRunning ) {
 		Sys_Sleep( 16 );
 		tasksRunner.CheckStatus();
 	}
@@ -483,6 +482,11 @@ void CLStatsowFacade::CheckOrWaitForPendingMatch() {
 	while( continueRunning ) {
 		Sys_Sleep( 16 );
 		tasksRunner.CheckStatus();
+	}
+
+	// Might have been reset on the last task failure
+	if( !matchAddress.empty() ) {
+		Cbuf_ExecuteText( EXEC_APPEND, va( "connect \"%s\"", matchAddress.c_str() ) );
 	}
 }
 
@@ -816,8 +820,8 @@ void CLCheckMatchTask::OnQuerySuccess() {
 	}
 
 	if( presentStatus <= 0 ) {
+		PrintMessage( tag, "There's no pending match\n" );
 		failureGuard.Suppress();
-		parent->OnPendingMatchSuccess();
 		return;
 	}
 
@@ -831,7 +835,7 @@ void CLCheckMatchTask::OnQuerySuccess() {
 }
 
 void CLCheckServerTask::OnQuerySuccess() {
-	ScopeGuard failureGuard( [&]() { parent->OnPendingMatchFailure(); } );
+	ScopeGuard failureGuard( [&]() { OnAnyFailure(); } );
 
 	constexpr const char *const tag = "OnQuerySuccess";
 	if( !CheckResponseStatus( tag ) ) {
@@ -845,13 +849,14 @@ void CLCheckServerTask::OnQuerySuccess() {
 
 	// If the match has been canceled
 	if( presentStatus < 0 ) {
-		parent->OnPendingMatchSuccess();
+		PrintMessage( tag, "The match has been canceled" );
 		failureGuard.Suppress();
 		return;
 	}
 
 	// Keep waiting for server address assignation
 	if( presentStatus == 0 ) {
+		hasRequestedRetry = true;
 		failureGuard.Suppress();
 		return;
 	}
@@ -876,12 +881,11 @@ void CLCheckServerTask::OnQuerySuccess() {
 void CLAcceptMatchTask::OnQuerySuccess() {
 	constexpr const char *const tag = "OnQuerySuccess";
 	if( !CheckResponseStatus( tag ) ) {
-		parent->OnPendingMatchFailure();
+		OnAnyFailure();
 		return;
 	}
 
 	PrintMessage( tag, "An offer reply has been successfully confirmed" );
-	parent->OnPendingMatchSuccess();
 }
 
 int CLStatsowFacade::GetLoginState() const {
@@ -896,6 +900,13 @@ const wsw::string_view &CLStatsowFacade::GetBaseWebUrl() const {
 	return baseUrlView;
 }
 
+static inline bool IsNullOrEmpty( const char *s ) {
+	if ( !s ) {
+		return true;
+	}
+	return !*s;
+}
+
 bool CLStatsowFacade::Login( const char *user, const char *password ) {
 	lastErrorMessage.clear();
 
@@ -903,34 +914,38 @@ bool CLStatsowFacade::Login( const char *user, const char *password ) {
 		return false;
 	}
 
-	// first figure out the user
-	if( !user || user[0] == '\0' ) {
+	if( IsNullOrEmpty( user ) ) {
 		user = cl_mm_user->string;
-	} else {
-		if( cl_mm_autologin->integer ) {
-			Cvar_ForceSet( "cl_mm_user", user );
+		if( IsNullOrEmpty( user ) ) {
+			return false;
+		}
+		// Save the user if the auto-login is not in "secret" mode
+		if( cl_mm_autologin->integer > 0 ) {
+			Cvar_ForceSet( cl_mm_user->name, user );
 		}
 	}
 
-	if( user[0] == '\0' ) {
-		return false;
-	}
-
-	// TODO: nicer error announcing
-	if( !password || password[0] == '\0' ) {
-		password = MM_PasswordRead( user );
-	} else {
-		if( cl_mm_autologin->integer ) {
+	if( !IsNullOrEmpty( password ) ) {
+		// Save the password is the auto-login is not in "secret" mode
+		if( cl_mm_autologin->integer > 0 ) {
 			MM_PasswordWrite( user, password );
 		}
+		return StartLoggingIn( user, password );
 	}
 
-	if( !password ) {
-		ErrorMessage( "CLStatsowFacade", "Login", "Can't get a password" );
-		return false;
+	// Let the command line have a priority over the local password storage.
+	// Credentials supplied via a command line should not be saved.
+	password = cl_mm_password->string;
+	if( IsNullOrEmpty( password ) ) {
+		password = MM_PasswordRead( user );
 	}
 
-	return StartLoggingIn( user, password );
+	if( !IsNullOrEmpty( password ) ) {
+		return StartLoggingIn( user, password );
+	}
+
+	ErrorMessage( "CLStatsowFacade", "Login", "Can't retrieve a password from a local storage or command line" );
+	return false;
 }
 
 void CLStatsowFacade::ErrorMessage( const char *format, ... ) {
@@ -1012,8 +1027,8 @@ CLStatsowFacade::CLStatsowFacade()
 	cl_mm_session = Cvar_Get( "cl_mm_session", "", CVAR_READONLY | CVAR_USERINFO );
 	cl_mm_autologin = Cvar_Get( "cl_mm_autologin", "1", CVAR_ARCHIVE );
 
-	// TODO: remove as cvar
 	cl_mm_user = Cvar_Get( "cl_mm_user", "", CVAR_ARCHIVE );
+	cl_mm_password = Cvar_Get( "cl_mm_password", "", CVAR_NOSET );
 
 	/*
 	* add commands

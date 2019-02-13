@@ -14,18 +14,19 @@
 
 // TODO: Lift this to an application-global scope
 class ScopeGuard {
-	const std::function<void()> *atExit;
+	std::function<void()> atExit;
+	bool suppressed { false };
 
 public:
-	explicit ScopeGuard( const std::function<void()> &atExit_ ) : atExit( &atExit_ ) {}
+	explicit ScopeGuard( std::function<void()> &&atExit_ ) : atExit( atExit_ ) {}
 
 	~ScopeGuard() {
-		if( atExit ) {
-			( *atExit )();
+		if( !suppressed ) {
+			( atExit )();
 		}
 	}
 
-	void Suppress() { atExit = nullptr; }
+	void Suppress() { suppressed = true; }
 };
 
 /**

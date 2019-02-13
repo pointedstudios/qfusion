@@ -51,6 +51,7 @@ class CLStatsowFacade {
 	mutable wsw::string_view ticketStringView;
 
 	struct cvar_s *cl_mm_user;
+	struct cvar_s *cl_mm_password;
 	struct cvar_s *cl_mm_session;
 	struct cvar_s *cl_mm_autologin;
 
@@ -132,9 +133,6 @@ class CLStatsowFacade {
 	void OnLoginSuccess();
 	void OnLoginFailure();
 	void OnLogoutCompleted();
-
-	void OnPendingMatchFailure();
-	void OnPendingMatchSuccess();
 
 	template <typename Task>
 	bool TryStartingTask( Task *task ) {
