@@ -874,6 +874,7 @@ void StatsowFacade::ClientEntry::WriteToReport( JsonWriter &writer, bool teamGam
 			writer << '}';
 		}
 	}
+	writer << '}';
 
 	if( respectStats.hasViolatedCodex || respectStats.hasIgnoredCodex ) {
 		return;
