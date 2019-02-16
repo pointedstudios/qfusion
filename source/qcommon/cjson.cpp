@@ -54,8 +54,13 @@ static int cJSON_strcasecmp( const char *s1,const char *s2 ) {
 	return tolower( *(const unsigned char *)s1 ) - tolower( *(const unsigned char *)s2 );
 }
 
+#if 0
 static void *(*cJSON_malloc)( size_t sz ) = NULL;
 static void (*cJSON_free)( void *ptr ) = NULL;
+#else
+#define cJSON_malloc malloc
+#define cJSON_free free
+#endif
 
 static char* cJSON_strdup( const char* str ) {
 	size_t len;
@@ -70,6 +75,7 @@ static char* cJSON_strdup( const char* str ) {
 }
 
 void cJSON_InitHooks( cJSON_Hooks* hooks ) {
+#if 0
 	if( !hooks ) { /* Reset hooks */
 		cJSON_malloc = malloc;
 		cJSON_free = free;
@@ -78,6 +84,7 @@ void cJSON_InitHooks( cJSON_Hooks* hooks ) {
 
 	cJSON_malloc = ( hooks->malloc_fn ) ? hooks->malloc_fn : malloc;
 	cJSON_free   = ( hooks->free_fn ) ? hooks->free_fn : free;
+#endif
 }
 
 /* Internal constructor. */
