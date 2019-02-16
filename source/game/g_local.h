@@ -1443,7 +1443,7 @@ public:
 	void RemoveRating( edict_t *ent );
 
 	bool IsMatchReportDiscarded() const {
-		return isDiscarded;
+		return !IsValid();
 	}
 
 	void OnClientHadPlaytime( const gclient_t *client );

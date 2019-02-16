@@ -1171,8 +1171,8 @@ void RespectHandler::ClientEntry::Reset() {
 }
 
 bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
-	// If has already violated the Codex
-	if( hasViolatedCodex ) {
+	// If has already violated or ignored the Codex
+	if( hasViolatedCodex || hasIgnoredCodex ) {
 		return false;
 	}
 
@@ -1181,7 +1181,7 @@ bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
 		return false;
 	}
 
-	const char *warning = S_COLOR_GREY "Less talk, let's play!";
+	const char *warning = S_COLOR_YELLOW "Less talk, let's play!";
 	if( GS_MatchState() < MATCH_STATE_PLAYTIME ) {
 		// Print a warning only to the player
 		PrintToClientScreen( "%s", warning );
@@ -1235,7 +1235,7 @@ void RespectHandler::ClientEntry::AnnounceMisconductBehaviour( const char *actio
 		outcome = S_COLOR_RED "No awards given";
 	}
 
-	constexpr const char *format = S_COLOR_RED "BOOM! " S_COLOR_WHITE "%s" S_COLOR_RED " has %s %s! %s!\n";
+	constexpr const char *format = S_COLOR_WHITE "%s" S_COLOR_RED " has %s %s! %s!\n";
 	G_PrintMsg( nullptr, format, ent->r.client->netname, action, subject, outcome );
 
 	PrintToClientScreen( S_COLOR_RED "You have %s R&S Codex...", action );
@@ -1381,7 +1381,7 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 	}
 
 	if( matchState == MATCH_STATE_PLAYTIME ) {
-		if( saidBefore ) {
+		if( saidBefore || hasViolatedCodex ) {
 			return;
 		}
 
@@ -1405,7 +1405,7 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 			return;
 		}
 
-		if( !hasTakenStartHint ) {
+		if( !hasTakenStartHint && !hasViolatedCodex ) {
 			PrintToClientScreen( S_COLOR_CYAN "Say `%s` please!", RespectTokensRegistry::TokenForNum( tokenNum ) );
 			hasTakenStartHint = true;
 			return;
@@ -1426,30 +1426,24 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 		return;
 	}
 
+	if( hasViolatedCodex || hasIgnoredCodex ) {
+		return;
+	}
+
 	if( levelTime - lastSaidAt[RespectTokensRegistry::SAY_AT_END_TOKEN_NUM] < 64 ) {
-		saidAfter = true;
-		if( saidBefore && !hasViolatedCodex ) {
+		if( !saidAfter ) {
+			saidAfter = true;
 			G_PlayerAward( ent, S_COLOR_CYAN "Fair play!" );
 			G_PrintMsg( ent, "Your stats and awards have been confirmed!\n" );
 		}
 	}
 
-	if( !saidAfter && saidBefore && !hasViolatedCodex ) {
-		// TODO: Say this hint 1 second after the match
-		if( !hasTakenFinalHint ) {
-			// Say "gg" at the end regardless of being in-game from the beginning or joining mid-game
-			PrintToClientScreen( S_COLOR_CYAN "Say `gg` please!" );
-			hasTakenFinalHint = true;
-		}
+	if( saidAfter || hasTakenFinalHint ) {
 		return;
 	}
 
-	if( !hasTakenFinalHint ) {
-		if( hasIgnoredCodex || hasViolatedCodex ) {
-			PrintToClientScreen( "Be nice next time please..." );
-		}
-		hasTakenFinalHint = true;
-	}
+	PrintToClientScreen( S_COLOR_CYAN "Say `gg` please!" );
+	hasTakenFinalHint = true;
 }
 
 void RespectHandler::ClientEntry::OnClientDisconnected() {
