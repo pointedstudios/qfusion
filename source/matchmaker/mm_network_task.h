@@ -62,7 +62,9 @@ protected:
 		}
 	}
 
-	virtual bool AllowQueryRetry() { return true; };
+	virtual bool AllowQueryRetry() {
+		return query && query->ShouldRetry();
+	};
 
 	virtual void OnQueryResult( bool succeeded ) {
 		if( succeeded ) {
@@ -230,6 +232,10 @@ protected:
 		, parent( parent_ ), name( name_ ) {}
 
 	bool AllowQueryRetry() override {
+		if( !StatsowNetworkTask::AllowQueryRetry() ) {
+			return false;
+		}
+
 		assert( startedAt >= 0 && maxRetryDuration >= 0 );
 		const auto now = Sys_Milliseconds();
 		assert( now >= startedAt );
@@ -281,6 +287,11 @@ protected:
 
 		// Check whether we have not fired the query again
 		if( !query->HasStarted() ) {
+			// Check whether a retry is allowed using generic facilities.
+			// This allows to stop explicit retries on timeout.
+			if( !AllowQueryRetry() ) {
+				OnQueryFailure();
+			}
 			if( !query->SendForStatusPolling() ) {
 				OnQueryFailure();
 			}

@@ -41,7 +41,7 @@ void QueryObject::RawCallback( wswcurl_req *req, int wswStatus, void *customp ) 
 	}
 
 	// Make sure the status has been set
-	assert( query->status >= SUCCEEDED );
+	assert( query->status >= Status::Succeeded );
 
 	query->completionCallback( query );
 
@@ -58,10 +58,10 @@ void QueryObject::HandleOtherFailure( wswcurl_req *, int wswStatus ) {
 		case CURLE_COULDNT_RESOLVE_PROXY:
 		case CURLE_SEND_ERROR:
 		case CURLE_RECV_ERROR:
-			SetStatus( NETWORK_FAILURE );
+			SetStatus( Status::NetworkFailure );
 			break;
 		default:
-			SetStatus( OTHER_FAILURE );
+			SetStatus( Status::OtherFailure );
 			break;
 	}
 }
@@ -77,17 +77,17 @@ void QueryObject::HandleHttpFailure( wswcurl_req *req, int status ) {
 	// Statsow returns these error codes if a request is throttled
 	// or a transaction serialization error occurs. We should retry in these cases.
 	if( httpStatus == 429 || httpStatus == 503 ) {
-		SetStatus( EXPLICIT_RETRY );
+		SetStatus( Status::ExplicitRetry );
 		return;
 	}
 
-	SetStatus( httpStatus < 500 ? MALFORMED_REQUEST : SERVER_FAILURE );
+	SetStatus( httpStatus < 500 ? Status::MalformedRequest : Status::ServerFailure );
 }
 
 void QueryObject::HandleHttpSuccess( wswcurl_req *req ) {
 	const char *contentType = wswcurl_get_content_type( req );
 	if( !contentType ) {
-		SetStatus( SUCCEEDED );
+		SetStatus( Status::Succeeded );
 		return;
 	}
 
@@ -95,11 +95,11 @@ void QueryObject::HandleHttpSuccess( wswcurl_req *req ) {
 	if( strcmp( contentType, "application/json" ) != 0 ) {
 		// Some calls return plain text ok (do they?)
 		if( strcmp( contentType, "text/plain" ) == 0 ) {
-			SetStatus( SUCCEEDED );
+			SetStatus( Status::Succeeded );
 			return;
 		}
 		Com_Printf( S_COLOR_YELLOW "%s: Unexpected content type `%s`\n", tag, contentType );
-		SetStatus( MALFORMED_RESPONSE );
+		SetStatus( Status::MalformedResponse );
 		return;
 	}
 
@@ -107,24 +107,24 @@ void QueryObject::HandleHttpSuccess( wswcurl_req *req ) {
 	wswcurl_getsize( req, &rawSize );
 	if( !rawSize ) {
 		// The failure is really handled on application logic level
-		SetStatus( SUCCEEDED );
+		SetStatus( Status::Succeeded );
 		return;
 	}
 
 	// read the response string
 	rawResponse = (char *)malloc( rawSize + 1 );
 	size_t readSize = wswcurl_read( req, rawResponse, rawSize );
-	QueryObject::Status status = SUCCEEDED;
+	QueryObject::Status status = Status::Succeeded;
 	if( readSize != rawSize ) {
 		const char *format = "%s: Can't read expected %u bytes, got %d instead\n";
 		Com_Printf( format, tag, (unsigned)rawSize, (unsigned)readSize );
 		// We think it's better than a "network error"
-		status = MALFORMED_RESPONSE;
+		status = Status::MalformedResponse;
 	} else {
 		if( rawSize ) {
 			if( !( responseRoot = cJSON_Parse( rawResponse ) ) ) {
 				Com_Printf( "%s: Failed to parse JSON response\n", tag );
-				status = MALFORMED_RESPONSE;
+				status = Status::MalformedResponse;
 			}
 		}
 	}
@@ -280,7 +280,7 @@ const char *QueryObject::FindFormParamByName( const char *name ) const {
 
 bool QueryObject::SendForStatusPolling() {
 	if( !Prepare() ) {
-		status.store( OTHER_FAILURE, std::memory_order_relaxed );
+		status.store( Status::OtherFailure, std::memory_order_relaxed );
 		return false;
 	}
 
@@ -290,7 +290,7 @@ bool QueryObject::SendForStatusPolling() {
 
 bool QueryObject::SendWithCallback( CompletionCallback &&callback_, bool deleteOnCompletion_ ) {
 	if( !Prepare() ) {
-		status.store( OTHER_FAILURE, std::memory_order_relaxed );
+		status.store( Status::OtherFailure, std::memory_order_relaxed );
 		return false;
 	}
 
@@ -302,13 +302,13 @@ bool QueryObject::SendWithCallback( CompletionCallback &&callback_, bool deleteO
 }
 
 void QueryObject::Fire() {
-	status.store( STARTED, std::memory_order_seq_cst );
+	status.store( Status::Started, std::memory_order_seq_cst );
 	wswcurl_stream_callbacks( req, nullptr, &QueryObject::RawCallback, nullptr, (void*)this );
 	wswcurl_start( req );
 }
 
 bool QueryObject::Prepare() {
-	assert( status < STARTED );
+	assert( status < Status::Started );
 
 	::wswcurl_delete( oldReq );
 	oldReq = nullptr;

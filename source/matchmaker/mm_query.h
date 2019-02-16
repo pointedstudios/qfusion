@@ -195,22 +195,58 @@ private:
 	 */
 	bool hasConveredJsonToFormParam { false };
 
-	enum Status: uint32_t {
-		CREATED,
-		STARTED,
-		SUCCEEDED,
-		OTHER_FAILURE,
-		NETWORK_FAILURE,
-		SERVER_FAILURE,
-		MALFORMED_REQUEST,
-		MALFORMED_RESPONSE,
-		EXPLICIT_RETRY
+public:
+	/**
+	 * Defines kinds of errors that may occur.
+	 */
+	enum class ErrorFlags: uint32_t {
+		OtherFailure = ( 1 << 4 ),
+		NetworkFailure = ( 1 << 5 ),
+		ServerFailure = ( 1 << 6 ),
+		MalformedRequest = ( 1 << 7 ),
+		MalformedResponse = ( 1 << 8 ),
 	};
+
+	/**
+	 * Clears a mask that defines kinds of errors that allow a query retry.
+	 */
+	void ClearRetryErrorFlags() {
+		retryErrorFlags = (ErrorFlags)0;
+	}
+
+	/**
+	 * Adds a kind of errors that allows a query retry to a recoverable errors mask.
+	 */
+	void AddRetryErrorFlags( ErrorFlags flagsToAdd ) {
+		retryErrorFlags = (ErrorFlags)( (uint32_t)retryErrorFlags | (uint32_t)flagsToAdd );
+	}
+private:
+	ErrorFlags retryErrorFlags {
+		(ErrorFlags)( (uint32_t)ErrorFlags::NetworkFailure | (uint32_t)ErrorFlags::ServerFailure )
+	};
+
+	enum class Status: uint32_t {
+		Created = ( 1 << 0 ),
+		Started = ( 1 << 1 ),
+		Succeeded = ( 1 << 2 ),
+		ExplicitRetry = ( 1 << 3 ),
+		OtherFailure = ( 1 << 4 ),
+		NetworkFailure = ( 1 << 5 ),
+		ServerFailure = ( 1 << 6 ),
+		MalformedRequest = ( 1 << 7 ),
+		MalformedResponse = ( 1 << 8 ),
+	};
+
+	static_assert( (int)ErrorFlags::OtherFailure == (int)Status::OtherFailure, "" );
+	static_assert( (int)ErrorFlags::NetworkFailure == (int)Status::NetworkFailure, "" );
+	static_assert( (int)ErrorFlags::ServerFailure == (int)Status::ServerFailure, "" );
+	static_assert( (int)ErrorFlags::MalformedRequest == (int)Status::MalformedRequest, "" );
+	static_assert( (int)ErrorFlags::MalformedResponse == (int)Status::MalformedResponse, "" );
 
 	/**
 	 * An atomic request status indicator used for status polling.
 	 */
-	std::atomic<Status> status { CREATED };
+	std::atomic<Status> status { Status::Created };
 
 	/**
 	 * Indicates whether this is a POST query (GET otherwise).
@@ -307,9 +343,9 @@ private:
 	 */
 	void CheckReadyStatusForAccess( const char *itemToAccess ) const {
 		Status actualStatus = this->status.load( std::memory_order_seq_cst );
-		if( actualStatus < SUCCEEDED ) {
+		if( actualStatus < Status::Succeeded ) {
 			FailWith( "Attempt to get %s while the request is not ready yet", itemToAccess );
-		} else if( actualStatus > SUCCEEDED ) {
+		} else if( actualStatus > Status::Succeeded ) {
 			FailWith( "Attempt to get %s while the request has not succeeded", itemToAccess );
 		}
 	}
@@ -379,7 +415,7 @@ private:
 
 	Status GetCompletionStatus() const {
 		Status actualStatus = status.load( std::memory_order_seq_cst );
-		if( actualStatus < SUCCEEDED ) {
+		if( actualStatus < Status::Succeeded ) {
 			FailWith( "Attempt to test status of request that is not ready yet" );
 		}
 		return actualStatus;
@@ -629,7 +665,7 @@ public:
 		if( !isPostQuery ) {
 			FailWith( "Attempt to add a JSON root to a GET request" );
 		}
-		if( status.load( std::memory_order_seq_cst ) >= STARTED ) {
+		if( status.load( std::memory_order_seq_cst ) >= Status::Started ) {
 			FailWith( "Attempt to add a JSON root to an already started request" );
 		}
 		if( hasConveredJsonToFormParam ) {
@@ -693,7 +729,7 @@ public:
 	 * Its safe to call this in any state.
 	 */
 	bool IsReady() const {
-		return status.load( std::memory_order_seq_cst ) >= SUCCEEDED;
+		return status.load( std::memory_order_seq_cst ) >= Status::Succeeded;
 	}
 
 	/**
@@ -701,7 +737,7 @@ public:
 	 * This is safe to call in any state.
 	 */
 	bool HasStarted() const {
-		return status.load( std::memory_order_seq_cst ) >= STARTED;
+		return status.load( std::memory_order_seq_cst ) >= Status::Started;
 	}
 
 	/**
@@ -709,7 +745,7 @@ public:
 	 * and response retrieval (if any) is now can be performed.
 	 * @warning an object must be in "ready" state to call this.
 	 */
-	bool HasSucceeded() const { return TestCompletionStatus( SUCCEEDED ); }
+	bool HasSucceeded() const { return TestCompletionStatus( Status::Succeeded ); }
 
 	/**
 	 * Checks whether the failure is not a logical error and is due to
@@ -717,8 +753,13 @@ public:
 	 * @warning an object must be in "ready" state to call this.
 	 */
 	bool ShouldRetry() {
-		Status status_ = GetCompletionStatus();
-		return status_ == EXPLICIT_RETRY || status_ == NETWORK_FAILURE || status_ == SERVER_FAILURE;
+		const Status status_ = GetCompletionStatus();
+		// Allow retry on success as well (this is for an explicitly requested task retries on success).
+		if( status == Status::Succeeded || status_ == Status::ExplicitRetry ) {
+			return true;
+		}
+		static_assert( sizeof( Status ) == sizeof( uint32_t ) && sizeof( ErrorFlags ) == sizeof( uint32_t ), "" );
+		return (bool)( ( (uint32_t)status_ ) & ( (uint32_t)retryErrorFlags ) );
 	}
 
 	/**
@@ -737,7 +778,7 @@ public:
 			::cJSON_Delete( responseRoot );
 			responseRoot = nullptr;
 		}
-		SetStatus( CREATED );
+		SetStatus( Status::Created );
 	}
 
 	/**

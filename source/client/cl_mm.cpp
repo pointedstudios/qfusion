@@ -69,6 +69,15 @@ protected:
 	CLStatsowTask( CLStatsowFacade *parent_, const char *name_, const char *resource_, unsigned retryDelay_ = 0 )
 		: StatsowFacadeTask( parent_, name_, va( "client/%s", resource_ ) ) {
 		this->retryDelay = retryDelay_;
+		if( !query ) {
+			return;
+		}
+
+		// QueryObject treats network errors as allowing retry by default.
+		// This is fine for the server side but not for clients.
+
+		query->ClearRetryErrorFlags();
+		query->AddRetryErrorFlags( QueryObject::ErrorFlags::ServerFailure );
 	}
 
 	bool CheckResponseStatus( const char *methodTag, bool displayInUi = false ) const {
