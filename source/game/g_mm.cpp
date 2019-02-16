@@ -1182,8 +1182,15 @@ bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
 		return false;
 	}
 
+	const auto matchState = GS_MatchState();
+	// We do not intercept this condition in RespectHandler::HandleMessage()
+	// as we still need to collect last said tokens for clients using CheckForTokens()
+	if( matchState > MATCH_STATE_PLAYTIME ) {
+		return false;
+	}
+
 	const char *warning = S_COLOR_YELLOW "Less talk, let's play!";
-	if( GS_MatchState() < MATCH_STATE_PLAYTIME ) {
+	if( matchState < MATCH_STATE_PLAYTIME ) {
 		// Print a warning only to the player
 		PrintToClientScreen( "%s", warning );
 		return false;
