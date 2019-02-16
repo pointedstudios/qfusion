@@ -192,7 +192,7 @@ public:
 class SVFetchMatchUuidTask : public SVStatsowTask {
 public:
 	explicit SVFetchMatchUuidTask( SVStatsowFacade *parent_ )
-		: SVStatsowTask( parent_, "SVFetchMatchUuidTask", "matchUuid", 2500 ) {
+		: SVStatsowTask( parent_, "SVFetchMatchUuidTask", "match/fetchId", 2500 ) {
 		if( query ) {
 			query->SetServerSession( parent->ourSession );
 		}
@@ -294,19 +294,19 @@ void SVFetchMatchUuidTask::OnQuerySuccess() {
 		return;
 	}
 
-	const char *uuidString = query->GetRootString( "uuid", "" );
-	if( !*uuidString ) {
-		PrintError( tag, "Can't find the `uuid` response field" );
+	const char *idString = query->GetRootString( "id", "" );
+	if( !*idString ) {
+		PrintError( tag, "Can't find the `id` response field" );
 		return;
 	}
 
 	mm_uuid_t tmp;
-	if( !mm_uuid_t::FromString( uuidString, &tmp ) ) {
-		PrintError( tag, "Can't parse UUID string `%s`", uuidString );
+	if( !mm_uuid_t::FromString( idString, &tmp ) ) {
+		PrintError( tag, "Can't parse UUID string `%s`", idString );
 		return;
 	}
 
-	Q_strncpyz( sv.configstrings[CS_MATCHUUID], uuidString, sizeof( sv.configstrings[CS_MATCHUUID] ) );
+	Q_strncpyz( sv.configstrings[CS_MATCHUUID], idString, sizeof( sv.configstrings[CS_MATCHUUID] ) );
 }
 
 void SVFetchMatchUuidTask::OnQueryFailure() {

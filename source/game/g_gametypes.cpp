@@ -455,6 +455,12 @@ void G_Match_LaunchState( int matchState ) {
 
 				G_UpdatePlayerMatchMsg( ent );
 			}
+
+			// Another dirty hack.
+			// This allows the server "fetch id" task to stop
+			// (it may be interrupted by presence of a well-formed UUID config string).
+			// This value won't be actually used.
+			trap_ConfigString( CS_MATCHUUID, "ffffffff-ffff-ffff-ffff-ffffffffffff" );
 		}
 	}
 
