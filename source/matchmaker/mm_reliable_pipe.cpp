@@ -150,6 +150,8 @@ void ReliablePipe::BackgroundSender::RunStep() {
 			return true;
 		}
 
+		Com_Printf( "%s: About to send query and start polling status\n", tag );
+
 		activeQuery->SendForStatusPolling();
 		while( !activeQuery->IsReady() ) {
 			Sys_Sleep( 16 );
@@ -197,6 +199,11 @@ bool ReliablePipe::BackgroundSender::CheckQueryResponse() {
 	assert( activeQuery && activeQuery->HasSucceeded() );
 
 	constexpr const char *tag = "ReliablePipe::BackgroundSender::CheckQueryResponse()";
+
+	if( !activeQuery->RawResponse() ) {
+		Com_Printf( S_COLOR_RED "%s: The query response is empty\n", tag );
+		return false;
+	}
 
 	const double status = activeQuery->GetRootDouble( "status", std::numeric_limits<double>::infinity() );
 	if( !std::isfinite( status ) ) {

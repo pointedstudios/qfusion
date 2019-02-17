@@ -1380,14 +1380,14 @@ class StatsowFacade {
 	ClientEntry *NewPlayerEntry( edict_t *ent, bool final );
 
 	void SendMatchStartedReport() {
-		SendGenericMatchStateEventReport( "started" );
+		SendGenericMatchStateEvent( "started" );
 	}
 
 	void SendMatchAbortedReport() {
-		SendGenericMatchStateEventReport( "aborted" );
+		SendGenericMatchStateEvent( "aborted" );
 	}
 
-	void SendGenericMatchStateEventReport( const char *event );
+	void SendGenericMatchStateEvent( const char *event );
 public:
 	static void Init();
 	static void Shutdown();

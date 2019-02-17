@@ -558,9 +558,16 @@ QueryObject *LocalReliableStorage::FetchNext( DBConnection connection, const cha
 	QueryObject *query = nullptr;
 
 	auto printReadRow = [&]( const char *name, const wsw::string_view &value ) {
+		constexpr const char *tag = "LocalReliableStorage::FetchNext()";
 		// TODO: This is quite error-prone (string views currently point to zero-terminated data
 		// but there's no strict guarantee). Introduce and use streams instead.
-		Com_DPrintf( "LocalReliableStorage::FetchNext(): read (`%s`, `%s`)\n", name, value.data() );
+
+		// Hack to always print the read URL regardless of "developer" cvar value
+		if( !Q_stricmp( name, "url" ) ) {
+			Com_Printf( "%s: the URL is `%s`\n", tag, value.data() );
+		} else {
+			Com_DPrintf( "%s: the `%s` is `%s`\n", tag, name, value.data());
+		}
 	};
 
 	const auto rowConsumer = [&]( const SQLiteRowReader &reader ) -> bool {
@@ -586,6 +593,7 @@ QueryObject *LocalReliableStorage::FetchNext( DBConnection connection, const cha
 	if( adapter.TryReadingAll( rowConsumer ) > 0 ) {
 		// At least a single row has been read so the query must have been created
 		assert( query );
+		// This won't harm ... even if there was no an actual attachment
 		query->hasConveredJsonToFormParam = true;
 		return query;
 	}

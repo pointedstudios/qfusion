@@ -477,17 +477,21 @@ void StatsowFacade::OnMatchStateLaunched( int oldState, int newState ) {
 	}
 }
 
-void StatsowFacade::SendGenericMatchStateEventReport( const char *event ) {
+void StatsowFacade::SendGenericMatchStateEvent( const char *event ) {
 	// This should be changed if a stateful competitive race gametype is really implemented
 	if( GS_RaceGametype() ) {
 		return;
 	}
+
+	constexpr const char *tag = "StatsowFacade::SendGenericMatchStateEvent()";
+	G_Printf( "%s: Sending `%s` event\n", tag, event );
 
 	char url[MAX_STRING_CHARS];
 	va_r( url, sizeof( url ), "server/match/%s", event );
 
 	QueryObject *query = trap_MM_NewPostQuery( url );
 	if( !query ) {
+		G_Printf( S_COLOR_YELLOW "%s: The server executable has not created a query object\n", tag );
 		return;
 	}
 
@@ -551,7 +555,7 @@ void StatsowFacade::SendGenericMatchStateEventReport( const char *event ) {
 		::free( idsBuffer );
 	}
 
-	trap_MM_SendQuery( query );
+	trap_MM_EnqueueReport( query );
 }
 
 void StatsowFacade::AddPlayerReport( edict_t *ent, bool final ) {
