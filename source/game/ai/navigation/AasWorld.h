@@ -282,7 +282,7 @@ class AiAasWorld
 	uint16_t *areaVisData { nullptr };
 	int32_t *areaVisDataOffsets { nullptr };
 
-	uint16_t *usefulGroundedAreas { nullptr };
+	uint16_t *groundedPrincipalRoutingAreas { nullptr };
 	uint16_t *jumppadReachPassThroughAreas { nullptr };
 	uint16_t *ladderReachPassThroughAreas { nullptr };
 	uint16_t *elevatorReachPassThroughAreas { nullptr };
@@ -524,9 +524,13 @@ public:
 	}
 
 	/**
-	 * Gets a list of all grounded areas in the world except "junk" ones.
+	 * Gets a list of grounded areas that are considered "principal" for routing
+	 * and that should be tested for blocking by enemies for a proper bot behaviour.
+	 * Not all principal areas are included in this list but only grounded ones
+	 * as they are tested using a separate code path during determination of areas blocked status.
 	 */
-	const uint16_t *UsefulGroundedAreas() const { return usefulGroundedAreas; }
+	const uint16_t *GroundedPrincipalRoutingAreas() const { return groundedPrincipalRoutingAreas; }
+
 	const uint16_t *JumppadReachPassThroughAreas() const { return jumppadReachPassThroughAreas; }
 	const uint16_t *LadderReachPassThroughAreas() const { return ladderReachPassThroughAreas; }
 	const uint16_t *ElevatorReachPassThroughAreas() const { return elevatorReachPassThroughAreas; }

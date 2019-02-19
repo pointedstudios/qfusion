@@ -298,7 +298,7 @@ void DisableMapAreasRequest::AddGroundedAreas( bool *__restrict blockedAreasTabl
 	const auto hitFlagsMask = (int)TrackedEnemy::HitFlags::ALL & ~(int)( TrackedEnemy::HitFlags::RAIL );
 	// Do not take "rail" hit flags into account while testing grounded areas for blocking.
 	// A bot can easily dodge rail-like weapons using regular movement on ground.
-	const auto *const __restrict groundedAreaNums = aasWorld->UsefulGroundedAreas() + 1;
+	const auto *const __restrict groundedAreaNums = aasWorld->GroundedPrincipalRoutingAreas();
 	const auto *const __restrict aasAreas = aasWorld->Areas();
 	for( int i = 0; i < groundedAreaNums[-1]; ++i ) {
 		const int areaNum = groundedAreaNums[i];
