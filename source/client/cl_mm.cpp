@@ -250,18 +250,23 @@ public:
 };
 
 class CLMatchMakerTask : public CLStatsowTask {
-	bool *const continueRunning;
+	bool *const waitForTaskCompletion;
 
-	void OnQueryResult( bool success ) override;
 	void OnQueryFailure() override;
 protected:
-	CLMatchMakerTask( CLStatsowFacade *parent_, bool *continueRunning_, const char *name_, const char *resource_ )
-		: CLStatsowTask( parent_, name_, resource_ ), continueRunning( continueRunning_ ) {}
+	CLMatchMakerTask( CLStatsowFacade *parent_, bool *waitForTaskCompletion_, const char *name_, const char *resource_ )
+		: CLStatsowTask( parent_, name_, resource_ ), waitForTaskCompletion( waitForTaskCompletion_ ) {
+		assert( waitForTaskCompletion_ );
+	}
 
 	void OnAnyFailure() {
 		parent->matchHandle = Uuid_ZeroUuid();
 		parent->matchAddress.clear();
-		*continueRunning = false;
+		InterruptWaitingForTaskCompletion();
+	}
+
+	void InterruptWaitingForTaskCompletion() {
+		*waitForTaskCompletion = false;
 	}
 
 	bool GetMatchPresentStatus( const char *tag, int *presentStatus ) {
@@ -278,8 +283,8 @@ protected:
 class CLCheckMatchTask : public CLMatchMakerTask {
 	void OnQuerySuccess() override;
 public:
-	CLCheckMatchTask( CLStatsowFacade *parent_, bool *continueRunning_ )
-		: CLMatchMakerTask( parent_, continueRunning_, "CLCheckMatchTask", "mm/checkMatch" ) {
+	CLCheckMatchTask( CLStatsowFacade *parent_, bool *waitForTaskCompletion_ )
+		: CLMatchMakerTask( parent_, waitForTaskCompletion_, "CLCheckMatchTask", "mm/checkMatch" ) {
 		if( query ) {
 			query->SetClientSession( parent->ourSession );
 		}
@@ -289,8 +294,8 @@ public:
 class CLCheckServerTask : public CLMatchMakerTask {
 	void OnQuerySuccess() override;
 public:
-	CLCheckServerTask( CLStatsowFacade *parent_, bool *continueRunning_ )
-		: CLMatchMakerTask( parent_, continueRunning_, "CLCheckServerTask", "mm/checkServer" ) {
+	CLCheckServerTask( CLStatsowFacade *parent_, bool *waitForTaskCompletion_ )
+		: CLMatchMakerTask( parent_, waitForTaskCompletion_, "CLCheckServerTask", "mm/checkServer" ) {
 		if( !query ) {
 			return;
 		}
@@ -302,8 +307,8 @@ public:
 class CLAcceptMatchTask : public CLMatchMakerTask {
 	void OnQuerySuccess() override;
 public:
-	CLAcceptMatchTask( CLStatsowFacade *parent_, bool *continueRunning_ )
-		: CLMatchMakerTask( parent_, continueRunning_, "CLAcceptMatchTask", "mm/acceptOrReject" ) {
+	CLAcceptMatchTask( CLStatsowFacade *parent_, bool *waitForTaskCompletion_ )
+		: CLMatchMakerTask( parent_, waitForTaskCompletion_, "CLAcceptMatchTask", "mm/acceptOrReject" ) {
 		if( !query ) {
 			return;
 		}
@@ -344,16 +349,16 @@ CLConnectTask *CLStatsowFacade::NewConnectTask( const char *address ) {
 	return NewTaskStub<CLConnectTask>( this, address );
 }
 
-CLCheckMatchTask *CLStatsowFacade::NewCheckMatchTask( bool *continueRunning ) {
-	return NewTaskStub<CLCheckMatchTask>( this, continueRunning );
+CLCheckMatchTask *CLStatsowFacade::NewCheckMatchTask() {
+	return NewTaskStub<CLCheckMatchTask>( this, &isCheckingPendingMatch );
 }
 
-CLCheckServerTask *CLStatsowFacade::NewCheckServerTask( bool *continueRunning ) {
-	return NewTaskStub<CLCheckServerTask>( this, continueRunning );
+CLCheckServerTask *CLStatsowFacade::NewCheckServerTask() {
+	return NewTaskStub<CLCheckServerTask>( this, &isCheckingPendingMatch );
 }
 
-CLAcceptMatchTask *CLStatsowFacade::NewAcceptTask( bool *continueRunning ) {
-	return NewTaskStub<CLAcceptMatchTask>( this, continueRunning );
+CLAcceptMatchTask *CLStatsowFacade::NewAcceptTask() {
+	return NewTaskStub<CLAcceptMatchTask>( this, &isCheckingPendingMatch );
 }
 
 void CLConnectTask::OnQueryFailure() {
@@ -406,10 +411,8 @@ bool CLStatsowFacade::StartConnecting( const netadr_t *address ) {
 
 bool CLStatsowFacade::WaitUntilConnectionAllowed() {
 	while( isLoggingIn || isLoggingOut ) {
-		Frame();
-		Sys_Sleep( 20 );
+		DoWaitingStep();
 	}
-
 	return ticket.IsValidSessionId();
 }
 
@@ -428,9 +431,8 @@ void CLStatsowFacade::CheckOrWaitForAutoLogin() {
 	Login( nullptr, nullptr );
 
 	while( isLoggingIn ) {
-		tasksRunner.CheckStatus();
+		DoWaitingStep();
 		PollLoginStatus();
-		Sys_Sleep( 16 );
 	}
 
 	// Interrupt if we have not logged in successfully or checking for pending match is not specified
@@ -441,62 +443,71 @@ void CLStatsowFacade::CheckOrWaitForAutoLogin() {
 	CheckOrWaitForPendingMatch();
 }
 
+void CLStatsowFacade::DoWaitingStep() {
+	Sys_Sleep( 16 );
+	tasksRunner.CheckStatus();
+}
+
+void CLStatsowFacade::WaitBlockingWhile( const volatile bool *condition ) {
+	assert( condition );
+	while( *condition ) {
+		DoWaitingStep();
+	}
+}
+
+template <typename Task>
+bool CLStatsowFacade::StartAndWaitForCompletion( Task *task, bool *waitForCompletion, const char *methodTag, const char *taskTag ) {
+	*waitForCompletion = true;
+
+	if( !TryStartingTask( task ) ) {
+		Com_Printf( S_COLOR_RED "%s: Can't spawn a `%s` task\n", methodTag, taskTag );
+		*waitForCompletion = false;
+		return false;
+	}
+
+	WaitBlockingWhile( waitForCompletion );
+	return true;
+}
+
 void CLStatsowFacade::CheckOrWaitForPendingMatch() {
 	assert( !isLoggingIn && !isLoggingOut );
 	assert( ourSession.IsValidSessionId() );
 
-	constexpr const char *const tag = "CLStatsowFacade::CheckOrWaitForPendingMatch";
+	constexpr const char *const methodTag = "CLStatsowFacade::CheckOrWaitForPendingMatch";
 	ScopeGuard failureGuard( [&]() {
 		this->matchHandle = Uuid_ZeroUuid();
 		this->matchAddress.clear();
 	});
 
 	matchHandle = Uuid_ZeroUuid();
-	bool continueRunning = true;
-	if( !TryStartingTask( NewCheckMatchTask( &continueRunning ) ) ) {
-		Com_Printf( S_COLOR_YELLOW "%s: Can't spawn a `check match` task", tag );
-		return;
-	}
 
-	while( continueRunning ) {
-		Sys_Sleep( 16 );
-		tasksRunner.CheckStatus();
+	if( !StartAndWaitForCompletion( NewCheckMatchTask(), &isCheckingPendingMatch, methodTag, "check match" ) ) {
+		return;
 	}
 
 	if( !matchHandle.IsValidSessionId() ) {
 		return;
 	}
 
-	continueRunning = true;
-	if( !TryStartingTask( NewCheckServerTask( &continueRunning ) ) ) {
-		Com_Printf( S_COLOR_YELLOW "%s: Can't spawn a `check server` task", tag );
+	if( !StartAndWaitForCompletion( NewCheckServerTask(), &isCheckingPendingMatch, methodTag, "check server" ) ) {
 		return;
-	}
-
-	while( continueRunning ) {
-		Sys_Sleep( 16 );
-		tasksRunner.CheckStatus();
 	}
 
 	if( matchAddress.empty() ) {
 		return;
 	}
 
-	continueRunning = true;
-	if( !TryStartingTask( NewAcceptTask( &continueRunning ) ) ) {
-		Com_Printf( S_COLOR_YELLOW "%s: Can't spawn an `accept` task", tag );
+	if( !StartAndWaitForCompletion( NewAcceptTask(), &isCheckingPendingMatch, methodTag, "accept" ) ) {
 		return;
 	}
 
-	while( continueRunning ) {
-		Sys_Sleep( 16 );
-		tasksRunner.CheckStatus();
+	// Might have been reset on the last task failure
+	if( matchAddress.empty() ) {
+		return;
 	}
 
-	// Might have been reset on the last task failure
-	if( !matchAddress.empty() ) {
-		Cbuf_ExecuteText( EXEC_APPEND, va( "connect \"%s\"", matchAddress.c_str() ) );
-	}
+	Com_Printf( "About to append a connect command using address `%s`\n", matchAddress.c_str() );
+	Cbuf_ExecuteText( EXEC_APPEND, va( "connect \"%s\"", matchAddress.c_str() ) );
 }
 
 void CLStatsowFacade::PollLoginStatus() {
@@ -603,10 +614,9 @@ bool CLStatsowFacade::Logout( bool waitForCompletion ) {
 		return true;
 	}
 
-	auto timeout = Sys_Milliseconds();
-	while( isLoggingOut && Sys_Milliseconds() < ( timeout + MM_LOGOUT_TIMEOUT ) ) {
-		tasksRunner.CheckStatus();
-		Sys_Sleep( 10 );
+	const auto timeoutAt = Sys_Milliseconds();
+	while( isLoggingOut && Sys_Milliseconds() < ( timeoutAt + MM_LOGOUT_TIMEOUT ) ) {
+		DoWaitingStep();
 	}
 
 	// Consider the call result successful anyway
@@ -805,11 +815,6 @@ bool CLStatsowFacade::StartLoggingIn( const char *user, const char *password ) {
 	return false;
 }
 
-void CLMatchMakerTask::OnQueryResult( bool success ) {
-	CLStatsowTask::OnQueryResult( success );
-	*continueRunning = false;
-}
-
 void CLMatchMakerTask::OnQueryFailure() {
 	PrintError( "OnQueryFailure", "The query has failed" );
 	OnAnyFailure();
@@ -831,6 +836,7 @@ void CLCheckMatchTask::OnQuerySuccess() {
 	if( presentStatus <= 0 ) {
 		PrintMessage( tag, "There's no pending match\n" );
 		failureGuard.Suppress();
+		InterruptWaitingForTaskCompletion();
 		return;
 	}
 
@@ -841,6 +847,7 @@ void CLCheckMatchTask::OnQuerySuccess() {
 
 	PrintMessage( tag, "Got pending match handle %s\n", stringToShow );
 	failureGuard.Suppress();
+	InterruptWaitingForTaskCompletion();
 }
 
 void CLCheckServerTask::OnQuerySuccess() {
@@ -860,6 +867,7 @@ void CLCheckServerTask::OnQuerySuccess() {
 	if( presentStatus < 0 ) {
 		PrintMessage( tag, "The match has been canceled" );
 		failureGuard.Suppress();
+		InterruptWaitingForTaskCompletion();
 		return;
 	}
 
@@ -885,6 +893,7 @@ void CLCheckServerTask::OnQuerySuccess() {
 	PrintMessage( tag, "Got a server address %s", addressString );
 	parent->matchAddress.assign( addressString );
 	failureGuard.Suppress();
+	InterruptWaitingForTaskCompletion();
 }
 
 void CLAcceptMatchTask::OnQuerySuccess() {
@@ -895,6 +904,7 @@ void CLAcceptMatchTask::OnQuerySuccess() {
 	}
 
 	PrintMessage( tag, "An offer reply has been successfully confirmed" );
+	InterruptWaitingForTaskCompletion();
 }
 
 int CLStatsowFacade::GetLoginState() const {
@@ -1048,7 +1058,11 @@ CLStatsowFacade::CLStatsowFacade()
 	Cvar_ForceSet( cl_mm_session->name, "" );
 }
 
-CLStatsowFacade::~CLStatsowFacade() {
+void CLStatsowFacade::CheckOrWaitForLoggingOutAtExit() {
+	if( !ourSession.IsValidSessionId() ) {
+		return;
+	}
+
 	// Check whether we have already initiated background logout.
 	// Try starting non-blocking logging out otherwise so we can use the same code path
 	if( !isLoggingOut ) {
@@ -1056,10 +1070,11 @@ CLStatsowFacade::~CLStatsowFacade() {
 	}
 
 	// If we continue logging out or we have just initiated logging out successfully wait for it
-	while( isLoggingOut ) {
-		Sys_Sleep( 16 );
-		tasksRunner.CheckStatus();
-	}
+	WaitBlockingWhile( &isLoggingOut );
+}
+
+CLStatsowFacade::~CLStatsowFacade() {
+	CheckOrWaitForLoggingOutAtExit();
 
 	Cvar_ForceSet( cl_mm_session->name, "0" );
 

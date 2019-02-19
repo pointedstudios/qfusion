@@ -61,6 +61,7 @@ class CLStatsowFacade {
 	bool isLoggingOut { false };
 	bool continueLogin2ndStageTask { false };
 	bool hasTriedLoggingIn { false };
+	bool isCheckingPendingMatch { false };
 
 	CLStatsowFacade();
 	~CLStatsowFacade();
@@ -69,9 +70,9 @@ class CLStatsowFacade {
 	class CLContinueLoggingInTask *NewContinueLoggingInTask( const mm_uuid_t &handle );
 	class CLLogoutTask *NewLogoutTask();
 	class CLConnectTask *NewConnectTask( const char *address );
-	class CLCheckMatchTask *NewCheckMatchTask( bool *continueRunning );
-	class CLCheckServerTask *NewCheckServerTask( bool *continueRunning );
-	class CLAcceptMatchTask *NewAcceptTask( bool *continueRunning );
+	class CLCheckMatchTask *NewCheckMatchTask();
+	class CLCheckServerTask *NewCheckServerTask();
+	class CLAcceptMatchTask *NewAcceptTask();
 
 	// Just to get the code working ... use caching for a final implementation
 	template <typename Task, typename... Args>
@@ -157,8 +158,20 @@ public:
 	bool WaitUntilConnectionAllowed();
 	void CheckOrWaitForAutoLogin();
 	void CheckOrWaitForPendingMatch();
+	void CheckOrWaitForLoggingOutAtExit();
 	void PollLoginStatus();
 	bool StartConnecting( const struct netadr_s *address );
+
+	/**
+	 * The volatile specifier is just to avoid an IDE inspection warning.
+	 * All operations tied to polling of {@code QueryObject} status
+	 * are performed in the main client thread.
+	 */
+	void WaitBlockingWhile( const volatile bool *waitForCompletion );
+	void DoWaitingStep();
+
+	template <typename Task>
+	bool StartAndWaitForCompletion( Task *task, bool *waitForCompletion, const char *methodTag, const char *taskTag );
 
 	bool Login( const char *user, const char *password );
 	bool Logout( bool waitForCompletion );
