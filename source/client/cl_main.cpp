@@ -2745,11 +2745,11 @@ static void CL_CheckForUpdate( void ) {
 	Q_snprintfz( url, sizeof( url ), "%s%s", APP_UPDATE_URL, APP_CLIENT_UPDATE_FILE );
 
 	updateRemoteDataSize = 1;
-	updateRemoteData = Mem_ZoneMalloc( 1 );
+	updateRemoteData = (char *)Mem_ZoneMalloc( 1 );
 	*updateRemoteData = '\0';
 
 	// send screen resolution in UA-pixels header
-	resolution = Mem_TempMalloc( HTTP_HEADER_SIZE );
+	resolution = (char *)Mem_TempMalloc( HTTP_HEADER_SIZE );
 	Q_snprintfz( resolution, HTTP_HEADER_SIZE, "%ix%i", viddef.width, viddef.height );
 	headers[headerNum++] = "UA-pixels";
 	headers[headerNum++] = resolution;
