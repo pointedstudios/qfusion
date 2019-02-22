@@ -711,6 +711,12 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 		return;
 	}
 
+	// Try skipping further tests if we have passed an obstacle or have changed Z substantially.
+	// This is proven to produce fairly good results.
+	if( TryTerminationHavingPassedObstacleOrDeltaZ( context, currTravelTimeToTarget, groundedAreaNum ) ) {
+		return;
+	}
+
 	// If the bot has not touched ground this frame
 	if( !WasOnGroundThisFrame( context ) ) {
 		context->SaveSuggestedActionForNextFrame( this );
@@ -814,6 +820,52 @@ bool GenericRunBunnyingAction::TryTerminationOnStopAreaNum( Context *context, in
 	mayStopAtStackFrame = (int) context->topOfStackIndex;
 	mayStopAtTravelTime = context->TravelTimeToNavTarget();
 	return false;
+}
+
+bool GenericRunBunnyingAction::TryTerminationHavingPassedObstacleOrDeltaZ( Context *context,
+																		   int currTravelTimeToTarget,
+																		   int groundedAreaNum ) {
+	if( !groundedAreaNum ) {
+		return false;
+	}
+
+	// Must be at the best reached area currently
+	if( currTravelTimeToTarget != minTravelTimeToNavTargetSoFar ) {
+		return false;
+	}
+
+	const auto *aasWorld = AiAasWorld::Instance();
+	// The current grounded area must be a NOFALL area.
+	if( !( aasWorld->AreaSettings()[groundedAreaNum].areaflags & AREA_NOFALL ) ) {
+		return false;
+	}
+
+	// Check whether we have sufficiently advanced to target
+	if( currTravelTimeToTarget + 15 > travelTimeAtSequenceStart ) {
+		return false;
+	}
+
+	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
+	if( HasSubstantiallyChangedZ( entityPhysicsState ) ) {
+		context->isCompleted = true;
+		return true;
+	}
+
+	// Try rejecting the expensive collision call by cheaper cluster walkability tests
+	if( aasWorld->IsAreaWalkableInFloorCluster( groundedAreaAtSequenceStart, groundedAreaNum ) ) {
+		return false;
+	}
+
+	trace_t trace;
+	// This is intended to check for corners.
+	// This turned out to detect small barriers and produce good bot behaviour results as well.
+	SolidWorldTrace( &trace, originAtSequenceStart.Data(), entityPhysicsState.Origin() );
+	if( trace.fraction == 1.0f ) {
+		return false;
+	}
+
+	context->isCompleted = true;
+	return true;
 }
 
 bool GenericRunBunnyingAction::TryHandlingLackOfStopAreaNum( Context *context,

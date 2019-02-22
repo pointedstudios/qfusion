@@ -112,6 +112,10 @@ protected:
 
 	bool TryTerminationOnStopAreaNum( MovementPredictionContext *context, int groundedAreaNum );
 
+	bool TryTerminationHavingPassedObstacleOrDeltaZ( MovementPredictionContext *context,
+													 int currTravelTimeToTarget,
+													 int groundedAreaNum );
+
 	bool TryHandlingLackOfStopAreaNum( MovementPredictionContext *context,
 									   int currTravelTimeToTarget,
 									   float squareDistanceFromStart,
