@@ -698,31 +698,8 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 		return;
 	}
 
-	// If we're at the best reached position currently
-	if( travelTimeAtSequenceStart && travelTimeAtSequenceStart > currTravelTimeToNavTarget ) {
-		if( currTravelTimeToNavTarget == minTravelTimeToNavTargetSoFar ) {
-			bool mayComplete = false;
-			// Skip way too restrictive CheckForActualCompletionOnGround() call
-			// if we are going to truncate trajectory at mayStopAtStackFrame
-			// and we have a substantial distance for further trajectory correction
-			// (if the distance to the trajectory truncation origin is above the threshold)
-			if( mayStopAtAreaNum && Distance2DSquared( mayStopAtOrigin, newEntityPhysicsState.Origin() ) > SQUARE( 40 ) ) {
-				mayComplete = true;
-			} else if( HasSubstantiallyChangedZ( newEntityPhysicsState ) ) {
-				mayComplete = true;
-			} else if( CheckForActualCompletionOnGround( context ) ) {
-				mayComplete = true;
-			}
-			if( mayComplete ) {
-				// Chop the last frame to prevent jumping if the predicted path will be fully utilized
-				if( context->frameEvents.hasJumped && context->topOfStackIndex ) {
-					context->StopTruncatingStackAt( context->topOfStackIndex - 1 );
-				} else {
-					context->isCompleted = true;
-				}
-				return;
-			}
-		}
+	if( TryTerminationAtBestGroundPosition( context, currTravelTimeToNavTarget ) ) {
+		return;
 	}
 
 	// If we have reached here, we are sure we have not:
@@ -788,6 +765,91 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 	// There still might be a gap between current and best position.
 	// Unforturnately there is no cheap way to test it
 	context->StopTruncatingStackAt( (unsigned)mayStopAtStackFrame );
+}
+
+bool GenericRunBunnyingAction::TryTerminationAtBestGroundPosition( Context *context, int currTravelTimeToTarget ) {
+	// Skip if the travel time at sequence start is undefined
+	if( !travelTimeAtSequenceStart ) {
+		return false;
+	}
+	// We must be at best reached position currently to use this
+	if( currTravelTimeToTarget != minTravelTimeToNavTargetSoFar ) {
+		return false;
+	}
+	// If we still are in the same start area
+	if( currTravelTimeToTarget == travelTimeAtSequenceStart ) {
+		return TryTerminationAtGroundInSameStartArea( context );
+	}
+
+	// This condition must be held if the curr travel time is the min travel time at start
+	assert( currTravelTimeToTarget < travelTimeAtSequenceStart );
+
+	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
+
+	// Skip way too restrictive CheckForActualCompletionOnGround() call
+	// if we are going to truncate trajectory at mayStopAtStackFrame
+	// and we have a substantial distance for further trajectory correction
+	// (if the distance to the trajectory truncation origin is above the threshold)
+	if( mayStopAtAreaNum && Distance2DSquared( mayStopAtOrigin, entityPhysicsState.Origin() ) > SQUARE( 40 ) ) {
+		goto complete;
+	}
+	if( HasSubstantiallyChangedZ( entityPhysicsState ) ) {
+		goto complete;
+	}
+	if( CheckForActualCompletionOnGround( context ) ) {
+		goto complete;
+	}
+
+	return false;
+complete:
+	// Chop the last frame to prevent jumping if the predicted path will be fully utilized
+	if( context->frameEvents.hasJumped && context->topOfStackIndex ) {
+		context->StopTruncatingStackAt( context->topOfStackIndex - 1 );
+	} else {
+		context->isCompleted = true;
+	}
+	return true;
+}
+
+bool GenericRunBunnyingAction::TryTerminationAtGroundInSameStartArea( Context *context ) {
+	const int reachNum = context->NextReachNum();
+	// Skip if we're seemingly in the nav target area
+	if( !reachNum ) {
+		return false;
+	}
+
+	const auto &reach = AiAasWorld::Instance()->Reachabilities()[reachNum];
+	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
+
+	Vec3 dirToReach( reach.start );
+	dirToReach -= entityPhysicsState.Origin();
+	const float squareDistanceToReach = dirToReach.SquaredLength();
+	if( squareDistanceToReach < 1 ) {
+		return false;
+	}
+
+	const float invDistanceToReach = Q_RSqrt( squareDistanceToReach );
+	const float distanceToReach = squareDistanceToReach * invDistanceToReach;
+	// Check whether we have shortened a distance to a next reach. sufficiently.
+	// This condition also consequently rejects termination being in tiny/junk areas.
+	if( distanceToReach + 40.0f > this->distanceToReachAtStart ) {
+		return false;
+	}
+
+	const float speed = entityPhysicsState.Speed();
+	if( speed < 100 ) {
+		return false;
+	}
+
+	Vec3 velocityDir( entityPhysicsState.Velocity() );
+	velocityDir *= Q_Rcp( speed );
+	dirToReach *= invDistanceToReach;
+	if( velocityDir.Dot( dirToReach ) < 0.8f ) {
+		return false;
+	}
+
+	context->isCompleted = true;
+	return true;
 }
 
 bool GenericRunBunnyingAction::GenericCheckForPrematureCompletion( Context *context ) {
@@ -936,16 +998,25 @@ void GenericRunBunnyingAction::OnApplicationSequenceStarted( Context *context ) 
 	reachAtSequenceStart = 0;
 	groundedAreaAtSequenceStart = context->CurrGroundedAasAreaNum();
 
+	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
+	originAtSequenceStart.Set( entityPhysicsState.Origin() );
+
+	distanceToReachAtStart = std::numeric_limits<float>::infinity();
+
 	if( context->NavTargetAasAreaNum() ) {
-		if( int travelTime = context->TravelTimeToNavTarget() ) {
+		int reachNum, travelTime;
+		context->NextReachNumAndTravelTimeToNavTarget( &reachNum, &travelTime );
+		if( travelTime ) {
 			minTravelTimeToNavTargetSoFar = travelTime;
 			travelTimeAtSequenceStart = travelTime;
-			reachAtSequenceStart = context->NextReachNum();
+			reachAtSequenceStart = reachNum;
+			if( reachNum ) {
+				const auto &reach = AiAasWorld::Instance()->Reachabilities()[reachNum];
+				distanceToReachAtStart = originAtSequenceStart.DistanceTo( reach.start );
+			}
 		}
 	}
 
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	originAtSequenceStart.Set( entityPhysicsState.Origin() );
 	const float heightOverGround = entityPhysicsState.HeightOverGround();
 	if( std::isfinite( heightOverGround ) ) {
 		groundZAtSequenceStart = originAtSequenceStart.Z() - heightOverGround + playerbox_stand_mins[2];

@@ -30,6 +30,8 @@ protected:
 	int mayStopAtStackFrame { -1 };
 	vec3_t mayStopAtOrigin { 0, 0, 0 };
 
+	float distanceToReachAtStart { std::numeric_limits<float>::infinity() };
+
 	// A fraction of speed gain per frame time.
 	// Might be negative, in this case it limits allowed speed loss
 	float minDesiredSpeedGainPerSecond { 0.0f };
@@ -85,6 +87,9 @@ protected:
 													int floorClusterNum );
 
 	bool CheckForActualCompletionOnGround( MovementPredictionContext *context );
+
+	bool TryTerminationAtBestGroundPosition( MovementPredictionContext *context, int currTravelTimeToTarget );
+	bool TryTerminationAtGroundInSameStartArea( MovementPredictionContext *context );
 
 	inline bool WasOnGroundThisFrame( const MovementPredictionContext *context ) const;
 
