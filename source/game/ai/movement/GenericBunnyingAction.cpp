@@ -454,28 +454,207 @@ inline void GenericRunBunnyingAction::MarkForTruncation( Context *context ) {
 	VectorCopy( context->movementState->entityPhysicsState.Origin(), mayStopAtOrigin );
 }
 
+void GenericRunBunnyingAction::TryMarkingForTruncation( Context *context ) {
+	const auto &physicsState = context->movementState->entityPhysicsState;
+	if( physicsState.Velocity()[2] / physicsState.Speed() < -0.1f ) {
+		MarkForTruncation( context );
+	} else if( WasOnGroundThisFrame( context ) ) {
+		MarkForTruncation( context );
+	}
+}
+
+void GenericRunBunnyingAction::HandleSameOrBetterTravelTimeToTarget( Context *context,
+																	 int currTravelTimeToTarget,
+																	 float squareDistanceFromStart,
+																	 int groundedAreaNum ) {
+	minTravelTimeToNavTargetSoFar = currTravelTimeToTarget;
+	minTravelTimeAreaNumSoFar = context->CurrAasAreaNum();
+
+	// Try setting "may stop at area num" if it has not been set yet
+	if( mayStopAtAreaNum ) {
+		return;
+	}
+
+	// Can't say much in this case
+	if( !groundedAreaNum || !travelTimeAtSequenceStart ) {
+		return;
+	}
+
+	// This is a very lenient condition, just check whether we are a bit closer to the target
+	if( travelTimeAtSequenceStart > currTravelTimeToTarget + 5 ) {
+		if( squareDistanceFromStart > SQUARE( 72 ) ) {
+			TryMarkingForTruncation( context );
+		}
+		return;
+	}
+
+	// Passing this condition also implies the area is really huge
+	if( squareDistanceFromStart < SQUARE( 96 ) ) {
+		return;
+	}
+
+	const auto &newEntityPhysicsState = context->movementState->entityPhysicsState;
+
+	Vec3 velocityDir2D( newEntityPhysicsState.Velocity() );
+	velocityDir2D.Z() = 0;
+	velocityDir2D *= Q_Rcp( newEntityPhysicsState.Speed2D() );
+	const auto &reach = AiAasWorld::Instance()->Reachabilities()[reachAtSequenceStart];
+
+	// The next reachability must be relatively far
+	// (a reachability following the next one might have completely different direction)
+	if( Distance2DSquared( reach.start, newEntityPhysicsState.Origin() ) < SQUARE( 48 ) ) {
+		return;
+	}
+
+	Vec3 reachDir2D = Vec3( reach.end );
+	reachDir2D -= reach.start;
+	reachDir2D.Z() = 0;
+	reachDir2D.NormalizeFast();
+
+	// Check whether we conform to the next reachability direction
+	if( velocityDir2D.Dot( reachDir2D ) < 0.9f ) {
+		return;
+	}
+
+	TryMarkingForTruncation( context );
+}
+
+bool GenericRunBunnyingAction::TryHandlingWorseTravelTimeToTarget( Context *context,
+																   int currTravelTimeToTarget,
+																   int groundedAreaNum ) {
+	constexpr const char *format = "A prediction step has lead to increased travel time to nav target\n";
+	if( currTravelTimeToTarget > (int)( minTravelTimeToNavTargetSoFar + tolerableWalkableIncreasedTravelTimeMillis ) ) {
+		Debug( format );
+		return false;
+	}
+
+	// Can't say much in this case. Continue prediction.
+	if( !groundedAreaNum || !minTravelTimeAreaNumSoFar ) {
+		return true;
+	}
+
+	const auto *aasWorld = AiAasWorld::Instance();
+
+	// Allow further prediction if we're still in the same floor cluster
+	if( const int clusterNum = aasWorld->FloorClusterNum( minTravelTimeAreaNumSoFar ) ) {
+		if( clusterNum == aasWorld->FloorClusterNum( groundedAreaNum ) ) {
+			return true;
+		}
+	}
+
+	// Disallow moving into an area if the min travel time area cannot be reached by walking from the area
+	int areaNums[2];
+	const int numAreas = context->movementState->entityPhysicsState.PrepareRoutingStartAreas( areaNums );
+	constexpr auto travelFlags = GenericGroundMovementFallback::TRAVEL_FLAGS;
+	for( int i = 0; i < numAreas; ++i ) {
+		int aasTime = bot->RouteCache()->TravelTimeToGoalArea( areaNums[i], minTravelTimeAreaNumSoFar, travelFlags );
+		// aasTime is in seconds^-2
+		if( aasTime && aasTime * 10 < (int) tolerableWalkableIncreasedTravelTimeMillis ) {
+			return true;
+		}
+	}
+
+	Debug( format );
+	return false;
+}
+
+bool GenericRunBunnyingAction::TryHandlingUnreachableTarget( Context *context ) {
+	currentUnreachableTargetSequentialMillis += context->predictionStepMillis;
+	if( currentUnreachableTargetSequentialMillis < tolerableUnreachableTargetSequentialMillis ) {
+		context->SaveSuggestedActionForNextFrame( this );
+		return true;
+	}
+
+	Debug( "A prediction step has lead to undefined travel time to the nav target\n" );
+	return false;
+}
+
+inline bool GenericRunBunnyingAction::IsSkimmingInAGivenState( const Context *context ) const {
+	const auto &newPMove = context->currPlayerState->pmove;
+	if( !newPMove.skim_time ) {
+		return true;
+	}
+
+	const auto &oldPMove = context->oldPlayerState->pmove;
+	return newPMove.skim_time != oldPMove.skim_time;
+}
+
+bool GenericRunBunnyingAction::TryHandlingSkimmingState( Context *context ) {
+	Assert( IsSkimmingInAGivenState( context ) );
+
+	// Skip tests while skimming
+	// The only exception is testing covered distance to prevent
+	// jumping in front of wall contacting it forever updating skim timer
+	if( this->SequenceDuration( context ) < 400 ) {
+		context->SaveSuggestedActionForNextFrame( this );
+		return true;
+	}
+
+	if( originAtSequenceStart.SquareDistance2DTo( context->movementState->entityPhysicsState.Origin() ) > SQUARE( 128 ) ) {
+		context->SaveSuggestedActionForNextFrame( this );
+		return true;
+	}
+
+	Debug( "Looks like the bot is stuck and is resetting the skim timer forever by jumping\n" );
+	context->SaveSuggestedActionForNextFrame( this );
+	return false;
+}
+
+bool GenericRunBunnyingAction::CheckNavTargetAreaTransition( Context *context ) {
+	if( !context->IsInNavTargetArea() ) {
+		// If the bot has left the nav target area
+		if( hasEnteredNavTargetArea ) {
+			if( !hasTouchedNavTarget ) {
+				Debug( "The bot has left the nav target area without touching the nav target\n" );
+				return false;
+			}
+			// Otherwise just save the action for next frame.
+			// We do not want to fall in a gap after picking a nav target.
+		}
+		return true;
+	}
+
+	hasEnteredNavTargetArea = true;
+	if( HasTouchedNavEntityThisFrame( context ) ) {
+		hasTouchedNavTarget = true;
+		// If there is no truncation frame set yet, we this frame is feasible to mark as one
+		if( !mayStopAtAreaNum ) {
+			mayStopAtAreaNum = context->NavTargetAasAreaNum();
+			mayStopAtStackFrame = (int)context->topOfStackIndex;
+			mayStopAtTravelTime = 1;
+		}
+	}
+
+	if( hasTouchedNavTarget ) {
+		return true;
+	}
+
+	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
+
+	Vec3 toTargetDir( context->NavTargetOrigin() );
+	toTargetDir -= entityPhysicsState.Origin();
+	toTargetDir.NormalizeFast();
+
+	Vec3 velocityDir( entityPhysicsState.Velocity() );
+	velocityDir *= Q_Rcp( entityPhysicsState.Speed() );
+	if( velocityDir.Dot( toTargetDir ) > 0.7f ) {
+		return true;
+	}
+
+	Debug( "The bot is very likely going to miss the nav target\n" );
+	return false;
+}
+
 void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 	BaseMovementAction::CheckPredictionStepResults( context );
 	if( context->cannotApplyAction || context->isCompleted ) {
 		return;
 	}
 
-	const auto &oldPMove = context->oldPlayerState->pmove;
-	const auto &newPMove = context->currPlayerState->pmove;
-
-	// Skip tests while skimming
-	if( newPMove.skim_time && newPMove.skim_time != oldPMove.skim_time ) {
-		// The only exception is testing covered distance to prevent
-		// jumping in front of wall contacting it forever updating skim timer
-		if( this->SequenceDuration( context ) > 400 ) {
-			if( originAtSequenceStart.SquareDistance2DTo( newPMove.origin ) < SQUARE( 128 ) ) {
-				context->SetPendingRollback();
-				Debug( "Looks like the bot is stuck and is resetting the skim timer forever by jumping\n" );
-				return;
-			}
+	if( IsSkimmingInAGivenState( context ) ) {
+		if( !TryHandlingSkimmingState( context ) ) {
+			context->SetPendingRollback();
 		}
-
-		context->SaveSuggestedActionForNextFrame( this );
 		return;
 	}
 
@@ -484,154 +663,35 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 		return;
 	}
 
+	if( !CheckNavTargetAreaTransition( context ) ) {
+		context->SetPendingRollback();
+		return;
+	}
+
 	// This entity physics state has been modified after prediction step
 	const auto &newEntityPhysicsState = context->movementState->entityPhysicsState;
 
-	const bool isInNavTargetArea = context->IsInNavTargetArea();
-	if( isInNavTargetArea ) {
-		hasEnteredNavTargetArea = true;
-		if( HasTouchedNavEntityThisFrame( context ) ) {
-			hasTouchedNavTarget = true;
-			// If there is no truncation frame set yet, we this frame is feasible to mark as one
-			if( !mayStopAtAreaNum ) {
-				mayStopAtAreaNum = context->NavTargetAasAreaNum();
-				mayStopAtStackFrame = (int)context->topOfStackIndex;
-				mayStopAtTravelTime = 1;
-			}
-		}
-		if( !hasTouchedNavTarget ) {
-			Vec3 toTargetDir( context->NavTargetOrigin() );
-			toTargetDir -= newEntityPhysicsState.Origin();
-			toTargetDir.NormalizeFast();
-			Vec3 velocityDir( newEntityPhysicsState.Velocity() );
-			velocityDir *= 1.0f / newEntityPhysicsState.Speed();
-			if( velocityDir.Dot( toTargetDir ) < 0.7f ) {
-				Debug( "The bot is very likely going to miss the nav target\n" );
-				context->SetPendingRollback();
-				return;
-			}
-		}
-	} else {
-		if( hasEnteredNavTargetArea ) {
-			// The bot has left the nav target area
-			if( !hasTouchedNavTarget ) {
-				Debug( "The bot has left the nav target area without touching the nav target\n" );
-				context->SetPendingRollback();
-				return;
-			}
-			// Otherwise just save the action for next frame.
-			// We do not want to fall in a gap after picking a nav target.
-		}
-	}
-
-	int currTravelTimeToNavTarget = context->TravelTimeToNavTarget();
-	if( !currTravelTimeToNavTarget ) {
-		currentUnreachableTargetSequentialMillis += context->predictionStepMillis;
-		// Be very strict in case when bot does another jump after landing.
-		// (Prevent falling in a gap immediately after successful landing on a ledge).
-		if( currentUnreachableTargetSequentialMillis > tolerableUnreachableTargetSequentialMillis ) {
+	const int currTravelTimeToTarget = context->TravelTimeToNavTarget();
+	if( !currTravelTimeToTarget ) {
+		if( !TryHandlingUnreachableTarget( context ) ) {
 			context->SetPendingRollback();
-			Debug( "A prediction step has lead to undefined travel time to the nav target\n" );
-			return;
 		}
-
-		context->SaveSuggestedActionForNextFrame( this );
 		return;
 	}
+
 	// Reset unreachable target timer
 	currentUnreachableTargetSequentialMillis = 0;
 
 	const auto *aasWorld = AiAasWorld::Instance();
 	const float squareDistanceFromStart = originAtSequenceStart.SquareDistanceTo( newEntityPhysicsState.Origin() );
-
 	const int groundedAreaNum = context->CurrGroundedAasAreaNum();
 
-	if( currTravelTimeToNavTarget <= minTravelTimeToNavTargetSoFar ) {
-		minTravelTimeToNavTargetSoFar = currTravelTimeToNavTarget;
-		minTravelTimeAreaNumSoFar = context->CurrAasAreaNum();
-
-		// Try set "may stop at area num" if it has not been set yet
-		if( !mayStopAtAreaNum ) {
-			bool trySet = false;
-			if( groundedAreaNum && travelTimeAtSequenceStart ) {
-				// This is a very lenient condition, just check whether we are a bit closer to the target
-				if( travelTimeAtSequenceStart > 1 + currTravelTimeToNavTarget ) {
-					if( squareDistanceFromStart > SQUARE( 72 ) ) {
-						trySet = true;
-					}
-				} else if( travelTimeAtSequenceStart == currTravelTimeToNavTarget ) {
-					// We're in the same start area.
-					if( squareDistanceFromStart > SQUARE( 96 ) ) {
-						auto &startArea = aasWorld->Areas()[groundedAreaAtSequenceStart];
-						// The area must be really huge
-						if( Distance2DSquared( startArea.mins, startArea.maxs ) > SQUARE( 108 ) ) {
-							Vec3 velocityDir2D( newEntityPhysicsState.Velocity() );
-							velocityDir2D *= 1.0 / newEntityPhysicsState.Speed2D();
-							auto &reach = aasWorld->Reachabilities()[reachAtSequenceStart];
-							// The next reachability must be relatively far
-							// (a reachability following the next one might have completely different direction)
-							if( Distance2DSquared( reach.start, newEntityPhysicsState.Origin() ) > SQUARE( 48 ) ) {
-								Vec3 reachDir2D = Vec3( reach.end ) - reach.start;
-								reachDir2D.Z() = 0;
-								reachDir2D.Normalize();
-								// Check whether we conform to the next reachability direction
-								if( velocityDir2D.Dot( reachDir2D ) > 0.9f ) {
-									trySet = true;
-								}
-							}
-						}
-					}
-				}
-			}
-
-			if( trySet ) {
-				if( newEntityPhysicsState.Velocity()[2] / newEntityPhysicsState.Speed() < -0.1f ) {
-					MarkForTruncation( context );
-				} else if( WasOnGroundThisFrame( context ) ) {
-					MarkForTruncation( context );
-				}
-			}
-		}
+	if( currTravelTimeToTarget <= minTravelTimeToNavTargetSoFar ) {
+		HandleSameOrBetterTravelTimeToTarget( context, currTravelTimeToTarget, squareDistanceFromStart, groundedAreaNum );
 	} else {
-		constexpr const char *format = "A prediction step has lead to increased travel time to nav target\n";
-		if( currTravelTimeToNavTarget > (int)( minTravelTimeToNavTargetSoFar + tolerableWalkableIncreasedTravelTimeMillis ) ) {
+		if( !TryHandlingWorseTravelTimeToTarget( context, currTravelTimeToTarget, groundedAreaNum ) ) {
 			context->SetPendingRollback();
-			Debug( format );
 			return;
-		}
-
-		if( groundedAreaNum ) {
-			if( minTravelTimeAreaNumSoFar ) {
-				bool walkable = false;
-				if( const int clusterNum = aasWorld->FloorClusterNum( minTravelTimeAreaNumSoFar ) ) {
-					if( clusterNum == aasWorld->FloorClusterNum( groundedAreaNum ) ) {
-						walkable = true;
-					}
-				}
-
-				if( !walkable ) {
-					// Disallow moving into an area if the min travel time area cannot be reached by walking from the area
-					int areaNums[2];
-					const int numAreas = newEntityPhysicsState.PrepareRoutingStartAreas( areaNums );
-					for( int i = 0; i < numAreas; ++i ) {
-						int flags = GenericGroundMovementFallback::TRAVEL_FLAGS;
-						int toAreaNum = minTravelTimeAreaNumSoFar;
-						if( int aasTime = bot->RouteCache()->TravelTimeToGoalArea( areaNums[i], toAreaNum, flags ) ) {
-							// aasTime is in seconds^-2
-							if( aasTime * 10 < (int) tolerableWalkableIncreasedTravelTimeMillis ) {
-								walkable = true;
-								break;
-							}
-						}
-					}
-
-					if( !walkable ) {
-						context->SetPendingRollback();
-						Debug( format );
-						return;
-					}
-				}
-			}
 		}
 	}
 
@@ -647,49 +707,8 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 		return;
 	}
 
-	if( groundedAreaNum ) {
-		auto iter = std::find( checkStopAtAreaNums.begin(), checkStopAtAreaNums.end(), groundedAreaNum );
-		// We have reached an area that is was a "pivot" area at application sequence start.
-		if( iter != checkStopAtAreaNums.end() ) {
-			// Stop prediction having touched the ground this frame in this kind of area
-			if( WasOnGroundThisFrame( context ) ) {
-				// Ignore bumping into walls if we are very likely in stairs-like environment.
-				// Bots have significant movement troubles in this case.
-				if( HasSubstantiallyChangedZ( newEntityPhysicsState ) ) {
-					context->isCompleted = true;
-					return;
-				}
-				if( CheckForActualCompletionOnGround( context ) ) {
-					context->isCompleted = true;
-					return;
-				}
-			} else {
-				const auto *const aasAreaFloorClusterNums = aasWorld->AreaFloorClusterNums();
-				// If the area is in a floor cluster, we can perform a cheap and robust 2D raycasting test
-				// that should be preferred for AREA_NOFALL areas as well.
-				if( const int floorClusterNum = aasAreaFloorClusterNums[groundedAreaNum] ) {
-					if( CheckForPrematureCompletionInFloorCluster( context, groundedAreaNum, floorClusterNum )) {
-						context->isCompleted = true;
-						return;
-					}
-				} else if( aasWorld->AreaSettings()[groundedAreaNum].areaflags & AREA_NOFALL) {
-					// We have decided still perform additional checks in this case.
-					// (the bot is in a "check stop at area num" area and is in a "no-fall" area but is in air).
-					// Bumping into walls on high speed is the most painful issue.
-					if( GenericCheckForPrematureCompletion( context )) {
-						context->isCompleted = true;
-						return;
-					}
-					// Can't say much, lets continue prediction
-				}
-
-				if( !mayStopAtAreaNum ) {
-					mayStopAtAreaNum = groundedAreaNum;
-					mayStopAtStackFrame = (int) context->topOfStackIndex;
-					mayStopAtTravelTime = currTravelTimeToNavTarget;
-				}
-			}
-		}
+	if( TryTerminationOnStopAreaNum( context, groundedAreaNum ) ) {
+		return;
 	}
 
 	// If the bot has not touched ground this frame
@@ -698,7 +717,7 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 		return;
 	}
 
-	if( TryTerminationAtBestGroundPosition( context, currTravelTimeToNavTarget ) ) {
+	if( TryTerminationAtBestGroundPosition( context, currTravelTimeToTarget ) ) {
 		return;
 	}
 
@@ -709,32 +728,14 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 
 	// If there were no area (and consequently, frame) marked as suitable for path truncation
 	if( !mayStopAtAreaNum ) {
-		constexpr unsigned maxStepsLimit = ( 7 * Context::MAX_PREDICTED_STATES ) / 8;
-		static_assert( maxStepsLimit + 1 < Context::MAX_PREDICTED_STATES, "" );
-		// If we have reached prediction limits
-		if( squareDistanceFromStart > SQUARE( 192 ) || context->topOfStackIndex > maxStepsLimit ) {
-			// Try considering this as a success if these conditions are met:
-			// 1) The current travel time is not worse than 250 millis relative to the best one during prediction
-			// 2) The current travel time is at least 750 millis better than the travel time at start
-			// 3) We have landed in some floor cluster (not stairs/ramp/obstacle).
-			if( minTravelTimeToNavTargetSoFar && currTravelTimeToNavTarget < minTravelTimeToNavTargetSoFar + 25 ) {
-				if( travelTimeAtSequenceStart && currTravelTimeToNavTarget + 75 < travelTimeAtSequenceStart ) {
-					if( aasWorld->FloorClusterNum( groundedAreaNum ) ) {
-						context->isCompleted = true;
-						return;
-					}
-				}
-			}
-
+		if( !TryHandlingLackOfStopAreaNum( context, currTravelTimeToTarget, distanceToReachAtStart, groundedAreaNum ) ) {
 			context->SetPendingRollback();
-			return;
 		}
-		context->SaveSuggestedActionForNextFrame( this );
 		return;
 	}
 
 	// See notes for "if we are at the best reached position currently" branch
-	if( Distance2DSquared( mayStopAtOrigin, newEntityPhysicsState.Origin() ) < SQUARE( 40 ) ) {
+	if( Distance2DSquared( mayStopAtOrigin, newEntityPhysicsState.Origin() ) < SQUARE( 64 ) ) {
 		if( !CheckForActualCompletionOnGround( context ) ) {
 			// Looks like the bot is going to bump into a wall
 			// without a substantial distance for trajectory correction
@@ -753,18 +754,94 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 		}
 	}
 
-	// Note: we have tried all possible cutoffs before this expensive part
-	// Do an additional raycast from the best to the current origin.
-	trace_t trace;
-	SolidWorldTrace( &trace, newEntityPhysicsState.Origin(), mayStopAtOrigin, vec3_origin, playerbox_stand_maxs );
-	if( trace.fraction != 1.0f ) {
-		context->SaveSuggestedActionForNextFrame( this );
-		return;
+	// We have decided to stop wasting CPU cycles at this.
+	// Attempts to add extra conditions for termination do not produce good bot behaviour.
+	context->SetPendingRollback();
+}
+
+bool GenericRunBunnyingAction::TryTerminationOnStopAreaNum( Context *context, int groundedAreaNum ) {
+	if( !groundedAreaNum ) {
+		return false;
 	}
 
-	// There still might be a gap between current and best position.
-	// Unforturnately there is no cheap way to test it
-	context->StopTruncatingStackAt( (unsigned)mayStopAtStackFrame );
+	auto iter = std::find( checkStopAtAreaNums.begin(), checkStopAtAreaNums.end(), groundedAreaNum );
+	if( iter == checkStopAtAreaNums.end() ) {
+		return false;
+	}
+
+	// Stop prediction having touched the ground this frame in this kind of area
+	if( WasOnGroundThisFrame( context ) ) {
+		// Ignore bumping into walls if we are very likely in stairs-like environment.
+		// Bots have significant movement troubles in this case.
+		if( HasSubstantiallyChangedZ( context->movementState->entityPhysicsState ) ) {
+			context->isCompleted = true;
+			return true;
+		}
+
+		if( CheckForActualCompletionOnGround( context ) ) {
+			context->isCompleted = true;
+			return true;
+		}
+
+		return false;
+	}
+
+	const auto *aasWorld = AiAasWorld::Instance();
+	const auto *const aasAreaFloorClusterNums = aasWorld->AreaFloorClusterNums();
+	// If the area is in a floor cluster, we can perform a cheap and robust 2D raycasting test
+	// that should be preferred for AREA_NOFALL areas as well.
+	if( const int floorClusterNum = aasAreaFloorClusterNums[groundedAreaNum] ) {
+		if( CheckForPrematureCompletionInFloorCluster( context, groundedAreaNum, floorClusterNum ) ) {
+			context->isCompleted = true;
+			return true;
+		}
+	} else if( aasWorld->AreaSettings()[groundedAreaNum].areaflags & AREA_NOFALL ) {
+		// We have decided still perform additional checks in this case.
+		// (the bot is in a "check stop at area num" area and is in a "no-fall" area but is in air).
+		// Bumping into walls on high speed is the most painful issue.
+		if( GenericCheckForPrematureCompletion( context ) ) {
+			context->isCompleted = true;
+			return true;
+		}
+		// Can't say much, lets continue prediction
+	}
+
+	if( mayStopAtAreaNum ) {
+		return false;
+	}
+
+	mayStopAtAreaNum = groundedAreaNum;
+	mayStopAtStackFrame = (int) context->topOfStackIndex;
+	mayStopAtTravelTime = context->TravelTimeToNavTarget();
+	return false;
+}
+
+bool GenericRunBunnyingAction::TryHandlingLackOfStopAreaNum( Context *context,
+															 int currTravelTimeToTarget,
+															 float squareDistanceFromStart,
+															 int groundedAreaNum ) {
+	constexpr unsigned maxStepsLimit = ( 7 * Context::MAX_PREDICTED_STATES ) / 8;
+	static_assert( maxStepsLimit + 1 < Context::MAX_PREDICTED_STATES, "" );
+	// If we have not reached prediction limits
+	if( squareDistanceFromStart < SQUARE( 192 ) && context->topOfStackIndex < maxStepsLimit ) {
+		context->SaveSuggestedActionForNextFrame( this );
+		return true;
+	}
+
+	// Try considering this as a success if these conditions are met:
+	// 1) The current travel time is not worse than 250 millis relative to the best one during prediction
+	// 2) The current travel time is at least 750 millis better than the travel time at start
+	// 3) We have landed in some floor cluster (not stairs/ramp/obstacle).
+	if( minTravelTimeToNavTargetSoFar && currTravelTimeToTarget < minTravelTimeToNavTargetSoFar + 25 ) {
+		if( travelTimeAtSequenceStart && currTravelTimeToTarget + 75 < travelTimeAtSequenceStart ) {
+			if( AiAasWorld::Instance()->FloorClusterNum( groundedAreaNum ) ) {
+				context->isCompleted = true;
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 bool GenericRunBunnyingAction::TryTerminationAtBestGroundPosition( Context *context, int currTravelTimeToTarget ) {

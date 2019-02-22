@@ -91,6 +91,32 @@ protected:
 	bool TryTerminationAtBestGroundPosition( MovementPredictionContext *context, int currTravelTimeToTarget );
 	bool TryTerminationAtGroundInSameStartArea( MovementPredictionContext *context );
 
+	bool CheckNavTargetAreaTransition( MovementPredictionContext *context );
+
+	inline bool IsSkimmingInAGivenState( const MovementPredictionContext *context ) const;
+
+	bool TryHandlingSkimmingState( MovementPredictionContext *context );
+
+	bool TryHandlingUnreachableTarget( MovementPredictionContext *context );
+
+	void HandleSameOrBetterTravelTimeToTarget( MovementPredictionContext *context,
+											   int currTravelTimeToTarget,
+											   float squareDistanceFromStart,
+											   int groundedAreaNum );
+
+	bool TryHandlingWorseTravelTimeToTarget( MovementPredictionContext *context,
+		                                     int currTravelTimeToTarget,
+		                                     int groundedAreaNum );
+
+	void TryMarkingForTruncation( MovementPredictionContext *context );
+
+	bool TryTerminationOnStopAreaNum( MovementPredictionContext *context, int groundedAreaNum );
+
+	bool TryHandlingLackOfStopAreaNum( MovementPredictionContext *context,
+									   int currTravelTimeToTarget,
+									   float squareDistanceFromStart,
+									   int groundedAreaNum );
+
 	inline bool WasOnGroundThisFrame( const MovementPredictionContext *context ) const;
 
 	inline bool HasSubstantiallyChangedZ( const AiEntityPhysicsState &entityPhysicsState ) const;
