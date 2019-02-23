@@ -217,6 +217,16 @@ inline void MovementPredictionContext::MarkSavepoint( BaseMovementAction *marked
 inline void MovementPredictionContext::SetPendingRollback() {
 	this->cannotApplyAction = true;
 	this->shouldRollback = true;
+
+#ifdef ENABLE_MOVEMENT_ASSERTIONS
+	if( !this->isCompleted ) {
+		return;
+	}
+
+	constexpr auto *tag = "MovementPredictionContext::SetPendingRollback()";
+	constexpr auto *format = "%s: Attempt to rollback while the context is in completed state\n";
+	AI_FailWith( tag, format, ActiveActionName() );
+#endif
 }
 
 inline void MovementPredictionContext::RollbackToSavepoint() {
