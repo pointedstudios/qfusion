@@ -1704,7 +1704,7 @@ void AiSquadBasedTeam::PlayerAssistanceTracker::UpdateInfluence() {
 		const float dotThreshold = isZooming ? 0.95f : 0.85f;
 
 		// Pick faster if the mate is crouching. "slice" suggested this.
-		const int refillScore = ent->r.client->ps.stats[PM_STAT_CROUCHTIME] ? 2 * REFILL_SCORE : REFILL_SCORE;
+		const int refillScore = ent->r.client->ps.stats[PM_STAT_CROUCHTIME] ? REFILL_SCORE : ( 2 * REFILL_SCORE );
 
 		for( Bot *bot = parent->teamBotsHead; bot; bot = bot->NextInBotsTeam() ) {
 			const auto botClientNum = bot->ClientNum();
