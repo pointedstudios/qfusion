@@ -343,13 +343,34 @@ inline bool BaseMovementAction::GenericCheckIsActionEnabled( MovementPredictionC
 
 typedef MovementPredictionContext Context;
 
+inline void BaseMovementAction::CheckDisableOrSwitchPreconditions( Context *context, const char *methodTag ) {
+#ifdef ENABLE_MOVEMENT_ASSERTIONS
+	if( context->isCompleted ) {
+		AI_FailWith( va( "%s::%s()", Name(), methodTag ), "The context must not have `isCompleted` flag set" );
+	}
+	if( context->cannotApplyAction ) {
+		AI_FailWith( va( "%s::%s()", Name(), methodTag ), "The context must not have `cannotApplyAction` flag set" );
+	}
+	if( context->shouldRollback ) {
+		AI_FailWith( va( "%s::%s()", Name(), methodTag ), "The context must not have `shouldRollback` flag set" );
+	}
+	if( this->isDisabledForPlanning ) {
+		AI_FailWith( va( "%s::%s()", Name(), methodTag ), "The action must not have been already disabled for planning" );
+	}
+#endif
+}
+
 inline void BaseMovementAction::DisableWithAlternative( Context *context, BaseMovementAction *suggestedAction ) {
+	CheckDisableOrSwitchPreconditions( context, "DisableWithAlternative" );
+
 	context->cannotApplyAction = true;
 	context->actionSuggestedByAction = suggestedAction;
 	this->isDisabledForPlanning = true;
 }
 
 inline void BaseMovementAction::SwitchOrStop( Context *context, BaseMovementAction *suggestedAction ) {
+	CheckDisableOrSwitchPreconditions( context, "SwitchOrStop" );
+
 	// Few predicted frames are enough if the action cannot be longer applied (but have not caused rollback)
 	if( context->topOfStackIndex > 0 ) {
 		Debug( "There were enough successfully predicted frames anyway, stopping prediction\n" );
@@ -361,6 +382,8 @@ inline void BaseMovementAction::SwitchOrStop( Context *context, BaseMovementActi
 }
 
 inline void BaseMovementAction::SwitchOrRollback( Context *context, BaseMovementAction *suggestedAction ) {
+	CheckDisableOrSwitchPreconditions( context, "SwitchOrRollback" );
+
 	if( context->topOfStackIndex > 0 ) {
 		Debug( "There were some frames predicted ahead that lead to a failure, should rollback\n" );
 		this->isDisabledForPlanning = true;

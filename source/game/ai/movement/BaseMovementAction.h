@@ -58,6 +58,8 @@ protected:
 	inline bool GenericCheckIsActionEnabled( MovementPredictionContext *context,
 											 BaseMovementAction *suggestedAction = nullptr ) const;
 
+	inline void CheckDisableOrSwitchPreconditions( MovementPredictionContext *context, const char *methodTag );
+
 	inline void DisableWithAlternative( MovementPredictionContext *context, BaseMovementAction *suggestedAction );
 	inline void SwitchOrStop( MovementPredictionContext *context, BaseMovementAction *suggestedAction );
 	inline void SwitchOrRollback( MovementPredictionContext *context, BaseMovementAction *suggestedAction );
