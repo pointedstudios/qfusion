@@ -2,7 +2,7 @@
 #include "MovementLocal.h"
 
 void BunnyTestingMultipleLookDirsAction::BeforePlanning() {
-	GenericRunBunnyingAction::BeforePlanning();
+	BunnyHopAction::BeforePlanning();
 
 	// Ensure the suggested action has been set in subtype constructor
 	Assert( suggestedAction );
@@ -42,7 +42,7 @@ void BunnyTestingSavedLookDirsAction::OnApplicationSequenceFailed( MovementPredi
 void BunnyTestingMultipleLookDirsAction::OnApplicationSequenceStopped( Context *context,
 																	   SequenceStopReason stopReason,
 																	   unsigned stoppedAtFrameIndex ) {
-	GenericRunBunnyingAction::OnApplicationSequenceStopped( context, stopReason, stoppedAtFrameIndex );
+	BunnyHopAction::OnApplicationSequenceStopped( context, stopReason, stoppedAtFrameIndex );
 
 	if( stopReason == FAILED ) {
 		OnApplicationSequenceFailed( context, stoppedAtFrameIndex );
@@ -70,7 +70,7 @@ void BunnyTestingMultipleLookDirsAction::PlanPredictionStep( Context *context ) 
 	}
 
 	// Do this test after GenericCheckIsActionEnabled(), otherwise disabledForApplicationFrameIndex does not get tested
-	if( !CheckCommonBunnyingPreconditions( context ) ) {
+	if( !CheckCommonBunnyHopPreconditions( context ) ) {
 		return;
 	}
 
@@ -80,7 +80,7 @@ void BunnyTestingMultipleLookDirsAction::PlanPredictionStep( Context *context ) 
 		context->TryAvoidJumpableObstacles( SuggestObstacleAvoidanceCorrectionFraction( context ) );
 	}
 
-	if( !SetupBunnying( context->record->botInput.IntendedLookDir(), context ) ) {
+	if( !SetupBunnyHopping( context->record->botInput.IntendedLookDir(), context ) ) {
 		context->SetPendingRollback();
 		return;
 	}

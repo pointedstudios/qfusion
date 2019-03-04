@@ -1,9 +1,9 @@
 #ifndef QFUSION_BUNNYTESTINGMULTIPLELOOKDIRSACTION_H
 #define QFUSION_BUNNYTESTINGMULTIPLELOOKDIRSACTION_H
 
-#include "GenericBunnyingAction.h"
+#include "BunnyHopAction.h"
 
-class BunnyTestingMultipleLookDirsAction : public GenericRunBunnyingAction {
+class BunnyTestingMultipleLookDirsAction : public BunnyHopAction {
 	friend class BunnyStraighteningReachChainAction;
 	friend class BunnyToBestShortcutAreaAction;
 	friend class BunnyInterpolatingChainAtStartAction;
@@ -14,7 +14,7 @@ protected:
 	virtual void OnApplicationSequenceFailed( MovementPredictionContext *context, unsigned stoppedAtFrameIndex ) {};
 public:
 	BunnyTestingMultipleLookDirsAction( BotMovementModule *module_, const char *name_, int debugColor_ )
-		: GenericRunBunnyingAction( module_, name_, debugColor_ ) {}
+		: BunnyHopAction( module_, name_, debugColor_ ) {}
 
 	void BeforePlanning() override;
 	void OnApplicationSequenceStopped( MovementPredictionContext *context,

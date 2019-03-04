@@ -8,7 +8,7 @@ void BunnyToStairsOrRampExitAction::PlanPredictionStep( MovementPredictionContex
 		return;
 	}
 
-	if( !CheckCommonBunnyingPreconditions( context ) ) {
+	if( !CheckCommonBunnyHopPreconditions( context ) ) {
 		return;
 	}
 
@@ -20,7 +20,7 @@ void BunnyToStairsOrRampExitAction::PlanPredictionStep( MovementPredictionContex
 		}
 	}
 
-	if( !SetupBunnying( Vec3( intendedLookDir ), context ) ) {
+	if( !SetupBunnyHopping( Vec3( intendedLookDir ), context ) ) {
 		return;
 	}
 }

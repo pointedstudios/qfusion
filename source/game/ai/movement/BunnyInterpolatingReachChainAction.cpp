@@ -37,7 +37,7 @@ void BunnyInterpolatingReachChainAction::PlanPredictionStep( Context *context ) 
 		return;
 	}
 
-	if( !CheckCommonBunnyingPreconditions( context ) ) {
+	if( !CheckCommonBunnyHopPreconditions( context ) ) {
 		return;
 	}
 
@@ -60,7 +60,7 @@ void BunnyInterpolatingReachChainAction::PlanPredictionStep( Context *context ) 
 
 	context->record->botInput.SetIntendedLookDir( interpolator.Result(), true );
 
-	if( !SetupBunnying( context->record->botInput.IntendedLookDir(), context ) ) {
+	if( !SetupBunnyHopping( context->record->botInput.IntendedLookDir(), context ) ) {
 		context->SetPendingRollback();
 		return;
 	}

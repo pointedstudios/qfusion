@@ -3,9 +3,10 @@
 
 #include "BunnyTestingMultipleLookDirsAction.h"
 
-class BunnyInterpolatingReachChainAction final : public GenericRunBunnyingAction {
+class BunnyInterpolatingReachChainAction final : public BunnyHopAction {
 public:
-	DECLARE_BUNNYING_MOVEMENT_ACTION_CONSTRUCTOR( BunnyInterpolatingReachChainAction, COLOR_RGB( 32, 0, 255 ) )
+	explicit BunnyInterpolatingReachChainAction( BotMovementModule *module_ )
+		: BunnyHopAction( module_, "BunnyInterpolatingReachChainAction", COLOR_RGB( 32, 0, 255 ) )
 	{
 		supportsObstacleAvoidance = false;
 	}

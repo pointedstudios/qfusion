@@ -1,10 +1,9 @@
-#ifndef QFUSION_GENERICBUNNYINGACTION_H
-#define QFUSION_GENERICBUNNYINGACTION_H
+#ifndef QFUSION_BUNNYHOPACTION_H
+#define QFUSION_BUNNYHOPACTION_H
 
 #include "BaseMovementAction.h"
 
-class GenericRunBunnyingAction : public BaseMovementAction
-{
+class BunnyHopAction : public BaseMovementAction {
 	friend class MovementPredictionContext;
 protected:
 	// If the current grounded area matches one of these areas, we can mark mayStopAtAreaNum
@@ -67,13 +66,13 @@ protected:
 		isTryingObstacleAvoidance = false;
 	}
 
-	void SetupCommonBunnyingInput( MovementPredictionContext *context );
+	void SetupCommonBunnyHopInput( MovementPredictionContext *context );
 	// TODO: Mark as virtual in base class and mark as final here to avoid a warning about hiding parent member?
 	bool GenericCheckIsActionEnabled( MovementPredictionContext *context, BaseMovementAction *suggestedAction );
-	bool CheckCommonBunnyingPreconditions( MovementPredictionContext *context );
-	bool SetupBunnying( const Vec3 &intendedLookVec,
-						MovementPredictionContext *context,
-						float maxAccelDotThreshold = 1.0f );
+	bool CheckCommonBunnyHopPreconditions( MovementPredictionContext *context );
+	bool SetupBunnyHopping( const Vec3 &intendedLookVec,
+							MovementPredictionContext *context,
+							float maxAccelDotThreshold = 1.0f );
 	bool CanFlyAboveGroundRelaxed( const MovementPredictionContext *context ) const;
 	bool CanSetWalljump( MovementPredictionContext *context ) const;
 	void TrySetWalljump( MovementPredictionContext *context );
@@ -127,7 +126,7 @@ protected:
 
 	inline void MarkForTruncation( MovementPredictionContext *context );
 public:
-	GenericRunBunnyingAction( BotMovementModule *module_, const char *name_, int debugColor_ = 0 )
+	BunnyHopAction( BotMovementModule *module_, const char *name_, int debugColor_ = 0 )
 		: BaseMovementAction( module_, name_, debugColor_ ) {
 		ResetObstacleAvoidanceState();
 		// Do NOT stop prediction on this! We have to check where the bot is going to land!
@@ -141,8 +140,5 @@ public:
 									   unsigned stoppedAtFrameIndex ) override;
 	void BeforePlanning() override;
 };
-
-#define DECLARE_BUNNYING_MOVEMENT_ACTION_CONSTRUCTOR( name, debugColor_ ) \
-	name( BotMovementModule *module_ ) : GenericRunBunnyingAction( module_, #name, debugColor_ )
 
 #endif

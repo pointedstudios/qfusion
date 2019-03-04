@@ -1,7 +1,7 @@
-#include "GenericBunnyingAction.h"
+#include "BunnyHopAction.h"
 #include "MovementLocal.h"
 
-bool GenericRunBunnyingAction::GenericCheckIsActionEnabled( Context *context, BaseMovementAction *suggestedAction ) {
+bool BunnyHopAction::GenericCheckIsActionEnabled( Context *context, BaseMovementAction *suggestedAction ) {
 	if( !BaseMovementAction::GenericCheckIsActionEnabled( context, suggestedAction ) ) {
 		return false;
 	}
@@ -17,7 +17,7 @@ bool GenericRunBunnyingAction::GenericCheckIsActionEnabled( Context *context, Ba
 	return false;
 }
 
-bool GenericRunBunnyingAction::CheckCommonBunnyingPreconditions( Context *context ) {
+bool BunnyHopAction::CheckCommonBunnyHopPreconditions( Context *context ) {
 	int currAasAreaNum = context->CurrAasAreaNum();
 	if( !currAasAreaNum ) {
 		Debug( "Cannot apply action: curr AAS area num is undefined\n" );
@@ -69,7 +69,7 @@ bool GenericRunBunnyingAction::CheckCommonBunnyingPreconditions( Context *contex
 	return true;
 }
 
-void GenericRunBunnyingAction::SetupCommonBunnyingInput( Context *context ) {
+void BunnyHopAction::SetupCommonBunnyHopInput( Context *context ) {
 	const auto *pmoveStats = context->currPlayerState->pmove.stats;
 
 	auto *botInput = &context->record->botInput;
@@ -116,7 +116,7 @@ void GenericRunBunnyingAction::SetupCommonBunnyingInput( Context *context ) {
 	}
 }
 
-bool GenericRunBunnyingAction::SetupBunnying( const Vec3 &intendedLookVec, Context *context, float maxAccelDotThreshold ) {
+bool BunnyHopAction::SetupBunnyHopping( const Vec3 &intendedLookVec, Context *context, float maxAccelDotThreshold ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	auto *botInput = &context->record->botInput;
 
@@ -130,7 +130,7 @@ bool GenericRunBunnyingAction::SetupBunnying( const Vec3 &intendedLookVec, Conte
 	float toTargetDir2DSqLen = toTargetDir2D.SquaredLength();
 
 	if( squareSpeed2D > 1.0f ) {
-		SetupCommonBunnyingInput( context );
+		SetupCommonBunnyHopInput( context );
 
 		velocityDir2D *= 1.0f / entityPhysicsState.Speed2D();
 
@@ -171,7 +171,7 @@ bool GenericRunBunnyingAction::SetupBunnying( const Vec3 &intendedLookVec, Conte
 		}
 		return true;
 	} else {
-		SetupCommonBunnyingInput( context );
+		SetupCommonBunnyHopInput( context );
 		return true;
 	}
 
@@ -219,7 +219,7 @@ bool GenericRunBunnyingAction::SetupBunnying( const Vec3 &intendedLookVec, Conte
 	return true;
 }
 
-bool GenericRunBunnyingAction::CanFlyAboveGroundRelaxed( const Context *context ) const {
+bool BunnyHopAction::CanFlyAboveGroundRelaxed( const Context *context ) const {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	if( entityPhysicsState.GroundEntity() ) {
 		return false;
@@ -229,7 +229,7 @@ bool GenericRunBunnyingAction::CanFlyAboveGroundRelaxed( const Context *context 
 	return entityPhysicsState.HeightOverGround() >= desiredHeightOverGround;
 }
 
-void GenericRunBunnyingAction::TrySetWalljump( Context *context ) {
+void BunnyHopAction::TrySetWalljump( Context *context ) {
 	if( !CanSetWalljump( context ) ) {
 		return;
 	}
@@ -251,7 +251,7 @@ void GenericRunBunnyingAction::TrySetWalljump( Context *context ) {
 		}                                                                         \
 	} while( 0 )
 
-bool GenericRunBunnyingAction::CanSetWalljump( Context *context ) const {
+bool BunnyHopAction::CanSetWalljump( Context *context ) const {
 	const short *pmoveStats = context->currPlayerState->pmove.stats;
 	if( !( pmoveStats[PM_STAT_FEATURES] & PMFEAT_WALLJUMP ) ) {
 		return false;
@@ -316,7 +316,7 @@ bool GenericRunBunnyingAction::CanSetWalljump( Context *context ) const {
 
 #undef TEST_TRACE_RESULT_NORMAL
 
-bool GenericRunBunnyingAction::CheckStepSpeedGainOrLoss( Context *context ) {
+bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 	const auto *oldPMove = &context->oldPlayerState->pmove;
 	const auto *newPMove = &context->currPlayerState->pmove;
 	// Make sure this test is skipped along with other ones while skimming
@@ -391,11 +391,11 @@ bool GenericRunBunnyingAction::CheckStepSpeedGainOrLoss( Context *context ) {
 	return true;
 }
 
-inline bool GenericRunBunnyingAction::WasOnGroundThisFrame( const Context *context ) const {
+inline bool BunnyHopAction::WasOnGroundThisFrame( const Context *context ) const {
 	return context->movementState->entityPhysicsState.GroundEntity() || context->frameEvents.hasJumped;
 }
 
-inline bool GenericRunBunnyingAction::HasSubstantiallyChangedZ( const AiEntityPhysicsState &state ) const {
+inline bool BunnyHopAction::HasSubstantiallyChangedZ( const AiEntityPhysicsState &state ) const {
 	if( !std::isfinite( groundZAtSequenceStart ) ) {
 		return false;
 	}
@@ -407,7 +407,7 @@ inline bool GenericRunBunnyingAction::HasSubstantiallyChangedZ( const AiEntityPh
 	return std::fabs( groundZAtSequenceStart - newGroundZ ) > 48.0f;
 }
 
-bool GenericRunBunnyingAction::CheckForActualCompletionOnGround( MovementPredictionContext *context ) {
+bool BunnyHopAction::CheckForActualCompletionOnGround( MovementPredictionContext *context ) {
 	// TODO: provide wrappers that eliminate this awkward invocation
 	if( context->TraceCache().CanSkipPMoveCollision( context ) ) {
 		return true;
@@ -441,7 +441,7 @@ bool GenericRunBunnyingAction::CheckForActualCompletionOnGround( MovementPredict
 	return velocityDir.Dot( trace.plane.normal ) > -0.3f;
 }
 
-inline void GenericRunBunnyingAction::MarkForTruncation( Context *context ) {
+inline void BunnyHopAction::MarkForTruncation( Context *context ) {
 	int currGroundedAreaNum = context->CurrGroundedAasAreaNum();
 	Assert( currGroundedAreaNum );
 	mayStopAtAreaNum = currGroundedAreaNum;
@@ -454,7 +454,7 @@ inline void GenericRunBunnyingAction::MarkForTruncation( Context *context ) {
 	VectorCopy( context->movementState->entityPhysicsState.Origin(), mayStopAtOrigin );
 }
 
-void GenericRunBunnyingAction::TryMarkingForTruncation( Context *context ) {
+void BunnyHopAction::TryMarkingForTruncation( Context *context ) {
 	const auto &physicsState = context->movementState->entityPhysicsState;
 	if( physicsState.Velocity()[2] / physicsState.Speed() < -0.1f ) {
 		MarkForTruncation( context );
@@ -463,10 +463,10 @@ void GenericRunBunnyingAction::TryMarkingForTruncation( Context *context ) {
 	}
 }
 
-void GenericRunBunnyingAction::HandleSameOrBetterTravelTimeToTarget( Context *context,
-																	 int currTravelTimeToTarget,
-																	 float squareDistanceFromStart,
-																	 int groundedAreaNum ) {
+void BunnyHopAction::HandleSameOrBetterTravelTimeToTarget( Context *context,
+														   int currTravelTimeToTarget,
+														   float squareDistanceFromStart,
+														   int groundedAreaNum ) {
 	minTravelTimeToNavTargetSoFar = currTravelTimeToTarget;
 	minTravelTimeAreaNumSoFar = context->CurrAasAreaNum();
 
@@ -519,9 +519,9 @@ void GenericRunBunnyingAction::HandleSameOrBetterTravelTimeToTarget( Context *co
 	TryMarkingForTruncation( context );
 }
 
-bool GenericRunBunnyingAction::TryHandlingWorseTravelTimeToTarget( Context *context,
-																   int currTravelTimeToTarget,
-																   int groundedAreaNum ) {
+bool BunnyHopAction::TryHandlingWorseTravelTimeToTarget( Context *context,
+														 int currTravelTimeToTarget,
+														 int groundedAreaNum ) {
 	constexpr const char *format = "A prediction step has lead to increased travel time to nav target\n";
 	if( currTravelTimeToTarget > (int)( minTravelTimeToNavTargetSoFar + tolerableWalkableIncreasedTravelTimeMillis ) ) {
 		Debug( format );
@@ -558,7 +558,7 @@ bool GenericRunBunnyingAction::TryHandlingWorseTravelTimeToTarget( Context *cont
 	return false;
 }
 
-bool GenericRunBunnyingAction::TryHandlingUnreachableTarget( Context *context ) {
+bool BunnyHopAction::TryHandlingUnreachableTarget( Context *context ) {
 	currentUnreachableTargetSequentialMillis += context->predictionStepMillis;
 	if( currentUnreachableTargetSequentialMillis < tolerableUnreachableTargetSequentialMillis ) {
 		context->SaveSuggestedActionForNextFrame( this );
@@ -569,7 +569,7 @@ bool GenericRunBunnyingAction::TryHandlingUnreachableTarget( Context *context ) 
 	return false;
 }
 
-inline bool GenericRunBunnyingAction::IsSkimmingInAGivenState( const Context *context ) const {
+inline bool BunnyHopAction::IsSkimmingInAGivenState( const Context *context ) const {
 	const auto &newPMove = context->currPlayerState->pmove;
 	if( !newPMove.skim_time ) {
 		return true;
@@ -579,7 +579,7 @@ inline bool GenericRunBunnyingAction::IsSkimmingInAGivenState( const Context *co
 	return newPMove.skim_time != oldPMove.skim_time;
 }
 
-bool GenericRunBunnyingAction::TryHandlingSkimmingState( Context *context ) {
+bool BunnyHopAction::TryHandlingSkimmingState( Context *context ) {
 	Assert( IsSkimmingInAGivenState( context ) );
 
 	// Skip tests while skimming
@@ -600,7 +600,7 @@ bool GenericRunBunnyingAction::TryHandlingSkimmingState( Context *context ) {
 	return false;
 }
 
-bool GenericRunBunnyingAction::CheckNavTargetAreaTransition( Context *context ) {
+bool BunnyHopAction::CheckNavTargetAreaTransition( Context *context ) {
 	if( !context->IsInNavTargetArea() ) {
 		// If the bot has left the nav target area
 		if( hasEnteredNavTargetArea ) {
@@ -645,7 +645,7 @@ bool GenericRunBunnyingAction::CheckNavTargetAreaTransition( Context *context ) 
 	return false;
 }
 
-void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
+void BunnyHopAction::CheckPredictionStepResults( Context *context ) {
 	BaseMovementAction::CheckPredictionStepResults( context );
 	if( context->cannotApplyAction || context->isCompleted ) {
 		return;
@@ -765,7 +765,7 @@ void GenericRunBunnyingAction::CheckPredictionStepResults( Context *context ) {
 	context->SetPendingRollback();
 }
 
-bool GenericRunBunnyingAction::TryTerminationOnStopAreaNum( Context *context, int groundedAreaNum ) {
+bool BunnyHopAction::TryTerminationOnStopAreaNum( Context *context, int groundedAreaNum ) {
 	if( !groundedAreaNum ) {
 		return false;
 	}
@@ -822,9 +822,9 @@ bool GenericRunBunnyingAction::TryTerminationOnStopAreaNum( Context *context, in
 	return false;
 }
 
-bool GenericRunBunnyingAction::TryTerminationHavingPassedObstacleOrDeltaZ( Context *context,
-																		   int currTravelTimeToTarget,
-																		   int groundedAreaNum ) {
+bool BunnyHopAction::TryTerminationHavingPassedObstacleOrDeltaZ( Context *context,
+																 int currTravelTimeToTarget,
+																 int groundedAreaNum ) {
 	if( !groundedAreaNum ) {
 		return false;
 	}
@@ -868,10 +868,10 @@ bool GenericRunBunnyingAction::TryTerminationHavingPassedObstacleOrDeltaZ( Conte
 	return true;
 }
 
-bool GenericRunBunnyingAction::TryHandlingLackOfStopAreaNum( Context *context,
-															 int currTravelTimeToTarget,
-															 float squareDistanceFromStart,
-															 int groundedAreaNum ) {
+bool BunnyHopAction::TryHandlingLackOfStopAreaNum( Context *context,
+												   int currTravelTimeToTarget,
+												   float squareDistanceFromStart,
+												   int groundedAreaNum ) {
 	constexpr unsigned maxStepsLimit = ( 7 * Context::MAX_PREDICTED_STATES ) / 8;
 	static_assert( maxStepsLimit + 1 < Context::MAX_PREDICTED_STATES, "" );
 	// If we have not reached prediction limits
@@ -896,7 +896,7 @@ bool GenericRunBunnyingAction::TryHandlingLackOfStopAreaNum( Context *context,
 	return false;
 }
 
-bool GenericRunBunnyingAction::TryTerminationAtBestGroundPosition( Context *context, int currTravelTimeToTarget ) {
+bool BunnyHopAction::TryTerminationAtBestGroundPosition( Context *context, int currTravelTimeToTarget ) {
 	// Skip if the travel time at sequence start is undefined
 	if( !travelTimeAtSequenceStart ) {
 		return false;
@@ -940,7 +940,7 @@ complete:
 	return true;
 }
 
-bool GenericRunBunnyingAction::TryTerminationAtGroundInSameStartArea( Context *context ) {
+bool BunnyHopAction::TryTerminationAtGroundInSameStartArea( Context *context ) {
 	const int reachNum = context->NextReachNum();
 	// Skip if we're seemingly in the nav target area
 	if( !reachNum ) {
@@ -981,7 +981,7 @@ bool GenericRunBunnyingAction::TryTerminationAtGroundInSameStartArea( Context *c
 	return true;
 }
 
-bool GenericRunBunnyingAction::GenericCheckForPrematureCompletion( Context *context ) {
+bool BunnyHopAction::GenericCheckForPrematureCompletion( Context *context ) {
 	const auto &newEntityPhysicsState = context->movementState->entityPhysicsState;
 
 	// Interpolate origin using full (non-2D) velocity
@@ -1038,9 +1038,9 @@ bool GenericRunBunnyingAction::GenericCheckForPrematureCompletion( Context *cont
 	return firstHitNormal.Dot( velocityDir ) > -0.3f;
 }
 
-bool GenericRunBunnyingAction::CheckForPrematureCompletionInFloorCluster( Context *context,
-																		  int currGroundedAreaNum,
-																		  int floorClusterNum ) {
+bool BunnyHopAction::CheckForPrematureCompletionInFloorCluster( Context *context,
+																int currGroundedAreaNum,
+																int floorClusterNum ) {
 	const auto &newEntityPhysicsState = context->movementState->entityPhysicsState;
 	const Vec3 currVelocity( newEntityPhysicsState.Velocity() );
 
@@ -1110,7 +1110,7 @@ bool GenericRunBunnyingAction::CheckForPrematureCompletionInFloorCluster( Contex
 	return aasWorld->IsAreaWalkableInFloorCluster( currGroundedAreaNum, landingAreaNum );
 }
 
-void GenericRunBunnyingAction::OnApplicationSequenceStarted( Context *context ) {
+void BunnyHopAction::OnApplicationSequenceStarted( Context *context ) {
 	BaseMovementAction::OnApplicationSequenceStarted( context );
 	context->MarkSavepoint( this, context->topOfStackIndex );
 
@@ -1160,9 +1160,9 @@ void GenericRunBunnyingAction::OnApplicationSequenceStarted( Context *context ) 
 	hasTouchedNavTarget = false;
 }
 
-void GenericRunBunnyingAction::OnApplicationSequenceStopped( Context *context,
-															 SequenceStopReason reason,
-															 unsigned stoppedAtFrameIndex ) {
+void BunnyHopAction::OnApplicationSequenceStopped( Context *context,
+												   SequenceStopReason reason,
+												   unsigned stoppedAtFrameIndex ) {
 	BaseMovementAction::OnApplicationSequenceStopped( context, reason, stoppedAtFrameIndex );
 
 	if( reason != FAILED ) {
@@ -1201,7 +1201,7 @@ void GenericRunBunnyingAction::OnApplicationSequenceStopped( Context *context,
 	this->ResetObstacleAvoidanceState();
 }
 
-void GenericRunBunnyingAction::BeforePlanning() {
+void BunnyHopAction::BeforePlanning() {
 	BaseMovementAction::BeforePlanning();
 	this->disabledForApplicationFrameIndex = std::numeric_limits<unsigned>::max();
 	ResetObstacleAvoidanceState();
