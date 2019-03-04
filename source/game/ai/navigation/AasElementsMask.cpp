@@ -9,6 +9,8 @@ static StaticVector<BitVector, 2> bitVectorsHolder;
 bool *AasElementsMask::tmpAreasVisRow = nullptr;
 bool *AasElementsMask::blockedAreasTable = nullptr;
 
+int AasElementsMask::numAreas = 0;
+
 void AasElementsMask::Init( AiAasWorld *parent ) {
 	assert( bitVectorsHolder.empty() );
 	assert( parent->NumAreas() );
@@ -24,11 +26,13 @@ void AasElementsMask::Init( AiAasWorld *parent ) {
 	facesMask = new( bitVectorsHolder.unsafe_grow_back() )BitVector(
 		(uint8_t *)G_LevelMalloc( numFacesBytes ), numFacesBytes );
 
-	tmpAreasVisRow = (bool *)G_LevelMalloc( sizeof( bool ) * parent->NumAreas() );
+	numAreas = parent->NumAreas();
+
+	tmpAreasVisRow = (bool *)G_LevelMalloc( sizeof( bool ) * numAreas * TMP_ROW_REDUNDANCY_SCALE );
 	// Don't share these buffers even it looks doable.
 	// It could lead to nasty reentrancy bugs especially considering that
 	// both buffers are very likely to be used in blocked areas status determination.
-	blockedAreasTable = (bool *)G_LevelMalloc( sizeof( bool ) * parent->NumAreas() );
+	blockedAreasTable = (bool *)G_LevelMalloc( sizeof( bool ) * numAreas );
 }
 
 void AasElementsMask::Shutdown() {

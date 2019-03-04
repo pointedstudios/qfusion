@@ -590,7 +590,30 @@ public:
 	 * @return an address of the supplied buffer
 	 * @warning using this in a loop is not cheap. Consider using {@code FindInVisList()} in this case.
 	 */
-	const bool *DecompressAreaVis( const uint16_t *__restrict visList, bool *__restrict row ) const;
+	bool *DecompressAreaVis( const uint16_t *__restrict visList, bool *__restrict row ) const {
+		::memset( row, 0, sizeof( bool ) * numareas );
+		return AddToDecompressedAreaVis( visList, row );
+	}
+
+	/**
+	 * @see AddToDecompressedAreaVis(const uint16_t *__restrict, bool *__restrict)
+	 * @param areaNum an number of an area
+	 * @param row a buffer for a decompressed row
+	 * @return an address of the supplied buffer.
+	 */
+	bool *AddToDecompressedAreaVis( int areaNum, bool *__restrict row ) const {
+		return AddToDecompressedAreaVis( AreaVisList( areaNum ), row );
+	}
+
+	/**
+	 * Converts a dense list of areas (certainly) visible from the area to a sparse row addressed by area numbers.
+	 * Contrary to {@code DecompressAreaVis()} the supplied buffer contents are not erased.
+	 * This allows building a lookup table of areas visible from multiple POV areas.
+	 * @param visList a list of areas (a result of {@code AreaVisList()} call)
+	 * @param row a buffer for a decompressed row (a result of {@code DecompressAreaVis()} call for some other area)
+	 * @return an address of the supplied buffer
+	 */
+	bool *AddToDecompressedAreaVis( const uint16_t *__restrict visList, bool *__restrict row ) const;
 
 	// Consider SSE2 instruction set always available for x86 targets
 #if !( defined ( __i386__ ) || defined ( __x86_64__ ) || defined( _M_IX86 ) || defined( _M_AMD64 ) || defined( _M_X64 ) )

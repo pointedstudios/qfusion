@@ -1,6 +1,7 @@
 #include "AwarenessLocal.h"
 #include "PathBlockingTracker.h"
 #include "../bot.h"
+#include "../navigation/AasElementsMask.h"
 
 #include <cmath>
 
@@ -19,39 +20,50 @@ class EnemyComputationalProxy {
 	enum { MAX_AREAS = 2 };
 
 	const AiAasWorld *const __restrict aasWorld;
+	/**
+	 * Points to AAS area vis row for own areas acting as POV areas.
+	 * The memory is held by {@code AasElementsMask}. Values are supposedly set by
+	 * {@code AasWorld::DecompressAreaVis() and likely by {@code AasWorld::AddToDecompressedAreaVis()} as well.
+	 */
+	const bool *__restrict ownAreasVisRow;
+
 	vec3_t origin;
 	vec3_t lookDir;
 	float squareBaseBlockingRadius;
 	int floorClusterNum;
-	int areaNums[MAX_AREAS];
-	int numAreas;
 	TrackedEnemy::HitFlags hitFlags;
 	bool isZooming;
 
-	void ComputeAreaNums();
+	int ComputeAreaNums( int areaNums[MAX_AREAS] );
+	const bool *PrepareAreasVisRow( const int areaNums[MAX_AREAS], int numAreas, bool *row );
+	void SaveFloorClusterNum( const int areaNums[MAX_AREAS], int numAreas );
 
 	bool CutOffForFlags( const aas_area_t &area, float squareDistance, int hitFlagsMask ) const;
 public:
-	EnemyComputationalProxy( const TrackedEnemy *enemy, float damageToKillBot );
+	EnemyComputationalProxy( const TrackedEnemy *enemy, float damageToKillBot, int num );
 
-	inline bool IsInVis( const uint16_t *__restrict visList ) const;
+	bool IsInVis( int areaNum ) const { return ownAreasVisRow[areaNum]; }
 
 	bool MayBlockOtherArea( int areaNum, int hitFlagsMask ) const;
 	bool MayBlockGroundedArea( int areaNum, int hitFlagsMask ) const;
 };
 
-EnemyComputationalProxy::EnemyComputationalProxy( const TrackedEnemy *enemy, float damageToKillBot )
+EnemyComputationalProxy::EnemyComputationalProxy( const TrackedEnemy *enemy, float damageToKillBot, int num )
 	: aasWorld( AiAasWorld::Instance() )
-	, isZooming( enemy->ent->r.client ? enemy->ent->r.client->ps.stats[PM_STAT_ZOOMTIME] : false ) {
+	, isZooming( enemy->ent->r.client ? (bool)enemy->ent->r.client->ps.stats[PM_STAT_ZOOMTIME] : false ) {
 	hitFlags = enemy->GetCheckForWeaponHitFlags( damageToKillBot );
+
 	// Lets use fairly low blocking radii that are still sufficient for narrow hallways.
 	// Otherwise bot behaviour is pretty poor as they think every path is blocked.
 	float baseBlockingRadius = enemy->HasQuad() ? 384.0f : 40.0f;
 	squareBaseBlockingRadius = baseBlockingRadius * baseBlockingRadius;
 	enemy->LastSeenOrigin().CopyTo( origin );
-	floorClusterNum = aasWorld->FloorClusterNum( aasWorld->FindAreaNum( origin ) );
 	enemy->LookDir().CopyTo( lookDir );
-	ComputeAreaNums();
+
+	int ownAreaNums[MAX_AREAS];
+	const int numOwnAreas = ComputeAreaNums( ownAreaNums );
+	SaveFloorClusterNum( ownAreaNums, numOwnAreas );
+	ownAreasVisRow = PrepareAreasVisRow( ownAreaNums, numOwnAreas, AasElementsMask::TmpAreasVisRow( num ) );
 }
 
 /**
@@ -62,6 +74,8 @@ EnemyComputationalProxy::EnemyComputationalProxy( const TrackedEnemy *enemy, flo
 class DisableMapAreasRequest: public AiAasRouteCache::DisableZoneRequest {
 public:
 	enum { MAX_ENEMIES = 8 };
+
+	static_assert( MAX_ENEMIES == AasElementsMask::TMP_ROW_REDUNDANCY_SCALE, "" );
 private:
 	const AiAasWorld *const aasWorld;
 	vec3_t botOrigin;
@@ -72,16 +86,11 @@ private:
 	// Let the array head be closer to the memory hot spot
 	StaticVector<EnemyComputationalProxy, MAX_ENEMIES> enemyProxies;
 
-	inline bool LooksLikeANearbyArea( const aas_area_t *__restrict areas, int areaNum ) const;
-
 	void AddAreas( const uint16_t *__restrict areasList, bool *__restrict blockedAreasTable );
 
 	void AddGroundedAreas( bool *__restrict blockedAreasTable );
 
 	void AddNonGroundedAreas( const uint16_t *__restrict areasList, bool *__restrict blockedAreasTable );
-
-	template <typename MayBlockFn>
-	bool TryAddEnemiesImpactOnArea( int areaNum, int hitFlagsMask );
 public:
 	void FillBlockedAreasTable( bool *__restrict blockedAreasTable ) override;
 
@@ -218,9 +227,10 @@ DisableMapAreasRequest::DisableMapAreasRequest( const TrackedEnemy **begin,
 	VectorCopy( botOrigin_, this->botOrigin );
 	botAreaNum = aasWorld->FindAreaNum( botOrigin_ );
 	assert( end - begin > 0 && end - begin <= MAX_ENEMIES );
+	int num = 0;
 	for( const TrackedEnemy **iter = begin; iter != end; ++iter ) {
 		const TrackedEnemy *enemy = *iter;
-		new( enemyProxies.unsafe_grow_back() )EnemyComputationalProxy( enemy, damageToKillBot_ );
+		new( enemyProxies.unsafe_grow_back() )EnemyComputationalProxy( enemy, damageToKillBot_, num++ );
 	}
 }
 
@@ -255,26 +265,6 @@ void DisableMapAreasRequest::FillBlockedAreasTable( bool *__restrict blockedArea
 	//}
 }
 
-struct MayBlockGroundedArea {
-	bool operator()( const EnemyComputationalProxy &__restrict enemy, int areaNum, int hitFlagsMask ) const {
-		return enemy.MayBlockGroundedArea( areaNum, hitFlagsMask );
-	}
-};
-
-struct MayBlockOtherArea {
-	bool operator()( const EnemyComputationalProxy &__restrict enemy, int areaNum, int hitFlagsMask ) const {
-		return enemy.MayBlockOtherArea( areaNum, hitFlagsMask );
-	}
-};
-
-inline bool DisableMapAreasRequest::LooksLikeANearbyArea( const aas_area_t *areas, int areaNum ) const {
-	// These are coarse tests that are however sufficient to prevent blocking nearby areas around bot in most cases.
-	// Note that the additional area test is performed to prevent blocking of the current area
-	// if its huge and the bot is far from its center.  We could have used multiple areas
-	// (AiEntityPhysicsState::PrepareRoutingStartAreas()) but this is dropped for performance reasons.
-	return DistanceSquared( areas[areaNum].center, botOrigin ) < 192.0f * 192.0f || areaNum == botAreaNum;
-}
-
 void DisableMapAreasRequest::AddAreas( const uint16_t *__restrict areasList,
 									   bool *__restrict blockedAreasTable ) {
 	const auto hitFlagsMask = (int)TrackedEnemy::HitFlags::ALL;
@@ -284,11 +274,24 @@ void DisableMapAreasRequest::AddAreas( const uint16_t *__restrict areasList,
 	const auto listSize = *areasList++;
 	for( int i = 0; i < listSize; ++i ) {
 		const auto areaNum = areasList[i];
-		if( LooksLikeANearbyArea( aasAreas, areaNum ) ) {
+		// Skip nearby areas
+		if( DistanceSquared( aasAreas[areaNum].center, botOrigin ) < 192.0f * 192.0f ) {
 			continue;
 		}
-		if( TryAddEnemiesImpactOnArea<MayBlockOtherArea>( areasList[i], hitFlagsMask ) ) {
+		// Skip the current area as well.
+		// This does not deserve its own code path as the number of non-grounded important areas is relatively small.
+		if( areaNum == botAreaNum ) {
+			continue;
+		}
+		for( const auto &__restrict enemy: enemyProxies ) {
+			if( !enemy.IsInVis( areaNum ) ) {
+				continue;
+			}
+			if( !enemy.MayBlockOtherArea( areaNum, hitFlagsMask ) ) {
+				continue;
+			}
 			blockedAreasTable[areaNum] = true;
+			break;
 		}
 	}
 }
@@ -298,15 +301,56 @@ void DisableMapAreasRequest::AddGroundedAreas( bool *__restrict blockedAreasTabl
 	const auto hitFlagsMask = (int)TrackedEnemy::HitFlags::ALL & ~(int)( TrackedEnemy::HitFlags::RAIL );
 	// Do not take "rail" hit flags into account while testing grounded areas for blocking.
 	// A bot can easily dodge rail-like weapons using regular movement on ground.
-	const auto *const __restrict groundedAreaNums = aasWorld->GroundedPrincipalRoutingAreas();
+	const auto *const __restrict groundedAreaNums = aasWorld->GroundedPrincipalRoutingAreas() + 1;
 	const auto *const __restrict aasAreas = aasWorld->Areas();
+
+	const float squareDistanceThreshold = 192.0f * 192.0f;
+	// Check whether we are not in a huge area so we do not have to check the area num additionally
+	if( DistanceSquared( aasAreas[botAreaNum].center, botOrigin ) <= squareDistanceThreshold ) {
+		for( int i = 0; i < groundedAreaNums[-1]; ++i ) {
+			const int areaNum = groundedAreaNums[i];
+			// Skip nearby areas (including the current one)
+			// These are coarse tests that are however sufficient to prevent blocking nearby areas around bot in most cases.
+			// Note that the additional area test is performed to prevent blocking of the current area
+			// if its huge and the bot is far from its center.  We could have used multiple areas
+			// (AiEntityPhysicsState::PrepareRoutingStartAreas()) but this is dropped for performance reasons.
+			if( DistanceSquared( aasAreas[areaNum].center, botOrigin ) < squareDistanceThreshold ) {
+				continue;
+			}
+			for( const auto &__restrict enemy: enemyProxies ) {
+				if( !enemy.IsInVis( areaNum ) ) {
+					continue;
+				}
+				if( !enemy.MayBlockGroundedArea( areaNum, hitFlagsMask ) ) {
+					continue;
+				}
+				blockedAreasTable[areaNum] = true;
+				break;
+			}
+		}
+		return;
+	}
+
+	// Handle the rare but possible case when the current area is so huge that the distance threshold test fails for it
 	for( int i = 0; i < groundedAreaNums[-1]; ++i ) {
 		const int areaNum = groundedAreaNums[i];
-		if( LooksLikeANearbyArea( aasAreas, areaNum ) ) {
+		// Skip nearby areas
+		if( DistanceSquared( aasAreas[areaNum].center, botOrigin ) < squareDistanceThreshold ) {
 			continue;
 		}
-		if( TryAddEnemiesImpactOnArea<MayBlockGroundedArea>( areaNum, hitFlagsMask ) ) {
+		// Skip the current area that must be huge
+		if( areaNum == botAreaNum ) {
+			continue;
+		}
+		for( const auto &__restrict enemy: enemyProxies ) {
+			if( !enemy.IsInVis( areaNum ) ) {
+				continue;
+			}
+			if( !enemy.MayBlockGroundedArea( areaNum, hitFlagsMask ) ) {
+				continue;
+			}
 			blockedAreasTable[areaNum] = true;
+			break;
 		}
 	}
 }
@@ -326,45 +370,26 @@ void DisableMapAreasRequest::AddNonGroundedAreas( const uint16_t *__restrict are
 		if( aasAreaSettings[areaNum].areaflags & AREA_GROUNDED ) {
 			continue;
 		}
-		if( LooksLikeANearbyArea( aasAreas, areaNum ) ) {
+		// Skip nearby areas
+		if( DistanceSquared( aasAreas[areaNum].center, botOrigin ) < 192.0f * 192.0f ) {
 			continue;
 		}
-		if( TryAddEnemiesImpactOnArea<MayBlockOtherArea>( areaNum, hitFlagsMask ) ) {
-			blockedAreasTable[areaNum] = true;
+		// Skip the current area as well.
+		// This does not deserve its own code path as the number of non-grounded important areas is relatively small.
+		if( areaNum == botAreaNum ) {
+			continue;
 		}
-	}
-}
-
-template <typename MayBlockFn>
-bool DisableMapAreasRequest::TryAddEnemiesImpactOnArea( int areaNum, int hitFlagsMask ) {
-	const auto *const __restrict visList = aasWorld->AreaVisList( areaNum );
-
-	MayBlockFn mayBlockFn;
-	if( const int floorClusterNum = aasWorld->FloorClusterNum( areaNum ) ) {
 		for( const auto &__restrict enemy: enemyProxies ) {
-			if( enemy.floorClusterNum ) {
-				if( !aasWorld->AreFloorClustersCertainlyVisible( enemy.floorClusterNum, floorClusterNum ) ) {
-					continue;
-				}
+			if( !enemy.IsInVis( areaNum ) ) {
+				continue;
 			}
-			if( mayBlockFn( enemy, hitFlagsMask, areaNum ) ) {
-				if( enemy.IsInVis( visList ) ) {
-					return true;
-				}
+			if( !enemy.MayBlockOtherArea( areaNum, hitFlagsMask ) ) {
+				continue;
 			}
-		}
-		return false;
-	}
-
-	for( const auto &__restrict enemy: enemyProxies ) {
-		if( mayBlockFn( enemy, hitFlagsMask, areaNum ) ) {
-			if( enemy.IsInVis( visList ) ) {
-				return true;
-			}
+			blockedAreasTable[areaNum] = true;
+			break;
 		}
 	}
-
-	return false;
 }
 
 bool EnemyComputationalProxy::CutOffForFlags( const aas_area_t &area, const float squareDistance, int hitFlagsMask ) const {
@@ -381,39 +406,18 @@ bool EnemyComputationalProxy::CutOffForFlags( const aas_area_t &area, const floa
 	// If only a rocket
 	if( hitFlags == TrackedEnemy::HitFlags::ROCKET ) {
 		if( origin[2] < area.mins[2] ) {
-			return true;
+			if( squareDistance > 125 * 125 ) {
+				return true;
+			}
 		}
 	}
 
 	Vec3 toAreaDir( area.center );
 	toAreaDir -= origin;
-	float dot = toAreaDir.Dot( lookDir );
-	// If the area is in the hemisphere behind the bot
-	if( dot < 0 ) {
-		return true;
-	}
 
-	// These dot tests have limited utility for non-client enemies
-	// but its unlikely we ever meet ones in vanilla gametypes.
-
-	// Normalize on demand
-	dot *= 1.0f / std::sqrt( squareDistance + 1.0f );
-	if( !isZooming ) {
-		// If not zooming but the client is not really looking at the area
-		if( dot < 0.3f ) {
-			return true;
-		}
-	}
-
-	// Skip the area if the enemy is zooming and the area is not its focus
-	return dot < 0.7f;
-}
-
-inline bool EnemyComputationalProxy::IsInVis( const uint16_t *__restrict visList ) const {
-	if( this->numAreas < 2 ) {
-		return aasWorld->FindInVisList( visList, areaNums[0] );
-	}
-	return aasWorld->FindInVisList( visList, areaNums[0], areaNums[1] );
+	const float invDistance = Q_RSqrt( squareDistance );
+	const float dot = toAreaDir.Dot( lookDir ) * invDistance;
+	return !isZooming ? dot < 0.5f : dot < 0.8f;
 }
 
 bool EnemyComputationalProxy::MayBlockOtherArea( int areaNum, int hitFlagsMask ) const {
@@ -431,14 +435,13 @@ bool EnemyComputationalProxy::MayBlockOtherArea( int areaNum, int hitFlagsMask )
 bool EnemyComputationalProxy::MayBlockGroundedArea( int areaNum, int hitFlagsMask ) const {
 	const auto &__restrict area = aasWorld->Areas()[areaNum];
 	const float squareDistance = DistanceSquared( origin, area.center );
-	// Skip far grounded areas.
-	// The bot should be able to dodge EB shots well on ground.
-	// Even if the bot is in air, let's hope the enemy can't hit.
-	// Otherwise we're going to trigger a computational explosion.
-	if( squareDistance > 1250.0f * 1250.0f ) {
+	// Hit flags are combined from ROCKET, SHAFT.
+	// The limit for SHAFT is the greatest limit
+	if( squareDistance > 900.0f * 900.0f ) {
 		return false;
 	}
 
+	// Put the likely case first
 	if( squareDistance > squareBaseBlockingRadius ) {
 		const auto effectiveFlags = (int)hitFlags & hitFlagsMask;
 		// If there were no weapon hit flags set for powerful weapons
@@ -446,17 +449,25 @@ bool EnemyComputationalProxy::MayBlockGroundedArea( int areaNum, int hitFlagsMas
 			return false;
 		}
 
-		// If only a rocket
-		if( effectiveFlags == (int)TrackedEnemy::HitFlags::ROCKET ) {
-			if( origin[2] < area.mins[2] ) {
-				return false;
+		// If we should check for rocket
+		if( effectiveFlags & (int)TrackedEnemy::HitFlags::ROCKET ) {
+			// If only a rocket
+			if( effectiveFlags == (int)TrackedEnemy::HitFlags::ROCKET ) {
+				if( origin[2] < area.mins[2] ) {
+					if( squareDistance > 125 * 125 ) {
+						return false;
+					}
+				}
+				if( squareDistance > 550 * 550 ) {
+					return false;
+				}
 			}
 		}
 
+		const float invDistance = Q_RSqrt( squareDistance );
 		Vec3 toAreaDir( area.center );
 		toAreaDir -= origin;
-		toAreaDir.NormalizeFast();
-		if( toAreaDir.Dot( lookDir ) < 0.3f ) {
+		if( toAreaDir.Dot( lookDir ) * invDistance < 0.7f ) {
 			return false;
 		}
 	}
@@ -464,7 +475,7 @@ bool EnemyComputationalProxy::MayBlockGroundedArea( int areaNum, int hitFlagsMas
 	return true;
 }
 
-void EnemyComputationalProxy::ComputeAreaNums() {
+int EnemyComputationalProxy::ComputeAreaNums( int areaNums[MAX_AREAS] ) {
 	// We can't reuse entity area nums the origin differs (its the last seen origin)
 	Vec3 enemyBoxMins( playerbox_stand_mins );
 	Vec3 enemyBoxMaxs( playerbox_stand_maxs );
@@ -473,7 +484,7 @@ void EnemyComputationalProxy::ComputeAreaNums() {
 
 	static_assert( MAX_AREAS == 2, "The entire logic assumes only two areas to select" );
 
-	numAreas = 0;
+	int numAreas = 0;
 	areaNums[0] = 0;
 	areaNums[1] = 0;
 
@@ -496,7 +507,7 @@ void EnemyComputationalProxy::ComputeAreaNums() {
 			if( areaFlags[i] & AREA_GROUNDED ) {
 				areaNums[numAreas++] = rawAreaNums[i];
 				if( numAreas == MAX_AREAS ) {
-					return;
+					return numAreas;
 				}
 			}
 		}
@@ -510,7 +521,7 @@ void EnemyComputationalProxy::ComputeAreaNums() {
 			if( areaNums[0] != rawAreaNums[i] ) {
 				areaNums[numAreas++] = rawAreaNums[i];
 				if( numAreas == MAX_AREAS ) {
-					return;
+					return numAreas;
 				}
 			}
 		}
@@ -521,8 +532,37 @@ void EnemyComputationalProxy::ComputeAreaNums() {
 		if( areaNums[0] != rawAreaNums[i] ) {
 			areaNums[numAreas++] = rawAreaNums[i];
 			if( numAreas == MAX_AREAS ) {
-				return;
+				return numAreas;
 			}
 		}
 	}
+
+	return numAreas;
+}
+
+void EnemyComputationalProxy::SaveFloorClusterNum( const int *ownAreaNums, int numOwnAreas ) {
+	const auto *const aasWorld = AiAasWorld::Instance();
+
+	floorClusterNum = 0;
+	for( int i = 0; i < numOwnAreas; ++i ) {
+		if( ( floorClusterNum = aasWorld->FloorClusterNum( ownAreaNums[i] ) ) ) {
+			return;
+		}
+	}
+}
+
+const bool *EnemyComputationalProxy::PrepareAreasVisRow( const int *ownAreaNums, int numOwnAreas, bool *row ) {
+	const auto *const aasWorld = AiAasWorld::Instance();
+
+	if( !numOwnAreas ) {
+		memset( row, 0, aasWorld->NumAreas() * sizeof( *row ) );
+		return row;
+	}
+
+	aasWorld->DecompressAreaVis( ownAreaNums[0], row );
+	for( int i = 1; i < numOwnAreas; ++i ) {
+		aasWorld->AddToDecompressedAreaVis( ownAreaNums[i], row );
+	}
+
+	return row;
 }

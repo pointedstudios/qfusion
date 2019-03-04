@@ -2520,8 +2520,7 @@ void AiAasWorld::ComputeAreasVisibility( uint32_t *offsetsDataSize, uint32_t *li
 	this->areaVisDataOffsets = listOffsets;
 }
 
-const bool *AiAasWorld::DecompressAreaVis( const uint16_t *__restrict visList, bool *__restrict buffer ) const {
-	memset( buffer, 0, numareas * sizeof( bool ) );
+bool *AiAasWorld::AddToDecompressedAreaVis( const uint16_t *__restrict visList, bool *__restrict buffer ) const {
 	const int size = *visList++;
 	for( int i = 0; i < size; ++i ) {
 		buffer[visList[i]] = true;

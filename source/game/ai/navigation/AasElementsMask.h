@@ -78,6 +78,8 @@ class AasElementsMask {
 	static bool *tmpAreasVisRow;
 	static bool *blockedAreasTable;
 
+	static int numAreas;
+
 	/**
  	 * Managed by {@code AiAasWorld} as its initialization requires these masks.
    	 */
@@ -87,8 +89,19 @@ class AasElementsMask {
 	 */
 	static void Shutdown();
 public:
+	/**
+	 * Assuming {@code N} is the number of areas in the world,
+	 * {@code N * TMP_ROW_REDUNDANCY_SCALE} elements are allocated for {@code TmpAreasVisRow()}
+	 */
+	static constexpr unsigned TMP_ROW_REDUNDANCY_SCALE = 8;
+
 	static BitVector *AreasMask() { return areasMask; }
 	static BitVector *FacesMask() { return facesMask; }
+
+	static bool *TmpAreasVisRow( int instanceNum ) {
+		assert( (unsigned)instanceNum < (unsigned)TMP_ROW_REDUNDANCY_SCALE );
+		return tmpAreasVisRow + instanceNum * numAreas;
+	}
 
 	static bool *TmpAreasVisRow() { return tmpAreasVisRow; }
 	static bool *BlockedAreasTable() { return blockedAreasTable; }
