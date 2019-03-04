@@ -180,7 +180,6 @@ void WalkCarefullyAction::PlanPredictionStep( Context *context ) {
 	}
 
 	if( !( hazardSidesNum + gapSidesNum ) ) {
-		context->cannotApplyAction = true;
 		context->actionSuggestedByAction = suggestedAction;
 		Debug( "Cannot apply action: there are just two walls from both sides, no gap or hazard\n" );
 		// If this block condition held a frame ago, save predicted results
