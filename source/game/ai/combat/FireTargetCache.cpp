@@ -1,105 +1,117 @@
 #include "FireTargetCache.h"
 #include "../navigation/AasElementsMask.h"
+#include "../navigation/AasAreasWalker.h"
 #include "../ai_trajectory_predictor.h"
 #include "../bot.h"
 
-struct PointAndDistance {
-	Vec3 point;
-	float distance;
-	inline PointAndDistance( const Vec3 &point_, float distance_ ) : point( point_ ), distance( distance_ ) {}
-	inline bool operator<( const PointAndDistance &that ) const { return distance < that.distance; }
+class ClosestFacePointSolver final : public SharedFaceAreasWalker<ArrayBasedFringe<>> {
+	const aas_vertex_t *const __restrict aasVertices;
+	const aas_edge_t *const __restrict aasEdges;
+	const aas_edgeindex_t *const __restrict aasEdgeIndex;
+	const aas_plane_t *const __restrict aasPlanes;
+
+	edict_t *const ignoreEnt;
+	edict_t *const targetEnt;
+	const float *result { nullptr };
+
+	Vec3 candidatePoint { 0, 0, 0 };
+	Vec3 fireOrigin;
+	Vec3 fireTarget;
+	const float splashRadius;
+
+	bool ProcessAreaTransition( int currArea, int nextArea, const aas_face_t *face ) override;
+public:
+	ClosestFacePointSolver( const float *fireOrigin_,
+							const float *fireTarget_,
+							float splashRadius_,
+							const edict_t *ignoreEnt_,
+							const edict_t *targetEnt_ )
+		: SharedFaceAreasWalker(
+			AiAasWorld::Instance()->FindAreaNum( fireTarget_ ),
+			AasElementsMask::AreasMask(),
+			AasElementsMask::FacesMask() )
+		, aasVertices( aasWorld->Vertexes() )
+		, aasEdges( aasWorld->Edges() )
+		, aasEdgeIndex( aasWorld->EdgeIndex() )
+		, aasPlanes( aasWorld->Planes() )
+		, ignoreEnt( const_cast<edict_t *>( ignoreEnt_ ) )
+		, targetEnt( const_cast<edict_t *>( targetEnt_ ) )
+		, fireOrigin( fireOrigin_ )
+		, fireTarget( fireTarget_ )
+		, splashRadius( splashRadius_ ) {}
+
+	void Exec() override;
+
+	const float *Result() const { return result; }
 };
 
-constexpr int MAX_CLOSEST_FACE_POINTS = 8;
-
-static void FindClosestAreasFacesPoints( float splashRadius, const vec3_t target, int startAreaNum,
-										 StaticVector<PointAndDistance, MAX_CLOSEST_FACE_POINTS + 1> &closestPoints ) {
-	// Retrieve these instances before the loop
-	const AiAasWorld *aasWorld = AiAasWorld::Instance();
-	BitVector *const visitedFaces = AasElementsMask::FacesMask();
-	BitVector *const visitedAreas = AasElementsMask::AreasMask();
-
-	visitedFaces->Clear();
-	visitedAreas->Clear();
-
-	// Actually it is not a limit of a queue capacity but a limit of processed areas number
-	constexpr int MAX_FRINGE_AREAS = 16;
-	// This is a breadth-first search fringe queue for a BFS through areas
-	int areasFringe[MAX_FRINGE_AREAS];
-
-	// Points to a head (front) of the fringe queue.
-	int areasFringeHead = 0;
-	// Points after a tail (back) of the fringe queue.
-	int areasFringeTail = 0;
-	// Push the start area to the queue
-	areasFringe[areasFringeTail++] = startAreaNum;
-
-	while( areasFringeHead < areasFringeTail ) {
-		const int areaNum = areasFringe[areasFringeHead++];
-		visitedAreas->Set( areaNum, true );
-
-		const aas_area_t *area = aasWorld->Areas() + areaNum;
-
-		for( int faceIndexNum = area->firstface; faceIndexNum < area->firstface + area->numfaces; ++faceIndexNum ) {
-			int faceIndex = aasWorld->FaceIndex()[faceIndexNum];
-
-			// If the face has been already processed, skip it.
-			if( !visitedFaces->TrySet( abs( faceIndex ) ) ) {
-				continue;
-			}
-
-			// Get actual face and area behind it by a sign of the faceIndex
-			const aas_face_t *face;
-			int areaBehindFace;
-			if( faceIndex >= 0 ) {
-				face = aasWorld->Faces() + faceIndex;
-				areaBehindFace = face->backarea;
-			} else {
-				face = aasWorld->Faces() - faceIndex;
-				areaBehindFace = face->frontarea;
-			}
-
-			// Determine a distance from the target to the face
-			const aas_plane_t *plane = aasWorld->Planes() + face->planenum;
-			const aas_edge_t *anyFaceEdge = aasWorld->Edges() + abs( aasWorld->EdgeIndex()[face->firstedge] );
-
-			Vec3 anyPlanePointToTarget( target );
-			anyPlanePointToTarget -= aasWorld->Vertexes()[anyFaceEdge->v[0]];
-			const float pointToFaceDistance = anyPlanePointToTarget.Dot( plane->normal );
-
-			// This is the actual loop stop condition.
-			// This means that `areaBehindFace` will not be pushed to the fringe queue, and the queue will shrink.
-			if( pointToFaceDistance > splashRadius ) {
-				continue;
-			}
-
-			// If there is a non-solid are behind face
-			if( areaBehindFace ) {
-				// If the area behind face is not checked yet and areas BFS limit is not reached
-				if( !visitedAreas->IsSet( areaBehindFace ) && areasFringeTail != MAX_FRINGE_AREAS ) {
-					// Enqueue `areaBehindFace` to the fringe queue
-					areasFringe[areasFringeTail++] = areaBehindFace;
-				}
-				continue;
-			}
-
-			// If the area borders with a solid
-			Vec3 projectedPoint = Vec3( target ) - pointToFaceDistance * Vec3( plane->normal );
-			// We are sure we always have a free slot (closestPoints.capacity() == MAX_CLOSEST_FACE_POINTS + 1)
-			closestPoints.push_back( PointAndDistance( projectedPoint, pointToFaceDistance ) );
-			std::push_heap( closestPoints.begin(), closestPoints.end() );
-			// Ensure that we have a free slot by evicting a largest distance point
-			// Do this afterward the addition to allow a newly added point win over some old one
-			if( closestPoints.size() == closestPoints.capacity() ) {
-				std::pop_heap( closestPoints.begin(), closestPoints.end() );
-				closestPoints.pop_back();
-			}
-		}
+bool ClosestFacePointSolver::ProcessAreaTransition( int currArea, int nextArea, const aas_face_t *face ) {
+	const auto *__restrict facePlane = aasPlanes + face->planenum;
+	// Check whether the face is within the splash radius
+	if( std::fabs( fireTarget.Dot( facePlane->normal ) - facePlane->dist ) > splashRadius ) {
+		return true;
 	}
 
-	// `closestPoints` is a heap arranged for quick eviction of an item with the largest distance.
-	// We have to sort it in ascending order, so really closest points are first.
-	std::sort( closestPoints.begin(), closestPoints.end() );
+	// If there is a non-solid area behind face
+	if( nextArea ) {
+		if( visitedAreas->TrySet( nextArea ) ) {
+			queue.Add( nextArea );
+		}
+		return true;
+	}
+
+	// TODO: Using raycasts for closest face point determination is pretty bad but operating on AAS edge is error-prone...
+
+	Vec3 testedOffsetVec( facePlane->normal );
+	testedOffsetVec *= -splashRadius;
+	Vec3 testedPoint( testedOffsetVec );
+	testedPoint += fireTarget;
+
+	trace_t trace;
+	SolidWorldTrace( &trace, fireTarget.Data(), testedPoint.Data() );
+	// If we can't find a point on a face in the solid world
+	if( trace.fraction == 1.0f ) {
+		return true;
+	}
+
+	candidatePoint.Set( testedOffsetVec );
+	candidatePoint *= trace.fraction;
+	candidatePoint += fireTarget;
+
+	// Set result as defined by default
+	result = candidatePoint.Data();
+
+	G_Trace( &trace, fireOrigin.Data(), nullptr, nullptr, candidatePoint.Data(), ignoreEnt, MASK_AISOLID );
+
+	// If there's no obstacles between the fire target and the candidate point
+	if( trace.fraction == 1.0f ) {
+		return false;
+	}
+
+	// If we hit the target directly while trying to check contents between the fire target and the candidate point
+	if( targetEnt == game.edicts + trace.ent ) {
+		return false;
+	}
+
+	// We might hit solid as the suggested point is probably at a solid surface.
+	// Make sure we really have hit the solid world closely to the suggested point.
+	if( candidatePoint.SquareDistanceTo( trace.endpos ) < 8 * 8 ) {
+		return false;
+	}
+
+	// Reset the result address on failure
+	result = nullptr;
+	// Continue testing candidates
+	return true;
+}
+
+void ClosestFacePointSolver::Exec() {
+	// If the start area num is zero
+	if( !queue.Peek() ) {
+		return;
+	}
+
+	SharedFaceAreasWalker::Exec();
 }
 
 void BotFireTargetCache::AdjustAimParams( const SelectedEnemies &selectedEnemies, const SelectedWeapons &selectedWeapons,
@@ -122,122 +134,19 @@ void BotFireTargetCache::AdjustAimParams( const SelectedEnemies &selectedEnemies
 	}
 }
 
-bool BotFireTargetCache::AdjustForShootableEnvironmentRayCasting( const SelectedEnemies &selectedEnemies,
-																  float splashRadius,
-																  AimParams *aimParams ) {
-	trace_t trace;
-
-	float minSqDistance = 999999.0f;
-	vec_t nearestPoint[3] = { 0, 0, 0 };
-
-	auto *traceKey = const_cast<edict_t *>( selectedEnemies.TraceKey() );
-	auto *firePoint = const_cast<float*>( aimParams->fireOrigin );
-
-	if( selectedEnemies.OnGround() ) {
-		Vec3 groundPoint( aimParams->fireTarget );
-		groundPoint.Z() += playerbox_stand_maxs[2];
-		// Check whether shot to this point is not blocked
-		edict_t *self = game.edicts + bot->EntNum();
-		G_Trace( &trace, firePoint, nullptr, nullptr, groundPoint.Data(), self, MASK_AISOLID );
-		if( trace.fraction > 0.999f || selectedEnemies.TraceKey() == game.edicts + trace.ent ) {
-			float skill = bot->Skill();
-			// For mid-skill bots it may be enough. Do not waste cycles.
-			if( skill < 0.66f && random() < ( 1.0f - skill ) ) {
-				aimParams->fireTarget[2] += playerbox_stand_mins[2];
-				return true;
-			}
-
-			VectorCopy( groundPoint.Data(), nearestPoint );
-			minSqDistance = playerbox_stand_mins[2] * playerbox_stand_mins[2];
-		}
-	}
-
-	Vec3 toTargetDir( aimParams->fireTarget );
-	toTargetDir -= aimParams->fireOrigin;
-	float sqDistanceToTarget = toTargetDir.SquaredLength();
-	// Not only prevent division by zero, but keep target as-is when it is colliding with bot
-	if( sqDistanceToTarget < 16 * 16 ) {
-		return false;
-	}
-
-	// Normalize to target dir
-	toTargetDir *= Q_RSqrt( sqDistanceToTarget );
-	Vec3 traceEnd = Vec3( aimParams->fireTarget ) + splashRadius * toTargetDir;
-
-	// We hope this function will be called rarely only when somebody wants to load a stripped Q3 AAS.
-	// Just trace an environment behind the bot, it is better than it used to be anyway.
-	G_Trace( &trace, aimParams->fireTarget, nullptr, nullptr, traceEnd.Data(), traceKey, MASK_AISOLID );
-	if( trace.fraction != 1.0f ) {
-		// First check whether an explosion in the point behind may damage the target to cut a trace quickly
-		float sqDistance = DistanceSquared( aimParams->fireTarget, trace.endpos );
-		if( sqDistance < minSqDistance ) {
-			// trace.endpos will be overwritten
-			Vec3 pointBehind( trace.endpos );
-			// Check whether shot to this point is not blocked
-			edict_t *self = game.edicts + bot->EntNum();
-			G_Trace( &trace, firePoint, nullptr, nullptr, pointBehind.Data(), self, MASK_AISOLID );
-			if( trace.fraction > 0.999f || selectedEnemies.TraceKey() == game.edicts + trace.ent ) {
-				minSqDistance = sqDistance;
-				VectorCopy( pointBehind.Data(), nearestPoint );
-			}
-		}
-	}
-
-	// Modify `target` if we have found some close solid point
-	if( minSqDistance <= splashRadius ) {
-		VectorCopy( nearestPoint, aimParams->fireTarget );
-		return true;
-	}
-	return false;
-}
-
-bool BotFireTargetCache::AdjustForShootableEnvironmentWithAas( const SelectedEnemies &selectedEnemies,
-															   float splashRadius,
-															   int areaNum,
-															   AimParams *aimParams ) {
-	// We can't just get a closest point from AAS world, it may be blocked for shooting.
-	// Also we can't check each potential point for being blocked, tracing is very expensive.
-	// Instead we get MAX_CLOSEST_FACE_POINTS best points and for each check whether it is blocked.
-	// We hope at least a single point will not be blocked.
-
-	StaticVector<PointAndDistance, MAX_CLOSEST_FACE_POINTS + 1> closestAreaFacePoints;
-	FindClosestAreasFacesPoints( splashRadius, aimParams->fireTarget, areaNum, closestAreaFacePoints );
-
-	trace_t trace;
-
-	// On each step get a best point left and check it for being blocked for shooting
-	// We assume that FindClosestAreasFacesPoints() returns a sorted array where closest points are first
-	edict_t *ignore = game.edicts + bot->EntNum();
-	for( PointAndDistance &pointAndDistance: closestAreaFacePoints ) {
-		G_Trace( &trace, aimParams->fireOrigin, nullptr, nullptr, pointAndDistance.point.Data(), ignore, MASK_AISOLID );
-		if( trace.fraction < 0.999f && selectedEnemies.TraceKey() != game.edicts + trace.ent ) {
-			continue;
-		}
-
-		pointAndDistance.point.CopyTo( aimParams->fireTarget );
-		return true;
-	}
-
-	return false;
-}
-
 constexpr float GENERIC_PROJECTILE_COORD_AIM_ERROR = 75.0f;
 constexpr float GENERIC_INSTANTHIT_COORD_AIM_ERROR = 100.0f;
 
-bool BotFireTargetCache::AdjustForShootableEnvironment( const SelectedEnemies &selectedEnemies,
+void BotFireTargetCache::AdjustForShootableEnvironment( const SelectedEnemies &selectedEnemies,
 														float splashRaidus,
 														AimParams *aimParams ) {
-	int targetAreaNum = 0;
-	// Reject AAS worlds that look like stripped
-	if( AiAasWorld::Instance()->NumFaces() > 512 ) {
-		targetAreaNum = AiAasWorld::Instance()->FindAreaNum( aimParams->fireTarget );
+	const edict_t *ignoreEnt = game.edicts + bot->EntNum();
+	const edict_t *targetEnt = selectedEnemies.TraceKey();
+	ClosestFacePointSolver solver( aimParams->fireOrigin, aimParams->fireTarget, splashRaidus, ignoreEnt, targetEnt );
+	solver.Exec();
+	if( const float *p = solver.Result() ) {
+		VectorCopy( p, aimParams->fireTarget );
 	}
-
-	if( targetAreaNum ) {
-		return AdjustForShootableEnvironmentWithAas( selectedEnemies, splashRaidus, targetAreaNum, aimParams );
-	}
-
-	return AdjustForShootableEnvironmentRayCasting( selectedEnemies, splashRaidus, aimParams );
 }
 
 void BotFireTargetCache::AdjustPredictionExplosiveAimTypeParams( const SelectedEnemies &selectedEnemies,

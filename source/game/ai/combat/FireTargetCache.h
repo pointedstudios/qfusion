@@ -70,17 +70,7 @@ class BotFireTargetCache {
 									 const GenericFireDef &fireDef,
 									 AimParams *aimParams );
 
-	// Returns true if a shootable environment for inflicting a splash damage has been found
-	bool AdjustForShootableEnvironment( const SelectedEnemies &selectedEnemies, float splashRadius, AimParams *aimParams );
-
-	bool AdjustForShootableEnvironmentRayCasting( const SelectedEnemies &selectedEnemies,
-												  float splashRadius,
-												  AimParams *aimParams );
-
-	bool AdjustForShootableEnvironmentWithAas( const SelectedEnemies &selectedEnemies,
-											   float splashRadius,
-											   int areaNum,
-											   AimParams *aimParams );
+	void AdjustForShootableEnvironment( const SelectedEnemies &selectedEnemies, float splashRadius, AimParams *aimParams );
 
 	void GetPredictedTargetOrigin( const SelectedEnemies &selectedEnemies,
 								   const SelectedWeapons &selectedWeapons,
