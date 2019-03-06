@@ -498,13 +498,41 @@ void AiAasWorld::ComputeExtraAreaData() {
 }
 
 void AiAasWorld::TrySetAreaLedgeFlags( int areaNum ) {
-	int reachNum = areasettings[areaNum].firstreachablearea;
-	int endReachNum = areasettings[areaNum].firstreachablearea + areasettings[areaNum].numreachableareas;
+	auto *const __restrict aasAreaSettings = this->areasettings;
+	auto *const __restrict aasReach = this->reachability;
 
-	for(; reachNum != endReachNum; ++reachNum ) {
-		if( reachability[reachNum].traveltype == TRAVEL_WALKOFFLEDGE ) {
-			areasettings[areaNum].areaflags |= AREA_LEDGE;
-			break;
+	auto *const __restrict areaSettings = aasAreaSettings + areaNum;
+	const int endReachNum = areaSettings->firstreachablearea + areaSettings->numreachableareas;
+	for( int reachNum = areaSettings->firstreachablearea; reachNum != endReachNum; ++reachNum ) {
+		const auto &__restrict reach = aasReach[reachNum];
+		if( reach.traveltype != TRAVEL_WALKOFFLEDGE ) {
+			continue;
+		}
+
+		// If the reachability has a substantial height there's no point in doing reverse reach checks
+		if( DistanceSquared( reach.start, reach.end ) > 40 * 40 ) {
+			areaSettings->areaflags |= AREA_LEDGE;
+			return;
+		}
+
+		// Check whether a reverse reachability exists (so we can walk/jump back)
+		// TODO: Build a table of reverse reachabilites as well? Could be useful for various purposes
+		const auto *__restrict nextAreaSettings = this->areasettings + reach.areanum;
+		const int endRevReachNum = nextAreaSettings->firstreachablearea + nextAreaSettings->numreachableareas;
+		for( int revReachNum = nextAreaSettings->firstreachablearea; revReachNum != endRevReachNum; ++revReachNum ) {
+			const auto &__restrict revReach = aasReach[revReachNum];
+			// Must point back to the area we built flags for
+			if( revReach.areanum != areaNum ) {
+				continue;
+			}
+			// Avoid setting flags in this case as we still can walk or jump back
+			if( revReach.traveltype == TRAVEL_WALK || revReach.traveltype == TRAVEL_BARRIERJUMP ) {
+				// We have found a reverse reachability so there's no point to continue the inner loop
+				break;
+			}
+			// We have found at least a single direct reachability that qualifies as a ledge.
+			areaSettings->areaflags |= AREA_LEDGE;
+			return;
 		}
 	}
 }
