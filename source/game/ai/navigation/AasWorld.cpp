@@ -1,5 +1,6 @@
 #include "AasWorld.h"
 #include "AasElementsMask.h"
+#include "AasAreasWalker.h"
 #include "../buffer_builder.h"
 #include "../static_vector.h"
 #include "../ai_local.h"
@@ -660,49 +661,117 @@ void AiAasWorld::TrySetAreaRampFlags( int areaNum ) {
 	}
 }
 
-void AiAasWorld::TrySetAreaNoFallFlags( int areaNum ) {
-	// First, try to cut off extremely expensive computations at the end of this method
-	const auto &areaSettings = areasettings[areaNum];
-	if( areaSettings.areaflags & ( AREA_JUNK | AREA_LIQUID | AREA_DISABLED ) ) {
-		return;
-	}
+class NofallAreaFlagSolver: public SharedFaceAreasWalker<ArrayBasedFringe<64>> {
+	vec3_t testedBoxMins;
+	vec3_t testedBoxMaxs;
 
+	const aas_area_t *__restrict aasAreas;
+	const aas_areasettings_t *__restrict aasAreaSettings;
+
+	bool result { true };
+
+	bool ProcessAreaTransition( int currArea, int nextArea, const aas_face_t *face ) override;
+	bool AreAreaContentsBad( int areaNum ) const;
+public:
+	NofallAreaFlagSolver( int areaNum_, AiAasWorld *aasWorld_ );
+
+	bool Result() const { return result; }
+
+	void Exec() override;
+};
+
+NofallAreaFlagSolver::NofallAreaFlagSolver( int areaNum_, AiAasWorld *aasWorld_ )
+	: SharedFaceAreasWalker( areaNum_, AasElementsMask::AreasMask(), AasElementsMask::FacesMask() ) {
+	this->aasAreas = aasWorld_->Areas();
+	this->aasAreaSettings = aasWorld_->AreaSettings();
+
+	VectorSet( testedBoxMins, -48, -48, -99999 );
+	VectorSet( testedBoxMaxs, +48, +48, +16 );
+
+	const auto &__restrict area = aasAreas[areaNum_];
+
+	VectorAdd( testedBoxMins, area.mins, testedBoxMins );
+	VectorAdd( testedBoxMaxs, area.maxs, testedBoxMaxs );
+}
+
+bool NofallAreaFlagSolver::AreAreaContentsBad( int areaNum ) const {
 	constexpr auto badContents = AREACONTENTS_LAVA | AREACONTENTS_SLIME | AREACONTENTS_DONOTENTER;
 	// We also include triggers/movers as undesired to prevent trigger activation without intention
 	constexpr auto triggerContents = AREACONTENTS_JUMPPAD | AREACONTENTS_TELEPORTER | AREACONTENTS_MOVER;
 	constexpr auto undesiredContents = badContents | triggerContents;
 
-	if( areaSettings.contents & undesiredContents ) {
+	return (bool)( aasAreaSettings[areaNum].contents & undesiredContents );
+}
+
+bool NofallAreaFlagSolver::ProcessAreaTransition( int currAreaNum, int nextAreaNum, const aas_face_t *face ) {
+	// Continue traversal if there's a solid contents behind the face
+	if( !nextAreaNum ) {
+		return true;
+	}
+
+	// Put this first as this should be relatively cheap
+	if( !visitedAreas->TrySet( nextAreaNum ) ) {
+		return true;
+	}
+
+	const auto &__restrict nextArea = aasAreas[nextAreaNum];
+	// Continue traversal if the area is completely outside of the bounds we're interested in
+	if( !BoundsIntersect( nextArea.mins, nextArea.maxs, testedBoxMins, testedBoxMaxs ) ) {
+		return true;
+	}
+
+	// Interrupt in this case
+	if( AreAreaContentsBad( nextAreaNum ) ) {
+		result = false;
+		return false;
+	}
+
+	// We disallow LEDGE areas as initial areas but allow transition to LEDGE areas
+	// If the area is a LEDGE area check whether we may actually fall while being within the tested bounds
+	const auto &__restrict currAreaSettings = aasAreaSettings[currAreaNum];
+	if( currAreaSettings.areaflags & AREA_LEDGE ) {
+		const auto &__restrict currArea = aasAreas[currAreaNum];
+		if( currArea.mins[2] > nextArea.mins[2] + 20 ) {
+			result = false;
+			return false;
+		}
+	}
+
+	queue.Add( nextAreaNum );
+	return true;
+}
+
+void NofallAreaFlagSolver::Exec() {
+	const int startAreaNum = queue.Peek();
+
+	if( aasAreaSettings[startAreaNum].areaflags & AREA_LEDGE ) {
+		result = false;
 		return;
 	}
 
-	// Inspect all outgoing reachabilities
-	int reachNum = areaSettings.firstreachablearea;
-	for(; reachNum < areaSettings.firstreachablearea + areaSettings.numreachableareas; ++reachNum ) {
-		const auto &reach = reachability[reachNum];
-		const auto &reachAreaSettings = areasettings[reach.areanum];
-		if( reachAreaSettings.areaflags & ( AREA_LIQUID | AREA_DISABLED ) ) {
-			return;
-		}
-		if( reachAreaSettings.contents & undesiredContents ) {
-			return;
-		}
-		const int travelType = reach.traveltype & TRAVELTYPE_MASK;
-		if( travelType == TRAVEL_JUMPPAD || travelType == TRAVEL_TELEPORT || travelType == TRAVEL_ELEVATOR ) {
-			return;
-		}
-		if( travelType == TRAVEL_WALKOFFLEDGE ) {
-			// Some reach. of this kind are really short and should not be considered as falling
-			if( DistanceSquared( reach.start, reach.end ) > 32 * 32 ) {
-				return;
-			}
-		}
-		// Note: TRAVEL_SWIM reach.-es are cut off by the reachable area contents test
+	if( AreAreaContentsBad( startAreaNum ) ) {
+		result = false;
+		return;
 	}
 
-	// TODO: This is way too optimistic
+	SharedFaceAreasWalker::Exec();
+}
 
-	areasettings[areaNum].areaflags |= AREA_NOFALL;
+void AiAasWorld::TrySetAreaNoFallFlags( int areaNum ) {
+	auto &__restrict areaSettings = areasettings[areaNum];
+	if( areaSettings.areaflags & ( AREA_LIQUID | AREA_DISABLED ) ) {
+		return;
+	}
+	// NOFALL flag do not make sense for non-grounded areas
+	if( !( areaSettings.areaflags & AREA_GROUNDED ) ) {
+		return;
+	}
+
+	NofallAreaFlagSolver solver( areaNum, this );
+	solver.Exec();
+	if( solver.Result() ) {
+		areaSettings.areaflags |= AREA_NOFALL;
+	}
 }
 
 void AiAasWorld::TrySetAreaSkipCollisionFlags() {
