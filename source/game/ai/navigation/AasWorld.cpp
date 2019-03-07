@@ -777,7 +777,7 @@ void AiAasWorld::TrySetAreaNoFallFlags( int areaNum ) {
 void AiAasWorld::TrySetAreaSkipCollisionFlags() {
 	trace_t trace;
 
-	const float extents[3] = { 32, 16 };
+	const float extents[3] = { 48, 32, 16 };
 	int flagsToSet[3] = { AREA_SKIP_COLLISION_48, AREA_SKIP_COLLISION_32, AREA_SKIP_COLLISION_16 };
 	// Leftmost flags also imply all rightmost flags presence
 	for( int i = 0; i < 2; ++i ) {
