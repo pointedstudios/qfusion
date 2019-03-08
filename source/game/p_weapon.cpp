@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "g_local.h"
 
-void SV_Physics_LinearProjectile( edict_t *ent );
+void SV_Physics_LinearProjectile( edict_t *ent, int lookAheadTime );
 
 static bool is_quad;
 
@@ -236,25 +236,16 @@ static void G_ProjectileDistancePrestep( edict_t *projectile, float distance ) {
 * G_ProjectileTimePrestep
 */
 static void G_ProjectileTimePrestep( edict_t *projectile, int timeOffset ) {
-	if( projectile->movetype != MOVETYPE_TOSS && projectile->movetype != MOVETYPE_LINEARPROJECTILE
-		&& projectile->movetype != MOVETYPE_BOUNCE && projectile->movetype != MOVETYPE_BOUNCEGRENADE ) {
-		return;
-	}
+	assert( projectile->movetype == MOVETYPE_LINEARPROJECTILE );
 
 	if( timeOffset <= 0 ) {
 		return;
 	}
 
-	if( projectile->movetype != MOVETYPE_LINEARPROJECTILE ) {
-		vec3_t distVec;
-
-		VectorScale( projectile->velocity, (float)timeOffset * 0.001f, distVec );
-		G_ProjectileDistancePrestep( projectile, VectorLength( distVec ) );
-		return;
-	}
-
-	projectile->s.linearMovementTimeStamp -= timeOffset;
-	SV_Physics_LinearProjectile( projectile );
+	// Look ahead timeOffset millis more
+	SV_Physics_LinearProjectile( projectile, timeOffset );
+	// Shift the linear movement initial origin
+	VectorCopy( projectile->s.origin, projectile->s.linearMovementBegin );
 }
 
 /*
@@ -726,15 +717,12 @@ static edict_t *G_Fire_Instagun( vec3_t origin, vec3_t angles, firedef_t *firede
 * G_FireWeapon
 */
 void G_FireWeapon( edict_t *ent, int parm ) {
-	gs_weapon_definition_t *weapondef;
-	firedef_t *firedef;
-	edict_t *projectile;
 	vec3_t origin, angles;
 	vec3_t viewoffset = { 0, 0, 0 };
 	int ucmdSeed;
 
-	weapondef = GS_GetWeaponDef( ( parm >> 1 ) & 0x3f );
-	firedef = ( parm & 0x1 ) ? &weapondef->firedef : &weapondef->firedef_weak;
+	auto *const weapondef = GS_GetWeaponDef( ( parm >> 1 ) & 0x3f );
+	auto *const firedef = ( parm & 0x1 ) ? &weapondef->firedef : &weapondef->firedef_weak;
 
 	// find this shot projection source
 	if( ent->r.client ) {
@@ -753,7 +741,7 @@ void G_FireWeapon( edict_t *ent, int parm ) {
 
 	// shoot
 
-	projectile = NULL;
+	edict_t *__restrict projectile = nullptr;
 
 	switch( weapondef->weapon_id ) {
 		default:
@@ -813,33 +801,43 @@ void G_FireWeapon( edict_t *ent, int parm ) {
 		ent->r.client->level.stats.accuracy_shots[firedef->ammo_id - AMMO_GUNBLADE] += firedef->projectile_count;
 	}
 
-	if( projectile ) {
-		//if( projectile->s.linearProjectile ) // convert distance to time for linear projectiles
-		//	G_ProjectileTimePrestep( projectile, 1000.0f * ( g_projectile_prestep->value / VectorLengthFast( projectile->velocity ) ) );
-		//else
-		if( GS_RaceGametype() && firedef->prestep != 0 ) {
-			G_ProjectileDistancePrestep( projectile, firedef->prestep );
-		} else {
-			G_ProjectileDistancePrestep( projectile, g_projectile_prestep->value );
-		}
-		if( projectile->s.linearMovement )
-			VectorCopy( projectile->s.origin, projectile->s.linearMovementBegin );
+	if( !projectile ) {
+		return;
+	}
+
+	if( GS_RaceGametype() && firedef->prestep != 0 ) {
+		G_ProjectileDistancePrestep( projectile, firedef->prestep );
+	} else {
+		G_ProjectileDistancePrestep( projectile, g_projectile_prestep->value );
+	}
+
+	// Skip further tests if there was an impact
+	if( !projectile->r.inuse ) {
+		return;
+	}
+
+	if( projectile->s.linearMovement ) {
+		VectorCopy( projectile->s.origin, projectile->s.linearMovementBegin );
 	}
 
 #ifdef NO_ROCKET_ANTILAG
 
 	// hack for disabling antilag on rockets
 	// race - disable antilag for plasma too
-	if( projectile && ( projectile->s.type == ET_ROCKET || ( GS_RaceGametype() && projectile->s.type == ET_PLASMA ) ) ) {
-		int timeOffset;
+	if( projectile->s.type != ET_ROCKET && !( GS_RaceGametype() && projectile->s.type == ET_PLASMA ) ) {
+		return;
+	}
 
-		timeOffset = -projectile->timeDelta;
-		projectile->timeDelta = 0;
-		if( projectile->s.linearMovement ) {
-			projectile->s.modelindex2 = 0;
-		}
+	assert( projectile->s.linearMovement );
+	const int timeOffset = -projectile->timeDelta;
+	projectile->timeDelta = 0;
+	projectile->s.modelindex2 = 0;
 
-		G_ProjectileTimePrestep( projectile, timeOffset );
+	G_ProjectileTimePrestep( projectile, timeOffset );
+
+	// If there was not an impact
+	if( projectile->r.inuse ) {
+		VectorCopy( projectile->s.origin, projectile->s.linearMovementBegin );
 	}
 #endif
 }

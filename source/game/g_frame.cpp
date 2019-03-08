@@ -741,6 +741,7 @@ void G_RunFrame( unsigned int msec, int64_t serverTime ) {
 		for( edict_t *ent = game.edicts + gs.maxclients; ENTNUM( ent ) < game.numentities; ent++ ) {
 			if( ent->s.linearMovement ) {
 				ent->s.linearMovementTimeStamp += serverTimeDelta;
+				ent->s.linearMovementPrevServerTime += serverTimeDelta;
 			}
 		}
 

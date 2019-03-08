@@ -856,28 +856,35 @@ static void SV_Physics_Toss( edict_t *ent ) {
 
 //============================================================================
 
-void SV_Physics_LinearProjectile( edict_t *ent ) {
-	vec3_t start, end;
-	int mask;
-	trace_t trace;
-	int old_waterLevel;
-
+void SV_Physics_LinearProjectile( edict_t *ent, int lookAheadTime ) {
 	// if not a team captain movement will be handled elsewhere
 	if( ent->flags & FL_TEAMSLAVE ) {
 		return;
 	}
 
-	old_waterLevel = ent->waterlevel;
+	const int old_waterLevel = ent->waterlevel;
+	const int mask = ( ent->r.clipmask ) ? ent->r.clipmask : MASK_SOLID;
 
-	mask = ( ent->r.clipmask ) ? ent->r.clipmask : MASK_SOLID;
+	const float startLineParam = ( ent->s.linearMovementPrevServerTime - ent->s.linearMovementTimeStamp ) * 0.001f;
+	ent->s.linearMovementPrevServerTime = game.serverTime;
+	const float endLineParam = ( lookAheadTime + game.serverTime - ent->s.linearMovementTimeStamp ) * 0.001f;
 
-	const float startLineParam = ( ent->s.linearMovementOldTimeStamp - ent->s.linearMovementTimeStamp ) * 0.001f;
-	ent->s.linearMovementOldTimeStamp = ent->s.linearMovementTimeStamp;
-	const float endLineParam = ( game.serverTime - ent->s.linearMovementTimeStamp ) * 0.001f;
-
+	vec3_t start, end;
 	VectorMA( ent->s.linearMovementBegin, startLineParam, ent->s.linearMovementVelocity, start );
 	VectorMA( ent->s.linearMovementBegin, endLineParam, ent->s.linearMovementVelocity, end );
 
+	// Make sure the segments that are checked every frame overlap by a unit.
+	// This is not obligatory but let's ensure they make a continuous joint segment.
+	const float squareSpeed = VectorLengthSquared( ent->s.linearMovementVelocity );
+	if( squareSpeed > 1 ) {
+		const float invSpeed = 1.0f / std::sqrt( squareSpeed );
+		vec3_t velocityDir;
+		VectorScale( ent->s.linearMovementVelocity, invSpeed, velocityDir );
+		VectorSubtract( start, velocityDir, start );
+		VectorAdd( end, velocityDir, end );
+	}
+
+	trace_t trace;
 	G_Trace4D( &trace, start, ent->r.mins, ent->r.maxs, end, ent, mask, ent->timeDelta );
 	VectorCopy( trace.endpos, ent->s.origin );
 	GClip_LinkEntity( ent );
@@ -953,7 +960,7 @@ void G_RunEntity( edict_t *ent ) {
 			SV_Physics_Toss( ent );
 			break;
 		case MOVETYPE_LINEARPROJECTILE:
-			SV_Physics_LinearProjectile( ent );
+			SV_Physics_LinearProjectile( ent, 0 );
 			break;
 		case MOVETYPE_TOSSSLIDE:
 			G_BoxSlideMove( ent, ent->r.clipmask ? ent->r.clipmask : MASK_PLAYERSOLID, 1.01f, 10 );

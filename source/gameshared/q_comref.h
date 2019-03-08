@@ -332,7 +332,7 @@ typedef struct entity_state_s {
 	vec3_t linearMovementBegin;			// the starting movement point for brush models
 	unsigned int linearMovementDuration;
 	int64_t linearMovementTimeStamp;
-	int64_t linearMovementOldTimeStamp;
+	int64_t linearMovementPrevServerTime;
 
 	float attenuation;                  // should be <= 255/16.0 as this is sent as byte
 
