@@ -102,18 +102,17 @@ void WalkOrSlideInterpolatingReachChainAction::PlanPredictionStep( Context *cont
 		return;
 	}
 
-	const auto &miscTactics = bot->GetMiscTactics();
-	if( !miscTactics.shouldBeSilent && !miscTactics.shouldMoveCarefully ) {
-		if( entityPhysicsState.Speed2D() > context->GetRunSpeed() ) {
-			// Check whether the bot is moving in a "proper" direction to prevent cycling in a loop around a reachability
-			Vec3 velocityDir( entityPhysicsState.Velocity() );
-			velocityDir *= 1.0f / ( entityPhysicsState.Speed() + 0.000001f );
-			if( velocityDir.Dot( interpolator.Result() ) > 0.7f ) {
-				context->cannotApplyAction = true;
-				context->actionSuggestedByAction = &DummyAction();
-				Debug( "Cannot apply action: do not lose a high speed, this speed is safe in the current environment\n" );
-				return;
-			}
+	const float speed2D = entityPhysicsState.Speed2D();
+	if( speed2D > 100 ) {
+		// Check whether the bot is moving in a "proper" direction to prevent cycling in a loop around a reachability
+		Vec3 velocityDir( entityPhysicsState.Velocity() );
+		velocityDir.Z() = 0;
+		velocityDir *= Q_Rcp( speed2D );
+		if( velocityDir.Dot( interpolator.Result() ) > ( speed2D >= context->GetRunSpeed() ? 0.9f : 0.7f ) ) {
+			context->cannotApplyAction = true;
+			context->actionSuggestedByAction = &DummyAction();
+			Debug( "Cannot apply action: velocity dir has a substantial mismatch with the intended one\n" );
+			return;
 		}
 	}
 
@@ -166,28 +165,34 @@ void WalkOrSlideInterpolatingReachChainAction::CheckPredictionStepResults( Conte
 	const auto &oldEntityPhysicsState = context->PhysicsStateBeforeStep();
 	if( !newEntityPhysicsState.GroundEntity() ) {
 		// Allow being in air on steps/stairs
-		if( newEntityPhysicsState.HeightOverGround() > 12 && oldEntityPhysicsState.HeightOverGround() < 12 ) {
-			Debug( "A prediction step has lead to being way too high above the ground\n" );
+		if( newEntityPhysicsState.HeightOverGround() > 32 && oldEntityPhysicsState.HeightOverGround() < 32 ) {
 			this->isDisabledForPlanning = true;
 			context->SetPendingRollback();
 			return;
 		}
 	}
 
-	int currTravelTimeToNavTarget = context->TravelTimeToNavTarget();
+	const int currTravelTimeToNavTarget = context->TravelTimeToNavTarget();
 	if( !currTravelTimeToNavTarget ) {
 		Debug( "A prediction step has lead to an undefined travel time to the nav target\n" );
 		this->isDisabledForPlanning = true;
 		context->SetPendingRollback();
 		return;
 	}
+
+	const float squareDistanceFromStart = originAtSequenceStart.SquareDistanceTo( newEntityPhysicsState.Origin() );
 	if( currTravelTimeToNavTarget > minTravelTimeToTarget ) {
-		Debug( "A prediction step has lead to an increased travel time to the nav target\n" );
-		this->isDisabledForPlanning = true;
-		context->SetPendingRollback();
-		return;
+		// Allow having an increased travel time to target a bit at start.
+		// Make sure this value is lesser than the distance termination threshold.
+		if( squareDistanceFromStart > SQUARE( 16 ) ) {
+			Debug( "A prediction step has lead to an increased travel time to the nav target\n" );
+			this->isDisabledForPlanning = true;
+			context->SetPendingRollback();
+			return;
+		}
+	} else {
+		minTravelTimeToTarget = currTravelTimeToNavTarget;
 	}
-	minTravelTimeToTarget = currTravelTimeToNavTarget;
 
 	if( this->SequenceDuration( context ) < 200 ) {
 		context->SaveSuggestedActionForNextFrame( this );
@@ -195,15 +200,15 @@ void WalkOrSlideInterpolatingReachChainAction::CheckPredictionStepResults( Conte
 	}
 
 	float distanceThreshold = 20.0f + 28.0f * ( numSlideFrames / (float)totalNumFrames );
-	if( originAtSequenceStart.SquareDistanceTo( newEntityPhysicsState.Origin() ) < SQUARE( distanceThreshold ) ) {
+	if( squareDistanceFromStart < SQUARE( distanceThreshold ) ) {
 		Debug( "The bot is likely to be stuck after 200 millis\n" );
 		this->isDisabledForPlanning = true;
 		context->SetPendingRollback();
 		return;
 	}
 
-	if( newEntityPhysicsState.Speed() < context->GetRunSpeed() - 10 ) {
-		Debug( "The bot speed is still below run speed after 200 millis\n" );
+	if( newEntityPhysicsState.Speed() <= 100 ) {
+		Debug( "The bot speed is still significantly below a walk speed after 200 millis\n" );
 		this->isDisabledForPlanning = true;
 		context->SetPendingRollback();
 		return;
