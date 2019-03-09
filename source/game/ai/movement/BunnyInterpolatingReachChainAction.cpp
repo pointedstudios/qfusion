@@ -2,17 +2,18 @@
 #include "MovementLocal.h"
 #include "ReachChainInterpolator.h"
 
-// Continue interpolating while a next reach has these travel types
-static const int COMPATIBLE_REACH_TYPES[] = {
-	TRAVEL_WALK, TRAVEL_WALKOFFLEDGE
-};
+/**
+ * Continue interpolating while a next reach has these travel types
+ */
+constexpr const uint32_t COMPATIBLE_REACH_TYPES =
+	( 1u << TRAVEL_WALK ) | ( 1u << TRAVEL_WALKOFFLEDGE );
 
 // Stop interpolating on these reach types but include a reach start in interpolation.
 // Note: Jump/Strafejump reach-es should interrupt interpolation,
 // otherwise they're prone to falling down as jumping over gaps should be timed precisely.
-static const int ALLOWED_REACH_END_REACH_TYPES[] = {
-	TRAVEL_JUMP, TRAVEL_STRAFEJUMP, TRAVEL_TELEPORT, TRAVEL_JUMPPAD, TRAVEL_ELEVATOR, TRAVEL_LADDER
-};
+constexpr const uint32_t ALLOWED_REACH_END_REACH_TYPES =
+	( 1u << TRAVEL_JUMP ) | ( 1u << TRAVEL_STRAFEJUMP ) | ( 1u << TRAVEL_TELEPORT ) |
+	( 1u << TRAVEL_JUMPPAD ) | ( 1u << TRAVEL_ELEVATOR ) | ( 1u << TRAVEL_LADDER );
 
 // We do not want to add this as a method of a ReachChainInterpolator as it is very specific to these movement actions.
 // Also we do not want to add extra computations for interpolation step (but this is a minor reason)
@@ -42,10 +43,7 @@ void BunnyInterpolatingReachChainAction::PlanPredictionStep( Context *context ) 
 	}
 
 	context->record->botInput.isUcmdSet = true;
-	ReachChainInterpolator interpolator;
-	interpolator.stopAtDistance = 256;
-	interpolator.SetCompatibleReachTypes( COMPATIBLE_REACH_TYPES, sizeof( COMPATIBLE_REACH_TYPES ) / sizeof( int ) );
-	interpolator.SetAllowedEndReachTypes( ALLOWED_REACH_END_REACH_TYPES, sizeof( ALLOWED_REACH_END_REACH_TYPES ) / sizeof( int ) );
+	ReachChainInterpolator interpolator( COMPATIBLE_REACH_TYPES, ALLOWED_REACH_END_REACH_TYPES, 256.0f );
 	if( !interpolator.Exec( context ) ) {
 		context->SetPendingRollback();
 		Debug( "Cannot apply action: cannot interpolate reach chain\n" );
@@ -76,9 +74,7 @@ BunnyInterpolatingChainAtStartAction::BunnyInterpolatingChainAtStartAction( BotM
 void BunnyInterpolatingChainAtStartAction::SaveSuggestedLookDirs( Context *context ) {
 	Assert( suggestedLookDirs.empty() );
 
-	ReachChainInterpolator interpolator;
-	interpolator.SetCompatibleReachTypes( COMPATIBLE_REACH_TYPES, sizeof( COMPATIBLE_REACH_TYPES ) / sizeof( int ) );
-	interpolator.SetAllowedEndReachTypes( ALLOWED_REACH_END_REACH_TYPES, sizeof( ALLOWED_REACH_END_REACH_TYPES ) / sizeof( int ) );
+	ReachChainInterpolator interpolator( COMPATIBLE_REACH_TYPES, ALLOWED_REACH_END_REACH_TYPES, 192.0f );
 	for( int i = 0; i < 5; ++i ) {
 		interpolator.stopAtDistance = 192.0f + 192.0f * i;
 		if( !interpolator.Exec( context ) ) {

@@ -88,15 +88,13 @@ void WalkOrSlideInterpolatingReachChainAction::PlanPredictionStep( Context *cont
 	}
 
 	// Continue interpolating while a next reach has these travel types
-	const int compatibleReachTypes[1] = { TRAVEL_WALK };
+	constexpr uint32_t compatibleReachTypes = ( 1u << TRAVEL_WALK );
 	// Stop interpolating on these reach types but include a reach start in interpolation
-	const int allowedEndReachTypes[6] = {
-		TRAVEL_WALKOFFLEDGE, TRAVEL_JUMP, TRAVEL_TELEPORT, TRAVEL_JUMPPAD, TRAVEL_ELEVATOR, TRAVEL_LADDER
-	};
-	ReachChainInterpolator interpolator;
-	interpolator.stopAtDistance = 128.0f;
-	interpolator.SetCompatibleReachTypes( compatibleReachTypes, sizeof( compatibleReachTypes ) / sizeof( int ) );
-	interpolator.SetAllowedEndReachTypes( allowedEndReachTypes, sizeof( allowedEndReachTypes ) / sizeof( int ) );
+	const uint32_t allowedEndReachTypes =
+		( 1u << TRAVEL_WALKOFFLEDGE ) | ( 1u << TRAVEL_JUMP ) | ( 1u << TRAVEL_TELEPORT ) |
+		( 1u << TRAVEL_JUMPPAD ) | ( 1u << TRAVEL_ELEVATOR ) | ( 1u << TRAVEL_LADDER );
+
+	ReachChainInterpolator interpolator( compatibleReachTypes, allowedEndReachTypes, 128.0f );
 	if( !interpolator.Exec( context ) ) {
 		this->isDisabledForPlanning = true;
 		context->SetPendingRollback();
