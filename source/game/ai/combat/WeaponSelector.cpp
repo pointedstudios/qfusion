@@ -694,7 +694,7 @@ int BotWeaponSelector::SuggestFinishWeapon( const WorldState &worldState ) {
 				return WEAP_MACHINEGUN;
 			}
 		}
-		return WEAP_GUNBLADE;
+		return WEAP_NONE;
 	}
 
 	const float lgRange = GetLaserRange();
@@ -723,7 +723,7 @@ int BotWeaponSelector::SuggestFinishWeapon( const WorldState &worldState ) {
 			return WEAP_PLASMAGUN;
 		}
 
-		return WEAP_GUNBLADE;
+		return WEAP_NONE;
 	}
 
 	if( damageToKill > 40 && BoltsReadyToFireCount() ) {
@@ -734,7 +734,11 @@ int BotWeaponSelector::SuggestFinishWeapon( const WorldState &worldState ) {
 		return WEAP_MACHINEGUN;
 	}
 
-	return WEAP_GUNBLADE;
+	if( BlastsReadyToFireCount() ) {
+		return WEAP_GUNBLADE;
+	}
+
+	return WEAP_NONE;
 }
 
 static bool IsEscapingFromStandingEntity( const edict_t *escaping, const edict_t *standing, float escapingVelocitySqLen ) {
