@@ -1,16 +1,15 @@
 #ifndef QFUSION_FALLDOWNFALLBACK_H
 #define QFUSION_FALLDOWNFALLBACK_H
 
-#include "MovementFallback.h"
+#include "MovementScript.h"
 
-class FallDownFallback: public MovementFallback
-{
+class FallDownScript: public MovementScript {
 	vec3_t targetOrigin { 0, 0, 0 };
 	unsigned timeout { 0 };
 	float reachRadius { 0.0f };
 public:
-	explicit FallDownFallback( const Bot *bot_, BotMovementModule *module_ )
-		: MovementFallback( bot_, module_, COLOR_RGB( 128, 0, 0 ) ) {}
+	explicit FallDownScript( const Bot *bot_, BotMovementModule *module_ )
+		: MovementScript( bot_, module_, COLOR_RGB( 128, 0, 0 ) ) {}
 
 	// Note: It is expected that bot origin Z should be <= target origin Z
 	// after completion of the fallback, so target Z matters a lot!
@@ -19,7 +18,7 @@ public:
 		VectorCopy( origin, this->targetOrigin );
 		this->timeout = timeout_;
 		this->reachRadius = reachRadius_;
-		MovementFallback::Activate();
+		MovementScript::Activate();
 	}
 
 	bool TryDeactivate( MovementPredictionContext *context = nullptr ) override;

@@ -1,7 +1,7 @@
-#include "FallDownFallback.h"
+#include "FallDownScript.h"
 #include "MovementLocal.h"
 
-bool FallDownFallback::TryDeactivate( Context *context ) {
+bool FallDownScript::TryDeactivate( Context *context ) {
 	assert( status == PENDING );
 
 	if( level.time - activatedAt > timeout ) {
@@ -28,7 +28,7 @@ bool FallDownFallback::TryDeactivate( Context *context ) {
 	return entityPhysicsState->Origin()[2] < targetOrigin[2];
 }
 
-void FallDownFallback::SetupMovement( Context *context ) {
+void FallDownScript::SetupMovement( Context *context ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	auto *botInput = &context->record->botInput;
 
@@ -94,26 +94,26 @@ void FallDownFallback::SetupMovement( Context *context ) {
 	}
 }
 
-MovementFallback *FallbackMovementAction::TryFindWalkOffLedgeReachFallback( Context *context,
+MovementScript *FallbackMovementAction::TryFindWalkOffLedgeReachFallback( Context *context,
 																			const aas_reachability_t &nextReach ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 
 	// If the falling distance is really low, treat is just as walking to a node
 	const float squareFallingHeight = DistanceSquared( nextReach.start, nextReach.end );
 	if( squareFallingHeight < SQUARE( 40.0f ) ) {
-		auto *fallback = &module->useWalkableNodeFallback;
+		auto *script = &module->useWalkableNodeScript;
 		float squareDistance = DistanceSquared( entityPhysicsState.Origin(), nextReach.start );
 		unsigned timeout = 100 + (unsigned)( 1000.0f * sqrtf( squareDistance ) / context->GetRunSpeed() );
 		Vec3 target( nextReach.start );
 		target.Z() += 1.0f - playerbox_stand_mins[2];
-		fallback->Activate( target.Data(), 16.0f, nextReach.areanum, timeout );
-		return fallback;
+		script->Activate( target.Data(), 16.0f, nextReach.areanum, timeout );
+		return script;
 	}
 
 	const int targetAreaNum = nextReach.areanum;
 	const auto &targetArea = AiAasWorld::Instance()->Areas()[targetAreaNum];
 
-	auto *fallback = &module->fallDownFallback;
+	auto *script = &module->fallDownScript;
 	// Set target not to the reach. end but to the center of the target area (a reach end is often at ledge)
 	// Setting the proper Z (should be greater than an origin of bot standing at destination) is important!
 	Vec3 targetOrigin( targetArea.center[0], targetArea.center[1], targetArea.mins[2] + 4.0f - playerbox_stand_mins[2] );
@@ -121,6 +121,6 @@ MovementFallback *FallbackMovementAction::TryFindWalkOffLedgeReachFallback( Cont
 	float distanceToReach = sqrtf( DistanceSquared( entityPhysicsState.Origin(), nextReach.start ) );
 	unsigned travelTimeToLedgeMillis = (unsigned)( 1000.0f * distanceToReach / context->GetRunSpeed() );
 	unsigned fallingTimeMillis = (unsigned)( 1000.0f * sqrtf( 2.0f * sqrtf( squareFallingHeight ) / level.gravity ) );
-	fallback->Activate( targetOrigin.Data(), travelTimeToLedgeMillis + fallingTimeMillis + 250, 24.0f );
-	return fallback;
+	script->Activate( targetOrigin.Data(), travelTimeToLedgeMillis + fallingTimeMillis + 250, 24.0f );
+	return script;
 }

@@ -1,13 +1,13 @@
-#include "UseRampExitFallback.h"
+#include "UseRampExitScript.h"
 #include "MovementLocal.h"
 
-bool UseRampExitFallback::TryDeactivate( Context *context ) {
+bool UseRampExitScript::TryDeactivate( Context *context ) {
 	// Call the superclass method first
-	if( GenericGroundMovementFallback::TryDeactivate( context ) ) {
+	if( GenericGroundMovementScript::TryDeactivate( context ) ) {
 		return true;
 	}
 
-	if( GenericGroundMovementFallback::ShouldSkipTests( context ) ) {
+	if( GenericGroundMovementScript::ShouldSkipTests( context ) ) {
 		return false;
 	}
 
@@ -119,7 +119,7 @@ const int *TryFindBestInclinedFloorExitArea( Context *context, int rampAreaNum, 
 	return &aasReach[fromReachNums[bestIndex]].areanum;
 }
 
-MovementFallback *FallbackMovementAction::TryFindRampFallback( Context *context, int rampAreaNum, int forbiddenAreaNum ) {
+MovementScript *FallbackMovementAction::TryFindRampFallback( Context *context, int rampAreaNum, int forbiddenAreaNum ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	const int *bestExitAreaNum = TryFindBestInclinedFloorExitArea( context, rampAreaNum, forbiddenAreaNum );
 	if( !bestExitAreaNum ) {
@@ -150,12 +150,12 @@ MovementFallback *FallbackMovementAction::TryFindRampFallback( Context *context,
 	}
 
 	if( tryJumpShortcut ) {
-		if( auto *fallback = TryShortcutOtherFallbackByJumping( context, areaPoint.Data(), *bestExitAreaNum ) ) {
-			return fallback;
+		if( auto *script = TryShortcutOtherFallbackByJumping( context, areaPoint.Data(), *bestExitAreaNum ) ) {
+			return script;
 		}
 	}
 
-	auto *fallback = &module->useRampExitFallback;
-	fallback->Activate( rampAreaNum, *bestExitAreaNum );
-	return fallback;
+	auto *script = &module->useRampExitScript;
+	script->Activate( rampAreaNum, *bestExitAreaNum );
+	return script;
 }

@@ -1,22 +1,21 @@
 #ifndef QFUSION_GENERICGROUNDMOVEMENTFALLBACK_H
 #define QFUSION_GENERICGROUNDMOVEMENTFALLBACK_H
 
-#include "MovementFallback.h"
+#include "MovementScript.h"
 #include "../navigation/AasRouteCache.h"
 
-class GenericGroundMovementFallback: public MovementFallback
-{
+class GenericGroundMovementScript: public MovementScript {
 protected:
-	float runDistanceToTargetThreshold;
-	float runDotProductToTargetThreshold;
-	float dashDistanceToTargetThreshold;
-	float dashDotProductToTargetThreshold;
-	float airAccelDistanceToTargetThreshold;
-	float airAccelDotProductToTargetThreshold;
-	bool allowRunning;
-	bool allowDashing;
-	bool allowAirAccel;
-	bool allowCrouchSliding;
+	float runDistanceToTargetThreshold { 20.0f };
+	float runDotProductToTargetThreshold { 0.3f };
+	float dashDistanceToTargetThreshold { 72.0f };
+	float dashDotProductToTargetThreshold { 0.9f };
+	float airAccelDistanceToTargetThreshold { 72.0f };
+	float airAccelDotProductToTargetThreshold { 0.9f };
+	bool allowRunning { true };
+	bool allowDashing { true };
+	bool allowAirAccel { true };
+	bool allowCrouchSliding { true };
 
 	virtual void GetSteeringTarget( vec3_t target ) = 0;
 
@@ -39,18 +38,14 @@ protected:
 public:
 	static constexpr auto TRAVEL_FLAGS = TFL_WALK | TFL_AIR | TFL_WALKOFFLEDGE;
 
-	GenericGroundMovementFallback( const Bot *bot_, BotMovementModule *module_, int debugColor_ )
-		: MovementFallback( bot_, module_, debugColor_ )
+	GenericGroundMovementScript( const Bot *bot_, BotMovementModule *module_, int debugColor_ )
+		: MovementScript( bot_, module_, debugColor_ )
 		, runDistanceToTargetThreshold( 20.0f )
 		, runDotProductToTargetThreshold( 0.3f )
 		, dashDistanceToTargetThreshold( 72.0f )
 		, dashDotProductToTargetThreshold( 0.9f )
 		, airAccelDistanceToTargetThreshold( 72.0f )
-		, airAccelDotProductToTargetThreshold( 0.9f )
-		, allowRunning( true )
-		, allowDashing( true )
-		, allowAirAccel( true )
-		, allowCrouchSliding( true ) {}
+		, airAccelDotProductToTargetThreshold( 0.9f ) {}
 
 	void SetupMovement( MovementPredictionContext *context ) override;
 

@@ -1,7 +1,7 @@
-#include "JumpOverBarrierFallback.h"
+#include "JumpOverBarrierScript.h"
 #include "MovementLocal.h"
 
-bool JumpOverBarrierFallback::TryDeactivate( Context *context ) {
+bool JumpOverBarrierScript::TryDeactivate( Context *context ) {
 	assert( status == PENDING );
 
 	if( level.time - activatedAt > 750 ) {
@@ -25,7 +25,7 @@ bool JumpOverBarrierFallback::TryDeactivate( Context *context ) {
 	return entityPhysicsState->Origin()[2] >= top[2];
 }
 
-void JumpOverBarrierFallback::SetupMovement( Context *context ) {
+void JumpOverBarrierScript::SetupMovement( Context *context ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	auto *botInput = &context->record->botInput;
 

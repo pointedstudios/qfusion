@@ -1,8 +1,8 @@
-#include "GenericGroundMovementFallback.h"
+#include "GenericGroundMovementScript.h"
 #include "MovementLocal.h"
 #include "../combat/TacticalSpotsRegistry.h"
 
-bool GenericGroundMovementFallback::TryDeactivate( Context *context ) {
+bool GenericGroundMovementScript::TryDeactivate( Context *context ) {
 	// This code is useful for all children and should be called first in all overridden implementations
 
 	// Deactivate the action with success if the bot has touched a trigger
@@ -23,7 +23,7 @@ bool GenericGroundMovementFallback::TryDeactivate( Context *context ) {
 	return false;
 }
 
-bool GenericGroundMovementFallback::ShouldSkipTests( Context *context ) {
+bool GenericGroundMovementScript::ShouldSkipTests( Context *context ) {
 	if( context ) {
 		return !context->movementState->entityPhysicsState.GroundEntity();
 	}
@@ -31,7 +31,7 @@ bool GenericGroundMovementFallback::ShouldSkipTests( Context *context ) {
 	return !game.edicts[bot->EntNum()].groundentity;
 }
 
-int GenericGroundMovementFallback::GetCurrBotAreas( int *areaNums, Context *context ) {
+int GenericGroundMovementScript::GetCurrBotAreas( int *areaNums, Context *context ) {
 	if( context ) {
 		return context->movementState->entityPhysicsState.PrepareRoutingStartAreas( areaNums );
 	}
@@ -39,9 +39,9 @@ int GenericGroundMovementFallback::GetCurrBotAreas( int *areaNums, Context *cont
 	return bot->EntityPhysicsState()->PrepareRoutingStartAreas( areaNums );
 }
 
-bool GenericGroundMovementFallback::SetupForKeptPointInFov( MovementPredictionContext *context,
-															const float *steeringTarget,
-															const float *keptInFovPoint ) {
+bool GenericGroundMovementScript::SetupForKeptPointInFov( MovementPredictionContext *context,
+														  const float *steeringTarget,
+														  const float *keptInFovPoint ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	auto *botInput = &context->record->botInput;
 
@@ -113,7 +113,7 @@ bool GenericGroundMovementFallback::SetupForKeptPointInFov( MovementPredictionCo
 	return true;
 }
 
-void GenericGroundMovementFallback::SetupMovement( Context *context ) {
+void GenericGroundMovementScript::SetupMovement( Context *context ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	auto *botInput = &context->record->botInput;
 	const auto &miscTactics = bot->GetMiscTactics();
@@ -220,7 +220,7 @@ void GenericGroundMovementFallback::SetupMovement( Context *context ) {
 	botInput->SetSpecialButton( true );
 }
 
-bool GenericGroundMovementFallback::TestActualWalkability( int targetAreaNum, const vec3_t targetOrigin, Context *context ) {
+bool GenericGroundMovementScript::TestActualWalkability( int targetAreaNum, const vec3_t targetOrigin, Context *context ) {
 	const AiEntityPhysicsState *entityPhysicsState;
 	if( context ) {
 		entityPhysicsState = &context->movementState->entityPhysicsState;

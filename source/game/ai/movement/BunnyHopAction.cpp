@@ -545,7 +545,7 @@ bool BunnyHopAction::TryHandlingWorseTravelTimeToTarget( Context *context,
 	// Disallow moving into an area if the min travel time area cannot be reached by walking from the area
 	int areaNums[2];
 	const int numAreas = context->movementState->entityPhysicsState.PrepareRoutingStartAreas( areaNums );
-	constexpr auto travelFlags = GenericGroundMovementFallback::TRAVEL_FLAGS;
+	constexpr auto travelFlags = GenericGroundMovementScript::TRAVEL_FLAGS;
 	for( int i = 0; i < numAreas; ++i ) {
 		int aasTime = bot->RouteCache()->TravelTimeToGoalArea( areaNums[i], minTravelTimeAreaNumSoFar, travelFlags );
 		// aasTime is in seconds^-2

@@ -1,26 +1,23 @@
 #ifndef QFUSION_JUMPOVERBARRIERFALLBACK_H
 #define QFUSION_JUMPOVERBARRIERFALLBACK_H
 
-#include "MovementFallback.h"
+#include "MovementScript.h"
 
-class JumpOverBarrierFallback: public MovementFallback
-{
-	vec3_t start;
-	vec3_t top;
-	bool hasReachedStart;
-	bool allowWalljumping;
+class JumpOverBarrierScript: public MovementScript {
+	vec3_t start { 0, 0, 0 };
+	vec3_t top { 0, 0, 0 };
+	bool hasReachedStart { false };
+	bool allowWalljumping { false };
 public:
-	explicit JumpOverBarrierFallback( const Bot *bot_, BotMovementModule *module_ )
-		: MovementFallback( bot_, module_, COLOR_RGB( 128, 0, 128 ) )
-		, hasReachedStart( false )
-		, allowWalljumping( false ) {}
+	explicit JumpOverBarrierScript( const Bot *bot_, BotMovementModule *module_ )
+		: MovementScript( bot_, module_, COLOR_RGB( 128, 0, 128 ) ) {}
 
 	void Activate( const vec3_t start_, const vec3_t top_, bool allowWalljumping_ = true ) {
 		VectorCopy( start_, start );
 		VectorCopy( top_, top );
 		hasReachedStart = false;
 		allowWalljumping = allowWalljumping_;
-		MovementFallback::Activate();
+		MovementScript::Activate();
 	}
 
 	bool TryDeactivate( MovementPredictionContext *context = nullptr ) override;

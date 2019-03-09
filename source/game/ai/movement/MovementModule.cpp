@@ -3,7 +3,7 @@
 #include "MovementLocal.h"
 #include "EnvironmentTraceCache.h"
 #include "BestJumpableSpotDetector.h"
-#include "MovementFallback.h"
+#include "MovementScript.h"
 
 BotMovementModule::BotMovementModule( Bot *bot_ )
 	: bot( bot_ )
@@ -28,17 +28,13 @@ BotMovementModule::BotMovementModule( Bot *bot_ )
 	, tryTriggerWeaponJumpAction( this )
 	, correctWeaponJumpAction( this )
 	, predictionContext( this )
-	, useWalkableNodeFallback( bot_, this )
-	, useRampExitFallback( bot_, this )
-	, useStairsExitFallback( bot_, this )
-	, useWalkableTriggerFallback( bot_, this )
-	, jumpToSpotFallback( bot_, this )
-	, fallDownFallback( bot_, this )
-	, jumpOverBarrierFallback( bot_, this )
-	, activeMovementFallback( nullptr )
-	, nextRotateInputAttemptAt( 0 )
-	, inputRotationBlockingTimer( 0 )
-	, lastInputRotationFailureAt( 0 ) {
+	, useWalkableNodeScript( bot_, this )
+	, useRampExitScript( bot_, this )
+	, useStairsExitScript( bot_, this )
+	, useWalkableTriggerScript( bot_, this )
+	, jumpToSpotScript( bot_, this )
+	, fallDownScript( bot_, this )
+	, jumpOverBarrierScript( bot_, this ) {
 	movementState.Reset();
 }
 
@@ -247,8 +243,8 @@ void BotMovementModule::Frame( BotInput *input ) {
 	const edict_t *self = game.edicts + bot->EntNum();
 	movementState.TryDeactivateContainedStates( self, nullptr );
 
-	if( activeMovementFallback && activeMovementFallback->TryDeactivate( nullptr ) ) {
-		activeMovementFallback = nullptr;
+	if( activeMovementScript && activeMovementScript->TryDeactivate( nullptr ) ) {
+		activeMovementScript = nullptr;
 	}
 
 	MovementActionRecord movementActionRecord;

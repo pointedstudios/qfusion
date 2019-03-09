@@ -20,13 +20,13 @@
 #include "WalkOrSlideInterpolatingAction.h"
 #include "WeaponJumpActions.h"
 
-#include "FallDownFallback.h"
-#include "JumpOverBarrierFallback.h"
-#include "JumpToSpotFallback.h"
-#include "UseWalkableNodeFallback.h"
-#include "UseWalkableTriggerFallback.h"
-#include "UseStairsExitFallback.h"
-#include "UseRampExitFallback.h"
+#include "FallDownScript.h"
+#include "JumpOverBarrierScript.h"
+#include "JumpToSpotScript.h"
+#include "UseWalkableNodeScript.h"
+#include "UseWalkableTriggerScript.h"
+#include "UseStairsExitScript.h"
+#include "UseRampExitScript.h"
 
 class Bot;
 
@@ -112,13 +112,13 @@ class BotMovementModule {
 	friend class TryTriggerWeaponJumpAction;
 	friend class CorrectWeaponJumpAction;
 
-	friend class GenericGroundMovementFallback;
-	friend class UseWalkableNodeFallback;
-	friend class UseRampExitFallback;
-	friend class UseStairsExitFallback;
-	friend class UseWalkableTriggerFallback;
-	friend class FallDownFallback;
-	friend class JumpOverBarrierFallback;
+	friend class GenericGroundMovementScript;
+	friend class UseWalkableNodeScript;
+	friend class UseRampExitScript;
+	friend class UseStairsExitScript;
+	friend class UseWalkableTriggerScript;
+	friend class FallDownScript;
+	friend class JumpOverBarrierScript;
 
 	Bot *const bot;
 
@@ -160,20 +160,20 @@ class BotMovementModule {
 
 	MovementPredictionContext predictionContext;
 
-	UseWalkableNodeFallback useWalkableNodeFallback;
-	UseRampExitFallback useRampExitFallback;
-	UseStairsExitFallback useStairsExitFallback;
-	UseWalkableTriggerFallback useWalkableTriggerFallback;
+	UseWalkableNodeScript useWalkableNodeScript;
+	UseRampExitScript useRampExitScript;
+	UseStairsExitScript useStairsExitScript;
+	UseWalkableTriggerScript useWalkableTriggerScript;
 
-	JumpToSpotFallback jumpToSpotFallback;
-	FallDownFallback fallDownFallback;
-	JumpOverBarrierFallback jumpOverBarrierFallback;
+	JumpToSpotScript jumpToSpotScript;
+	FallDownScript fallDownScript;
+	JumpOverBarrierScript jumpOverBarrierScript;
 
-	MovementFallback *activeMovementFallback;
+	MovementScript *activeMovementScript { nullptr };
 
-	int64_t nextRotateInputAttemptAt;
-	int64_t inputRotationBlockingTimer;
-	int64_t lastInputRotationFailureAt;
+	int64_t nextRotateInputAttemptAt { 0 };
+	int64_t inputRotationBlockingTimer { 0 };
+	int64_t lastInputRotationFailureAt { 0 };
 
 	void CheckGroundPlatform();
 
@@ -189,7 +189,7 @@ class BotMovementModule {
 		this->lastWeaponJumpTriggeringFailedAt = level.time;
 	}
 public:
-	BotMovementModule( Bot *bot_ );
+	explicit BotMovementModule( Bot *bot_ );
 
 	bool TestWhetherCanSafelyKeepHighSpeed( MovementPredictionContext *context );
 
@@ -233,7 +233,7 @@ public:
 
 	void Reset() {
 		movementState.Reset();
-		activeMovementFallback = nullptr;
+		activeMovementScript = nullptr;
 	}
 
 	bool CanInterruptMovement() const;

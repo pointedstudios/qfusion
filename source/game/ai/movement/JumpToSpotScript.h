@@ -1,9 +1,9 @@
 #ifndef QFUSION_JUMPTOSPOTFALLBACK_H
 #define QFUSION_JUMPTOSPOTFALLBACK_H
 
-#include "MovementFallback.h"
+#include "MovementScript.h"
 
-class JumpToSpotFallback: public MovementFallback {
+class JumpToSpotScript: public MovementScript {
 protected:
 	vec3_t targetOrigin { 0, 0, 0 };
 	vec3_t startOrigin { 0, 0, 0 };
@@ -20,8 +20,8 @@ public:
 	int desiredAasContents { 0 };
 	int desiredAasFlags { AREA_GROUNDED };
 
-	JumpToSpotFallback( const Bot *bot_, BotMovementModule *module_ )
-		: MovementFallback( bot_, module_, COLOR_RGB( 255, 0, 128 ) ) {}
+	JumpToSpotScript( const Bot *bot_, BotMovementModule *module_ )
+		: MovementScript( bot_, module_, COLOR_RGB( 255, 0, 128 ) ) {}
 
 	void Activate( const vec3_t startOrigin_,
 				   const vec3_t targetOrigin_,

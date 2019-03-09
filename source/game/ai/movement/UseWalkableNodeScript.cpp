@@ -1,7 +1,7 @@
-#include "UseWalkableNodeFallback.h"
+#include "UseWalkableNodeScript.h"
 #include "MovementLocal.h"
 
-void UseWalkableNodeFallback::Activate( const vec3_t nodeOrigin_, float reachRadius_, int nodeAasAreaNum_, unsigned timeout_ ) {
+void UseWalkableNodeScript::Activate( const vec3_t nodeOrigin_, float reachRadius_, int nodeAasAreaNum_, unsigned timeout_ ) {
 	VectorCopy( nodeOrigin_, this->nodeOrigin );
 	this->reachRadius = reachRadius_;
 	this->nodeAasAreaNum = nodeAasAreaNum_;
@@ -9,12 +9,12 @@ void UseWalkableNodeFallback::Activate( const vec3_t nodeOrigin_, float reachRad
 	if( !nodeAasAreaNum ) {
 		nodeAasAreaNum = AiAasWorld::Instance()->FindAreaNum( nodeOrigin_ );
 	}
-	GenericGroundMovementFallback::Activate();
+	GenericGroundMovementScript::Activate();
 }
 
-bool UseWalkableNodeFallback::TryDeactivate( Context *context ) {
+bool UseWalkableNodeScript::TryDeactivate( Context *context ) {
 	// Call the superclass method first
-	if( GenericGroundMovementFallback::TryDeactivate( context ) ) {
+	if( GenericGroundMovementScript::TryDeactivate( context ) ) {
 		return true;
 	}
 
@@ -25,7 +25,7 @@ bool UseWalkableNodeFallback::TryDeactivate( Context *context ) {
 		return true;
 	}
 
-	if( GenericGroundMovementFallback::ShouldSkipTests( context )) {
+	if( GenericGroundMovementScript::ShouldSkipTests( context )) {
 		return false;
 	}
 
@@ -42,7 +42,7 @@ bool UseWalkableNodeFallback::TryDeactivate( Context *context ) {
 	return false;
 }
 
-MovementFallback *FallbackMovementAction::TryFindWalkReachFallback( Context *context, const aas_reachability_t &nextReach ) {
+MovementScript *FallbackMovementAction::TryFindWalkReachFallback( Context *context, const aas_reachability_t &nextReach ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 
 	// Allow following WALK reachabilities but make sure
@@ -57,21 +57,21 @@ MovementFallback *FallbackMovementAction::TryFindWalkReachFallback( Context *con
 		return nullptr;
 	}
 
-	if( auto *fallback = TryShortcutOtherFallbackByJumping( context, nextReach.end, nextReach.areanum ) ) {
-		return fallback;
+	if( auto *script = TryShortcutOtherFallbackByJumping( context, nextReach.end, nextReach.areanum ) ) {
+		return script;
 	}
 
-	auto *fallback = &module->useWalkableNodeFallback;
+	auto *script = &module->useWalkableNodeScript;
 	unsigned timeout = (unsigned)( 1000.0f * sqrtf( squareDistance ) / context->GetRunSpeed() );
 	// Note: We have to add several units to the target Z, otherwise a collision test
 	// on next frame is very likely to immediately deactivate it
 	Vec3 target( nextReach.end );
 	target.Z() += -playerbox_stand_mins[2];
-	fallback->Activate( target.Data(), 16.0f, AiAasWorld::Instance()->FindAreaNum( target ), timeout );
-	return fallback;
+	script->Activate( target.Data(), 16.0f, AiAasWorld::Instance()->FindAreaNum( target ), timeout );
+	return script;
 }
 
-MovementFallback *FallbackMovementAction::TryFindNearbyRampAreasFallback( Context *context ) {
+MovementScript *FallbackMovementAction::TryFindNearbyRampAreasFallback( Context *context ) {
 	int currGroundedAreaNum = context->CurrGroundedAasAreaNum();
 	if( !currGroundedAreaNum ) {
 		return nullptr;
@@ -99,7 +99,7 @@ MovementFallback *FallbackMovementAction::TryFindNearbyRampAreasFallback( Contex
 			const auto &bestArea = aasWorld->Areas()[*areaNum];
 			Vec3 areaPoint( bestArea.center );
 			areaPoint.Z() = bestArea.mins[2] + 1.0f + -playerbox_stand_mins[2];
-			auto *fallback = &module->useWalkableNodeFallback;
+			auto *fallback = &module->useWalkableNodeScript;
 			fallback->Activate( areaPoint.Data(), 32.0f, *areaNum );
 			return fallback;
 		}

@@ -1,8 +1,8 @@
-#include "UseWalkableTriggerFallback.h"
+#include "UseWalkableTriggerScript.h"
 #include "MovementLocal.h"
 #include "../combat/TacticalSpotsRegistry.h"
 
-void UseWalkableTriggerFallback::GetSteeringTarget( vec3_t target ) {
+void UseWalkableTriggerScript::GetSteeringTarget( vec3_t target ) {
 	// Triggers do not have s.origin set.
 	// Get the bounds center
 	VectorSubtract( trigger->r.absmax, trigger->r.absmin, target );
@@ -11,12 +11,12 @@ void UseWalkableTriggerFallback::GetSteeringTarget( vec3_t target ) {
 	VectorAdd( trigger->r.absmin, target, target );
 }
 
-bool UseWalkableTriggerFallback::TryDeactivate( Context *context ) {
-	if( GenericGroundMovementFallback::TryDeactivate( context ) ) {
+bool UseWalkableTriggerScript::TryDeactivate( Context *context ) {
+	if( GenericGroundMovementScript::TryDeactivate( context ) ) {
 		return true;
 	}
 
-	if( GenericGroundMovementFallback::ShouldSkipTests( context ) ) {
+	if( GenericGroundMovementScript::ShouldSkipTests( context ) ) {
 		return false;
 	}
 
@@ -35,11 +35,11 @@ bool UseWalkableTriggerFallback::TryDeactivate( Context *context ) {
 	return false;
 }
 
-MovementFallback *FallbackMovementAction::TryFindWalkableTriggerFallback( Context *context ) {
+MovementScript *FallbackMovementAction::TryFindWalkableTriggerFallback( Context *context ) {
 	if( const edict_t *trigger = FindClosestToTargetTrigger( context ) ) {
-		auto *fallback = &module->useWalkableTriggerFallback;
-		fallback->Activate( trigger );
-		return fallback;
+		auto *script = &module->useWalkableTriggerScript;
+		script->Activate( trigger );
+		return script;
 	}
 
 	return nullptr;
@@ -112,7 +112,7 @@ const edict_t *FallbackMovementAction::FindClosestToTargetTrigger( const Closest
 
 		int travelTimeToTrigger = 0;
 		for( int j = 0; j < numFromAreas; ++j ) {
-			const auto travelFlags = GenericGroundMovementFallback::TRAVEL_FLAGS;
+			const auto travelFlags = GenericGroundMovementScript::TRAVEL_FLAGS;
 			travelTimeToTrigger = routeCache->TravelTimeToGoalArea( fromAreaNums[j], entAreaNum, travelFlags );
 			if( travelTimeToTrigger && travelTimeToTrigger < 200 ) {
 				break;

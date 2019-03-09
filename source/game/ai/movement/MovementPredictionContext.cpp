@@ -687,7 +687,7 @@ BaseMovementAction *MovementPredictionContext::SuggestSuitableAction() {
 	}
 
 	// The dummy movement action handles escaping using the movement fallback
-	if( module->activeMovementFallback ) {
+	if( module->activeMovementScript ) {
 		return &module->fallbackMovementAction;
 	}
 

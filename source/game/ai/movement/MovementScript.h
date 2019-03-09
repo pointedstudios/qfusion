@@ -7,8 +7,7 @@ class Bot;
 class BotMovementModule;
 class MovementPredictionContext;
 
-class MovementFallback
-{
+class MovementScript {
 public:
 	enum Status {
 		COMPLETED,
@@ -35,14 +34,14 @@ protected:
 		return true;
 	}
 public:
-	MovementFallback( const Bot *bot_, BotMovementModule *module_, int debugColor_ )
+	MovementScript( const Bot *bot_, BotMovementModule *module_, int debugColor_ )
 		: bot( bot_ ), module( module_ ), activatedAt( 0 ), status( COMPLETED ), debugColor( debugColor_ ) {}
 
 	bool IsActive() const { return status == PENDING; }
 
 	int DebugColor()  const { return debugColor; }
 
-	virtual ~MovementFallback() {}
+	virtual ~MovementScript() = default;
 
 	virtual bool TryDeactivate( MovementPredictionContext *context = nullptr ) = 0;
 
