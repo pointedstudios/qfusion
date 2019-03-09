@@ -20,6 +20,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "g_local.h"
 
 #include "../qalgo/SingletonHolder.h"
+#include "../qalgo/WswStdTypes.h"
+#include "ai/navigation/AasWorld.h"
 
 /*
 * G_Teleport
@@ -366,32 +368,48 @@ static void Cmd_CvarInfo_f( edict_t *ent ) {
 	}
 }
 
+static bool CheckStateForPositionCmd( edict_t *ent ) {
+	if( sv_cheats->integer ) {
+		return true;
+	}
+	if( GS_MatchState() <= MATCH_STATE_WARMUP ) {
+		return true;
+	}
+	if ( ent->r.client->ps.pmove.pm_type != PM_SPECTATOR ) {
+		return true;
+	}
+	G_PrintMsg( ent, "Position command is only available in warmup and in spectator mode.\n" );
+	return false;
+}
+
 /*
 * Cmd_Position_f
 */
 static void Cmd_Position_f( edict_t *ent ) {
-	char *action;
-
-	if( !sv_cheats->integer && GS_MatchState() > MATCH_STATE_WARMUP &&
-		ent->r.client->ps.pmove.pm_type != PM_SPECTATOR ) {
-		G_PrintMsg( ent, "Position command is only available in warmup and in spectator mode.\n" );
-		return;
-	}
-
 	// flood protect
 	if( ent->r.client->teamstate.position_lastcmd + 500 > game.realtime ) {
 		return;
 	}
+
 	ent->r.client->teamstate.position_lastcmd = game.realtime;
 
-	action = trap_Cmd_Argv( 1 );
+	const char *action = trap_Cmd_Argv( 1 );
 
 	if( !Q_stricmp( action, "save" ) ) {
+		if( !CheckStateForPositionCmd( ent ) ) {
+			return;
+		}
 		ent->r.client->teamstate.position_saved = true;
 		VectorCopy( ent->s.origin, ent->r.client->teamstate.position_origin );
 		VectorCopy( ent->s.angles, ent->r.client->teamstate.position_angles );
 		G_PrintMsg( ent, "Position saved.\n" );
-	} else if( !Q_stricmp( action, "load" ) ) {
+		return;
+	}
+
+	if( !Q_stricmp( action, "load" ) ) {
+		if( !CheckStateForPositionCmd( ent ) ) {
+			return;
+		}
 		if( !ent->r.client->teamstate.position_saved ) {
 			G_PrintMsg( ent, "No position saved.\n" );
 		} else {
@@ -405,7 +423,14 @@ static void Cmd_Position_f( edict_t *ent ) {
 				G_PrintMsg( ent, "Position not available.\n" );
 			}
 		}
-	} else if( !Q_stricmp( action, "set" ) && trap_Cmd_Argc() == 7 ) {
+		return;
+	}
+
+	if( !Q_stricmp( action, "set" ) && trap_Cmd_Argc() == 7 ) {
+		if( !CheckStateForPositionCmd( ent ) ) {
+			return;
+		}
+
 		vec3_t origin, angles;
 		int i, argnumber = 2;
 
@@ -424,17 +449,53 @@ static void Cmd_Position_f( edict_t *ent ) {
 		} else {
 			G_PrintMsg( ent, "Position set.\n" );
 		}
-	} else {
-		char msg[MAX_STRING_CHARS];
 
-		msg[0] = 0;
-		Q_strncatz( msg, "Usage:\nposition save - Save current position\n", sizeof( msg ) );
-		Q_strncatz( msg, "position load - Teleport to saved position\n", sizeof( msg ) );
-		Q_strncatz( msg, "position set <x> <y> <z> <pitch> <yaw> - Teleport to specified position\n", sizeof( msg ) );
-		Q_strncatz( msg, va( "Current position: %.4f %.4f %.4f %.4f %.4f\n", ent->s.origin[0], ent->s.origin[1],
-							 ent->s.origin[2], ent->s.angles[0], ent->s.angles[1] ), sizeof( msg ) );
-		G_PrintMsg( ent, "%s", msg );
+		return;
 	}
+
+	if( !Q_stricmp( action, "details" ) ) {
+		wsw::stringstream ss;
+		ss << va( "Origin: %.6f %.6f %.6f, ", ent->s.origin[0], ent->s.origin[1], ent->s.origin[2] );
+		ss << va( "angles: %.6f %.6f\n", ent->s.angles[0], ent->s.angles[1] );
+		if( G_ISGHOSTING( ent ) ) {
+			G_PrintMsg( ent, "%s\n", ss.str().c_str() );
+			return;
+		}
+
+		const int topNode = trap_CM_FindTopNodeForBox( ent->r.absmin, ent->r.absmax );
+		int tmp, nums[32];
+		const int numLeaves = trap_CM_BoxLeafnums( ent->r.mins, ent->r.maxs, nums, 32, &tmp, topNode );
+		ss << "CM top node for box: " << topNode << ", leaves: [";
+		for( int i = 0; i < numLeaves; ++i ) {
+			ss << nums[i] << ( ( i + 1 != numLeaves ) ? "," : "" );
+		}
+		ss << "]";
+
+		const auto *aasWorld = AiAasWorld::Instance();
+		if( !aasWorld->IsLoaded() ) {
+			G_PrintMsg( ent, "%s\n", ss.str().c_str() );
+			return;
+		}
+
+		const int numAreas = aasWorld->BBoxAreas( ent->r.mins, ent->r.maxs, nums, 32 );
+		ss << ", AAS areas for box: [";
+		for( int i = 0; i < numAreas; ++i ) {
+			ss << nums[i] << ( ( i + 1 != numAreas ) ? "," : "" );
+		}
+		ss << "]";
+
+		G_PrintMsg( ent, "%s", ss.str().c_str() );
+		return;
+	}
+
+	char msg[MAX_STRING_CHARS];
+
+	msg[0] = 0;
+	Q_strncatz( msg, "Usage:\nposition save - Save current position\n", sizeof( msg ) );
+	Q_strncatz( msg, "position load - Teleport to saved position\n", sizeof( msg ) );
+	Q_strncatz( msg, "position set <x> <y> <z> <pitch> <yaw> - Teleport to specified position\n", sizeof( msg ) );
+	Q_strncatz( msg, "position details - Display detailed information about the current position\n", sizeof( msg ) );
+	G_PrintMsg( ent, "%s", msg );
 }
 
 /*

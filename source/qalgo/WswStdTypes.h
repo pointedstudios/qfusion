@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include <string>
+#include <sstream>
 
 namespace wsw {
 
@@ -29,6 +30,7 @@ public:
 };
 
 using string = std::string;
+using stringstream = std::stringstream;
 
 }
 
