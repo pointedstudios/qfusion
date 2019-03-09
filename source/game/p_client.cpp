@@ -1537,6 +1537,11 @@ void ClientThink( edict_t *ent, usercmd_t *ucmd, int timeDelta ) {
 	pm.playerState = &client->ps;
 	pm.cmd = *ucmd;
 
+	// A grand hack to disable occasional ladder usage for bots/AI beings without intrusive changes to bot code
+	if( ent->ai ) {
+		pm.skipLadders = true;
+	}
+
 	// perform a pmove
 	Pmove( &pm );
 

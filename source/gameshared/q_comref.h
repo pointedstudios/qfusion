@@ -468,6 +468,8 @@ typedef struct {
 
 	// A hint (in)
 	bool skipCollision;
+	// A flag for disabling occasional ladder usage for bots without intrusive changes to bot code (in)
+	bool skipLadders;
 
 	// results (out)
 	int numtouch;

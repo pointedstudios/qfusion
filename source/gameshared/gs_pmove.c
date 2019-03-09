@@ -1437,7 +1437,7 @@ static void PM_CheckSpecialMovement( void ) {
 	pml.ladder = false;
 
 	// check for ladder
-	if( !pm->skipCollision ) {
+	if( !pm->skipCollision && !pm->skipLadders ) {
 		VectorMA( pml.origin, 1, pml.flatforward, spot );
 		module_Trace( &trace, pml.origin, pm->mins, pm->maxs, spot, pm->playerState->POVnum, pm->contentmask, 0 );
 		if( ( trace.fraction < 1 ) && ( trace.surfFlags & SURF_LADDER ) ) {
