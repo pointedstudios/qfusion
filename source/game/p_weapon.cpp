@@ -26,7 +26,6 @@ void SV_Physics_LinearProjectile( edict_t *ent, int lookAheadTime );
 
 static bool is_quad;
 
-#define NO_ROCKET_ANTILAG
 #define PLASMAHACK // ffs : hack for the plasmagun
 
 #ifdef PLASMAHACK
@@ -820,17 +819,28 @@ void G_FireWeapon( edict_t *ent, int parm ) {
 		VectorCopy( projectile->s.origin, projectile->s.linearMovementBegin );
 	}
 
-#ifdef NO_ROCKET_ANTILAG
+	// Hacks for limiting time offset that is used instead of former plain wrong 4D collision antilag.
+	// We have to limit the offset as it makes these weapons practically instant-hit.
+	// We do not want to apply this limitation to rockets as this is what players are used to.
 
-	// hack for disabling antilag on rockets
-	// race - disable antilag for plasma too
-	if( projectile->s.type != ET_ROCKET && !( GS_RaceGametype() && projectile->s.type == ET_PLASMA ) ) {
+	int timeOffset = -projectile->timeDelta;
+	if( !timeOffset ) {
 		return;
 	}
 
-	assert( projectile->s.linearMovement );
-	const int timeOffset = -projectile->timeDelta;
+	// Disable antilag for all projectiles regardless of type.
 	projectile->timeDelta = 0;
+	// Use a time prestep for rockets and a very limited one for plasma/blasts.
+	if( projectile->s.type != ET_ROCKET ) {
+		if( projectile->s.type != ET_PLASMA && projectile->s.type != ET_BLASTER ) {
+			return;
+		}
+		if( !GS_RaceGametype() ) {
+			clamp_high( timeOffset, 50 );
+		}
+	}
+
+	assert( projectile->s.linearMovement );
 	projectile->s.modelindex2 = 0;
 
 	G_ProjectileTimePrestep( projectile, timeOffset );
@@ -839,5 +849,4 @@ void G_FireWeapon( edict_t *ent, int parm ) {
 	if( projectile->r.inuse ) {
 		VectorCopy( projectile->s.origin, projectile->s.linearMovementBegin );
 	}
-#endif
 }
