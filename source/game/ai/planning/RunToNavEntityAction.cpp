@@ -28,6 +28,37 @@ AiBaseActionRecord::Status BotRunToNavEntityActionRecord::CheckStatus( const Wor
 		return COMPLETED;
 	}
 
+	// Hack for following a sneaky movement of a leader (if any).
+	if( !navEntity->IsClient() ) {
+		return VALID;
+	}
+
+	const edict_t *const targetEnt = game.edicts + navEntity->EntityId();
+	const edict_t *const botEnt = game.edicts + Self()->EntNum();
+	// Make sure the target is in the same team
+	if( botEnt->s.team <= TEAM_ALPHA || targetEnt->s.team != botEnt->s.team ) {
+		return VALID;
+	}
+
+	// TODO: Rename the method to UpdateStatus() and allow mutable operations
+	auto &miscTactics = const_cast<Bot *>( Self() )->GetMiscTactics();
+
+	const float *const velocity = targetEnt->velocity;
+	// If the leader seems to be using sneaky movement
+	const float speedThreshold = DEFAULT_PLAYERSPEED * 1.5f;
+	if( velocity[0] * velocity[0] + velocity[1] * velocity[1] < speedThreshold * speedThreshold ) {
+		// Check whether the leader is in PVS for the bot.
+		// Bots left behind should hurry up to reach the leader.
+		if( trap_inPVS( Self()->Origin(), targetEnt->s.origin ) ) {
+			miscTactics.shouldBeSilent = true;
+			miscTactics.shouldMoveCarefully = true;
+			return VALID;
+		}
+	}
+
+	// Reset sneaky movement flags (if any)
+	miscTactics.shouldBeSilent = false;
+	miscTactics.shouldMoveCarefully = false;
 	return VALID;
 }
 
