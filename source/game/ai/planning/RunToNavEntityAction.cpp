@@ -1,19 +1,19 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotGenericRunToItemActionRecord::Activate() {
+void BotRunToNavEntityActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
 	// Attack if view angles needed for movement fit aiming
 	Self()->GetMiscTactics().PreferRunRatherThanAttack();
 	Self()->SetNavTarget( navEntity );
 }
 
-void BotGenericRunToItemActionRecord::Deactivate() {
+void BotRunToNavEntityActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotGenericRunToItemActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotRunToNavEntityActionRecord::CheckStatus( const WorldState &currWorldState ) const {
 	const auto &selectedNavEntity = Self()->GetSelectedNavEntity();
 	if( !navEntity->IsBasedOnNavEntity( selectedNavEntity.GetNavEntity() ) ) {
 		Debug( "Nav target does no longer match selected nav entity\n" );
@@ -31,7 +31,7 @@ AiBaseActionRecord::Status BotGenericRunToItemActionRecord::CheckStatus( const W
 	return VALID;
 }
 
-PlannerNode *BotGenericRunToItemAction::TryApply( const WorldState &worldState ) {
+PlannerNode *BotRunToNavEntityAction::TryApply( const WorldState &worldState ) {
 	if( worldState.GoalItemWaitTimeVar().Ignore() ) {
 		Debug( "Goal item is ignored in the given world state\n" );
 		return nullptr;

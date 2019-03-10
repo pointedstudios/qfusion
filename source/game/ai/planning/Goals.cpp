@@ -62,9 +62,9 @@ void BotGrabItemGoal::GetDesiredWorldState( WorldState *worldState ) {
 PlannerNode *BotGrabItemGoal::GetWorldStateTransitions( const WorldState &worldState ) {
 	PlannerNode *firstTransition = nullptr;
 
-	TRY_APPLY_ACTION( genericRunToItemAction );
-	TRY_APPLY_ACTION( pickupItemAction );
-	TRY_APPLY_ACTION( waitForItemAction );
+	TRY_APPLY_ACTION( runToNavEntityAction );
+	TRY_APPLY_ACTION( pickupNavEntityAction );
+	TRY_APPLY_ACTION( waitForNavEntityAction );
 
 	return ApplyExtraActions( firstTransition, worldState );
 }
@@ -163,7 +163,7 @@ void BotRunAwayGoal::GetDesiredWorldState( WorldState *worldState ) {
 PlannerNode *BotRunAwayGoal::GetWorldStateTransitions( const WorldState &worldState ) {
 	PlannerNode *firstTransition = nullptr;
 
-	TRY_APPLY_ACTION( genericRunAvoidingCombatAction );
+	TRY_APPLY_ACTION( fleeToSpotAction );
 
 	TRY_APPLY_ACTION( startGotoCoverAction );
 	TRY_APPLY_ACTION( takeCoverAction );
@@ -349,7 +349,7 @@ PlannerNode *BotReactToEnemyLostGoal::GetWorldStateTransitions( const WorldState
 
 	TRY_APPLY_ACTION( turnToLostEnemyAction );
 	TRY_APPLY_ACTION( startLostEnemyPursuitAction );
-	TRY_APPLY_ACTION( genericRunAvoidingCombatAction );
+	TRY_APPLY_ACTION( fleeToSpotAction );
 	TRY_APPLY_ACTION( stopLostEnemyPursuitAction );
 
 	return ApplyExtraActions( firstTransition, worldState );
@@ -377,7 +377,7 @@ void BotRoamGoal::GetDesiredWorldState( WorldState *worldState ) {
 PlannerNode *BotRoamGoal::GetWorldStateTransitions( const WorldState &worldState ) {
 	PlannerNode *firstTransition = nullptr;
 
-	TRY_APPLY_ACTION( genericRunAvoidingCombatAction );
+	TRY_APPLY_ACTION( fleeToSpotAction );
 
 	return ApplyExtraActions( firstTransition, worldState );
 }

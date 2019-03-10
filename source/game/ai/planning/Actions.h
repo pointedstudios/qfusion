@@ -34,13 +34,12 @@ public:
 	inline const class BotWeightConfig &WeightConfig() const;
 };
 
-class BotGenericRunToItemActionRecord : public BotBaseActionRecord
-{
+class BotRunToNavEntityActionRecord : public BotBaseActionRecord {
 	const NavEntity *const navEntity;
 
 public:
-	BotGenericRunToItemActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
-		: BotBaseActionRecord( pool_, self_, "BotGenericRunToItemActionRecord" ), navEntity( navEntity_ ) {}
+	BotRunToNavEntityActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
+		: BotBaseActionRecord( pool_, self_, "BotRunToNavEntityActionRecord" ), navEntity( navEntity_ ) {}
 
 	void Activate() override;
 	void Deactivate() override;
@@ -67,35 +66,35 @@ public:                                                                         
 		PlannerNode *TryApply( const WorldState &worldState ) override;           \
 	}
 
-DECLARE_ACTION( BotGenericRunToItemAction, 3 );
+DECLARE_ACTION( BotRunToNavEntityAction, 3 );
 
-class BotPickupItemActionRecord : public BotBaseActionRecord
+class BotPickupNavEntityActionRecord : public BotBaseActionRecord
 {
 	const NavEntity *const navEntity;
 public:
-	BotPickupItemActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
-		: BotBaseActionRecord( pool_, self_, "BotPickupItemActionRecord" ), navEntity( navEntity_ ) {}
+	BotPickupNavEntityActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
+		: BotBaseActionRecord( pool_, self_, "BotPickupNavEntityActionRecord" ), navEntity( navEntity_ ) {}
 
 	void Activate() override;
 	void Deactivate() override;
 	Status CheckStatus( const WorldState &currWorldState ) const override;
 };
 
-DECLARE_ACTION( BotPickupItemAction, 3 );
+DECLARE_ACTION( BotPickupNavEntityAction, 3 );
 
-class BotWaitForItemActionRecord : public BotBaseActionRecord
+class BotWaitForNavEntityActionRecord : public BotBaseActionRecord
 {
 	const NavEntity *const navEntity;
 public:
-	BotWaitForItemActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
-		: BotBaseActionRecord( pool_, self_, "BotWaitForItemActionRecord" ), navEntity( navEntity_ ) {}
+	BotWaitForNavEntityActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
+		: BotBaseActionRecord( pool_, self_, "BotWaitForNavEntityActionRecord" ), navEntity( navEntity_ ) {}
 
 	void Activate() override;
 	void Deactivate() override;
 	Status CheckStatus( const WorldState &currWorldState ) const override;
 };
 
-DECLARE_ACTION( BotWaitForItemAction, 3 );
+DECLARE_ACTION( BotWaitForNavEntityAction, 3 );
 
 // A dummy action that always terminates actions chain but should not actually gets reached.
 // This action is used to avoid direct world state satisfaction by temporary actions
@@ -223,13 +222,12 @@ public:
 		: BotBaseAction( module_, name_ ) {}
 };
 
-class BotGenericRunAvoidingCombatActionRecord : public BotBaseActionRecord
-{
+class BotFleeToSpotActionRecord : public BotBaseActionRecord {
 	NavSpot navSpot { NavSpot::Dummy() };
 
 public:
-	BotGenericRunAvoidingCombatActionRecord( PoolBase *pool_, Bot *self_, const Vec3 &destination )
-		: BotBaseActionRecord( pool_, self_, "BotGenericRunAvoidingCombatActionRecord" ) {
+	BotFleeToSpotActionRecord( PoolBase *pool_, Bot *self_, const Vec3 &destination )
+		: BotBaseActionRecord( pool_, self_, "BotFleeToSpotActionRecord" ) {
 		navSpot.Set( destination, GOAL_PICKUP_ACTION_RADIUS, NavTargetFlags::REACH_ON_RADIUS );
 	}
 
@@ -238,7 +236,7 @@ public:
 	Status CheckStatus( const WorldState &currWorldState ) const override;
 };
 
-DECLARE_ACTION( BotGenericRunAvoidingCombatAction, 5 );
+DECLARE_ACTION( BotFleeToSpotAction, 5 );
 
 DECLARE_DUMMY_ACTION_RECORD( BotStartGotoCoverActionRecord );
 DECLARE_INHERITED_ACTION( BotStartGotoCoverAction, BotRunAwayAction, 5 );

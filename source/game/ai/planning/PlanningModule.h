@@ -37,9 +37,9 @@ class BotPlanningModule {
 	BotAttackOutOfDespairGoal attackOutOfDespairGoal;
 	BotRoamGoal roamGoal;
 
-	BotGenericRunToItemAction genericRunToItemAction;
-	BotPickupItemAction pickupItemAction;
-	BotWaitForItemAction waitForItemAction;
+	BotRunToNavEntityAction runToNavEntityAction;
+	BotPickupNavEntityAction pickupNavEntityAction;
+	BotWaitForNavEntityAction waitForNavEntityAction;
 
 	BotKillEnemyAction killEnemyAction;
 	BotAdvanceToGoodPositionAction advanceToGoodPositionAction;
@@ -48,7 +48,7 @@ class BotPlanningModule {
 	BotAttackFromCurrentPositionAction attackFromCurrentPositionAction;
 	BotAttackAdvancingToTargetAction attackAdvancingToTargetAction;
 
-	BotGenericRunAvoidingCombatAction genericRunAvoidingCombatAction;
+	BotFleeToSpotAction fleeToSpotAction;
 	BotStartGotoCoverAction startGotoCoverAction;
 	BotTakeCoverAction takeCoverAction;
 

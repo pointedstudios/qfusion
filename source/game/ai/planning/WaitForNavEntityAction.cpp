@@ -1,7 +1,7 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotWaitForItemActionRecord::Activate() {
+void BotWaitForNavEntityActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
 	Self()->GetMiscTactics().shouldMoveCarefully = true;
 	Self()->GetMiscTactics().PreferAttackRatherThanRun();
@@ -9,13 +9,13 @@ void BotWaitForItemActionRecord::Activate() {
 	Self()->SetCampingSpot( AiCampingSpot( navEntity->Origin(), GOAL_PICKUP_ACTION_RADIUS, 0.5f ) );
 }
 
-void BotWaitForItemActionRecord::Deactivate() {
+void BotWaitForNavEntityActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
 	Self()->ResetCampingSpot();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotWaitForItemActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotWaitForNavEntityActionRecord::CheckStatus( const WorldState &currWorldState ) const {
 	if( currWorldState.HasJustPickedGoalItemVar() ) {
 		Debug( "Goal item has been just picked up\n" );
 		return COMPLETED;
@@ -50,7 +50,7 @@ AiBaseActionRecord::Status BotWaitForItemActionRecord::CheckStatus( const WorldS
 	return VALID;
 }
 
-PlannerNode *BotWaitForItemAction::TryApply( const WorldState &worldState ) {
+PlannerNode *BotWaitForNavEntityAction::TryApply( const WorldState &worldState ) {
 	if( worldState.NavTargetOriginVar().Ignore() ) {
 		Debug( "Nav target is ignored in the given world state\n" );
 		return nullptr;

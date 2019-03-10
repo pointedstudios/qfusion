@@ -1,18 +1,18 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotGenericRunAvoidingCombatActionRecord::Activate() {
+void BotFleeToSpotActionRecord::Activate() {
 	BotBaseActionRecord::Activate();
 	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 	Self()->SetNavTarget( &navSpot );
 }
 
-void BotGenericRunAvoidingCombatActionRecord::Deactivate() {
+void BotFleeToSpotActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotGenericRunAvoidingCombatActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotFleeToSpotActionRecord::CheckStatus( const WorldState &currWorldState ) const {
 	const auto &selectedEnemies = Self()->GetSelectedEnemies();
 	Bot *bot = const_cast<Bot *>( Self() );
 	if( selectedEnemies.AreValid() && selectedEnemies.CouldBeHitIfBotTurns() ) {
@@ -30,7 +30,7 @@ AiBaseActionRecord::Status BotGenericRunAvoidingCombatActionRecord::CheckStatus(
 	return VALID;
 }
 
-PlannerNode *BotGenericRunAvoidingCombatAction::TryApply( const WorldState &worldState ) {
+PlannerNode *BotFleeToSpotAction::TryApply( const WorldState &worldState ) {
 	if( worldState.NavTargetOriginVar().Ignore() ) {
 		Debug( "Nav target is absent in the given world state\n" );
 		return nullptr;
