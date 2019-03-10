@@ -43,6 +43,51 @@ void BotGrabItemGoal::UpdateWeight( const WorldState &currWorldState ) {
 	const auto &configGroup = WeightConfig().nativeGoals.grabItem;
 	// SelectedNavEntity().PickupGoalWeight() still might need some (minor) tweaking.
 	this->weight = configGroup.baseWeight + configGroup.selectedGoalWeightScale * SelectedNavEntity().PickupGoalWeight();
+
+	// Hack! Lower a weight of this goal if there are threatening enemies
+	// and we have to wait for an item while being attacking
+	// and the gametype seems to be round based (this is primarily for bomb).
+
+	// If the assigned weight is not significant
+	if( this->weight <= 1.0f ) {
+		return;
+	}
+
+	const auto *navEntity = SelectedNavEntity().GetNavEntity();
+	// Skip if we do not have to wait for nav entity reached signal
+	if( !navEntity->ShouldBeReachedOnEvent() ) {
+		return;
+	}
+
+	// This is a hack to cut off most non-round-based gametypes
+	if( level.gametype.spawnableItemsMask & IT_HEALTH ) {
+		return;
+	}
+
+	const auto &selectedEnemies = SelectedEnemies();
+	// Skip if there's no active threatening enemies
+	if( !selectedEnemies.AreValid() || !selectedEnemies.AreThreatening() ) {
+		return;
+	}
+
+	// Rush to the item site if it is far or is not in PVS
+	const Vec3 botOrigin( currWorldState.BotOriginVar().Value() );
+
+	// LG range seems to be an appropriate threshold
+	const auto *weaponDef = GS_GetWeaponDef( WEAP_LASERGUN );
+	const float distanceThreshold = std::max( weaponDef->firedef.timeout, weaponDef->firedef_weak.timeout );
+	if( botOrigin.SquareDistanceTo( navEntity->Origin() ) > distanceThreshold * distanceThreshold ) {
+		return;
+	}
+
+	if( !trap_inPVS( botOrigin.Data(), navEntity->Origin().Data() ) ) {
+		return;
+	}
+
+	// Force killing enemies instead
+	this->module->killEnemyGoal.SetAdditionalWeight( this->weight );
+	// Clamp the weight of this goal
+	this->weight = std::min( this->weight, 1.0f );
 }
 
 void BotGrabItemGoal::GetDesiredWorldState( WorldState *worldState ) {
@@ -98,6 +143,8 @@ void BotKillEnemyGoal::UpdateWeight( const WorldState &currWorldState ) {
 			this->weight = 0.001f + this->weight * ( maxBotViewDot / offFrac );
 		}
 	}
+
+	this->weight += GetAndResetAdditionalWeight();
 }
 
 void BotKillEnemyGoal::GetDesiredWorldState( WorldState *worldState ) {

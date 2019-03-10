@@ -39,11 +39,21 @@ public:
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotKillEnemyGoal : public BotBaseGoal
-{
+class BotKillEnemyGoal : public BotBaseGoal {
+	float additionalWeight { 0.0f };
 public:
 	explicit BotKillEnemyGoal( BotPlanningModule *module_ )
 		: BotBaseGoal( module_, "BotKillEnemyGoal", COLOR_RGB( 255, 0, 0 ), 1250 ) {}
+
+	void SetAdditionalWeight( float weight ) {
+		this->additionalWeight = weight;
+	}
+
+	float GetAndResetAdditionalWeight() {
+		float result = std::max( 0.0f, additionalWeight );
+		this->additionalWeight = 0;
+		return result;
+	}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
