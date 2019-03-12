@@ -664,7 +664,7 @@ void AiManager::Quota::Update( const ai_handle_t *aiHandlesHead ) {
 	// Scan all bots that are after the current owner in the list
 	while( owner ) {
 		// Stop on the first bot that fits this
-		if( !Fits( owner ) ) {
+		if( Fits( owner ) ) {
 			break;
 		}
 		owner = owner->Next();
@@ -682,7 +682,7 @@ void AiManager::Quota::Update( const ai_handle_t *aiHandlesHead ) {
 	// Keep the current owner if there is no in-game bots before
 	while( owner && owner != oldOwner ) {
 		// Stop on the first bot that fits this
-		if( !Fits( owner ) ) {
+		if( Fits( owner ) ) {
 			break;
 		}
 		owner = owner->Next();
