@@ -37,6 +37,7 @@ public:
 class BotRunToNavEntityActionRecord : public BotBaseActionRecord {
 	const NavEntity *const navEntity;
 
+	bool ShouldUseSneakyBehaviour() const;
 public:
 	BotRunToNavEntityActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
 		: BotBaseActionRecord( pool_, self_, "BotRunToNavEntityActionRecord" ), navEntity( navEntity_ ) {}
