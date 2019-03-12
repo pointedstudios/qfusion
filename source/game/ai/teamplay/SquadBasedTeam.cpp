@@ -1698,13 +1698,13 @@ void AiSquadBasedTeam::PlayerAssistanceTracker::UpdateInfluence() {
 		vec3_t mateForwardDir;
 		AngleVectors( ent->s.angles, mateForwardDir, nullptr, nullptr );
 
-		const bool isZooming = ent->r.client->ps.stats[PM_STAT_ZOOMTIME] > 0;
+		const bool isZooming = ent->r.client->ps.pmove.stats[PM_STAT_ZOOMTIME] > 0;
 		// Avoid excessive branching on `isZooming` in the loop below
 		const float squareDistanceThreshold = isZooming ? std::numeric_limits<float>::max() : 1250.0f * 1250.0f;
 		const float dotThreshold = isZooming ? 0.95f : 0.85f;
 
 		// Pick faster if the mate is crouching. "slice" suggested this.
-		const int refillScore = ent->r.client->ps.stats[PM_STAT_CROUCHTIME] ? REFILL_SCORE : ( 2 * REFILL_SCORE );
+		const int refillScore = ent->r.client->ps.pmove.stats[PM_STAT_CROUCHTIME] ? 2 * REFILL_SCORE : REFILL_SCORE;
 
 		for( Bot *bot = parent->teamBotsHead; bot; bot = bot->NextInBotsTeam() ) {
 			const auto botClientNum = bot->ClientNum();
@@ -1727,13 +1727,7 @@ void AiSquadBasedTeam::PlayerAssistanceTracker::UpdateInfluence() {
 			}
 
 			// Check whether the teammate is looking at the bot
-			float dot = toBotVec.Dot( mateForwardDir );
-			// Check dot sign before normalization
-			if( dot < 0 ) {
-				continue;
-			}
-			dot *= 1.0f / std::sqrt( squareDistance + 1.0f );
-			if( dot < dotThreshold ) {
+			if( toBotVec.Dot( mateForwardDir ) * Q_RSqrt( squareDistance + 1.0f ) < dotThreshold ) {
 				continue;
 			}
 
@@ -1745,18 +1739,13 @@ void AiSquadBasedTeam::PlayerAssistanceTracker::UpdateInfluence() {
 
 			Vec3 traceStart( ent->s.origin );
 			traceStart.Z() += ent->viewheight;
-			Vec3 traceEnd( botEnt->s.origin );
-			traceEnd.Z() += botEnt->viewheight;
+			Vec3 traceEnd( mateForwardDir );
+			traceEnd *= 99999.0f;
+			traceEnd += traceStart;
 
 			G_Trace( &trace, traceStart.Data(), nullptr, nullptr, traceEnd.Data(), ent, MASK_PLAYERSOLID );
 			if( gameEdicts + trace.ent != botEnt ) {
-				// We can do another call since control flow rarely reaches actual ray-casting.
-				// The first trace was at "chest" level of the model. Check trace at the "legs".
-				traceEnd.Z() -= botEnt->viewheight - 0.5f * playerbox_stand_mins[2];
-				G_Trace( &trace, traceStart.Data(), nullptr, nullptr, traceEnd.Data(), ent, MASK_PLAYERSOLID );
-				if( game.edicts + trace.ent != botEnt ) {
-					continue;
-				}
+				continue;
 			}
 
 			assert( playerEntNum > 0 );
@@ -1783,8 +1772,8 @@ void AiSquadBasedTeam::PlayerAssistanceTracker::DrainAndPick() {
 		// Note that we do not have to track the time exactly.
 		// Just let the assistance expire in few seconds.
 		constexpr auto thinkInterval = 16 * 4;
-		// Assume that it requires tracking a bot perfectly for a second
-		constexpr int maxScore = ( REFILL_SCORE * 1000 ) / thinkInterval;
+		// Assume that it requires tracking a bot perfectly for a half of a second
+		constexpr int maxScore = ( REFILL_SCORE * 500 ) / thinkInterval;
 		// Avoid score overflow
 		static_assert( maxScore < std::numeric_limits<int8_t>::max() - REFILL_SCORE, "" );
 
