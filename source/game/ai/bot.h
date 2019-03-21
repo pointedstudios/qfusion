@@ -306,6 +306,10 @@ public:
 		return planningModule.InstantiateScriptAction( scriptFactoryObject, name );
 	}
 
+	const WorldState &CachedWorldState() const {
+		return planningModule.CachedWorldState();
+	}
+
 	const BotWeightConfig &WeightConfig() const { return weightConfig; }
 	BotWeightConfig &WeightConfig() { return weightConfig; }
 

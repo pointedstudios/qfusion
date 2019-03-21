@@ -88,7 +88,7 @@ public:
 
 	void ClearGoalAndPlan() { planner.ClearGoalAndPlan(); }
 
-	const WorldState &CachedWorldState() { return planner.cachedWorldState; }
+	const WorldState &CachedWorldState() const { return planner.cachedWorldState; }
 
 	void CheckTargetProximity() { return roamingManager.CheckSpotsProximity(); }
 

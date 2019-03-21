@@ -7,7 +7,8 @@ void BotRunToNavEntityActionRecord::Activate() {
 	Self()->SetNavTarget( navEntity );
 	// Attack if view angles needed for movement fit aiming
 	Self()->GetMiscTactics().PreferRunRatherThanAttack();
-	Self()->GetMiscTactics().shouldBeSilent = ShouldUseSneakyBehaviour();
+	// TODO: It's better to supply the cached world state via Activate() method argument
+	Self()->GetMiscTactics().shouldBeSilent = ShouldUseSneakyBehaviour( Self()->CachedWorldState() );
 }
 
 void BotRunToNavEntityActionRecord::Deactivate() {
@@ -31,11 +32,11 @@ AiBaseActionRecord::Status BotRunToNavEntityActionRecord::CheckStatus( const Wor
 	}
 
 	// TODO: Rename the method to UpdateStatus() and allow mutable operations
-	const_cast<Bot *>( Self() )->GetMiscTactics().shouldBeSilent = ShouldUseSneakyBehaviour();
+	const_cast<Bot *>( Self() )->GetMiscTactics().shouldBeSilent = ShouldUseSneakyBehaviour( currWorldState );
 	return VALID;
 }
 
-bool BotRunToNavEntityActionRecord::ShouldUseSneakyBehaviour() const {
+bool BotRunToNavEntityActionRecord::ShouldUseSneakyBehaviour( const WorldState &currWorldState ) const {
 	// Hack for following a sneaky movement of a leader (if any).
 	if( !navEntity->IsClient() ) {
 		return false;
@@ -54,6 +55,25 @@ bool BotRunToNavEntityActionRecord::ShouldUseSneakyBehaviour() const {
 	// Bot movement troubles produce many false positives.
 	if( targetEnt->r.svflags & SVF_FAKECLIENT ) {
 		return false;
+	}
+
+	// If there's a defined enemy origin (and a defined enemy consequently)
+	if( !currWorldState.EnemyOriginVar().Ignore() ) {
+		// TODO: Lift testing of a value within the "Ignore" monad
+
+		// Interrupt sneaking immediately if there's a threatening enemy
+		if( !currWorldState.HasThreateningEnemyVar().Ignore() && currWorldState.HasThreateningEnemyVar() ) {
+			return false;
+		}
+		// Don't try being sneaky if the bot can hit an enemy
+		// (we can try doing that but bot behaviour is rather poor)
+		if( !currWorldState.CanHitEnemyVar().Ignore() && currWorldState.CanHitEnemyVar() ) {
+			return false;
+		}
+		// Interrupt sneaking immediately if an enemy can hit
+		if( !currWorldState.EnemyCanHitVar().Ignore() && currWorldState.EnemyCanHitVar() ) {
+			return false;
+		}
 	}
 
 	const float *const velocity = targetEnt->velocity;
