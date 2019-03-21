@@ -14,7 +14,7 @@ void BotAdvanceToGoodPositionActionRecord::Deactivate() {
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotAdvanceToGoodPositionActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotAdvanceToGoodPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( !CheckCommonCombatConditions( currWorldState ) ) {
 		return INVALID;
 	}

@@ -44,7 +44,7 @@ public:
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
 #define DECLARE_ACTION( actionName, poolSize )                                    \
@@ -78,7 +78,7 @@ public:
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
 DECLARE_ACTION( BotPickupNavEntityAction, 3 );
@@ -92,7 +92,7 @@ public:
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
 DECLARE_ACTION( BotWaitForNavEntityAction, 3 );
@@ -108,7 +108,8 @@ public:
 
 	void Activate() override { BotBaseActionRecord::Activate(); }
 	void Deactivate() override { BotBaseActionRecord::Deactivate(); }
-	Status CheckStatus( const WorldState &currWorldState ) const override {
+
+	Status UpdateStatus( const WorldState &currWorldState ) override {
 		Debug( "This is a dummy action, should move to next one or replan\n" );
 		return COMPLETED;
 	}
@@ -149,7 +150,7 @@ public:                                                                         
 			: BotCombatActionRecord( pool_, self_, #recordName, tacticalSpotOrigin, selectedEnemiesInstanceId_ ) {}        \
 		void Activate() override;                                                                                        \
 		void Deactivate() override;                                                                                      \
-		Status CheckStatus( const WorldState &currWorldState ) const override;                                             \
+		Status UpdateStatus( const WorldState &currWorldState ) override;                                             \
 	};
 
 DECLARE_COMBAT_ACTION_RECORD( BotAdvanceToGoodPositionActionRecord );
@@ -177,7 +178,7 @@ public:
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
 DECLARE_ACTION( BotAttackAdvancingToTargetAction, 2 );
@@ -208,7 +209,7 @@ public:                                                                         
 			: BotRunAwayActionRecord( pool_, self_, #recordName, tacticalSpotOrigin, selectedEnemiesInstanceId_ ) {}       \
 		void Activate() override;                                                                                        \
 		void Deactivate() override;                                                                                      \
-		Status CheckStatus( const WorldState &currWorldState ) const override;                                             \
+		Status UpdateStatus( const WorldState &currWorldState ) override;                                             \
 	}
 
 class BotRunAwayAction : public BotBaseAction
@@ -234,7 +235,7 @@ public:
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
 DECLARE_ACTION( BotFleeToSpotAction, 5 );
@@ -283,7 +284,7 @@ public:
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
 DECLARE_ACTION( BotDodgeToSpotAction, 1 );
@@ -299,7 +300,7 @@ public:
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
 DECLARE_ACTION( BotTurnToThreatOriginAction, 1 );
@@ -315,7 +316,7 @@ public:
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
 DECLARE_ACTION( BotTurnToLostEnemyAction, 1 );
@@ -355,7 +356,7 @@ public:
 	void Activate() override;
 	void Deactivate() override;
 
-	Status CheckStatus( const WorldState &worldState ) const override;
+	Status UpdateStatus( const WorldState &worldState ) override;
 };
 
 class BotScriptAction : public BotBaseAction

@@ -2031,10 +2031,10 @@ void GENERIC_asDeleteScriptActionRecord(void *scriptObject)
 
 static auto checkScriptActionRecordStatusFunc =
     gtAIFunctionsRegistry.Function2<int, void *, const WorldState *>(
-        "int GENERIC_CheckScriptActionRecordStatus( AIScriptActionRecord &record, const AIWorldState &worldState )",
+        "int GENERIC_UpdateScriptActionRecordStatus( AIScriptActionRecord &record, const AIWorldState &worldState )",
         (int)AiBaseActionRecord::Status::VALID);
 
-int GENERIC_asCheckScriptActionRecordStatus(void *scriptObject, const WorldState &worldState)
+int GENERIC_asUpdateScriptActionRecordStatus(void *scriptObject, const WorldState &worldState)
 {
     return checkScriptActionRecordStatusFunc(scriptObject, &worldState);
 }

@@ -55,7 +55,7 @@ void BotDoRunAwayViaElevatorActionRecord::Deactivate() {
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotDoRunAwayViaElevatorActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotDoRunAwayViaElevatorActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	// Checking of this action record differs from other run away action record.
 	// We want the bot to stand on a platform until it finishes its movement.
 

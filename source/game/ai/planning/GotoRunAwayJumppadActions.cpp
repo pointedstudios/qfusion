@@ -50,7 +50,7 @@ void BotDoRunAwayViaJumppadActionRecord::Deactivate() {
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotDoRunAwayViaJumppadActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotDoRunAwayViaJumppadActionRecord::UpdateStatus( const WorldState &currWorldState )  {
 	if( currWorldState.HasJustTouchedJumppadVar().Ignore() ) {
 		Debug( "Has just touched jumppad is ignored\n" );
 		return INVALID;

@@ -12,7 +12,7 @@ void BotTurnToLostEnemyActionRecord::Deactivate() {
 	Self()->ResetPendingLookAtPoint();
 }
 
-AiBaseActionRecord::Status BotTurnToLostEnemyActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotTurnToLostEnemyActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	const edict_t *ent = game.edicts + Self()->EntNum();
 
 	vec3_t lookDir;

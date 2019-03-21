@@ -13,7 +13,7 @@ void BotTakeCoverActionRecord::Deactivate() {
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotTakeCoverActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotTakeCoverActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	static_assert( GOAL_PICKUP_ACTION_RADIUS > TACTICAL_SPOT_RADIUS, "" );
 
 	if( selectedEnemiesInstanceId != Self()->GetSelectedEnemies().InstanceId() ) {

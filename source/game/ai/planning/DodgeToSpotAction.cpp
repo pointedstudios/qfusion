@@ -13,7 +13,7 @@ void BotDodgeToSpotActionRecord::Deactivate() {
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotDodgeToSpotActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotDodgeToSpotActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	// If the bot has reached the spot, consider the action completed
 	// (use a low threshold because dodging is a precise movement)
 	if( ( navSpot.Origin() - Self()->Origin() ).SquaredLength() < 16 * 16 ) {

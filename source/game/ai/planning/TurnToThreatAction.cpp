@@ -12,7 +12,7 @@ void BotTurnToThreatOriginActionRecord::Deactivate() {
 	Self()->ResetPendingLookAtPoint();
 }
 
-AiBaseActionRecord::Status BotTurnToThreatOriginActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotTurnToThreatOriginActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	const edict_t *ent = game.edicts + Self()->EntNum();
 
 	vec3_t lookDir;

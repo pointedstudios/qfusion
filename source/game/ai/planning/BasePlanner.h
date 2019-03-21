@@ -93,7 +93,7 @@ public:
 		COMPLETED
 	};
 
-	virtual Status CheckStatus( const WorldState &currWorldState ) const = 0;
+	virtual Status UpdateStatus( const WorldState &currWorldState ) = 0;
 };
 
 struct PlannerNode : PoolItem {

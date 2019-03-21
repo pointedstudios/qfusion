@@ -15,7 +15,7 @@ void BotPickupNavEntityActionRecord::Deactivate() {
 	Self()->ResetCampingSpot();
 }
 
-AiBaseActionRecord::Status BotPickupNavEntityActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotPickupNavEntityActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( currWorldState.HasJustPickedGoalItemVar() ) {
 		Debug( "Goal item has been just picked up\n" );
 		return COMPLETED;

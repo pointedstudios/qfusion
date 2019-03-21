@@ -16,7 +16,7 @@ void BotRunToNavEntityActionRecord::Deactivate() {
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotRunToNavEntityActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotRunToNavEntityActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	const auto &selectedNavEntity = Self()->GetSelectedNavEntity();
 	if( !navEntity->IsBasedOnNavEntity( selectedNavEntity.GetNavEntity() ) ) {
 		Debug( "Nav target does no longer match selected nav entity\n" );
@@ -31,8 +31,7 @@ AiBaseActionRecord::Status BotRunToNavEntityActionRecord::CheckStatus( const Wor
 		return COMPLETED;
 	}
 
-	// TODO: Rename the method to UpdateStatus() and allow mutable operations
-	const_cast<Bot *>( Self() )->GetMiscTactics().shouldBeSilent = ShouldUseSneakyBehaviour( currWorldState );
+	Self()->GetMiscTactics().shouldBeSilent = ShouldUseSneakyBehaviour( currWorldState );
 	return VALID;
 }
 

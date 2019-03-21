@@ -98,7 +98,7 @@ void *GENERIC_asInstantiateAction( void *factoryObject, edict_t *owner, class Bo
 void GENERIC_asActivateScriptActionRecord( void *scriptObject );
 void GENERIC_asDeactivateScriptActionRecord( void *scriptObject );
 void GENERIC_asDeleteScriptActionRecord( void *scriptObject );
-int GENERIC_asCheckScriptActionRecordStatus( void *scriptObject, const class WorldState &currWorldState );
+int GENERIC_asUpdateScriptActionRecordStatus( void *scriptObject, const class WorldState &currWorldState );
 void *GENERIC_asTryApplyScriptAction( void *scriptObject, const class WorldState &worldState );
 float GENERIC_asGetScriptGoalWeight( void *scriptObject, const class WorldState &currWorldState );
 void GENERIC_asGetScriptGoalDesiredWorldState( void *scriptObject, class WorldState *worldState );

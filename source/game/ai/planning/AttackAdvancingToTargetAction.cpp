@@ -20,7 +20,7 @@ void BotAttackAdvancingToTargetActionRecord::Deactivate() {
 	BotBaseActionRecord::Deactivate();
 }
 
-AiBaseActionRecord::Status BotAttackAdvancingToTargetActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotAttackAdvancingToTargetActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	const auto &selectedNavEntity = Self()->GetSelectedNavEntity();
 	if( !selectedNavEntity.IsValid() || selectedNavEntity.IsEmpty() ) {
 		Debug( "The currently selected nav entity is invalid or is empty\n" );

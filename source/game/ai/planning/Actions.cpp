@@ -85,8 +85,8 @@ void BotScriptActionRecord::Deactivate() {
 	GENERIC_asDeactivateScriptActionRecord( scriptObject );
 }
 
-AiBaseActionRecord::Status BotScriptActionRecord::CheckStatus( const WorldState &currWorldState ) const {
-	return (AiBaseActionRecord::Status)GENERIC_asCheckScriptActionRecordStatus( scriptObject, currWorldState );
+AiBaseActionRecord::Status BotScriptActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+	return (AiBaseActionRecord::Status)GENERIC_asUpdateScriptActionRecordStatus( scriptObject, currWorldState );
 }
 
 PlannerNode *BotScriptAction::TryApply( const WorldState &worldState ) {

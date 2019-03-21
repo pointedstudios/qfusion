@@ -12,13 +12,12 @@ void BotFleeToSpotActionRecord::Deactivate() {
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotFleeToSpotActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotFleeToSpotActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	const auto &selectedEnemies = Self()->GetSelectedEnemies();
-	Bot *bot = const_cast<Bot *>( Self() );
 	if( selectedEnemies.AreValid() && selectedEnemies.CouldBeHitIfBotTurns() ) {
-		bot->GetMiscTactics().PreferAttackRatherThanRun();
+		Self()->GetMiscTactics().PreferAttackRatherThanRun();
 	} else {
-		bot->GetMiscTactics().PreferRunRatherThanAttack();
+		Self()->GetMiscTactics().PreferRunRatherThanAttack();
 	}
 
 	// It really gets invalidated on goal reevaluation

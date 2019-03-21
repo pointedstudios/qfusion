@@ -657,7 +657,7 @@ void BasePlanner::Think() {
 		return;
 	}
 
-	AiBaseActionRecord::Status status = planHead->CheckStatus( currWorldState );
+	AiBaseActionRecord::Status status = planHead->UpdateStatus( currWorldState );
 	if( status == AiBaseActionRecord::INVALID ) {
 		Debug( "Plan head %s CheckStatus() returned INVALID status\n", planHead->Name() );
 		ClearGoalAndPlan();

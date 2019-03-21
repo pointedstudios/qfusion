@@ -15,7 +15,7 @@ void BotWaitForNavEntityActionRecord::Deactivate() {
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotWaitForNavEntityActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotWaitForNavEntityActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( currWorldState.HasJustPickedGoalItemVar() ) {
 		Debug( "Goal item has been just picked up\n" );
 		return COMPLETED;

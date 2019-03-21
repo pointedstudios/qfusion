@@ -113,7 +113,7 @@ PlannerNode *BotDoRunAwayViaTeleportAction::TryApply( const WorldState &worldSta
 	return plannerNode.PrepareActionResult();
 }
 
-AiBaseActionRecord::Status BotDoRunAwayViaTeleportActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiBaseActionRecord::Status BotDoRunAwayViaTeleportActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( currWorldState.HasJustTeleportedVar().Ignore() ) {
 		Debug( "Has bot just teleported is ignored\n" );
 		return INVALID;
