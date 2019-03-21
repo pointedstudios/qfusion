@@ -3,8 +3,7 @@
 
 #include "../ai_local.h"
 
-class BotTacticalSpotsCache
-{
+class BotTacticalSpotsCache {
 	template <typename SpotData>
 	struct CachedSpot {
 		short origin[3];
@@ -21,14 +20,14 @@ class BotTacticalSpotsCache
 		CachedSpot<SpotData> spots[MAX_SPOTS];
 		unsigned numSpots;
 
-		inline SpotsCache() { Clear(); }
+		SpotsCache() { Clear(); }
 
-		inline void Clear() {
+		void Clear() {
 			numSpots = 0;
 			memset( spots, 0, sizeof( spots ) );
 		}
 
-		inline CachedSpot<SpotData> *Alloc() {
+		CachedSpot<SpotData> *Alloc() {
 			if( numSpots == MAX_SPOTS ) {
 				return nullptr;
 			}
@@ -89,29 +88,23 @@ class BotTacticalSpotsCache
 	// AiAasWorld is provided as an argument to avoid an implicit retrieval of global instance in a loop.
 	int FindMostFeasibleEntityAasArea( const edict_t *ent, const AiAasWorld *aasWorld ) const;
 
-	class NearbyEntitiesCache
-	{
+	class NearbyEntitiesCache {
 public:
 		static constexpr unsigned MAX_CACHED_NEARBY_ENTITIES = 32;
 		struct NearbyEntitiesCacheEntry {
 			int entNums[MAX_CACHED_NEARBY_ENTITIES];
-			int numEntities;
+			int numEntities { 0 };
 			vec3_t botOrigin;
-			float radius;
-
-			// Shut an analyzer up
-			NearbyEntitiesCacheEntry() : numEntities( 0 ), radius( 0 ) {}
+			float radius { 0 };
 		};
 
 private:
 		static constexpr unsigned MAX_ENTITIES_CACHE_ENTRIES = 4;
 		NearbyEntitiesCacheEntry entries[MAX_ENTITIES_CACHE_ENTRIES];
-		unsigned numEntries;
-
+		unsigned numEntries { 0 };
 public:
-		inline NearbyEntitiesCache() : numEntries( 0 ) {}
-		inline void Clear() { numEntries = 0; }
-		inline NearbyEntitiesCacheEntry *Alloc() {
+		void Clear() { numEntries = 0; }
+		NearbyEntitiesCacheEntry *Alloc() {
 			if( numEntries == MAX_ENTITIES_CACHE_ENTRIES ) {
 				return nullptr;
 			}
@@ -139,7 +132,7 @@ public:
 									const short *enemyOrigin, DualOriginFindMethod findMethod );
 
 public:
-	inline BotTacticalSpotsCache( edict_t *self_ ) : self( self_ ) {}
+	explicit BotTacticalSpotsCache( edict_t *self_ ) : self( self_ ) {}
 
 	inline void Clear() {
 		sniperRangeTacticalSpotsCache.Clear();
@@ -155,19 +148,22 @@ public:
 		runAwayElevatorOriginsCache.Clear();
 	}
 
-	inline const short *GetSniperRangeTacticalSpot( const short *origin, const short *enemyOrigin ) {
+	const short *GetSniperRangeTacticalSpot( const short *origin, const short *enemyOrigin ) {
 		return GetSingleOriginSpot( &sniperRangeTacticalSpotsCache, origin, enemyOrigin,
 									&BotTacticalSpotsCache::FindSniperRangeTacticalSpot );
 	}
-	inline const short *GetFarRangeTacticalSpot( const short *origin, const short *enemyOrigin ) {
+
+	const short *GetFarRangeTacticalSpot( const short *origin, const short *enemyOrigin ) {
 		return GetSingleOriginSpot( &farRangeTacticalSpotsCache, origin, enemyOrigin,
 									&BotTacticalSpotsCache::FindFarRangeTacticalSpot );
 	}
-	inline const short *GetMiddleRangeTacticalSpot( const short *origin, const short *enemyOrigin ) {
+
+	const short *GetMiddleRangeTacticalSpot( const short *origin, const short *enemyOrigin ) {
 		return GetSingleOriginSpot( &middleRangeTacticalSpotsCache, origin, enemyOrigin,
 									&BotTacticalSpotsCache::FindMiddleRangeTacticalSpot );
 	}
-	inline const short *GetCloseRangeTacticalSpot( const short *origin, const short *enemyOrigin ) {
+
+	const short *GetCloseRangeTacticalSpot( const short *origin, const short *enemyOrigin ) {
 		return GetSingleOriginSpot( &closeRangeTacticalSpotsCache, origin, enemyOrigin,
 									&BotTacticalSpotsCache::FindCloseRangeTacticalSpot );
 	}
@@ -176,15 +172,17 @@ public:
 									&BotTacticalSpotsCache::FindCoverSpot );
 	}
 
-	inline const short *GetRunAwayTeleportOrigin( const short *origin, const short *enemyOrigin ) {
+	const short *GetRunAwayTeleportOrigin( const short *origin, const short *enemyOrigin ) {
 		return GetDualOriginSpot( &runAwayTeleportOriginsCache, origin, enemyOrigin,
 								  &BotTacticalSpotsCache::FindRunAwayTeleportOrigin );
 	}
-	inline const short *GetRunAwayJumppadOrigin( const short *origin, const short *enemyOrigin ) {
+
+	const short *GetRunAwayJumppadOrigin( const short *origin, const short *enemyOrigin ) {
 		return GetDualOriginSpot( &runAwayJumppadOriginsCache, origin, enemyOrigin,
 								  &BotTacticalSpotsCache::FindRunAwayJumppadOrigin );
 	}
-	inline const short *GetRunAwayElevatorOrigin( const short *origin, const short *enemyOrigin ) {
+
+	const short *GetRunAwayElevatorOrigin( const short *origin, const short *enemyOrigin ) {
 		return GetDualOriginSpot( &runAwayElevatorOriginsCache, origin, enemyOrigin,
 								  &BotTacticalSpotsCache::FindRunAwayElevatorOrigin );
 	}

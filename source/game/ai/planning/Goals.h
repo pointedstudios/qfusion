@@ -5,31 +5,28 @@
 
 class BotPlanningModule;
 
-class BotBaseGoal : public AiBaseGoal
-{
+class BotBaseGoal : public AiBaseGoal {
 	StaticVector<AiBaseAction *, BasePlanner::MAX_ACTIONS> extraApplicableActions;
 public:
 	BotBaseGoal( BotPlanningModule *module_, const char *name_, int debugColor_, unsigned updatePeriod_ );
 
-	inline void AddExtraApplicableAction( AiBaseAction *action ) {
+	void AddExtraApplicableAction( AiBaseAction *action ) {
 		extraApplicableActions.push_back( action );
 	}
-
 protected:
 	BotPlanningModule *const module;
 
-	inline PlannerNode *ApplyExtraActions( PlannerNode *firstTransition, const WorldState &worldState );
+	PlannerNode *ApplyExtraActions( PlannerNode *firstTransition, const WorldState &worldState );
 
 	Bot *Self() { return (Bot *)self; }
 	const Bot *Self() const { return (Bot *)self; }
 
-	inline const class SelectedNavEntity &SelectedNavEntity() const;
-	inline const class SelectedEnemies &SelectedEnemies() const;
-	inline const class BotWeightConfig &WeightConfig() const;
+	const class SelectedNavEntity &SelectedNavEntity() const;
+	const class SelectedEnemies &SelectedEnemies() const;
+	const class BotWeightConfig &WeightConfig() const;
 };
 
-class BotGrabItemGoal : public BotBaseGoal
-{
+class BotGrabItemGoal : public BotBaseGoal {
 public:
 	explicit BotGrabItemGoal( BotPlanningModule *module_ )
 		: BotBaseGoal( module_, "BotGrabItemGoal", COLOR_RGB( 0, 255, 0 ), 950 ) {}
@@ -60,8 +57,7 @@ public:
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotRunAwayGoal : public BotBaseGoal
-{
+class BotRunAwayGoal : public BotBaseGoal {
 public:
 	explicit BotRunAwayGoal( BotPlanningModule *module_ )
 		: BotBaseGoal( module_, "BotRunAwayGoal", COLOR_RGB( 0, 0, 255 ), 950 ) {}
@@ -71,14 +67,11 @@ public:
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotAttackOutOfDespairGoal : public BotBaseGoal
-{
-	float oldOffensiveness;
-
+class BotAttackOutOfDespairGoal : public BotBaseGoal {
+	float oldOffensiveness { 1.0f };
 public:
 	explicit BotAttackOutOfDespairGoal( BotPlanningModule *module_ )
-		: BotBaseGoal( module_, "BotAttackOutOfDespairGoal", COLOR_RGB( 192, 192, 0 ), 750 ),
-		oldOffensiveness( 1.0f ) {}
+		: BotBaseGoal( module_, "BotAttackOutOfDespairGoal", COLOR_RGB( 192, 192, 0 ), 750 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
@@ -88,8 +81,7 @@ public:
 	void OnPlanBuildingCompleted( const AiBaseActionRecord *planHead ) override;
 };
 
-class BotReactToHazardGoal : public BotBaseGoal
-{
+class BotReactToHazardGoal : public BotBaseGoal {
 public:
 	explicit BotReactToHazardGoal( BotPlanningModule *module_ )
 		: BotBaseGoal( module_, "BotReactToHazardGoal", COLOR_RGB( 192, 0, 192 ), 750 ) {}
@@ -99,8 +91,7 @@ public:
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotReactToThreatGoal : public BotBaseGoal
-{
+class BotReactToThreatGoal : public BotBaseGoal {
 public:
 	explicit BotReactToThreatGoal( BotPlanningModule *module_ )
 		: BotBaseGoal( module_, "BotReactToThreatGoal", COLOR_RGB( 255, 0, 128 ), 350 ) {}
@@ -110,8 +101,7 @@ public:
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotReactToEnemyLostGoal : public BotBaseGoal
-{
+class BotReactToEnemyLostGoal : public BotBaseGoal {
 public:
 	explicit BotReactToEnemyLostGoal( BotPlanningModule *module_ )
 		: BotBaseGoal( module_, "BotReactToEnemyLostGoal", COLOR_RGB( 0, 192, 192 ), 950 ) {}
@@ -121,8 +111,7 @@ public:
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotRoamGoal : public BotBaseGoal
-{
+class BotRoamGoal : public BotBaseGoal {
 public:
 	explicit BotRoamGoal( BotPlanningModule *module_ )
 		: BotBaseGoal( module_, "BotRoamGoal", COLOR_RGB( 0, 0, 80 ), 400 ) {}
@@ -132,10 +121,8 @@ public:
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotScriptGoal : public BotBaseGoal
-{
+class BotScriptGoal : public BotBaseGoal {
 	void *scriptObject;
-
 public:
 	// TODO: Provide ways for setting the debug color for this kind of goals
 	explicit BotScriptGoal( BotPlanningModule *module_, const char *name_, unsigned updatePeriod_, void *scriptObject_ )

@@ -4,8 +4,7 @@
 #include "../ai_local.h"
 #include "../static_vector.h"
 
-class BotRoamingManager
-{
+class BotRoamingManager {
 	// Note: very large values lead to all spots being considered as visited
 	// during the first VISITED_SPOT_EXPIRATION_TIME millis of the level time.
 	// Even if TryResetAllSpotsDisabledState() fills visitedAt by zero,
@@ -26,11 +25,11 @@ class BotRoamingManager
 
 	const Vec3 &GetRoamingSpot();
 
-	inline bool IsTemporarilyDisabled( unsigned spotNum ) const {
+	bool IsTemporarilyDisabled( unsigned spotNum ) const {
 		return MillisSinceVisited( spotNum, level.time ) < VISITED_SPOT_EXPIRATION_TIME;
 	}
 
-	inline bool IsTemporarilyDisabled( unsigned spotNum, int64_t levelTime ) const {
+	bool IsTemporarilyDisabled( unsigned spotNum, int64_t levelTime ) const {
 		return MillisSinceVisited( spotNum, levelTime ) < VISITED_SPOT_EXPIRATION_TIME;
 	}
 
@@ -49,22 +48,23 @@ class BotRoamingManager
 
 	inline void ClearVisitedSpots();
 public:
-	BotRoamingManager( edict_t *self_ );
+	explicit BotRoamingManager( edict_t *self_ );
+
 	~BotRoamingManager() {
 		G_LevelFree( visitedAt );
 	}
 
-	inline uint64_t MillisSinceVisited( unsigned spotNum ) const {
+	uint64_t MillisSinceVisited( unsigned spotNum ) const {
 		assert( level.time >= visitedAt[spotNum] );
 		return (uint64_t)( level.time - visitedAt[spotNum] );
 	}
 
-	inline uint64_t MillisSinceVisited( unsigned spotNum, int64_t levelTime ) const {
+	uint64_t MillisSinceVisited( unsigned spotNum, int64_t levelTime ) const {
 		assert( levelTime >= visitedAt[spotNum] );
 		return (uint64_t)( levelTime - visitedAt[spotNum] );
 	}
 
-	inline void DisableSpotsInRadius( const Vec3 &origin, float radius ) {
+	void DisableSpotsInRadius( const Vec3 &origin, float radius ) {
 		DisableSpotsInRadius( origin.Data(), radius );
 	}
 
@@ -73,7 +73,7 @@ public:
 	// All calls during a single frame are guaranteed to return the same result
 	const Vec3 &GetCachedRoamingSpot();
 
-	inline void CheckSpotsProximity() {
+	void CheckSpotsProximity() {
 		DisableSpotsInRadius( self->s.origin, 96.0f );
 	}
 };

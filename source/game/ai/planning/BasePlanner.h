@@ -10,13 +10,11 @@
 #include "../ai_base_ai.h"
 #include "WorldState.h"
 
-class AiBaseGoal
-{
+class AiBaseGoal {
 	friend class Ai;
 	friend class BasePlanner;
 
 	static inline void Register( Ai *ai, AiBaseGoal *goal );
-
 protected:
 	Ai *const self;
 	const char *name;
@@ -26,7 +24,7 @@ protected:
 
 public:
 	// Don't pass self as a constructor argument (self->ai ptr might not been set yet)
-	inline AiBaseGoal( Ai *self_, const char *name_, unsigned updatePeriod_ )
+	AiBaseGoal( Ai *self_, const char *name_, unsigned updatePeriod_ )
 		: self( self_ ), name( name_ ), updatePeriod( updatePeriod_ ) {
 		Register( self_, this );
 	}
@@ -40,22 +38,21 @@ public:
 	virtual void OnPlanBuildingStarted() {}
 	virtual void OnPlanBuildingCompleted( const class AiBaseActionRecord *planHead ) {}
 
-	inline bool IsRelevant() const { return weight > 0; }
+	bool IsRelevant() const { return weight > 0; }
 
 	// More important goals are first after sorting goals array
-	inline bool operator<( const AiBaseGoal &that ) const {
+	bool operator<( const AiBaseGoal &that ) const {
 		return this->weight > that.weight;
 	}
 
-	inline int DebugColor() const { return debugColor; }
+	int DebugColor() const { return debugColor; }
 
-	inline const char *Name() const { return name; }
-	inline unsigned UpdatePeriod() const { return updatePeriod; }
+	const char *Name() const { return name; }
+	unsigned UpdatePeriod() const { return updatePeriod; }
 };
 
 class AiBaseActionRecord : public PoolItem {
 	friend class AiBaseAction;
-
 protected:
 	Ai *const self;
 	const char *name;
@@ -75,12 +72,13 @@ protected:
 public:
 	AiBaseActionRecord *nextInPlan { nullptr };
 
-	inline AiBaseActionRecord( PoolBase *pool_, Ai *self_, const char *name_ )
+	AiBaseActionRecord( PoolBase *pool_, Ai *self_, const char *name_ )
 		: PoolItem( pool_ ), self( self_ ), name( name_ ) {}
 
 	virtual void Activate() {
 		Debug( "About to activate\n" );
 	};
+
 	virtual void Deactivate() {
 		Debug( "About to deactivate\n" );
 	};
@@ -197,7 +195,7 @@ protected:
 	PlannerNodePtr NewNodeForRecord( AiBaseActionRecord *record );
 public:
 	// Don't pass self as a constructor argument (self->ai ptr might not been set yet)
-	inline AiBaseAction( Ai *self_, const char *name_ )
+	AiBaseAction( Ai *self_, const char *name_ )
 		: self( self_ ), name( name_ ) {
 		Register( self_, this );
 	}
@@ -256,7 +254,7 @@ protected:
 	virtual void BeforePlanning() {}
 	virtual void AfterPlanning() {}
 public:
-	inline bool HasPlan() const { return planHead != nullptr; }
+	bool HasPlan() const { return planHead != nullptr; }
 
 	void ClearGoalAndPlan();
 

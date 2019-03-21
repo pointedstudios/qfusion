@@ -28,25 +28,25 @@ class BotPlanner : public BasePlanner {
 	BotScriptGoal *AllocScriptGoal() { return scriptGoals.unsafe_grow_back(); }
 	BotScriptAction *AllocScriptAction() { return scriptActions.unsafe_grow_back(); }
 
-	inline const int *Inventory() const { return self->r.client->ps.inventory; }
+	const int *Inventory() const { return self->r.client->ps.inventory; }
 
 	template <int Weapon>
-	inline int AmmoReadyToFireCount() const {
+	int AmmoReadyToFireCount() const {
 		if( !Inventory()[Weapon] ) {
 			return 0;
 		}
 		return Inventory()[WeaponAmmo < Weapon > ::strongAmmoTag] + Inventory()[WeaponAmmo < Weapon > ::weakAmmoTag];
 	}
 
-	inline int ShellsReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_RIOTGUN>(); }
-	inline int GrenadesReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_GRENADELAUNCHER>(); }
-	inline int RocketsReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_ROCKETLAUNCHER>(); }
-	inline int PlasmasReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_PLASMAGUN>(); }
-	inline int BulletsReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_MACHINEGUN>(); }
-	inline int LasersReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_LASERGUN>(); }
-	inline int BoltsReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_ELECTROBOLT>(); }
-	inline int WavesReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_SHOCKWAVE>(); }
-	inline int InstasReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_INSTAGUN>(); }
+	int ShellsReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_RIOTGUN>(); }
+	int GrenadesReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_GRENADELAUNCHER>(); }
+	int RocketsReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_ROCKETLAUNCHER>(); }
+	int PlasmasReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_PLASMAGUN>(); }
+	int BulletsReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_MACHINEGUN>(); }
+	int LasersReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_LASERGUN>(); }
+	int BoltsReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_ELECTROBOLT>(); }
+	int WavesReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_SHOCKWAVE>(); }
+	int InstasReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_INSTAGUN>(); }
 
 	bool FindDodgeHazardSpot( const Hazard &hazard, vec3_t spotOrigin );
 
@@ -55,7 +55,6 @@ class BotPlanner : public BasePlanner {
 	bool ShouldSkipPlanning() const override;
 
 	void BeforePlanning() override;
-
 public:
 	BotPlanner() = delete;
 	// Disable copying and moving

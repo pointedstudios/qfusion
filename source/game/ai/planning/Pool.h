@@ -19,7 +19,7 @@ class alignas ( sizeof( void * ) )PoolBase {
 	int16_t listFirst[2] { 0, -1 };
 
 #ifdef _DEBUG
-	inline const char *ListName( int index ) {
+	const char *ListName( int index ) {
 		switch( index ) {
 			case FREE_LIST: return "FREE";
 			case USED_LIST: return "USED";
@@ -28,7 +28,7 @@ class alignas ( sizeof( void * ) )PoolBase {
 	}
 #endif
 
-	static inline uint16_t LinksOffset( uint16_t itemSize ) {
+	static uint16_t LinksOffset( uint16_t itemSize ) {
 		uint16_t remainder = itemSize % alignof( uint16_t );
 		if( !remainder ) {
 			return itemSize;
@@ -36,7 +36,7 @@ class alignas ( sizeof( void * ) )PoolBase {
 		return itemSize + alignof( uint16_t ) - remainder;
 	}
 
-	static inline uint16_t AlignedChunkSize( uint16_t itemSize ) {
+	static uint16_t AlignedChunkSize( uint16_t itemSize ) {
 		uint16_t totalSize = LinksOffset( itemSize ) + sizeof( ItemLinks );
 		uint16_t remainder = totalSize % alignof( void * );
 		if( !remainder ) {
@@ -45,26 +45,26 @@ class alignas ( sizeof( void * ) )PoolBase {
 		return totalSize + alignof( void * ) - remainder;
 	}
 
-	inline class PoolItem &ItemAt( int16_t index ) {
+	class PoolItem &ItemAt( int16_t index ) {
 		char *mem = ( basePtr + alignedChunkSize * index );
 		assert( !( (uintptr_t)mem % sizeof( void * ) ) );
 		return *(PoolItem *)mem;
 	}
-	inline int16_t IndexOf( const class PoolItem *item ) const {
+
+	int16_t IndexOf( const class PoolItem *item ) const {
 		return (int16_t)( ( (const char *)item - basePtr ) / alignedChunkSize );
 	}
 
-	inline void Link( int16_t itemIndex, int16_t listIndex );
-	inline void Unlink( int16_t itemIndex, int16_t listIndex );
-
+	void Link( int16_t itemIndex, int16_t listIndex );
+	void Unlink( int16_t itemIndex, int16_t listIndex );
 protected:
 	void *Alloc();
 	void Free( class PoolItem *poolItem );
 
 #ifndef _MSC_VER
-	inline void Debug( const char *format, ... ) const __attribute__( ( format( printf, 2, 3 ) ) )
+	void Debug( const char *format, ... ) const __attribute__( ( format( printf, 2, 3 ) ) )
 #else
-	inline void Debug( _Printf_format_string_ const char *format, ... ) const
+	void Debug( _Printf_format_string_ const char *format, ... ) const
 #endif
 	{
 		va_list va;
@@ -83,7 +83,7 @@ protected:
 		int16_t &Next() { return links[1]; }
 	};
 
-	inline ItemLinks &ItemLinksAt( int16_t index ) {
+	ItemLinks &ItemLinksAt( int16_t index ) {
 		char *mem = ( basePtr + alignedChunkSize * index + linksOffset );
 		assert( !( (uintptr_t)mem % alignof( ItemLinks ) ) );
 		return *(ItemLinks *)mem;
@@ -101,7 +101,7 @@ public:
 	explicit PoolItem( PoolBase * pool_ ) : pool( pool_ ) {}
 	virtual ~PoolItem() = default;
 
-	inline void DeleteSelf() {
+	void DeleteSelf() {
 		this->~PoolItem();
 		pool->Free( this );
 	}
@@ -138,49 +138,49 @@ public:
 		static_assert( N <= std::numeric_limits<int16_t>::max(), "Links can't handle more than 2^15 elements in pool" );
 	}
 
-	inline Item *New() {
+	Item *New() {
 		if( void *mem = Alloc() ) {
-			return new(mem) Item( this );
+			return new( mem )Item( this );
 		}
 		return nullptr;
 	}
 
 	template <typename Arg1>
-	inline Item *New( Arg1 arg1 ) {
+	Item *New( Arg1 arg1 ) {
 		if( void *mem = Alloc() ) {
-			return new(mem) Item( this, arg1 );
+			return new( mem )Item( this, arg1 );
 		}
 		return nullptr;
 	}
 
 	template <typename Arg1, typename Arg2>
-	inline Item *New( Arg1 arg1, Arg2 arg2 ) {
+	Item *New( Arg1 arg1, Arg2 arg2 ) {
 		if( void *mem = Alloc() ) {
-			return new(mem) Item( this, arg1, arg2 );
+			return new( mem )Item( this, arg1, arg2 );
 		}
 		return nullptr;
 	};
 
 	template <typename Arg1, typename Arg2, typename Arg3>
-	inline Item *New( Arg1 arg1, Arg2 arg2, Arg3 arg3 ) {
+	Item *New( Arg1 arg1, Arg2 arg2, Arg3 arg3 ) {
 		if( void *mem = Alloc() ) {
-			return new(mem) Item( this, arg1, arg2, arg3 );
+			return new( mem )Item( this, arg1, arg2, arg3 );
 		}
 		return nullptr;
 	};
 
 	template <typename Arg1, typename Arg2, typename Arg3, typename Arg4>
-	inline Item *New( Arg1 arg1, Arg2 arg2, Arg3 arg3, Arg4 arg4 ) {
+	Item *New( Arg1 arg1, Arg2 arg2, Arg3 arg3, Arg4 arg4 ) {
 		if( void *mem = Alloc() ) {
-			return new(mem) Item( this, arg1, arg2, arg3, arg4 );
+			return new( mem )Item( this, arg1, arg2, arg3, arg4 );
 		}
 		return nullptr;
 	};
 
 	template <typename Arg1, typename Arg2, typename Arg3, typename Arg4, typename Arg5>
-	inline Item *New( Arg1 arg1, Arg2 arg2, Arg3 arg3, Arg4 arg4, Arg5 arg5 ) {
+	Item *New( Arg1 arg1, Arg2 arg2, Arg3 arg3, Arg4 arg4, Arg5 arg5 ) {
 		if( void *mem = Alloc() ) {
-			return new(mem) Item( this, arg1, arg2, arg3, arg4, arg5 );
+			return new( mem )Item( this, arg1, arg2, arg3, arg4, arg5 );
 		}
 		return nullptr;
 	};

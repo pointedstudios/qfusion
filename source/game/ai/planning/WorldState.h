@@ -10,8 +10,7 @@ inline float DamageToKill( float health, float armor ) {
 }
 
 #define DECLARE_COMPARABLE_VAR_CLASS( className, type )                           \
-	class className                                                                 \
-	{                                                                               \
+	class className {                                                                \
 		friend class WorldState;                                                    \
 protected:                                                                      \
 		WorldState *parent;                                                         \
@@ -78,8 +77,7 @@ bool GENERIC_asIsScriptWorldStateAttachmentSatisfiedBy( const void *lhs, const v
 void GENERIC_asDebugPrintScriptWorldStateAttachment( const void *attachment );
 void GENERIC_asDebugPrintScriptWorldStateAttachmentDiff( const void *lhs, const void *rhs );
 
-class WorldState
-{
+class WorldState {
 	friend class FloatBaseVar;
 	friend class BoolVar;
 
@@ -245,8 +243,8 @@ private:
 
 	inline void SetVarSatisfyOp( uint8_t *ops, int varIndex, SatisfyOp value );
 
-	inline const short *BotOriginData() const { return originVarsData + BotOrigin * 4; }
-	inline const short *EnemyOriginData() const { return originVarsData + EnemyOrigin * 4; }
+	const short *BotOriginData() const { return originVarsData + BotOrigin * 4; }
+	const short *EnemyOriginData() const { return originVarsData + EnemyOrigin * 4; }
 
 	const short *GetSniperRangeTacticalSpot();
 	const short *GetFarRangeTacticalSpot();
@@ -272,13 +270,13 @@ public:
 
 	WorldState &operator=( const WorldState &that );
 
-	inline WorldState( const WorldState &that ) {
+	WorldState( const WorldState &that ) {
 		*this = that;
 	}
 
 	WorldState &operator=( WorldState &&that );
 
-	inline WorldState( WorldState &&that ) {
+	WorldState( WorldState &&that ) {
 		*this = std::move( that );
 	}
 
@@ -294,8 +292,7 @@ public:
 
 #define VAR_NAME_FORMAT "%-32.32s"
 
-	class BoolVar
-	{
+	class BoolVar {
 		friend class WorldState;
 		WorldState *parent;
 		const char *name;
@@ -304,10 +301,11 @@ public:
 			: parent( const_cast<WorldState *>( parent_ ) ), name( name_ ), index( index_ ) {}
 
 public:
-		inline bool Value() const {
+		bool Value() const {
 			return ( parent->boolVarsValues & ( 1 << index ) ) != 0;
 		}
-		inline BoolVar &SetValue( bool value ) {
+
+		BoolVar &SetValue( bool value ) {
 			if( value ) {
 				parent->boolVarsValues |= ( 1 << index );
 			} else {
@@ -315,14 +313,18 @@ public:
 			}
 			return *this;
 		}
-		inline operator bool() const { return Value(); }
-		inline bool IsSatisfiedBy( bool value ) const {
+
+		operator bool() const { return Value(); }
+
+		bool IsSatisfiedBy( bool value ) const {
 			return Value() == value;
 		}
-		inline bool Ignore() const {
+
+		bool Ignore() const {
 			return ( parent->boolVarsIgnoreFlags & ( 1 << index ) ) != 0;
 		}
-		inline BoolVar SetIgnore( bool ignore ) {
+
+		BoolVar SetIgnore( bool ignore ) {
 			if( ignore ) {
 				parent->boolVarsIgnoreFlags |= ( 1 << index );
 			} else {
@@ -330,12 +332,12 @@ public:
 			}
 			return *this;
 		}
+
 		inline void DebugPrint( const char *tag ) const;
 	};
 
 	// Stores a 3-dimensional world space origin vector. Dimensions are rounded up to 4 units.
-	class OriginVar
-	{
+	class OriginVar {
 		friend class WorldState;
 		WorldState *parent;
 		const char *name;
@@ -343,8 +345,8 @@ public:
 		OriginVar( const WorldState *parent_, short index_, const char *name_ )
 			: parent( const_cast<WorldState *>( parent_ ) ), name( name_ ), index( index_ ) {}
 
-		inline short *Data() { return &parent->originVarsData[index * 4]; }
-		inline const short *Data() const { return &parent->originVarsData[index * 4]; }
+		short *Data() { return &parent->originVarsData[index * 4]; }
+		const short *Data() const { return &parent->originVarsData[index * 4]; }
 
 		struct alignas( 2 )PackedFields {
 			bool ignore : 1;
@@ -359,10 +361,10 @@ public:
 		static_assert( sizeof( PackedFields ) == sizeof( short ), "" );
 		static_assert( alignof( PackedFields ) == alignof( short ), "" );
 
-		inline PackedFields &Packed() {
+		PackedFields &Packed() {
 			return *(PackedFields *)&Data()[3];
 		}
-		inline const PackedFields &Packed() const {
+		const PackedFields &Packed() const {
 			return *(const PackedFields *)&Data()[3];
 		}
 
@@ -371,48 +373,52 @@ public:
 		// Thus maximal rounding distance error = sqrt(dx*dx + dy*dy + dz*dz) = sqrt(4*4 + 4*4 + 4*4)
 		static constexpr float MAX_ROUNDING_SQUARE_DISTANCE_ERROR = 3 * 4 * 4;
 
-		inline float DistanceTo( const OriginVar &that ) const;
+		float DistanceTo( const OriginVar &that ) const;
 
-		inline Vec3 Value() const {
+		Vec3 Value() const {
 			return Vec3( 4 * Data()[0], 4 * Data()[1], 4 * Data()[2] );
 		}
-		inline OriginVar &SetValue( float x, float y, float z ) {
+
+		OriginVar &SetValue( float x, float y, float z ) {
 			Data()[0] = (short)( ( (int)x ) / 4 );
 			Data()[1] = (short)( ( (int)y ) / 4 );
 			Data()[2] = (short)( ( (int)z ) / 4 );
 			return *this;
 		}
-		inline OriginVar &SetValue( const Vec3 &value ) {
+
+		OriginVar &SetValue( const Vec3 &value ) {
 			return SetValue( value.X(), value.Y(), value.Z() );
 		}
-		inline OriginVar &SetValue( const vec3_t value ) {
+
+		OriginVar &SetValue( const vec3_t value ) {
 			return SetValue( value[0], value[1], value[2] );
 		}
-		inline bool Ignore() const {
+
+		bool Ignore() const {
 			return Packed().ignore;
 		}
-		inline OriginVar &SetIgnore( bool ignore ) {
+
+		OriginVar &SetIgnore( bool ignore ) {
 			Packed().ignore = ignore;
 			return *this;
 		}
 
-		inline OriginVar &SetSatisfyOp( WorldState::SatisfyOp op, float epsilon );
+		OriginVar &SetSatisfyOp( WorldState::SatisfyOp op, float epsilon );
 
-		inline WorldState::SatisfyOp SatisfyOp() const {
+		WorldState::SatisfyOp SatisfyOp() const {
 			return (WorldState::SatisfyOp)( Packed().satisfyOp );
 		}
 
-		inline float SatisfyEpsilon() const {
+		float SatisfyEpsilon() const {
 			return ( Packed().epsilon ) * 4;
 		}
 
-		inline bool operator==( const OriginVar &that ) const;
-		inline bool operator!=( const OriginVar &that ) const { return !( *this == that ); }
-		inline void DebugPrint( const char *tag ) const;
+		bool operator==( const OriginVar &that ) const;
+		bool operator!=( const OriginVar &that ) const { return !( *this == that ); }
+		void DebugPrint( const char *tag ) const;
 	};
 
-	class OriginLazyVarBase
-	{
+	class OriginLazyVarBase {
 		friend class OriginVar;
 
 public:
@@ -426,19 +432,19 @@ protected:
 		short *varsData;
 		short index;
 
-		inline OriginLazyVarBase( const WorldState *parent_,
-								  short index_,
-								  ValueSupplier supplier_,
-								  const short *varsData_,
-								  const char *name_ )
-			: parent( const_cast<WorldState *>( parent_ ) ),
-			name( name_ ),
-			supplier( supplier_ ),
-			varsData( const_cast<short *>( varsData_ ) ),
-			index( index_ ) {}
+		OriginLazyVarBase( const WorldState *parent_,
+						   short index_,
+						   ValueSupplier supplier_,
+						   const short *varsData_,
+						   const char *name_ )
+			: parent( const_cast<WorldState *>( parent_ ) )
+			, name( name_ )
+			, supplier( supplier_ )
+			, varsData( const_cast<short *>( varsData_ ) )
+			, index( index_ ) {}
 
-		inline short *Data() { return &varsData[index * 4]; }
-		inline const short *Data() const { return &varsData[index * 4]; }
+		short *Data() { return &varsData[index * 4]; }
+		const short *Data() const { return &varsData[index * 4]; }
 
 		struct alignas( 2 )PackedFields {
 			bool ignore : 1;
@@ -454,18 +460,19 @@ protected:
 		static_assert( sizeof( PackedFields ) == sizeof( short ), "" );
 		static_assert( alignof( PackedFields ) == alignof( short ), "" );
 
-		inline PackedFields &Packed() {
+		PackedFields &Packed() {
 			return *(PackedFields *)&varsData[index * 4 + 3];
 		}
-		inline const PackedFields &Packed() const {
+		const PackedFields &Packed() const {
 			return *(const PackedFields *)&varsData[index * 4 + 3];
 		}
 
-		inline unsigned char StateBits() const {
+		unsigned char StateBits() const {
 			return (unsigned char)Packed().stateBits;
 		}
+
 		// It gets called from a const function, thats why it is const too
-		inline void SetStateBits( unsigned char stateBits ) const {
+		void SetStateBits( unsigned char stateBits ) const {
 			const_cast<OriginLazyVarBase *>( this )->Packed().stateBits = stateBits;
 		}
 
@@ -473,89 +480,82 @@ protected:
 		static constexpr unsigned char ABSENT = 0;
 		static constexpr unsigned char PRESENT = 1;
 		static constexpr unsigned char PENDING = 2;
-
 public:
 		// Each coordinate is rounded up to 4 units
 		// Thus maximal rounding distance error = sqrt(dx*dx + dy*dy + dz*dz) = sqrt(4*4 + 4*4 + 4*4)
 		static constexpr float MAX_ROUNDING_SQUARE_DISTANCE_ERROR = 3 * 4 * 4;
 
-		inline Vec3 Value() const;
+		Vec3 Value() const;
 
-		inline void Reset() {
+		void Reset() {
 			SetStateBits( PENDING );
 			Packed().ignore = false;
 		}
 
-		inline bool Ignore() const {
+		bool Ignore() const {
 			return Packed().ignore;
 		}
 
-		inline OriginLazyVarBase &SetIgnore( bool ignore ) {
+		OriginLazyVarBase &SetIgnore( bool ignore ) {
 			Packed().ignore = ignore;
 			return *this;
 		}
 
-		inline OriginLazyVarBase &SetSatisfyOp( SatisfyOp op, float epsilon );
+		OriginLazyVarBase &SetSatisfyOp( SatisfyOp op, float epsilon );
 
-		inline WorldState::SatisfyOp SatisfyOp() const {
+		WorldState::SatisfyOp SatisfyOp() const {
 			return (WorldState::SatisfyOp)( Packed().satisfyOp );
 		}
 
-		inline float SatisfyEpsilon() const {
+		float SatisfyEpsilon() const {
 			return Packed().epsilon * 4;
 		}
 
-		inline float DistanceTo( const OriginVar &that ) const;
+		float DistanceTo( const OriginVar &that ) const;
 	};
 
-	class OriginLazyVar : public OriginLazyVarBase
-	{
+	class OriginLazyVar : public OriginLazyVarBase {
 		friend class WorldState;
-
 private:
 		OriginLazyVar( const WorldState *parent_, short index_, ValueSupplier supplier_, const char *name_ )
 			: OriginLazyVarBase( parent_, index_, supplier_, parent_->originLazyVarsData, name_ ) {}
-
 public:
-		inline bool IsPresent() const;
+		bool IsPresent() const;
 
-		inline bool IgnoreOrAbsent() const {
+		bool IgnoreOrAbsent() const {
 			return Ignore() || !IsPresent();
 		}
 
-		inline bool operator==( const OriginLazyVar &that ) const;
-		inline bool operator!=( const OriginLazyVar &that ) { return !( *this == that ); }
+		bool operator==( const OriginLazyVar &that ) const;
+		bool operator!=( const OriginLazyVar &that ) { return !( *this == that ); }
 
-		inline uint32_t Hash() const;
-		inline bool IsSatisfiedBy( const OriginLazyVar &that ) const;
-		inline void DebugPrint( const char *tag ) const;
+		uint32_t Hash() const;
+		bool IsSatisfiedBy( const OriginLazyVar &that ) const;
+		void DebugPrint( const char *tag ) const;
 	};
 
-	class DualOriginLazyVar : public OriginLazyVarBase
-	{
+	class DualOriginLazyVar : public OriginLazyVarBase {
 		friend class WorldState;
-
 private:
 		DualOriginLazyVar( const WorldState *parent_, short index_, ValueSupplier supplier_, const char *name_ )
 			: OriginLazyVarBase( parent_, index_, supplier_, parent_->dualOriginLazyVarsData, name_ ) {}
 
-		inline short *Data2() { return Data() + 4; }
-		inline const short *Data2() const { return Data() + 4; }
-
+		short *Data2() { return Data() + 4; }
+		const short *Data2() const { return Data() + 4; }
 public:
-		inline Vec3 Value2() const;
-		inline bool IsPresent() const;
+		Vec3 Value2() const;
+		bool IsPresent() const;
 
-		inline bool IgnoreOrAbsent() const {
+		bool IgnoreOrAbsent() const {
 			return Ignore() || !IsPresent();
 		}
 
-		inline bool operator==( const DualOriginLazyVar &that ) const;
-		inline bool operator!=( const DualOriginLazyVar &that ) { return !( *this == that ); }
-		inline uint32_t Hash() const;
+		bool operator==( const DualOriginLazyVar &that ) const;
+		bool operator!=( const DualOriginLazyVar &that ) { return !( *this == that ); }
+		uint32_t Hash() const;
 
-		inline bool IsSatisfiedBy( const DualOriginLazyVar &that ) const;
-		inline void DebugPrint( const char *tag ) const;
+		bool IsSatisfiedBy( const DualOriginLazyVar &that ) const;
+		void DebugPrint( const char *tag ) const;
 	};
 
 #define DECLARE_UNSIGNED_VAR( varName ) UnsignedVar varName ## Var() const { return UnsignedVar( this, varName, #varName ); }
@@ -661,26 +661,26 @@ public:
 #undef DECLARE_ORIGIN_LAZY_VAR
 #undef DECLARE_DUAL_ORIGIN_LAZY_VAR
 
-	inline float DistanceToEnemy() const { return BotOriginVar().DistanceTo( EnemyOriginVar() ); }
-	inline float DistanceToNavTarget() const { return BotOriginVar().DistanceTo( NavTargetOriginVar() ); }
+	float DistanceToEnemy() const { return BotOriginVar().DistanceTo( EnemyOriginVar() ); }
+	float DistanceToNavTarget() const { return BotOriginVar().DistanceTo( NavTargetOriginVar() ); }
 
-	inline float DistanceToSniperRangeTacticalSpot() const {
+	float DistanceToSniperRangeTacticalSpot() const {
 		return SniperRangeTacticalSpotVar().DistanceTo( BotOriginVar() );
 	}
-	inline float DistanceToFarRangeTacticalSpot() const {
+	float DistanceToFarRangeTacticalSpot() const {
 		return FarRangeTacticalSpotVar().DistanceTo( BotOriginVar() );
 	}
-	inline float DistanceToMiddleRangeTacticalSpot() const {
+	float DistanceToMiddleRangeTacticalSpot() const {
 		return MiddleRangeTacticalSpotVar().DistanceTo( BotOriginVar() );
 	}
-	inline float DistanceToCloseRangeTacticalSpot() const {
+	float DistanceToCloseRangeTacticalSpot() const {
 		return CloseRangeTacticalSpotVar().DistanceTo( BotOriginVar() );
 	}
-	inline float DistanceToCoverSpot() const {
+	float DistanceToCoverSpot() const {
 		return CoverSpotVar().DistanceTo( BotOriginVar() );
 	}
 
-	inline void ResetTacticalSpots() {
+	void ResetTacticalSpots() {
 		SniperRangeTacticalSpotVar().Reset();
 		FarRangeTacticalSpotVar().Reset();
 		MiddleRangeTacticalSpotVar().Reset();
@@ -696,20 +696,20 @@ public:
 	constexpr static float MIDDLE_RANGE_MAX = 900.0f;
 	constexpr static float CLOSE_RANGE_MAX = 175.0f;
 
-	inline bool EnemyIsOnSniperRange() const {
+	bool EnemyIsOnSniperRange() const {
 		return DistanceToEnemy() > FAR_RANGE_MAX;
 	}
-	inline bool EnemyIsOnFarRange() const {
+	bool EnemyIsOnFarRange() const {
 		return DistanceToEnemy() > MIDDLE_RANGE_MAX && DistanceToEnemy() <= FAR_RANGE_MAX;
 	}
-	inline bool EnemyIsOnMiddleRange() const {
+	bool EnemyIsOnMiddleRange() const {
 		return DistanceToEnemy() > CLOSE_RANGE_MAX && DistanceToEnemy() <= MIDDLE_RANGE_MAX;
 	}
-	inline bool EnemyIsOnCloseRange() const {
+	bool EnemyIsOnCloseRange() const {
 		return DistanceToEnemy() <= CLOSE_RANGE_MAX;
 	}
 
-	inline float DamageToBeKilled() const {
+	float DamageToBeKilled() const {
 		float damageToBeKilled = ::DamageToKill( HealthVar(), ArmorVar() );
 		if( HasShellVar() ) {
 			damageToBeKilled *= 4.0f;
@@ -720,7 +720,7 @@ public:
 		return damageToBeKilled;
 	}
 
-	inline float DamageToKill() const {
+	float DamageToKill() const {
 		float damageToKill = RawDamageToKillVar();
 		if( HasQuadVar() ) {
 			damageToKill /= 4.0f;
@@ -728,7 +728,7 @@ public:
 		return damageToKill;
 	}
 
-	inline float KillToBeKilledDamageRatio() const {
+	float KillToBeKilledDamageRatio() const {
 		return DamageToKill() / DamageToBeKilled();
 	}
 
