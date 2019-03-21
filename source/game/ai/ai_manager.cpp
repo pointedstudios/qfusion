@@ -84,9 +84,9 @@ AiManager::AiManager( const char *gametype, const char *mapname ) {
 	// Do not clear built-in goals later
 	registeredGoals.MarkClearLimit();
 
-	REGISTER_BUILTIN_ACTION( BotGenericRunToItemAction );
-	REGISTER_BUILTIN_ACTION( BotPickupItemAction );
-	REGISTER_BUILTIN_ACTION( BotWaitForItemAction );
+	REGISTER_BUILTIN_ACTION( BotRunToNavEntityAction );
+	REGISTER_BUILTIN_ACTION( BotPickupNavEntityAction );
+	REGISTER_BUILTIN_ACTION( BotWaitForNavEntityAction );
 
 	REGISTER_BUILTIN_ACTION( BotKillEnemyAction );
 	REGISTER_BUILTIN_ACTION( BotAdvanceToGoodPositionAction );
@@ -95,7 +95,7 @@ AiManager::AiManager( const char *gametype, const char *mapname ) {
 	REGISTER_BUILTIN_ACTION( BotAttackFromCurrentPositionAction );
 	REGISTER_BUILTIN_ACTION( BotAttackAdvancingToTargetAction );
 
-	REGISTER_BUILTIN_ACTION( BotGenericRunAvoidingCombatAction );
+	REGISTER_BUILTIN_ACTION( BotFleeToSpotAction );
 	REGISTER_BUILTIN_ACTION( BotStartGotoCoverAction );
 	REGISTER_BUILTIN_ACTION( BotTakeCoverAction );
 	REGISTER_BUILTIN_ACTION( BotStartGotoRunAwayTeleportAction );
@@ -244,7 +244,7 @@ edict_t * AiManager::ConnectFakeClient() {
 		return game.edicts + entNum;
 	}
 
-	G_Printf( "AI: Can't spawn the fake client\n" );
+	G_Printf( "AiManager::ConnectFakeClient(): Can't spawn a fake client\n" );
 	return nullptr;
 }
 
@@ -299,11 +299,11 @@ float AiManager::MakeSkillForNewBot( const gclient_t *client ) const {
 
 void AiManager::SetupBotForEntity( edict_t *ent ) {
 	if( ent->ai ) {
-		AI_FailWith( "G_SpawnAI()", "Entity AI has been already initialized\n" );
+		AI_FailWith( "AiManager::SetupBotForEntity()", "Entity AI has been already initialized\n" );
 	}
 
 	if( !( ent->r.svflags & SVF_FAKECLIENT ) ) {
-		AI_FailWith( "G_SpawnAI()", "Only fake clients are supported\n" );
+		AI_FailWith( "AiManager::SetupBotForEntity()", "Only fake clients are supported\n" );
 	}
 
 	size_t memSize = sizeof( ai_handle_t ) + sizeof( Bot );
@@ -372,7 +372,7 @@ void AiManager::RemoveBot( const char *name ) {
 			return;
 		}
 	}
-	G_Printf( "BOT: %s not found\n", name );
+	G_Printf( "AiManager::RemoveBot(): A bot `%s` has not been found\n", name );
 }
 
 void AiManager::AfterLevelScriptShutdown() {
@@ -396,54 +396,60 @@ void AiManager::BeforeLevelScriptShutdown() {
 // We have to sanitize all input values since these methods are exported to scripts
 
 void AiManager::RegisterScriptGoal( const char *goalName, void *factoryObject, unsigned updatePeriod ) {
+	constexpr const char *tag = "AiManager::RegisterScriptGoal()";
+
 	if( registeredGoals.IsFull() ) {
-		Debug( S_COLOR_RED "RegisterScriptGoal(): can't register the %s goal (too many goals)\n", goalName );
+		G_Printf( S_COLOR_RED "%s: Can't register the %s goal (too many goals)\n", tag, goalName );
 		return;
 	}
 
 	GoalProps goalProps( goalName, factoryObject, updatePeriod );
 	// Ensure map key valid lifetime, use GoalProps::name
 	if( !registeredGoals.Insert( goalProps.name, std::move( goalProps ) ) ) {
-		Debug( S_COLOR_RED "RegisterScriptGoal(): goal %s is already registered\n", goalName );
+		G_Printf( S_COLOR_RED "%s: Goal %s is already registered\n", tag, goalName );
 	}
 }
 
 void AiManager::RegisterScriptAction( const char *actionName, void *factoryObject ) {
+	constexpr const char *tag = "AiManager::RegisterScriptAction()";
+
 	if( registeredActions.IsFull() ) {
-		Debug( S_COLOR_RED "RegisterScriptAction(): can't register the %s action (too many actions)\n", actionName );
+		G_Printf( S_COLOR_RED "%s: can't register the %s action (too many actions)\n", tag, actionName );
 		return;
 	}
 
 	ActionProps actionProps( actionName, factoryObject );
 	// Ensure map key valid lifetime, user ActionProps::name
 	if( !registeredActions.Insert( actionProps.name, std::move( actionProps ) ) ) {
-		Debug( S_COLOR_RED "RegisterScriptAction(): action %s is already registered\n", actionName );
+		G_Printf( S_COLOR_RED "%s: action %s is already registered\n", tag, actionName );
 	}
 }
 
 void AiManager::AddApplicableAction( const char *goalName, const char *actionName ) {
+	constexpr const char *tag = "AiManager::AddApplicableAction";
+
 	ActionProps *actionProps = registeredActions.Get( actionName );
 	if( !actionProps ) {
-		Debug( S_COLOR_RED "AddApplicableAction(): action %s has not been registered\n", actionName );
+		G_Printf( S_COLOR_RED "%s: action %s has not been registered\n", tag, actionName );
 		return;
 	}
 
 	GoalProps *goalProps = registeredGoals.Get( goalName );
 	if( !goalProps ) {
-		Debug( S_COLOR_RED "AddApplicableAction(): goal %s has not been registered\n", goalName );
+		G_Printf( S_COLOR_RED "%s: goal %s has not been registered\n", tag, goalName );
 		return;
 	}
 
 	if( !actionProps->factoryObject && !goalProps->factoryObject ) {
 		const char *format = S_COLOR_RED
-							 "AddApplicableAction(): both goal %s and action %s are builtin "
+							 "%s: both goal %s and action %s are builtin "
 							 "(builtin action/goal relations are hardcoded for performance)\n";
-		Debug( format, goalName, actionName );
+		G_Printf( format, tag, goalName, actionName );
 		return;
 	}
 
 	if( goalProps->numApplicableActions == MAX_ACTIONS ) {
-		Debug( S_COLOR_RED "AddApplicableAction(): too many actions have already been registered\n" );
+		G_Printf( S_COLOR_RED "%s: too many actions have already been registered\n", tag );
 		return;
 	}
 
@@ -452,51 +458,56 @@ void AiManager::AddApplicableAction( const char *goalName, const char *actionNam
 }
 
 void AiManager::RegisterBuiltinGoal( const char *goalName ) {
+	constexpr const char *tag = "AiManager::RegisterBuiltinGoal()";
+
 	if( registeredGoals.IsFull() ) {
-		AI_FailWith( "AiManager::RegisterBuiltinGoal()", "Too many registered goals" );
+		AI_FailWith( tag, "Too many registered goals" );
 	}
 
 	GoalProps goalProps( goalName, nullptr, 0 );
 	// Ensure map key valid lifetime, user GoalProps::name
 	if( !registeredGoals.Insert( goalProps.name, std::move( goalProps ) ) ) {
-		AI_FailWith( "AiManager::RegisterBuiltinGoal()", "The goal %s is already registered", goalName );
+		AI_FailWith( tag, "The goal %s is already registered", goalName );
 	}
 }
 
 void AiManager::RegisterBuiltinAction( const char *actionName ) {
+	constexpr const char *tag = "AiManager::RegisterBuiltinAction()";
+
 	if( registeredActions.IsFull() ) {
-		AI_FailWith( "AiManager::RegisterBuiltinAction()", "Too many registered actions" );
+		AI_FailWith( tag, "Too many registered actions" );
 	}
 
 	ActionProps actionProps( actionName, nullptr );
 	// Ensure map key valid lifetime, use ActionProps::name.
 	if( !registeredActions.Insert( actionProps.name, std::move( actionProps ) ) ) {
-		AI_FailWith( "AiManager::RegisterBuiltinAction()", "The action %s is already registered", actionName );
+		AI_FailWith( tag, "The action %s is already registered", actionName );
 	}
 }
 
 void AiManager::SetupBotGoalsAndActions( edict_t *ent ) {
 	Bot *const bot = ent->ai->botRef;
 
-#ifdef _DEBUG
+	constexpr const char *tag = "AiManager::SetupBotGoalsAndActions()";
+
 	// Make sure all builtin goals and actions have been registered
 	bool wereErrors = false;
 	for( const auto *goal: bot->planningModule.Goals() ) {
 		if( !registeredGoals.Get( goal->Name() ) ) {
-			Debug( S_COLOR_RED "Builtin goal %s has not been registered\n", goal->Name() );
+			// Use G_Printf() as Debug() output may be turned off
+			G_Printf( S_COLOR_RED "%s: Builtin goal %s has not been registered\n", tag, goal->Name() );
 			wereErrors = true;
 		}
 	}
 	for( const auto *action: bot->planningModule.Actions() ) {
 		if( !registeredActions.Get( action->Name() ) ) {
-			Debug( S_COLOR_RED "Builtin action %s has not been registered\n", action->Name() );
+			G_Printf( S_COLOR_RED "%s: Builtin action %s has not been registered\n", tag, action->Name() );
 			wereErrors = true;
 		}
 	}
 	if( wereErrors ) {
-		AI_FailWith( "AiManager::SetupBotGoalsAndActions()", "There were errors\n" );
+		AI_FailWith( tag, "There were errors\n" );
 	}
-#endif
 
 	for( auto &goalPropsAndName: registeredGoals ) {
 		GoalProps &goalProps = goalPropsAndName.second;
