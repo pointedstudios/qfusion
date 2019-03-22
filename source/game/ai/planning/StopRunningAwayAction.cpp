@@ -1,7 +1,7 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-PlannerNode *BotStopRunningAwayAction::TryApply( const WorldState &worldState ) {
+PlannerNode *StopRunningAwayAction::TryApply( const WorldState &worldState ) {
 	if( worldState.IsRunningAwayVar().Ignore() ) {
 		Debug( "Is bot running away is ignored in the given world state\n" );
 		return nullptr;

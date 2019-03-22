@@ -1,8 +1,8 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotRunToNavEntityActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void RunToNavEntityActionRecord::Activate() {
+	BotActionRecord::Activate();
 	// Set the nav target first as it gets used by further calls
 	Self()->SetNavTarget( navEntity );
 	// Attack if view angles needed for movement fit aiming
@@ -11,12 +11,12 @@ void BotRunToNavEntityActionRecord::Activate() {
 	Self()->GetMiscTactics().shouldBeSilent = ShouldUseSneakyBehaviour( Self()->CachedWorldState() );
 }
 
-void BotRunToNavEntityActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void RunToNavEntityActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotRunToNavEntityActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status RunToNavEntityActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	const auto &selectedNavEntity = Self()->GetSelectedNavEntity();
 	if( !navEntity->IsBasedOnNavEntity( selectedNavEntity.GetNavEntity() ) ) {
 		Debug( "Nav target does no longer match selected nav entity\n" );
@@ -35,7 +35,7 @@ AiBaseActionRecord::Status BotRunToNavEntityActionRecord::UpdateStatus( const Wo
 	return VALID;
 }
 
-bool BotRunToNavEntityActionRecord::ShouldUseSneakyBehaviour( const WorldState &currWorldState ) const {
+bool RunToNavEntityActionRecord::ShouldUseSneakyBehaviour( const WorldState &currWorldState ) const {
 	// Hack for following a sneaky movement of a leader (if any).
 	if( !navEntity->IsClient() ) {
 		return false;
@@ -93,7 +93,7 @@ bool BotRunToNavEntityActionRecord::ShouldUseSneakyBehaviour( const WorldState &
 	return EntitiesPvsCache::Instance()->AreInPvs( botEnt, targetEnt );
 }
 
-PlannerNode *BotRunToNavEntityAction::TryApply( const WorldState &worldState ) {
+PlannerNode *RunToNavEntityAction::TryApply( const WorldState &worldState ) {
 	if( worldState.GoalItemWaitTimeVar().Ignore() ) {
 		Debug( "Goal item is ignored in the given world state\n" );
 		return nullptr;

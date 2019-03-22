@@ -3,7 +3,7 @@
 
 #include <stdarg.h>
 #include "../ai_base_ai.h"
-#include "BasePlanner.h"
+#include "Planner.h"
 #include "../awareness/EnemiesTracker.h"
 #include "ItemsSelector.h"
 #include "../combat/WeaponSelector.h"
@@ -12,7 +12,7 @@
 
 struct Hazard;
 
-class BotPlanner : public BasePlanner {
+class BotPlanner : public AiPlanner {
 	friend class BotPlanningModule;
 	friend class BotItemsSelector;
 	friend class BotBaseGoal;
@@ -22,8 +22,8 @@ class BotPlanner : public BasePlanner {
 	StaticVector<BotScriptGoal, MAX_GOALS> scriptGoals;
 	StaticVector<BotScriptAction, MAX_ACTIONS> scriptActions;
 
-	BotBaseGoal *GetGoalByName( const char *name );
-	BotBaseAction *GetActionByName( const char *name );
+	BotGoal *GetGoalByName( const char *name );
+	BotAction *GetActionByName( const char *name );
 
 	BotScriptGoal *AllocScriptGoal() { return scriptGoals.unsafe_grow_back(); }
 	BotScriptAction *AllocScriptAction() { return scriptActions.unsafe_grow_back(); }

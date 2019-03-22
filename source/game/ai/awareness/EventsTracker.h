@@ -1,7 +1,7 @@
 #ifndef QFUSION_BOT_PERCEPTION_MANAGER_H
 #define QFUSION_BOT_PERCEPTION_MANAGER_H
 
-#include "../planning/BasePlanner.h"
+#include "../planning/Planner.h"
 #include "../static_deque.h"
 #include "AwarenessLocal.h"
 

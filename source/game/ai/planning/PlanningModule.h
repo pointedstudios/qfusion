@@ -11,16 +11,16 @@
 class BotPlanningModule {
 	friend class Bot;
 	friend class BotPlanner;
-	friend class BotBaseAction;
-	friend class BotBaseGoal;
-	friend class BotGrabItemGoal;
-	friend class BotKillEnemyGoal;
-	friend class BotRunAwayGoal;
-	friend class BotReactToHazardGoal;
-	friend class BotReactToThreatGoal;
-	friend class BotReactToEnemyLostGoal;
-	friend class BotAttackOutOfDespairGoal;
-	friend class BotRoamGoal;
+	friend class BotAction;
+	friend class BotGoal;
+	friend class GrabItemGoal;
+	friend class KillEnemyGoal;
+	friend class RunAwayGoal;
+	friend class ReactToHazardGoal;
+	friend class ReactToThreatGoal;
+	friend class ReactToEnemyLostGoal;
+	friend class AttackOutOfDespairGoal;
+	friend class RoamGoal;
 	friend class BotTacticalSpotsCache;
 	friend class WorldState;
 
@@ -28,45 +28,45 @@ class BotPlanningModule {
 
 	BotPlanner planner;
 
-	BotGrabItemGoal grabItemGoal;
-	BotKillEnemyGoal killEnemyGoal;
-	BotRunAwayGoal runAwayGoal;
-	BotReactToHazardGoal reactToHazardGoal;
-	BotReactToThreatGoal reactToThreatGoal;
-	BotReactToEnemyLostGoal reactToEnemyLostGoal;
-	BotAttackOutOfDespairGoal attackOutOfDespairGoal;
-	BotRoamGoal roamGoal;
+	GrabItemGoal grabItemGoal;
+	KillEnemyGoal killEnemyGoal;
+	RunAwayGoal runAwayGoal;
+	ReactToHazardGoal reactToHazardGoal;
+	ReactToThreatGoal reactToThreatGoal;
+	ReactToEnemyLostGoal reactToEnemyLostGoal;
+	AttackOutOfDespairGoal attackOutOfDespairGoal;
+	RoamGoal roamGoal;
 
-	BotRunToNavEntityAction runToNavEntityAction;
-	BotPickupNavEntityAction pickupNavEntityAction;
-	BotWaitForNavEntityAction waitForNavEntityAction;
+	RunToNavEntityAction runToNavEntityAction;
+	PickupNavEntityAction pickupNavEntityAction;
+	WaitForNavEntityAction waitForNavEntityAction;
 
-	BotKillEnemyAction killEnemyAction;
-	BotAdvanceToGoodPositionAction advanceToGoodPositionAction;
-	BotRetreatToGoodPositionAction retreatToGoodPositionAction;
-	BotGotoAvailableGoodPositionAction gotoAvailableGoodPositionAction;
-	BotAttackFromCurrentPositionAction attackFromCurrentPositionAction;
-	BotAttackAdvancingToTargetAction attackAdvancingToTargetAction;
+	KillEnemyAction killEnemyAction;
+	AdvanceToGoodPositionAction advanceToGoodPositionAction;
+	RetreatToGoodPositionAction retreatToGoodPositionAction;
+	GotoAvailableGoodPositionAction gotoAvailableGoodPositionAction;
+	AttackFromCurrentPositionAction attackFromCurrentPositionAction;
+	AttackAdvancingToTargetAction attackAdvancingToTargetAction;
 
-	BotFleeToSpotAction fleeToSpotAction;
-	BotStartGotoCoverAction startGotoCoverAction;
-	BotTakeCoverAction takeCoverAction;
+	FleeToSpotAction fleeToSpotAction;
+	StartGotoCoverAction startGotoCoverAction;
+	TakeCoverAction takeCoverAction;
 
-	BotStartGotoRunAwayTeleportAction startGotoRunAwayTeleportAction;
-	BotDoRunAwayViaTeleportAction doRunAwayViaTeleportAction;
-	BotStartGotoRunAwayJumppadAction startGotoRunAwayJumppadAction;
-	BotDoRunAwayViaJumppadAction doRunAwayViaJumppadAction;
-	BotStartGotoRunAwayElevatorAction startGotoRunAwayElevatorAction;
-	BotDoRunAwayViaElevatorAction doRunAwayViaElevatorAction;
-	BotStopRunningAwayAction stopRunningAwayAction;
+	StartGotoRunAwayTeleportAction startGotoRunAwayTeleportAction;
+	DoRunAwayViaTeleportAction doRunAwayViaTeleportAction;
+	StartGotoRunAwayJumppadAction startGotoRunAwayJumppadAction;
+	DoRunAwayViaJumppadAction doRunAwayViaJumppadAction;
+	StartGotoRunAwayElevatorAction startGotoRunAwayElevatorAction;
+	DoRunAwayViaElevatorAction doRunAwayViaElevatorAction;
+	StopRunningAwayAction stopRunningAwayAction;
 
-	BotDodgeToSpotAction dodgeToSpotAction;
+	DodgeToSpotAction dodgeToSpotAction;
 
-	BotTurnToThreatOriginAction turnToThreatOriginAction;
+	TurnToThreatOriginAction turnToThreatOriginAction;
 
-	BotTurnToLostEnemyAction turnToLostEnemyAction;
-	BotStartLostEnemyPursuitAction startLostEnemyPursuitAction;
-	BotStopLostEnemyPursuitAction stopLostEnemyPursuitAction;
+	TurnToLostEnemyAction turnToLostEnemyAction;
+	StartLostEnemyPursuitAction startLostEnemyPursuitAction;
+	StopLostEnemyPursuitAction stopLostEnemyPursuitAction;
 
 	BotTacticalSpotsCache tacticalSpotsCache;
 	BotItemsSelector itemsSelector;
@@ -75,8 +75,8 @@ public:
 	// We have to provide both entity and Bot class refs due to initialization order issues
 	BotPlanningModule( edict_t *self_, Bot *bot_, float skill_ );
 
-	BotBaseGoal *GetGoalByName( const char *name ) { return planner.GetGoalByName( name ); }
-	BotBaseAction *GetActionByName( const char *name ) { return planner.GetActionByName( name ); }
+	BotGoal *GetGoalByName( const char *name ) { return planner.GetGoalByName( name ); }
+	BotAction *GetActionByName( const char *name ) { return planner.GetActionByName( name ); }
 
 	BotScriptGoal *InstantiateScriptGoal( void *scriptGoalsFactory, const char *name, unsigned updatePeriod );
 	BotScriptAction *InstantiateScriptAction( void *scriptActionsFactory, const char *name );
@@ -117,12 +117,12 @@ public:
 		planner.SetFrameAffinity( modulo, offset );
 	}
 
-	const ArrayRange<AiBaseGoal *> Goals() const {
-		return ArrayRange<AiBaseGoal *>( planner.goals.begin(), planner.goals.size() );
+	const ArrayRange<AiGoal *> Goals() const {
+		return ArrayRange<AiGoal *>( planner.goals.begin(), planner.goals.size() );
 	}
 
-	const ArrayRange<AiBaseAction *> Actions() const {
-		return ArrayRange<AiBaseAction *>( planner.actions.begin(), planner.actions.size() );
+	const ArrayRange<AiAction *> Actions() const {
+		return ArrayRange<AiAction *>( planner.actions.begin(), planner.actions.size() );
 	}
 };
 

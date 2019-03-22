@@ -237,6 +237,8 @@ public:
 	}
 };
 
+class AiPlanner;
+
 class Ai : public AiFrameAwareUpdatable
 {
 	friend class AiManager;
@@ -245,16 +247,16 @@ class Ai : public AiFrameAwareUpdatable
 	friend class AiSquadBasedTeam;
 	friend class AiObjectiveBasedTeam;
 	friend class BasePlanner;
-	friend class AiBaseAction;
-	friend class AiBaseActionRecord;
-	friend class AiBaseGoal;
+	friend class AiAction;
+	friend class AiActionRecord;
+	friend class AiGoal;
 
 protected:
 	edict_t *const self;
 	// Must be set in a subclass constructor. A subclass manages memory for its planner
 	// (it either has it as an intrusive member of allocates it on heap)
 	// and provides a reference to it to this base class via this pointer.
-	class BasePlanner *basePlanner { nullptr };
+	AiPlanner *planner { nullptr };
 	// Must be set in a subclass constructor.
 	// A subclass should decide whether a shared or separated route cache should be used.
 	// A subclass should destroy the cache instance if necessary.
@@ -335,7 +337,7 @@ public:
 	static constexpr float DEFAULT_PITCH_SPEED = 170.0f;
 
 	Ai( edict_t *self_
-	  , BasePlanner *planner_
+	  , AiPlanner *planner_
 	  , AiAasRouteCache *routeCache_
 	  , AiEntityPhysicsState *entityPhysicsState_
 	  , int preferredAasTravelFlags_

@@ -1,18 +1,18 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotFleeToSpotActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void FleeToSpotActionRecord::Activate() {
+	BotActionRecord::Activate();
 	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 	Self()->SetNavTarget( &navSpot );
 }
 
-void BotFleeToSpotActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void FleeToSpotActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotFleeToSpotActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status FleeToSpotActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	const auto &selectedEnemies = Self()->GetSelectedEnemies();
 	if( selectedEnemies.AreValid() && selectedEnemies.CouldBeHitIfBotTurns() ) {
 		Self()->GetMiscTactics().PreferAttackRatherThanRun();
@@ -29,7 +29,7 @@ AiBaseActionRecord::Status BotFleeToSpotActionRecord::UpdateStatus( const WorldS
 	return VALID;
 }
 
-PlannerNode *BotFleeToSpotAction::TryApply( const WorldState &worldState ) {
+PlannerNode *FleeToSpotAction::TryApply( const WorldState &worldState ) {
 	if( worldState.NavTargetOriginVar().Ignore() ) {
 		Debug( "Nav target is absent in the given world state\n" );
 		return nullptr;

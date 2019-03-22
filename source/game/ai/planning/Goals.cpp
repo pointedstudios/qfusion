@@ -3,25 +3,25 @@
 #include <cmath>
 #include <cstdlib>
 
-BotBaseGoal::BotBaseGoal( BotPlanningModule *module_, const char *name_, int debugColor_, unsigned updatePeriod_ )
-	: AiBaseGoal( module_->bot, name_, updatePeriod_ ), module( module_ ) {
+BotGoal::BotGoal( BotPlanningModule *module_, const char *name_, int debugColor_, unsigned updatePeriod_ )
+	: AiGoal( module_->bot, name_, updatePeriod_ ), module( module_ ) {
 	this->debugColor = debugColor_;
 }
 
-inline const SelectedNavEntity &BotBaseGoal::SelectedNavEntity() const {
+inline const SelectedNavEntity &BotGoal::SelectedNavEntity() const {
 	return Self()->GetSelectedNavEntity();
 }
 
-inline const SelectedEnemies &BotBaseGoal::SelectedEnemies() const {
+inline const SelectedEnemies &BotGoal::SelectedEnemies() const {
 	return Self()->GetSelectedEnemies();
 }
 
-inline const BotWeightConfig &BotBaseGoal::WeightConfig() const {
+inline const BotWeightConfig &BotGoal::WeightConfig() const {
 	return Self()->WeightConfig();
 }
 
-inline PlannerNode *BotBaseGoal::ApplyExtraActions( PlannerNode *firstTransition, const WorldState &worldState ) {
-	for( AiBaseAction *action: extraApplicableActions ) {
+inline PlannerNode *BotGoal::ApplyExtraActions( PlannerNode *firstTransition, const WorldState &worldState ) {
+	for( AiAction *action: extraApplicableActions ) {
 		if( PlannerNode *currTransition = action->TryApply( worldState ) ) {
 			currTransition->nextTransition = firstTransition;
 			firstTransition = currTransition;
@@ -30,7 +30,7 @@ inline PlannerNode *BotBaseGoal::ApplyExtraActions( PlannerNode *firstTransition
 	return firstTransition;
 }
 
-void BotGrabItemGoal::UpdateWeight( const WorldState &currWorldState ) {
+void GrabItemGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight = 0.0f;
 
 	if( !SelectedNavEntity().IsValid() ) {
@@ -90,7 +90,7 @@ void BotGrabItemGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight = std::min( this->weight, 1.0f );
 }
 
-void BotGrabItemGoal::GetDesiredWorldState( WorldState *worldState ) {
+void GrabItemGoal::GetDesiredWorldState( WorldState *worldState ) {
 	worldState->SetIgnoreAll( true );
 
 	worldState->HasJustPickedGoalItemVar().SetValue( true ).SetIgnore( false );
@@ -104,7 +104,7 @@ void BotGrabItemGoal::GetDesiredWorldState( WorldState *worldState ) {
 		}                                                                                    \
 	} while( 0 )
 
-PlannerNode *BotGrabItemGoal::GetWorldStateTransitions( const WorldState &worldState ) {
+PlannerNode *GrabItemGoal::GetWorldStateTransitions( const WorldState &worldState ) {
 	PlannerNode *firstTransition = nullptr;
 
 	TRY_APPLY_ACTION( runToNavEntityAction );
@@ -114,7 +114,7 @@ PlannerNode *BotGrabItemGoal::GetWorldStateTransitions( const WorldState &worldS
 	return ApplyExtraActions( firstTransition, worldState );
 }
 
-void BotKillEnemyGoal::UpdateWeight( const WorldState &currWorldState ) {
+void KillEnemyGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight = 0.0f;
 
 	if( !SelectedEnemies().AreValid() ) {
@@ -147,13 +147,13 @@ void BotKillEnemyGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight += GetAndResetAdditionalWeight();
 }
 
-void BotKillEnemyGoal::GetDesiredWorldState( WorldState *worldState ) {
+void KillEnemyGoal::GetDesiredWorldState( WorldState *worldState ) {
 	worldState->SetIgnoreAll( true );
 
 	worldState->HasJustKilledEnemyVar().SetValue( true ).SetIgnore( false );
 }
 
-PlannerNode *BotKillEnemyGoal::GetWorldStateTransitions( const WorldState &worldState ) {
+PlannerNode *KillEnemyGoal::GetWorldStateTransitions( const WorldState &worldState ) {
 	PlannerNode *firstTransition = nullptr;
 
 	TRY_APPLY_ACTION( attackAdvancingToTargetAction );
@@ -167,7 +167,7 @@ PlannerNode *BotKillEnemyGoal::GetWorldStateTransitions( const WorldState &world
 	return ApplyExtraActions( firstTransition, worldState );
 }
 
-void BotRunAwayGoal::UpdateWeight( const WorldState &currWorldState ) {
+void RunAwayGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight = 0.0f;
 
 	if( !SelectedEnemies().AreValid() ) {
@@ -201,13 +201,13 @@ void BotRunAwayGoal::UpdateWeight( const WorldState &currWorldState ) {
 	}
 }
 
-void BotRunAwayGoal::GetDesiredWorldState( WorldState *worldState ) {
+void RunAwayGoal::GetDesiredWorldState( WorldState *worldState ) {
 	worldState->SetIgnoreAll( true );
 
 	worldState->HasRunAwayVar().SetValue( true ).SetIgnore( false );
 }
 
-PlannerNode *BotRunAwayGoal::GetWorldStateTransitions( const WorldState &worldState ) {
+PlannerNode *RunAwayGoal::GetWorldStateTransitions( const WorldState &worldState ) {
 	PlannerNode *firstTransition = nullptr;
 
 	TRY_APPLY_ACTION( fleeToSpotAction );
@@ -229,7 +229,7 @@ PlannerNode *BotRunAwayGoal::GetWorldStateTransitions( const WorldState &worldSt
 	return ApplyExtraActions( firstTransition, worldState );
 }
 
-void BotAttackOutOfDespairGoal::UpdateWeight( const WorldState &currWorldState ) {
+void AttackOutOfDespairGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight = 0.0f;
 
 	if( !SelectedEnemies().AreValid() ) {
@@ -255,24 +255,24 @@ void BotAttackOutOfDespairGoal::UpdateWeight( const WorldState &currWorldState )
 	this->weight += configGroup.dmgFracCoeff * damageWeightPart;
 }
 
-void BotAttackOutOfDespairGoal::GetDesiredWorldState( WorldState *worldState ) {
+void AttackOutOfDespairGoal::GetDesiredWorldState( WorldState *worldState ) {
 	worldState->SetIgnoreAll( true );
 
 	worldState->HasJustKilledEnemyVar().SetValue( true ).SetIgnore( false );
 }
 
-void BotAttackOutOfDespairGoal::OnPlanBuildingStarted() {
+void AttackOutOfDespairGoal::OnPlanBuildingStarted() {
 	// Hack: save the bot's base offensiveness and enrage the bot
 	this->oldOffensiveness = Self()->GetBaseOffensiveness();
 	Self()->SetBaseOffensiveness( 1.0f );
 }
 
-void BotAttackOutOfDespairGoal::OnPlanBuildingCompleted( const AiBaseActionRecord *planHead ) {
+void AttackOutOfDespairGoal::OnPlanBuildingCompleted( const AiActionRecord *planHead ) {
 	// Hack: restore the bot's base offensiveness
 	Self()->SetBaseOffensiveness( this->oldOffensiveness );
 }
 
-PlannerNode *BotAttackOutOfDespairGoal::GetWorldStateTransitions( const WorldState &worldState ) {
+PlannerNode *AttackOutOfDespairGoal::GetWorldStateTransitions( const WorldState &worldState ) {
 	PlannerNode *firstTransition = nullptr;
 
 	TRY_APPLY_ACTION( advanceToGoodPositionAction );
@@ -285,13 +285,13 @@ PlannerNode *BotAttackOutOfDespairGoal::GetWorldStateTransitions( const WorldSta
 	return ApplyExtraActions( firstTransition, worldState );
 }
 
-void BotReactToHazardGoal::GetDesiredWorldState( WorldState *worldState ) {
+void ReactToHazardGoal::GetDesiredWorldState( WorldState *worldState ) {
 	worldState->SetIgnoreAll( true );
 
 	worldState->HasReactedToHazardVar().SetIgnore( false ).SetValue( true );
 }
 
-void BotReactToHazardGoal::UpdateWeight( const WorldState &currWorldState ) {
+void ReactToHazardGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight = 0.0f;
 
 	if( currWorldState.PotentialHazardDamageVar().Ignore() ) {
@@ -308,7 +308,7 @@ void BotReactToHazardGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight = weight_;
 }
 
-PlannerNode *BotReactToHazardGoal::GetWorldStateTransitions( const WorldState &worldState ) {
+PlannerNode *ReactToHazardGoal::GetWorldStateTransitions( const WorldState &worldState ) {
 	PlannerNode *firstTransition = nullptr;
 
 	TRY_APPLY_ACTION( dodgeToSpotAction );
@@ -316,7 +316,7 @@ PlannerNode *BotReactToHazardGoal::GetWorldStateTransitions( const WorldState &w
 	return ApplyExtraActions( firstTransition, worldState );
 }
 
-void BotReactToThreatGoal::UpdateWeight( const WorldState &currWorldState ) {
+void ReactToThreatGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight = 0.0f;
 
 	if( currWorldState.ThreatPossibleOriginVar().Ignore() ) {
@@ -336,13 +336,13 @@ void BotReactToThreatGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight = weight_;
 }
 
-void BotReactToThreatGoal::GetDesiredWorldState( WorldState *worldState ) {
+void ReactToThreatGoal::GetDesiredWorldState( WorldState *worldState ) {
 	worldState->SetIgnoreAll( true );
 
 	worldState->HasReactedToThreatVar().SetIgnore( false ).SetValue( true );
 }
 
-PlannerNode *BotReactToThreatGoal::GetWorldStateTransitions( const WorldState &worldState ) {
+PlannerNode *ReactToThreatGoal::GetWorldStateTransitions( const WorldState &worldState ) {
 	PlannerNode *firstTransition = nullptr;
 
 	TRY_APPLY_ACTION( turnToThreatOriginAction );
@@ -350,7 +350,7 @@ PlannerNode *BotReactToThreatGoal::GetWorldStateTransitions( const WorldState &w
 	return ApplyExtraActions( firstTransition, worldState );
 }
 
-void BotReactToEnemyLostGoal::UpdateWeight( const WorldState &currWorldState ) {
+void ReactToEnemyLostGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight = 0.0f;
 
 	if( currWorldState.LostEnemyLastSeenOriginVar().Ignore() ) {
@@ -385,13 +385,13 @@ void BotReactToEnemyLostGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight *= 1.25f + 3.0f * ( 1.0f - std::sqrt( distanceToEnemy / 192.0f ) ) * offensiveness;
 }
 
-void BotReactToEnemyLostGoal::GetDesiredWorldState( WorldState *worldState ) {
+void ReactToEnemyLostGoal::GetDesiredWorldState( WorldState *worldState ) {
 	worldState->SetIgnoreAll( true );
 
 	worldState->HasReactedToEnemyLostVar().SetIgnore( false ).SetValue( true );
 }
 
-PlannerNode *BotReactToEnemyLostGoal::GetWorldStateTransitions( const WorldState &worldState ) {
+PlannerNode *ReactToEnemyLostGoal::GetWorldStateTransitions( const WorldState &worldState ) {
 	PlannerNode *firstTransition = nullptr;
 
 	TRY_APPLY_ACTION( turnToLostEnemyAction );
@@ -402,7 +402,7 @@ PlannerNode *BotReactToEnemyLostGoal::GetWorldStateTransitions( const WorldState
 	return ApplyExtraActions( firstTransition, worldState );
 }
 
-void BotRoamGoal::UpdateWeight( const WorldState &currWorldState ) {
+void RoamGoal::UpdateWeight( const WorldState &currWorldState ) {
 	// This goal is a fallback goal. Set the lowest feasible weight if it should be positive.
 	if( Self()->ShouldUseRoamSpotAsNavTarget() ) {
 		this->weight = 0.000001f;
@@ -412,7 +412,7 @@ void BotRoamGoal::UpdateWeight( const WorldState &currWorldState ) {
 	this->weight = 0.0f;
 }
 
-void BotRoamGoal::GetDesiredWorldState( WorldState *worldState ) {
+void RoamGoal::GetDesiredWorldState( WorldState *worldState ) {
 	worldState->SetIgnoreAll( true );
 
 	const Vec3 &spotOrigin = module->roamingManager.GetCachedRoamingSpot();
@@ -421,7 +421,7 @@ void BotRoamGoal::GetDesiredWorldState( WorldState *worldState ) {
 	worldState->BotOriginVar().SetIgnore( false );
 }
 
-PlannerNode *BotRoamGoal::GetWorldStateTransitions( const WorldState &worldState ) {
+PlannerNode *RoamGoal::GetWorldStateTransitions( const WorldState &worldState ) {
 	PlannerNode *firstTransition = nullptr;
 
 	TRY_APPLY_ACTION( fleeToSpotAction );
@@ -445,6 +445,6 @@ void BotScriptGoal::OnPlanBuildingStarted() {
 	GENERIC_asOnScriptGoalPlanBuildingStarted( scriptObject );
 }
 
-void BotScriptGoal::OnPlanBuildingCompleted( const AiBaseActionRecord *planHead ) {
+void BotScriptGoal::OnPlanBuildingCompleted( const AiActionRecord *planHead ) {
 	GENERIC_asOnScriptGoalPlanBuildingCompleted( scriptObject, planHead != nullptr );
 }

@@ -1,5 +1,5 @@
 #include "ai_manager.h"
-#include "planning/BasePlanner.h"
+#include "planning/Planner.h"
 #include "teamplay/BaseTeam.h"
 #include "bot_evolution_manager.h"
 #include "bot.h"
@@ -72,47 +72,47 @@ bool AiManager::StringValueMap<T, N>::Insert( const char *key, T &&value ) {
 AiManager::AiManager( const char *gametype, const char *mapname ) {
 	std::fill_n( teams, MAX_CLIENTS, TEAM_SPECTATOR );
 
-	REGISTER_BUILTIN_GOAL( BotGrabItemGoal );
-	REGISTER_BUILTIN_GOAL( BotKillEnemyGoal );
-	REGISTER_BUILTIN_GOAL( BotRunAwayGoal );
-	REGISTER_BUILTIN_GOAL( BotReactToHazardGoal );
-	REGISTER_BUILTIN_GOAL( BotReactToThreatGoal );
-	REGISTER_BUILTIN_GOAL( BotReactToEnemyLostGoal );
-	REGISTER_BUILTIN_GOAL( BotAttackOutOfDespairGoal );
-	REGISTER_BUILTIN_GOAL( BotRoamGoal );
+	REGISTER_BUILTIN_GOAL( GrabItemGoal );
+	REGISTER_BUILTIN_GOAL( KillEnemyGoal );
+	REGISTER_BUILTIN_GOAL( RunAwayGoal );
+	REGISTER_BUILTIN_GOAL( ReactToHazardGoal );
+	REGISTER_BUILTIN_GOAL( ReactToThreatGoal );
+	REGISTER_BUILTIN_GOAL( ReactToEnemyLostGoal );
+	REGISTER_BUILTIN_GOAL( AttackOutOfDespairGoal );
+	REGISTER_BUILTIN_GOAL( RoamGoal );
 
 	// Do not clear built-in goals later
 	registeredGoals.MarkClearLimit();
 
-	REGISTER_BUILTIN_ACTION( BotRunToNavEntityAction );
-	REGISTER_BUILTIN_ACTION( BotPickupNavEntityAction );
-	REGISTER_BUILTIN_ACTION( BotWaitForNavEntityAction );
+	REGISTER_BUILTIN_ACTION( RunToNavEntityAction );
+	REGISTER_BUILTIN_ACTION( PickupNavEntityAction );
+	REGISTER_BUILTIN_ACTION( WaitForNavEntityAction );
 
-	REGISTER_BUILTIN_ACTION( BotKillEnemyAction );
-	REGISTER_BUILTIN_ACTION( BotAdvanceToGoodPositionAction );
-	REGISTER_BUILTIN_ACTION( BotRetreatToGoodPositionAction );
-	REGISTER_BUILTIN_ACTION( BotGotoAvailableGoodPositionAction );
-	REGISTER_BUILTIN_ACTION( BotAttackFromCurrentPositionAction );
-	REGISTER_BUILTIN_ACTION( BotAttackAdvancingToTargetAction );
+	REGISTER_BUILTIN_ACTION( KillEnemyAction );
+	REGISTER_BUILTIN_ACTION( AdvanceToGoodPositionAction );
+	REGISTER_BUILTIN_ACTION( RetreatToGoodPositionAction );
+	REGISTER_BUILTIN_ACTION( GotoAvailableGoodPositionAction );
+	REGISTER_BUILTIN_ACTION( AttackFromCurrentPositionAction );
+	REGISTER_BUILTIN_ACTION( AttackAdvancingToTargetAction );
 
-	REGISTER_BUILTIN_ACTION( BotFleeToSpotAction );
-	REGISTER_BUILTIN_ACTION( BotStartGotoCoverAction );
-	REGISTER_BUILTIN_ACTION( BotTakeCoverAction );
-	REGISTER_BUILTIN_ACTION( BotStartGotoRunAwayTeleportAction );
-	REGISTER_BUILTIN_ACTION( BotDoRunAwayViaTeleportAction );
-	REGISTER_BUILTIN_ACTION( BotStartGotoRunAwayJumppadAction );
-	REGISTER_BUILTIN_ACTION( BotDoRunAwayViaJumppadAction );
-	REGISTER_BUILTIN_ACTION( BotStartGotoRunAwayElevatorAction );
-	REGISTER_BUILTIN_ACTION( BotDoRunAwayViaElevatorAction );
-	REGISTER_BUILTIN_ACTION( BotStopRunningAwayAction );
+	REGISTER_BUILTIN_ACTION( FleeToSpotAction );
+	REGISTER_BUILTIN_ACTION( StartGotoCoverAction );
+	REGISTER_BUILTIN_ACTION( TakeCoverAction );
+	REGISTER_BUILTIN_ACTION( StartGotoRunAwayTeleportAction );
+	REGISTER_BUILTIN_ACTION( DoRunAwayViaTeleportAction );
+	REGISTER_BUILTIN_ACTION( StartGotoRunAwayJumppadAction );
+	REGISTER_BUILTIN_ACTION( DoRunAwayViaJumppadAction );
+	REGISTER_BUILTIN_ACTION( StartGotoRunAwayElevatorAction );
+	REGISTER_BUILTIN_ACTION( DoRunAwayViaElevatorAction );
+	REGISTER_BUILTIN_ACTION( StopRunningAwayAction );
 
-	REGISTER_BUILTIN_ACTION( BotDodgeToSpotAction );
+	REGISTER_BUILTIN_ACTION( DodgeToSpotAction );
 
-	REGISTER_BUILTIN_ACTION( BotTurnToThreatOriginAction );
+	REGISTER_BUILTIN_ACTION( TurnToThreatOriginAction );
 
-	REGISTER_BUILTIN_ACTION( BotTurnToLostEnemyAction );
-	REGISTER_BUILTIN_ACTION( BotStartLostEnemyPursuitAction );
-	REGISTER_BUILTIN_ACTION( BotStopLostEnemyPursuitAction );
+	REGISTER_BUILTIN_ACTION( TurnToLostEnemyAction );
+	REGISTER_BUILTIN_ACTION( StartLostEnemyPursuitAction );
+	REGISTER_BUILTIN_ACTION( StopLostEnemyPursuitAction );
 
 	// Do not clear builtin actions later
 	registeredActions.MarkClearLimit();
@@ -512,7 +512,7 @@ void AiManager::SetupBotGoalsAndActions( edict_t *ent ) {
 	for( auto &goalPropsAndName: registeredGoals ) {
 		GoalProps &goalProps = goalPropsAndName.second;
 		// If the goal is builtin
-		BotBaseGoal *goal;
+		BotGoal *goal;
 		if( !goalProps.factoryObject ) {
 			goal = bot->GetGoalByName( goalProps.name );
 		} else {
@@ -522,7 +522,7 @@ void AiManager::SetupBotGoalsAndActions( edict_t *ent ) {
 		for( unsigned i = 0; i < goalProps.numApplicableActions; ++i ) {
 			const char *actionName = goalProps.applicableActions[i];
 			ActionProps *actionProps = registeredActions.Get( actionName );
-			BotBaseAction *action;
+			BotAction *action;
 			// If the action is builtin
 			if( !actionProps->factoryObject ) {
 				action = bot->GetActionByName( actionProps->name );

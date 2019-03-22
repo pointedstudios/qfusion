@@ -9,22 +9,22 @@
 #include <stdarg.h>
 
 BotPlanner::BotPlanner( edict_t *self_, BotPlanningModule *module_, float skillLevel_ )
-	: BasePlanner( self_ ), module( module_ ), cachedWorldState( module_->bot ) {}
+	: AiPlanner( self_ ), module( module_ ), cachedWorldState( module_->bot ) {}
 
-BotBaseGoal *BotPlanner::GetGoalByName( const char *name ) {
-	for( unsigned i = 0; i < scriptGoals.size(); ++i ) {
-		if( !Q_stricmp( name, scriptGoals[i].Name() ) ) {
-			return &scriptGoals[i];
+BotGoal *BotPlanner::GetGoalByName( const char *name ) {
+	for( auto &goal: scriptGoals ) {
+		if( !Q_stricmp( name, goal.Name() ) ) {
+			return &goal;
 		}
 	}
 
 	return nullptr;
 }
 
-BotBaseAction *BotPlanner::GetActionByName( const char *name ) {
-	for( unsigned i = 0; i < scriptActions.size(); ++i ) {
-		if( !Q_stricmp( name, scriptActions[i].Name() ) ) {
-			return &scriptActions[i];
+BotAction *BotPlanner::GetActionByName( const char *name ) {
+	for( auto &action: scriptActions ) {
+		if( !Q_stricmp( name, action.Name() ) ) {
+			return &action;
 		}
 	}
 
@@ -233,7 +233,7 @@ bool BotPlanner::ShouldSkipPlanning() const {
 }
 
 void BotPlanner::BeforePlanning() {
-	BasePlanner::BeforePlanning();
+	AiPlanner::BeforePlanning();
 
 	module->tacticalSpotsCache.Clear();
 }

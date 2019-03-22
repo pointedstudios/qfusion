@@ -55,7 +55,7 @@ static const asEnumVal_t asWeaponAimTypeEnumVals[] =
     ASLIB_ENUM_VAL_NULL
 };
 
-#define DECLARE_ACTION_RECORD_STATUS_ENUM_VAL(value) { "AI_ACTION_RECORD_STATUS_" #value, (int)AiBaseActionRecord::value }
+#define DECLARE_ACTION_RECORD_STATUS_ENUM_VAL(value) { "AI_ACTION_RECORD_STATUS_" #value, (int)AiActionRecord::value }
 
 static const asEnumVal_t asActionRecordStatusEnumVals[] =
 {
@@ -2032,7 +2032,7 @@ void GENERIC_asDeleteScriptActionRecord(void *scriptObject)
 static auto checkScriptActionRecordStatusFunc =
     gtAIFunctionsRegistry.Function2<int, void *, const WorldState *>(
         "int GENERIC_UpdateScriptActionRecordStatus( AIScriptActionRecord &record, const AIWorldState &worldState )",
-        (int)AiBaseActionRecord::Status::VALID);
+        (int)AiActionRecord::Status::VALID);
 
 int GENERIC_asUpdateScriptActionRecordStatus(void *scriptObject, const WorldState &worldState)
 {

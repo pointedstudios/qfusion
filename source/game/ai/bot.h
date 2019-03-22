@@ -93,7 +93,7 @@ class Bot: public Ai {
 	friend class TacticalSpotsRegistry;
 	friend class BotNavMeshQueryCache;
 	friend class BotTacticalSpotsCache;
-	friend class BotRoamGoal;
+	friend class RoamGoal;
 	friend class WorldState;
 
 	friend class BotMovementModule;
@@ -290,11 +290,11 @@ public:
 	 */
 	float FovDotFactor() const { return cosf( (float)DEG2RAD( Fov() / 2 ) ); }
 
-	BotBaseGoal *GetGoalByName( const char *name ) {
+	BotGoal *GetGoalByName( const char *name ) {
 		return planningModule.GetGoalByName( name );
 	}
 
-	BotBaseAction *GetActionByName( const char *name ) {
+	BotAction *GetActionByName( const char *name ) {
 		return planningModule.GetActionByName( name );
 	}
 
@@ -462,7 +462,7 @@ public:
 	void ForceSetNavEntity( const SelectedNavEntity &selectedNavEntity_ );
 
 	void ForcePlanBuilding() {
-		basePlanner->ClearGoalAndPlan();
+		planner->ClearGoalAndPlan();
 	}
 
 	void SetCampingSpot( const AiCampingSpot &campingSpot ) {

@@ -10,11 +10,11 @@
 #include "../ai_base_ai.h"
 #include "WorldState.h"
 
-class AiBaseGoal {
+class AiGoal {
 	friend class Ai;
-	friend class BasePlanner;
+	friend class AiPlanner;
 
-	static inline void Register( Ai *ai, AiBaseGoal *goal );
+	static inline void Register( Ai *ai, AiGoal *goal );
 protected:
 	Ai *const self;
 	const char *name;
@@ -24,24 +24,24 @@ protected:
 
 public:
 	// Don't pass self as a constructor argument (self->ai ptr might not been set yet)
-	AiBaseGoal( Ai *self_, const char *name_, unsigned updatePeriod_ )
+	AiGoal( Ai *self_, const char *name_, unsigned updatePeriod_ )
 		: self( self_ ), name( name_ ), updatePeriod( updatePeriod_ ) {
 		Register( self_, this );
 	}
 
-	virtual ~AiBaseGoal() = default;
+	virtual ~AiGoal() = default;
 
 	virtual void UpdateWeight( const WorldState &worldState ) = 0;
 	virtual void GetDesiredWorldState( WorldState *worldState ) = 0;
 	virtual struct PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) = 0;
 
 	virtual void OnPlanBuildingStarted() {}
-	virtual void OnPlanBuildingCompleted( const class AiBaseActionRecord *planHead ) {}
+	virtual void OnPlanBuildingCompleted( const class AiActionRecord *planHead ) {}
 
 	bool IsRelevant() const { return weight > 0; }
 
 	// More important goals are first after sorting goals array
-	bool operator<( const AiBaseGoal &that ) const {
+	bool operator<( const AiGoal &that ) const {
 		return this->weight > that.weight;
 	}
 
@@ -51,7 +51,7 @@ public:
 	unsigned UpdatePeriod() const { return updatePeriod; }
 };
 
-class AiBaseActionRecord : public PoolItem {
+class AiActionRecord : public PoolItem {
 	friend class AiBaseAction;
 protected:
 	Ai *const self;
@@ -70,9 +70,9 @@ protected:
 	}
 
 public:
-	AiBaseActionRecord *nextInPlan { nullptr };
+	AiActionRecord *nextInPlan { nullptr };
 
-	AiBaseActionRecord( PoolBase *pool_, Ai *self_, const char *name_ )
+	AiActionRecord( PoolBase *pool_, Ai *self_, const char *name_ )
 		: PoolItem( pool_ ), self( self_ ), name( name_ ) {}
 
 	virtual void Activate() {
@@ -98,7 +98,7 @@ struct PlannerNode : PoolItem {
 	// World state after applying an action
 	WorldState worldState;
 	// An action record to apply
-	AiBaseActionRecord *actionRecord { nullptr };
+	AiActionRecord *actionRecord { nullptr };
 	// Used to reconstruct a plan
 	PlannerNode *parent { nullptr };
 	// Next in linked list of transitions for current node
@@ -138,11 +138,11 @@ struct PlannerNode : PoolItem {
 	}
 };
 
-class AiBaseAction {
+class AiAction {
 	friend class Ai;
 	friend class BasePlanner;
 
-	static inline void Register( Ai *ai, AiBaseAction *action );
+	static inline void Register( Ai *ai, AiAction *action );
 
 protected:
 	Ai *self;
@@ -192,28 +192,28 @@ protected:
 		operator bool() const { return node != nullptr; }
 	};
 
-	PlannerNodePtr NewNodeForRecord( AiBaseActionRecord *record );
+	PlannerNodePtr NewNodeForRecord( AiActionRecord *record );
 public:
 	// Don't pass self as a constructor argument (self->ai ptr might not been set yet)
-	AiBaseAction( Ai *self_, const char *name_ )
+	AiAction( Ai *self_, const char *name_ )
 		: self( self_ ), name( name_ ) {
 		Register( self_, this );
 	}
 
-	virtual ~AiBaseAction() = default;
+	virtual ~AiAction() = default;
 
 	const char *Name() const { return name; }
 
 	virtual PlannerNode *TryApply( const WorldState &worldState ) = 0;
 };
 
-class BasePlanner : public AiFrameAwareUpdatable {
+class AiPlanner : public AiFrameAwareUpdatable {
 	friend class Ai;
 	friend class AiManager;
 	friend class AiBaseTeam;
-	friend class AiBaseGoal;
-	friend class AiBaseAction;
-	friend class AiBaseActionRecord;
+	friend class AiGoal;
+	friend class AiAction;
+	friend class AiActionRecord;
 
 public:
 	static constexpr unsigned MAX_GOALS = 12;
@@ -222,17 +222,17 @@ public:
 protected:
 	edict_t *const self;
 
-	AiBaseActionRecord *planHead { nullptr };
-	AiBaseGoal *activeGoal { nullptr };
+	AiActionRecord *planHead { nullptr };
+	AiGoal *activeGoal { nullptr };
 	int64_t nextActiveGoalUpdateAt { 0 };
 
-	StaticVector<AiBaseGoal *, MAX_GOALS> goals;
-	StaticVector<AiBaseAction *, MAX_ACTIONS> actions;
+	StaticVector<AiGoal *, MAX_GOALS> goals;
+	StaticVector<AiAction *, MAX_ACTIONS> actions;
 
 	static constexpr unsigned MAX_PLANNER_NODES = 384;
 	Pool<PlannerNode, MAX_PLANNER_NODES> plannerNodesPool { "PlannerNodesPool" };
 
-	explicit BasePlanner( edict_t *self_ ): self( self_ ) {}
+	explicit AiPlanner( edict_t *self_ ): self( self_ ) {}
 
 	virtual void PrepareCurrWorldState( WorldState *worldState ) = 0;
 
@@ -243,11 +243,11 @@ protected:
 	bool FindNewGoalAndPlan( const WorldState &currWorldState );
 
 	// Allowed to be overridden in a subclass for class-specific optimization purposes
-	virtual AiBaseActionRecord *BuildPlan( AiBaseGoal *goal, const WorldState &startWorldState );
+	virtual AiActionRecord *BuildPlan( AiGoal *goal, const WorldState &startWorldState );
 
-	AiBaseActionRecord *ReconstructPlan( PlannerNode *lastNode ) const;
+	AiActionRecord *ReconstructPlan( PlannerNode *lastNode ) const;
 
-	void SetGoalAndPlan( AiBaseGoal *goal_, AiBaseActionRecord *planHead_ );
+	void SetGoalAndPlan( AiGoal *goal_, AiActionRecord *planHead_ );
 
 	void Think() override;
 
@@ -258,28 +258,27 @@ public:
 
 	void ClearGoalAndPlan();
 
-	void DeletePlan( AiBaseActionRecord *head );
+	void DeletePlan( AiActionRecord *head );
 };
 
-inline void AiBaseGoal::Register( Ai *ai, AiBaseGoal *goal ) {
-	assert( ai );
-	assert( ai->basePlanner );
-	ai->basePlanner->goals.push_back( goal );
+inline void AiGoal::Register( Ai *ai, AiGoal *goal ) {
+	assert( ai && ai->planner );
+	ai->planner->goals.push_back( goal );
 }
 
-inline void AiBaseAction::Register( Ai *ai, AiBaseAction *action ) {
+inline void AiAction::Register( Ai *ai, AiAction *action ) {
 	assert( ai );
-	assert( ai->basePlanner );
-	ai->basePlanner->actions.push_back( action );
+	assert( ai->planner );
+	ai->planner->actions.push_back( action );
 }
 
-inline AiBaseAction::PlannerNodePtr::~PlannerNodePtr() {
+inline AiAction::PlannerNodePtr::~PlannerNodePtr() {
 	if( this->node ) {
 		this->node->DeleteSelf();
 	}
 }
 
-inline PlannerNode *AiBaseAction::PlannerNodePtr::PrepareActionResult() {
+inline PlannerNode *AiAction::PlannerNodePtr::PrepareActionResult() {
 	PlannerNode *result = this->node;
 	this->node = nullptr;
 
@@ -296,11 +295,11 @@ inline PlannerNode *AiBaseAction::PlannerNodePtr::PrepareActionResult() {
 	return result;
 }
 
-inline WorldState &AiBaseAction::PlannerNodePtr::WorldState() {
+inline WorldState &AiAction::PlannerNodePtr::WorldState() {
 	return node->worldState;
 }
 
-inline float &AiBaseAction::PlannerNodePtr::Cost() {
+inline float &AiAction::PlannerNodePtr::Cost() {
 	return node->transitionCost;
 }
 

@@ -1,20 +1,20 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotAdvanceToGoodPositionActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void AdvanceToGoodPositionActionRecord::Activate() {
+	BotActionRecord::Activate();
 	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 	// Set a hint for weapon selection
 	Self()->GetMiscTactics().willAdvance = true;
 	Self()->SetNavTarget( &navSpot );
 }
 
-void BotAdvanceToGoodPositionActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void AdvanceToGoodPositionActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotAdvanceToGoodPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status AdvanceToGoodPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( !CheckCommonCombatConditions( currWorldState ) ) {
 		return INVALID;
 	}
@@ -27,7 +27,7 @@ AiBaseActionRecord::Status BotAdvanceToGoodPositionActionRecord::UpdateStatus( c
 }
 
 
-PlannerNode *BotAdvanceToGoodPositionAction::TryApply( const WorldState &worldState ) {
+PlannerNode *AdvanceToGoodPositionAction::TryApply( const WorldState &worldState ) {
 	if( worldState.EnemyOriginVar().Ignore() ) {
 		Debug( "Enemy is ignored in the given world state\n" );
 		return nullptr;

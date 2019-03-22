@@ -1,18 +1,18 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotTurnToLostEnemyActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void TurnToLostEnemyActionRecord::Activate() {
+	BotActionRecord::Activate();
 	Self()->SetPendingLookAtPoint( AiPendingLookAtPoint( lastSeenEnemyOrigin, 3.0f ), 400 );
 	Self()->GetMiscTactics().PreferRunRatherThanAttack();
 }
 
-void BotTurnToLostEnemyActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void TurnToLostEnemyActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetPendingLookAtPoint();
 }
 
-AiBaseActionRecord::Status BotTurnToLostEnemyActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status TurnToLostEnemyActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	const edict_t *ent = game.edicts + Self()->EntNum();
 
 	vec3_t lookDir;
@@ -29,7 +29,7 @@ AiBaseActionRecord::Status BotTurnToLostEnemyActionRecord::UpdateStatus( const W
 	return Self()->HasPendingLookAtPoint() ? VALID : INVALID;
 }
 
-PlannerNode *BotTurnToLostEnemyAction::TryApply( const WorldState &worldState ) {
+PlannerNode *TurnToLostEnemyAction::TryApply( const WorldState &worldState ) {
 	if( worldState.IsReactingToEnemyLostVar().Ignore() ) {
 		Debug( "Is bot reacting to enemy lost is ignored in the given world state\n" );
 		return nullptr;

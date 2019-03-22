@@ -1,7 +1,7 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-PlannerNode *BotStartGotoRunAwayTeleportAction::TryApply( const WorldState &worldState ) {
+PlannerNode *StartGotoRunAwayTeleportAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}
@@ -44,17 +44,17 @@ PlannerNode *BotStartGotoRunAwayTeleportAction::TryApply( const WorldState &worl
 	return plannerNode.PrepareActionResult();
 }
 
-void BotDoRunAwayViaTeleportActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void DoRunAwayViaTeleportActionRecord::Activate() {
+	BotActionRecord::Activate();
 	Self()->SetNavTarget( &navSpot );
 }
 
-void BotDoRunAwayViaTeleportActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void DoRunAwayViaTeleportActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-PlannerNode *BotDoRunAwayViaTeleportAction::TryApply( const WorldState &worldState ) {
+PlannerNode *DoRunAwayViaTeleportAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}
@@ -113,7 +113,7 @@ PlannerNode *BotDoRunAwayViaTeleportAction::TryApply( const WorldState &worldSta
 	return plannerNode.PrepareActionResult();
 }
 
-AiBaseActionRecord::Status BotDoRunAwayViaTeleportActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status DoRunAwayViaTeleportActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( currWorldState.HasJustTeleportedVar().Ignore() ) {
 		Debug( "Has bot just teleported is ignored\n" );
 		return INVALID;

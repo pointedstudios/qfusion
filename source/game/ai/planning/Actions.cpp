@@ -3,11 +3,11 @@
 #include "../ai_ground_trace_cache.h"
 #include "../combat/TacticalSpotsRegistry.h"
 
-BotBaseActionRecord::BotBaseActionRecord( PoolBase *pool_, Bot *self_, const char *name_ )
-	: AiBaseActionRecord( pool_, self_, name_ ) {}
+BotActionRecord::BotActionRecord( PoolBase *pool_, Bot *self_, const char *name_ )
+	: AiActionRecord( pool_, self_, name_ ) {}
 
-BotBaseAction::BotBaseAction( BotPlanningModule *module_, const char *name_ )
-	: AiBaseAction( module_->bot, name_ ), module( module_ ) {}
+BotAction::BotAction( BotPlanningModule *module_, const char *name_ )
+	: AiAction( module_->bot, name_ ), module( module_ ) {}
 
 typedef WorldState::SatisfyOp SatisfyOp;
 
@@ -45,21 +45,21 @@ const short *WorldState::GetRunAwayElevatorOrigin() {
 	return Self()->planningModule.tacticalSpotsCache.GetRunAwayElevatorOrigin( BotOriginData(), EnemyOriginData() );
 }
 
-inline const BotWeightConfig &BotBaseAction::WeightConfig() const {
+inline const BotWeightConfig &BotAction::WeightConfig() const {
 	return Self()->WeightConfig();
 }
 
-void BotBaseActionRecord::Activate() {
-	AiBaseActionRecord::Activate();
+void BotActionRecord::Activate() {
+	AiActionRecord::Activate();
 	Self()->GetMiscTactics().Clear();
 }
 
-void BotBaseActionRecord::Deactivate() {
-	AiBaseActionRecord::Deactivate();
+void BotActionRecord::Deactivate() {
+	AiActionRecord::Deactivate();
 	Self()->GetMiscTactics().Clear();
 }
 
-bool BotCombatActionRecord::CheckCommonCombatConditions( const WorldState &currWorldState ) const {
+bool CombatActionRecord::CheckCommonCombatConditions( const WorldState &currWorldState ) const {
 	if( currWorldState.EnemyOriginVar().Ignore() ) {
 		Debug( "Enemy is not specified\n" );
 		return false;
@@ -76,17 +76,17 @@ BotScriptActionRecord::~BotScriptActionRecord() {
 }
 
 void BotScriptActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+	BotActionRecord::Activate();
 	GENERIC_asActivateScriptActionRecord( scriptObject );
 }
 
 void BotScriptActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+	BotActionRecord::Deactivate();
 	GENERIC_asDeactivateScriptActionRecord( scriptObject );
 }
 
-AiBaseActionRecord::Status BotScriptActionRecord::UpdateStatus( const WorldState &currWorldState ) {
-	return (AiBaseActionRecord::Status)GENERIC_asUpdateScriptActionRecordStatus( scriptObject, currWorldState );
+AiActionRecord::Status BotScriptActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+	return (AiActionRecord::Status)GENERIC_asUpdateScriptActionRecordStatus( scriptObject, currWorldState );
 }
 
 PlannerNode *BotScriptAction::TryApply( const WorldState &worldState ) {

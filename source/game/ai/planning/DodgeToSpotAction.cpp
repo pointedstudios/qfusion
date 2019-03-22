@@ -1,19 +1,19 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotDodgeToSpotActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void DodgeToSpotActionRecord::Activate() {
+	BotActionRecord::Activate();
 	Self()->SetNavTarget( &navSpot );
 	timeoutAt = level.time + Hazard::TIMEOUT;
 	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 }
 
-void BotDodgeToSpotActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void DodgeToSpotActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotDodgeToSpotActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status DodgeToSpotActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	// If the bot has reached the spot, consider the action completed
 	// (use a low threshold because dodging is a precise movement)
 	if( ( navSpot.Origin() - Self()->Origin() ).SquaredLength() < 16 * 16 ) {
@@ -24,7 +24,7 @@ AiBaseActionRecord::Status BotDodgeToSpotActionRecord::UpdateStatus( const World
 	return timeoutAt > level.time ? VALID : INVALID;
 }
 
-PlannerNode *BotDodgeToSpotAction::TryApply( const WorldState &worldState ) {
+PlannerNode *DodgeToSpotAction::TryApply( const WorldState &worldState ) {
 	if( worldState.PotentialHazardDamageVar().Ignore() ) {
 		Debug( "Potential hazard damage is ignored in the given world state\n" );
 		return nullptr;

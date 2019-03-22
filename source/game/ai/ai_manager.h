@@ -1,7 +1,7 @@
 #ifndef QFUSION_AI_MANAGER_H
 #define QFUSION_AI_MANAGER_H
 
-#include "planning/BasePlanner.h"
+#include "planning/Planner.h"
 #include "ai_frame_aware_updatable.h"
 #include "planning/GoalEntities.h"
 #include "static_vector.h"
@@ -10,8 +10,8 @@ class Bot;
 
 class AiManager : public AiFrameAwareUpdatable
 {
-	static const unsigned MAX_ACTIONS = BasePlanner::MAX_ACTIONS;
-	static const unsigned MAX_GOALS = BasePlanner::MAX_GOALS;
+	static const unsigned MAX_ACTIONS = AiPlanner::MAX_ACTIONS;
+	static const unsigned MAX_GOALS = AiPlanner::MAX_GOALS;
 
 protected:
 	AiManager( const char *gametype, const char *mapname );

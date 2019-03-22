@@ -2,7 +2,7 @@
 #include "../bot.h"
 #include "../ai_ground_trace_cache.h"
 
-PlannerNode *BotStartGotoRunAwayElevatorAction::TryApply( const WorldState &worldState ) {
+PlannerNode *StartGotoRunAwayElevatorAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}
@@ -45,17 +45,17 @@ PlannerNode *BotStartGotoRunAwayElevatorAction::TryApply( const WorldState &worl
 	return plannerNode.PrepareActionResult();
 }
 
-void BotDoRunAwayViaElevatorActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void DoRunAwayViaElevatorActionRecord::Activate() {
+	BotActionRecord::Activate();
 	Self()->SetNavTarget( &navSpot );
 }
 
-void BotDoRunAwayViaElevatorActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void DoRunAwayViaElevatorActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotDoRunAwayViaElevatorActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status DoRunAwayViaElevatorActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	// Checking of this action record differs from other run away action record.
 	// We want the bot to stand on a platform until it finishes its movement.
 
@@ -91,7 +91,7 @@ AiBaseActionRecord::Status BotDoRunAwayViaElevatorActionRecord::UpdateStatus( co
 	return VALID;
 }
 
-PlannerNode *BotDoRunAwayViaElevatorAction::TryApply( const WorldState &worldState ) {
+PlannerNode *DoRunAwayViaElevatorAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}

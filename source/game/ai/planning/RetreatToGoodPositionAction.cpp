@@ -1,20 +1,20 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotRetreatToGoodPositionActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void RetreatToGoodPositionActionRecord::Activate() {
+	BotActionRecord::Activate();
 	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 	// Set a hint for weapon selection
 	Self()->GetMiscTactics().willRetreat = true;
 	Self()->SetNavTarget( &navSpot );
 }
 
-void BotRetreatToGoodPositionActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void RetreatToGoodPositionActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotRetreatToGoodPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status RetreatToGoodPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( !CheckCommonCombatConditions( currWorldState ) ) {
 		return INVALID;
 	}
@@ -26,7 +26,7 @@ AiBaseActionRecord::Status BotRetreatToGoodPositionActionRecord::UpdateStatus( c
 	return VALID;
 }
 
-PlannerNode *BotRetreatToGoodPositionAction::TryApply( const WorldState &worldState ) {
+PlannerNode *RetreatToGoodPositionAction::TryApply( const WorldState &worldState ) {
 	if( worldState.EnemyOriginVar().Ignore() ) {
 		Debug( "Enemy is ignored in the given world state\n" );
 		return nullptr;

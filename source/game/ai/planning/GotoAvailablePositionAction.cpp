@@ -1,19 +1,19 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotGotoAvailableGoodPositionActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void GotoAvailableGoodPositionActionRecord::Activate() {
+	BotActionRecord::Activate();
 	// Since the combat movement has a decent quality and this action is often triggered in combat, set flags this way.
 	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 	Self()->SetNavTarget( &navSpot );
 }
 
-void BotGotoAvailableGoodPositionActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void GotoAvailableGoodPositionActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotGotoAvailableGoodPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status GotoAvailableGoodPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( !CheckCommonCombatConditions( currWorldState ) ) {
 		return INVALID;
 	}
@@ -25,7 +25,7 @@ AiBaseActionRecord::Status BotGotoAvailableGoodPositionActionRecord::UpdateStatu
 	return VALID;
 }
 
-PlannerNode *BotGotoAvailableGoodPositionAction::TryApply( const WorldState &worldState ) {
+PlannerNode *GotoAvailableGoodPositionAction::TryApply( const WorldState &worldState ) {
 	if( worldState.EnemyOriginVar().Ignore() ) {
 		Debug( "Enemy is ignored in the given world state\n" );
 		return nullptr;

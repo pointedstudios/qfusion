@@ -1,21 +1,21 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotPickupNavEntityActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void PickupNavEntityActionRecord::Activate() {
+	BotActionRecord::Activate();
 	Self()->GetMiscTactics().shouldMoveCarefully = true;
 	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 	Self()->SetCampingSpot( AiCampingSpot( navEntity->Origin(), GOAL_PICKUP_ACTION_RADIUS, 0.5f ) );
 	Self()->SetNavTarget( navEntity );
 }
 
-void BotPickupNavEntityActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void PickupNavEntityActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 	Self()->ResetCampingSpot();
 }
 
-AiBaseActionRecord::Status BotPickupNavEntityActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status PickupNavEntityActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( currWorldState.HasJustPickedGoalItemVar() ) {
 		Debug( "Goal item has been just picked up\n" );
 		return COMPLETED;
@@ -46,7 +46,7 @@ AiBaseActionRecord::Status BotPickupNavEntityActionRecord::UpdateStatus( const W
 	return VALID;
 }
 
-PlannerNode *BotPickupNavEntityAction::TryApply( const WorldState &worldState ) {
+PlannerNode *PickupNavEntityAction::TryApply( const WorldState &worldState ) {
 	if( worldState.GoalItemWaitTimeVar().Ignore() ) {
 		Debug( "Goal item is ignored in the given world state\n" );
 		return nullptr;

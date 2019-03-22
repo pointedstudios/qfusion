@@ -1,7 +1,7 @@
 #ifndef QFUSION_HAZARDSSELECTOR_H
 #define QFUSION_HAZARDSSELECTOR_H
 
-#include "../planning/BasePlanner.h"
+#include "../planning/Planner.h"
 #include "HazardsDetector.h"
 
 struct Hazard : public PoolItem {

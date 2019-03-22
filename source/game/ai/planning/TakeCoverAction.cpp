@@ -1,19 +1,19 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotTakeCoverActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void TakeCoverActionRecord::Activate() {
+	BotActionRecord::Activate();
 	// Since bot should be already close to the nav target, give (a defencive) aiming a higher priority
 	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 	Self()->SetNavTarget( &navSpot );
 }
 
-void BotTakeCoverActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void TakeCoverActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotTakeCoverActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status TakeCoverActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	static_assert( GOAL_PICKUP_ACTION_RADIUS > TACTICAL_SPOT_RADIUS, "" );
 
 	if( selectedEnemiesInstanceId != Self()->GetSelectedEnemies().InstanceId() ) {
@@ -30,7 +30,7 @@ AiBaseActionRecord::Status BotTakeCoverActionRecord::UpdateStatus( const WorldSt
 	return ( distanceToActionNavTarget < TACTICAL_SPOT_RADIUS ) ? COMPLETED : VALID;
 }
 
-PlannerNode *BotTakeCoverAction::TryApply( const WorldState &worldState ) {
+PlannerNode *TakeCoverAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}

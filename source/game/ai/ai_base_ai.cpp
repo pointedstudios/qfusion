@@ -1,9 +1,9 @@
 #include "ai_base_ai.h"
-#include "planning/BasePlanner.h"
+#include "planning/Planner.h"
 #include "ai_ground_trace_cache.h"
 
 Ai::Ai( edict_t *self_,
-		BasePlanner *planner_,
+		AiPlanner *planner_,
 		AiAasRouteCache *routeCache_,
 		AiEntityPhysicsState *entityPhysicsState_,
 		int allowedAasTravelFlags_,
@@ -11,7 +11,7 @@ Ai::Ai( edict_t *self_,
 		float yawSpeed,
 		float pitchSpeed )
 	: self( self_ )
-	, basePlanner( planner_ )
+	, planner( planner_ )
 	, routeCache( routeCache_ )
 	, aasWorld( AiAasWorld::Instance() )
 	, entityPhysicsState( entityPhysicsState_ )
@@ -33,7 +33,7 @@ Ai::Ai( edict_t *self_,
 void Ai::SetFrameAffinity( unsigned modulo, unsigned offset ) {
 	frameAffinityModulo = modulo;
 	frameAffinityOffset = offset;
-	basePlanner->SetFrameAffinity( modulo, offset );
+	planner->SetFrameAffinity( modulo, offset );
 }
 
 void Ai::ResetNavigation() {
@@ -224,7 +224,7 @@ void Ai::Frame() {
 	}
 
 	// Call planner Update() (Frame() and, maybe Think())
-	basePlanner->Update();
+	planner->Update();
 
 	if( level.spawnedTimeStamp + 5000 > game.realtime || !level.canSpawnEntities ) {
 		self->nextThink = level.time + game.snapFrameTime;

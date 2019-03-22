@@ -1,7 +1,7 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-PlannerNode *BotStartLostEnemyPursuitAction::TryApply( const WorldState &worldState ) {
+PlannerNode *StartLostEnemyPursuitAction::TryApply( const WorldState &worldState ) {
 	if( worldState.IsReactingToEnemyLostVar().Ignore() ) {
 		Debug( "Is bot reacting to enemy lost is ignored in the given world state\n" );
 		return nullptr;
@@ -68,7 +68,7 @@ PlannerNode *BotStartLostEnemyPursuitAction::TryApply( const WorldState &worldSt
 	return plannerNode.PrepareActionResult();
 }
 
-PlannerNode *BotStopLostEnemyPursuitAction::TryApply( const WorldState &worldState ) {
+PlannerNode *StopLostEnemyPursuitAction::TryApply( const WorldState &worldState ) {
 	if( worldState.IsReactingToEnemyLostVar().Ignore() ) {
 		Debug( "Is bot reacting to enemy lost is ignored in the given world state\n" );
 		return nullptr;

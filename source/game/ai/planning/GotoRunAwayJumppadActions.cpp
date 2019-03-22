@@ -1,7 +1,7 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-PlannerNode *BotStartGotoRunAwayJumppadAction::TryApply( const WorldState &worldState ) {
+PlannerNode *StartGotoRunAwayJumppadAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}
@@ -40,17 +40,17 @@ PlannerNode *BotStartGotoRunAwayJumppadAction::TryApply( const WorldState &world
 	return plannerNode.PrepareActionResult();
 }
 
-void BotDoRunAwayViaJumppadActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void DoRunAwayViaJumppadActionRecord::Activate() {
+	BotActionRecord::Activate();
 	Self()->SetNavTarget( &navSpot );
 }
 
-void BotDoRunAwayViaJumppadActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void DoRunAwayViaJumppadActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotDoRunAwayViaJumppadActionRecord::UpdateStatus( const WorldState &currWorldState )  {
+AiActionRecord::Status DoRunAwayViaJumppadActionRecord::UpdateStatus( const WorldState &currWorldState )  {
 	if( currWorldState.HasJustTouchedJumppadVar().Ignore() ) {
 		Debug( "Has just touched jumppad is ignored\n" );
 		return INVALID;
@@ -81,7 +81,7 @@ AiBaseActionRecord::Status BotDoRunAwayViaJumppadActionRecord::UpdateStatus( con
 	return VALID;
 }
 
-PlannerNode *BotDoRunAwayViaJumppadAction::TryApply( const WorldState &worldState ) {
+PlannerNode *DoRunAwayViaJumppadAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}

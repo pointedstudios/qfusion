@@ -2,18 +2,18 @@
 #include "../bot.h"
 #include "../combat/SideStepDodgeProblemSolver.h"
 
-void BotAttackFromCurrentPositionActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void AttackFromCurrentPositionActionRecord::Activate() {
+	BotActionRecord::Activate();
 	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 	Self()->SetNavTarget( &navSpot );
 }
 
-void BotAttackFromCurrentPositionActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void AttackFromCurrentPositionActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotAttackFromCurrentPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status AttackFromCurrentPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( !CheckCommonCombatConditions( currWorldState ) ) {
 		return INVALID;
 	}
@@ -34,7 +34,7 @@ AiBaseActionRecord::Status BotAttackFromCurrentPositionActionRecord::UpdateStatu
 	return VALID;
 }
 
-PlannerNode *BotAttackFromCurrentPositionAction::TryApply( const WorldState &worldState ) {
+PlannerNode *AttackFromCurrentPositionAction::TryApply( const WorldState &worldState ) {
 	// Allow attacking from current position on high offensiveness even if a tactical spot exist
 	// (attacking from tactical spots has more restrictive conditions on kill/be killed damage ratio).
 

@@ -1,8 +1,8 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotAttackAdvancingToTargetActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void AttackAdvancingToTargetActionRecord::Activate() {
+	BotActionRecord::Activate();
 	// Let's provide a spot origin that matches the nav entity
 	// (we should use spots since to conform to the rest of combat actions).
 	Vec3 origin( Self()->GetSelectedNavEntity().GetNavEntity()->Origin() );
@@ -14,13 +14,13 @@ void BotAttackAdvancingToTargetActionRecord::Activate() {
 	Self()->GetMiscTactics().willRetreat = true;
 }
 
-void BotAttackAdvancingToTargetActionRecord::Deactivate() {
+void AttackAdvancingToTargetActionRecord::Deactivate() {
 	Self()->GetMiscTactics().Clear();
 	Self()->ResetNavTarget();
-	BotBaseActionRecord::Deactivate();
+	BotActionRecord::Deactivate();
 }
 
-AiBaseActionRecord::Status BotAttackAdvancingToTargetActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status AttackAdvancingToTargetActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	const auto &selectedNavEntity = Self()->GetSelectedNavEntity();
 	if( !selectedNavEntity.IsValid() || selectedNavEntity.IsEmpty() ) {
 		Debug( "The currently selected nav entity is invalid or is empty\n" );
@@ -48,7 +48,7 @@ AiBaseActionRecord::Status BotAttackAdvancingToTargetActionRecord::UpdateStatus(
 	return VALID;
 }
 
-PlannerNode *BotAttackAdvancingToTargetAction::TryApply( const WorldState &worldState ) {
+PlannerNode *AttackAdvancingToTargetAction::TryApply( const WorldState &worldState ) {
 	if( worldState.BotOriginVar().Ignore() ) {
 		Debug( "Bot origin is ignored in the given world state\n" );
 		return nullptr;

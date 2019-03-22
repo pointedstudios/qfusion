@@ -1,18 +1,18 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotTurnToThreatOriginActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void TurnToThreatOriginActionRecord::Activate() {
+	BotActionRecord::Activate();
 	Self()->SetPendingLookAtPoint( AiPendingLookAtPoint( threatPossibleOrigin, 3.0f ), 350 );
 	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 }
 
-void BotTurnToThreatOriginActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+void TurnToThreatOriginActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
 	Self()->ResetPendingLookAtPoint();
 }
 
-AiBaseActionRecord::Status BotTurnToThreatOriginActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+AiActionRecord::Status TurnToThreatOriginActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	const edict_t *ent = game.edicts + Self()->EntNum();
 
 	vec3_t lookDir;
@@ -29,7 +29,7 @@ AiBaseActionRecord::Status BotTurnToThreatOriginActionRecord::UpdateStatus( cons
 	return Self()->HasPendingLookAtPoint() ? VALID : INVALID;
 }
 
-PlannerNode *BotTurnToThreatOriginAction::TryApply( const WorldState &worldState ) {
+PlannerNode *TurnToThreatOriginAction::TryApply( const WorldState &worldState ) {
 	if( worldState.ThreatPossibleOriginVar().Ignore() ) {
 		Debug( "Threat possible origin is ignored in the given world state\n" );
 		return nullptr;

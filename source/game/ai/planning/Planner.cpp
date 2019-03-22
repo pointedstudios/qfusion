@@ -1,4 +1,4 @@
-#include "BasePlanner.h"
+#include "Planner.h"
 #include "../ai_manager.h"
 #include "../teamplay/BaseTeam.h"
 #include "../ai_base_ai.h"
@@ -10,13 +10,13 @@
 PlannerNode::PlannerNode( PoolBase *pool, Ai *self )
 	: PoolItem( pool ),	worldState( self ) {}
 
-AiBaseAction::PlannerNodePtr AiBaseAction::NewNodeForRecord( AiBaseActionRecord *record ) {
+AiAction::PlannerNodePtr AiAction::NewNodeForRecord( AiActionRecord *record ) {
 	if( !record ) {
 		Debug( "Can't allocate an action record\n" );
 		return PlannerNodePtr( nullptr );
 	}
 
-	PlannerNode *node = self->basePlanner->plannerNodesPool.New( self );
+	PlannerNode *node = self->planner->plannerNodesPool.New( self );
 	if( !node ) {
 		Debug( "Can't allocate a planner node\n" );
 		record->DeleteSelf();
@@ -119,12 +119,12 @@ void PoolBase::Clear() {
 }
 
 struct GoalRef {
-	AiBaseGoal *goal;
-	GoalRef( AiBaseGoal *goal_ ) : goal( goal_ ) {}
+	AiGoal *goal;
+	explicit GoalRef( AiGoal *goal_ ) : goal( goal_ ) {}
 	bool operator<( const GoalRef &that ) const { return *this->goal < *that.goal; }
 };
 
-bool BasePlanner::FindNewGoalAndPlan( const WorldState &currWorldState ) {
+bool AiPlanner::FindNewGoalAndPlan( const WorldState &currWorldState ) {
 	if( planHead ) {
 		FailWith( "FindNewGoalAndPlan(): an active plan is present\n" );
 	}
@@ -139,15 +139,16 @@ bool BasePlanner::FindNewGoalAndPlan( const WorldState &currWorldState ) {
 	BeforePlanning();
 
 	// Update goals weights based for the current world state before sorting
-	for( AiBaseGoal *goal: goals )
+	for( AiGoal *goal: goals )
 		goal->UpdateWeight( currWorldState );
 
 	// Filter relevant goals
 	StaticVector<GoalRef, MAX_GOALS> relevantGoals;
-	for( AiBaseGoal *goal: goals )
+	for( AiGoal *goal: goals ) {
 		if( goal->IsRelevant() ) {
-			relevantGoals.push_back( GoalRef( goal ) );
+			relevantGoals.emplace_back( GoalRef( goal ) );
 		}
+	}
 
 	if( relevantGoals.empty() ) {
 		Debug( "There are no relevant goals\n" );
@@ -160,7 +161,7 @@ bool BasePlanner::FindNewGoalAndPlan( const WorldState &currWorldState ) {
 
 	// For each relevant goal try find a plan that satisfies it
 	for( const GoalRef &goalRef: relevantGoals ) {
-		if( AiBaseActionRecord *newPlanHead = BuildPlan( goalRef.goal, currWorldState ) ) {
+		if( AiActionRecord *newPlanHead = BuildPlan( goalRef.goal, currWorldState ) ) {
 			Debug( "About to set new goal %s as an active one\n", goalRef.goal->Name() );
 			SetGoalAndPlan( goalRef.goal, newPlanHead );
 			AfterPlanning();
@@ -174,7 +175,7 @@ bool BasePlanner::FindNewGoalAndPlan( const WorldState &currWorldState ) {
 	return false;
 }
 
-bool BasePlanner::UpdateGoalAndPlan( const WorldState &currWorldState ) {
+bool AiPlanner::UpdateGoalAndPlan( const WorldState &currWorldState ) {
 	if( !planHead ) {
 		FailWith( "UpdateGoalAndPlan(): there is no active plan\n" );
 	}
@@ -186,19 +187,19 @@ bool BasePlanner::UpdateGoalAndPlan( const WorldState &currWorldState ) {
 		return false;
 	}
 
-	for( AiBaseGoal *goal: goals )
+	for( AiGoal *goal: goals )
 		goal->UpdateWeight( currWorldState );
 
-	AiBaseGoal *activeRelevantGoal = nullptr;
+	AiGoal *activeRelevantGoal = nullptr;
 	// Filter relevant goals and mark whether the active goal is relevant
 	StaticVector<GoalRef, MAX_GOALS> relevantGoals;
-	for( AiBaseGoal *goal: goals ) {
+	for( AiGoal *goal: goals ) {
 		if( goal->IsRelevant() ) {
 			if( goal == activeGoal ) {
 				activeRelevantGoal = goal;
 			}
 
-			relevantGoals.push_back( goal );
+			relevantGoals.emplace_back( GoalRef( goal ) );
 		}
 	}
 
@@ -216,7 +217,7 @@ bool BasePlanner::UpdateGoalAndPlan( const WorldState &currWorldState ) {
 		ClearGoalAndPlan();
 
 		for( const GoalRef &goalRef: relevantGoals ) {
-			if( AiBaseActionRecord *newPlanHead = BuildPlan( goalRef.goal, currWorldState ) ) {
+			if( AiActionRecord *newPlanHead = BuildPlan( goalRef.goal, currWorldState ) ) {
 				Debug( "About to set goal %s as an active one\n", goalRef.goal->Name() );
 				SetGoalAndPlan( goalRef.goal, newPlanHead );
 				return true;
@@ -227,7 +228,7 @@ bool BasePlanner::UpdateGoalAndPlan( const WorldState &currWorldState ) {
 		return false;
 	}
 
-	AiBaseActionRecord *newActiveGoalPlan = BuildPlan( activeRelevantGoal, currWorldState );
+	AiActionRecord *newActiveGoalPlan = BuildPlan( activeRelevantGoal, currWorldState );
 	if( !newActiveGoalPlan ) {
 		Debug( "There is no a plan that satisfies current goal %s anymore\n", activeGoal->Name() );
 		ClearGoalAndPlan();
@@ -235,7 +236,7 @@ bool BasePlanner::UpdateGoalAndPlan( const WorldState &currWorldState ) {
 		for( const GoalRef &goalRef: relevantGoals ) {
 			// Skip already tested for new plan existence active goal
 			if( goalRef.goal != activeRelevantGoal ) {
-				if( AiBaseActionRecord *newPlanHead = BuildPlan( goalRef.goal, currWorldState ) ) {
+				if( AiActionRecord *newPlanHead = BuildPlan( goalRef.goal, currWorldState ) ) {
 					Debug( "About to set goal %s as an active one\n", goalRef.goal->Name() );
 					SetGoalAndPlan( goalRef.goal, newPlanHead );
 					return true;
@@ -254,7 +255,7 @@ bool BasePlanner::UpdateGoalAndPlan( const WorldState &currWorldState ) {
 			break;
 		}
 
-		if( AiBaseActionRecord *newPlanHead = BuildPlan( goalRef.goal, currWorldState ) ) {
+		if( AiActionRecord *newPlanHead = BuildPlan( goalRef.goal, currWorldState ) ) {
 			// Release the new current active goal plan that is not going to be used to prevent leaks
 			DeletePlan( newActiveGoalPlan );
 			const char *format = "About to set goal %s instead of current one %s that is less relevant at the moment\n";
@@ -472,7 +473,7 @@ public:
 	}
 };
 
-AiBaseActionRecord *BasePlanner::BuildPlan( AiBaseGoal *goal, const WorldState &currWorldState ) {
+AiActionRecord *AiPlanner::BuildPlan( AiGoal *goal, const WorldState &currWorldState ) {
 	goal->OnPlanBuildingStarted();
 
 	PlannerNode *startNode = plannerNodesPool.New( self->ai->aiRef );
@@ -497,7 +498,7 @@ AiBaseActionRecord *BasePlanner::BuildPlan( AiBaseGoal *goal, const WorldState &
 
 	while( PlannerNode *currNode = openNodesHeap.Pop() ) {
 		if( goalWorldState.IsSatisfiedBy( currNode->worldState ) ) {
-			AiBaseActionRecord *plan = ReconstructPlan( currNode );
+			AiActionRecord *plan = ReconstructPlan( currNode );
 			goal->OnPlanBuildingCompleted( plan );
 			plannerNodesPool.Clear();
 			return plan;
@@ -559,8 +560,8 @@ AiBaseActionRecord *BasePlanner::BuildPlan( AiBaseGoal *goal, const WorldState &
 	return nullptr;
 }
 
-AiBaseActionRecord *BasePlanner::ReconstructPlan( PlannerNode *lastNode ) const {
-	AiBaseActionRecord *recordsStack[MAX_PLANNER_NODES];
+AiActionRecord *AiPlanner::ReconstructPlan( PlannerNode *lastNode ) const {
+	AiActionRecord *recordsStack[MAX_PLANNER_NODES];
 	int numNodes = 0;
 
 	// Start node does not have an associated action record (actions are transitions from parent nodes)
@@ -575,8 +576,8 @@ AiBaseActionRecord *BasePlanner::ReconstructPlan( PlannerNode *lastNode ) const 
 		return nullptr;
 	}
 
-	AiBaseActionRecord *firstInPlan = recordsStack[numNodes - 1];
-	AiBaseActionRecord *lastInPlan = recordsStack[numNodes - 1];
+	AiActionRecord *firstInPlan = recordsStack[numNodes - 1];
+	AiActionRecord *lastInPlan = recordsStack[numNodes - 1];
 	Debug( "Built plan is:\n" );
 	Debug( "  %s\n", firstInPlan->Name() );
 	for( int i = numNodes - 2; i >= 0; --i ) {
@@ -589,7 +590,7 @@ AiBaseActionRecord *BasePlanner::ReconstructPlan( PlannerNode *lastNode ) const 
 	return firstInPlan;
 }
 
-void BasePlanner::SetGoalAndPlan( AiBaseGoal *activeGoal_, AiBaseActionRecord *planHead_ ) {
+void AiPlanner::SetGoalAndPlan( AiGoal *activeGoal_, AiActionRecord *planHead_ ) {
 	if( this->planHead ) {
 		FailWith( "SetGoalAndPlan(): current plan is still present\n" );
 	}
@@ -613,7 +614,7 @@ void BasePlanner::SetGoalAndPlan( AiBaseGoal *activeGoal_, AiBaseActionRecord *p
 	this->planHead->Activate();
 }
 
-void BasePlanner::ClearGoalAndPlan() {
+void AiPlanner::ClearGoalAndPlan() {
 	if( planHead ) {
 		Debug( "ClearGoalAndPlan(): Should deactivate plan head\n" );
 		planHead->Deactivate();
@@ -624,16 +625,16 @@ void BasePlanner::ClearGoalAndPlan() {
 	activeGoal = nullptr;
 }
 
-void BasePlanner::DeletePlan( AiBaseActionRecord *head ) {
-	AiBaseActionRecord *currRecord = head;
+void AiPlanner::DeletePlan( AiActionRecord *head ) {
+	AiActionRecord *currRecord = head;
 	while( currRecord ) {
-		AiBaseActionRecord *nextRecord = currRecord->nextInPlan;
+		AiActionRecord *nextRecord = currRecord->nextInPlan;
 		currRecord->DeleteSelf();
 		currRecord = nextRecord;
 	}
 }
 
-void BasePlanner::Think() {
+void AiPlanner::Think() {
 	if( G_ISGHOSTING( self ) ) {
 		return;
 	}
@@ -657,8 +658,8 @@ void BasePlanner::Think() {
 		return;
 	}
 
-	AiBaseActionRecord::Status status = planHead->UpdateStatus( currWorldState );
-	if( status == AiBaseActionRecord::INVALID ) {
+	AiActionRecord::Status status = planHead->UpdateStatus( currWorldState );
+	if( status == AiActionRecord::INVALID ) {
 		Debug( "Plan head %s CheckStatus() returned INVALID status\n", planHead->Name() );
 		ClearGoalAndPlan();
 		if( FindNewGoalAndPlan( currWorldState ) ) {
@@ -668,9 +669,9 @@ void BasePlanner::Think() {
 		return;
 	}
 
-	if( status == AiBaseActionRecord::COMPLETED ) {
+	if( status == AiActionRecord::COMPLETED ) {
 		Debug( "Plan head %s CheckStatus() returned COMPLETED status\n", planHead->Name() );
-		AiBaseActionRecord *oldPlanHead = planHead;
+		AiActionRecord *oldPlanHead = planHead;
 		planHead = planHead->nextInPlan;
 		oldPlanHead->Deactivate();
 		oldPlanHead->DeleteSelf();
