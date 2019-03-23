@@ -222,8 +222,6 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 
 	worldState->SimilarWorldStateInstanceIdVar().SetIgnore( true );
 
-	worldState->PrepareAttachment();
-
 	cachedWorldState = *worldState;
 }
 

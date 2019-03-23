@@ -65,18 +65,6 @@ public:                                                                         
 		inline void DebugPrint( const char *tag ) const;                              \
 	}
 
-void *GENERIC_asNewScriptWorldStateAttachment( const edict_t *self );
-void GENERIC_asDeleteScriptWorldStateAttachment( const edict_t *self, void *attachment );
-void *GENERIC_asCopyScriptWorldStateAttachment( const edict_t *self, const void *attachment );
-void GENERIC_asSetScriptWorldStateAttachmentIgnoreAllVars( void *attachment, bool ignore );
-// A native WorldState is provided too (sometimes you want to modify it in scripts).
-void GENERIC_asPrepareScriptWorldStateAttachment( const edict_t *self, WorldState *worldState, void *attachment );
-unsigned GENERIC_asScriptWorldStateAttachmentHash( const void *attachment );
-bool GENERIC_asScriptWorldStateAttachmentEquals( const void *lhs, const void *rhs );
-bool GENERIC_asIsScriptWorldStateAttachmentSatisfiedBy( const void *lhs, const void *rhs );
-void GENERIC_asDebugPrintScriptWorldStateAttachment( const void *attachment );
-void GENERIC_asDebugPrintScriptWorldStateAttachmentDiff( const void *lhs, const void *rhs );
-
 class WorldState {
 	friend class FloatBaseVar;
 	friend class BoolVar;
@@ -93,7 +81,6 @@ public:
 
 private:
 	Ai *self;
-	void *scriptAttachment;
 #ifndef PUBLIC_BUILD
 	bool isCopiedFromOtherWorldState;
 #endif
@@ -256,7 +243,7 @@ private:
 	const short *GetRunAwayJumppadOrigin();
 	const short *GetRunAwayElevatorOrigin();
 
-	inline void CopyFromOtherWorldState( const WorldState &that ) {
+	void CopyFromOtherWorldState( const WorldState &that ) {
 		memcpy( this, &that, sizeof( WorldState ) );
 #ifndef PUBLIC_BUILD
 		isCopiedFromOtherWorldState = true;
@@ -268,21 +255,23 @@ public:
 	inline bool IsCopiedFromOtherWorldState() { return isCopiedFromOtherWorldState; }
 #endif
 
-	WorldState &operator=( const WorldState &that );
+	WorldState &operator=( const WorldState &that ) {
+		CopyFromOtherWorldState( that );
+		return *this;
+	}
 
 	WorldState( const WorldState &that ) {
-		*this = that;
+		CopyFromOtherWorldState( that );
 	}
 
-	WorldState &operator=( WorldState &&that );
-
-	WorldState( WorldState &&that ) {
-		*this = std::move( that );
+	WorldState &operator=( WorldState &&that ) {
+		CopyFromOtherWorldState( that );
+		return *this;
 	}
 
-	// Exposed for script interface
-	const void *ScriptAttachment() const { return scriptAttachment; }
-	void *ScriptAttachment() { return scriptAttachment; }
+	WorldState( WorldState &&that ) noexcept {
+		CopyFromOtherWorldState( that );
+	}
 
 	DECLARE_COMPARABLE_VAR_CLASS( UnsignedVar, unsigned );
 
@@ -573,7 +562,7 @@ public:
 
 	explicit WorldState( Ai *self_ );
 
-	~WorldState();
+	~WorldState() = default;
 
 	bool IsSatisfiedBy( const WorldState &that ) const;
 
@@ -581,8 +570,6 @@ public:
 	bool operator==( const WorldState &that ) const;
 
 	void SetIgnoreAll( bool ignore );
-
-	void PrepareAttachment();
 
 	DECLARE_UNSIGNED_VAR( GoalItemWaitTime )
 	DECLARE_UNSIGNED_VAR( SimilarWorldStateInstanceId )

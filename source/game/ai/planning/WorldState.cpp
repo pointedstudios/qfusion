@@ -4,41 +4,6 @@
 Bot *WorldState::Self() { return (Bot *)self; }
 const Bot *WorldState::Self() const { return (const Bot *)self; }
 
-WorldState &WorldState::operator=( const WorldState &that ) {
-	const edict_t *ent = game.edicts + Self()->EntNum();
-	if( scriptAttachment ) {
-		GENERIC_asDeleteScriptWorldStateAttachment( ent, scriptAttachment );
-	}
-	CopyFromOtherWorldState( that );
-	// We check the argument outside of the function call to avoid wasting cycles on an empty call
-	if( that.scriptAttachment ) {
-		this->scriptAttachment = GENERIC_asCopyScriptWorldStateAttachment( ent, that.scriptAttachment );
-	}
-	return *this;
-}
-
-WorldState &WorldState::operator=( WorldState &&that ) {
-	if( scriptAttachment ) {
-		GENERIC_asDeleteScriptWorldStateAttachment( game.edicts + Self()->EntNum(), scriptAttachment );
-	}
-	CopyFromOtherWorldState( that );
-	// Release the attachment ownership (if any)
-	that.scriptAttachment = nullptr;
-	return *this;
-}
-
-WorldState::~WorldState() {
-	if( scriptAttachment ) {
-		GENERIC_asDeleteScriptWorldStateAttachment( game.edicts + Self()->EntNum(), scriptAttachment );
-	}
-}
-
-void WorldState::PrepareAttachment() {
-	if( scriptAttachment ) {
-		GENERIC_asPrepareScriptWorldStateAttachment( game.edicts + Self()->EntNum(), this, scriptAttachment );
-	}
-}
-
 #ifndef PUBLIC_BUILD
 
 WorldState::WorldState( Ai *self_ ) {
@@ -73,16 +38,11 @@ WorldState::WorldState( Ai *self_ ) {
 		packedFields->epsilon = 1;
 		packedFields->satisfyOp = (unsigned char)SatisfyOp::EQ;
 	}
-
-	scriptAttachment = GENERIC_asNewScriptWorldStateAttachment( game.edicts + Self()->EntNum() );
 }
 
 #else
 
-WorldState::WorldState( Ai *self_ )
-	: self( self_ ) {
-	scriptAttachment = GENERIC_asNewScriptWorldStateAttachment( game.edicts + Self()->EntNum() );
-}
+WorldState::WorldState( Ai *self_ ): self( self_ ) {}
 
 #endif
 
@@ -107,10 +67,6 @@ void WorldState::SetIgnoreAll( bool ignore ) {
 
 	for( unsigned i = 0; i < NUM_DUAL_ORIGIN_LAZY_VARS; ++i )
 		( (DualOriginLazyVar::PackedFields *)&dualOriginLazyVarsData[i * 4 + 3] )->ignore = ignore;
-
-	if( scriptAttachment ) {
-		GENERIC_asSetScriptWorldStateAttachmentIgnoreAllVars( scriptAttachment, ignore );
-	}
 }
 
 // Use this macro so one have to write condition that matches the corresponding case and not its negation
@@ -227,11 +183,7 @@ bool WorldState::IsSatisfiedBy( const WorldState &that ) const {
 		return false;
 	}
 
-	if( !scriptAttachment ) {
-		return true;
-	}
-
-	return GENERIC_asIsScriptWorldStateAttachmentSatisfiedBy( scriptAttachment, that.scriptAttachment );
+	return true;
 }
 
 uint32_t WorldState::Hash() const {
@@ -277,11 +229,7 @@ uint32_t WorldState::Hash() const {
 	result = result * 17 + RunAwayJumppadOriginVar().Hash();
 	result = result * 17 + RunAwayElevatorOriginVar().Hash();
 
-	if( !scriptAttachment ) {
-		return result;
-	}
-
-	return result * 17 + (uint32_t)GENERIC_asScriptWorldStateAttachmentHash( scriptAttachment );
+	return result;
 }
 
 #define TEST_VARS_EQUALITY( values, flags, ops )                           \
@@ -364,11 +312,7 @@ bool WorldState::operator==( const WorldState &that ) const {
 		return false;
 	}
 
-	if( !scriptAttachment ) {
-		return true;
-	}
-
-	return GENERIC_asScriptWorldStateAttachmentEquals( scriptAttachment, that.scriptAttachment );
+	return true;
 }
 
 void WorldState::DebugPrint( const char *tag ) const {
@@ -430,10 +374,6 @@ void WorldState::DebugPrint( const char *tag ) const {
 	RunAwayTeleportOriginVar().DebugPrint( tag );
 	RunAwayJumppadOriginVar().DebugPrint( tag );
 	RunAwayElevatorOriginVar().DebugPrint( tag );
-
-	if( scriptAttachment ) {
-		GENERIC_asDebugPrintScriptWorldStateAttachment( scriptAttachment );
-	}
 }
 
 #define PRINT_DIFF( varName )                             \
@@ -500,8 +440,4 @@ void WorldState::DebugPrintDiff( const WorldState &that, const char *oldTag, con
 	PRINT_DIFF( RunAwayTeleportOrigin );
 	PRINT_DIFF( RunAwayJumppadOrigin );
 	PRINT_DIFF( RunAwayElevatorOrigin );
-
-	if( scriptAttachment ) {
-		GENERIC_asDebugPrintScriptWorldStateAttachmentDiff( scriptAttachment, that.scriptAttachment );
-	}
 }
