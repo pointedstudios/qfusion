@@ -77,20 +77,69 @@ bool RunToNavEntityActionRecord::ShouldUseSneakyBehaviour( const WorldState &cur
 
 	const float *const velocity = targetEnt->velocity;
 	// Check whether the leader seems to be using a sneaky movement
-	const float speedThreshold = DEFAULT_PLAYERSPEED * 1.5f;
-	if( velocity[0] * velocity[0] + velocity[1] * velocity[1] > speedThreshold * speedThreshold ) {
+	const float maxSpeedThreshold = DEFAULT_PLAYERSPEED * 1.5f;
+	const float squareVelocity2D = velocity[0] * velocity[0] + velocity[1] * velocity[1];
+	if( squareVelocity2D > maxSpeedThreshold * maxSpeedThreshold ) {
 		return false;
 	}
 
 	// The bot should be relatively close to the target client.
 	// The threshold value is chosen having bomb gametype in mind to prevent a site rush disclosure
-	const float distanceThreshold = 1024.0f + 512.0f;
-	if( DistanceSquared( botEnt->s.origin, targetEnt->s.origin ) > distanceThreshold * distanceThreshold ) {
+	const float maxDistanceThreshold = 1024.0f + 512.0f;
+	const float squareDistanceToTarget = DistanceSquared( botEnt->s.origin, targetEnt->s.origin );
+	if( squareDistanceToTarget > maxDistanceThreshold * maxDistanceThreshold ) {
 		return false;
 	}
 
 	// Check whether the leader is in PVS for the bot.
-	return EntitiesPvsCache::Instance()->AreInPvs( botEnt, targetEnt );
+	if( !EntitiesPvsCache::Instance()->AreInPvs( botEnt, targetEnt ) ) {
+		return false;
+	}
+
+	// Skip further tests if the bot is fairly close to the target client and follow the sneaky behaviour of the client.
+	if( squareDistanceToTarget < 128 * 128 ) {
+		return true;
+	}
+
+	// Skip further tests if the client seems to be walking (having a walk key held).
+	// Holding a walk key pressed is a way to look at bot teammates without forcing them rushing.
+	// TODO: Avoid these magic numbers (there's no numeric constant for this currently)
+	if( squareVelocity2D < 200 * 200 ) {
+		return true;
+	}
+
+	// Check whether the bot is approximately in the client's fov
+	// and the client looks approximately at the bot
+	// (do not confuse this with assistance tests that are much more strict).
+
+	vec3_t targetLookDir;
+	AngleVectors( targetEnt->s.angles, targetLookDir, nullptr, nullptr );
+	Vec3 targetToBotDir( Q_RSqrt( squareDistanceToTarget ) * Vec3( botEnt->s.origin ) - targetEnt->s.origin );
+	// If the bot not in the center of the leader view
+	if( targetToBotDir.Dot( targetLookDir ) < 0.7f ) {
+		return true;
+	}
+
+	// Check whether the bot looks approximately at the leader as well.
+	// This allows to behave realistically "understanding" a leader intent.
+	if( targetToBotDir.Dot( Self()->EntityPhysicsState()->ForwardDir() ) > 0.3f ) {
+		return true;
+	}
+
+	trace_t trace;
+	Vec3 traceStart( Vec3( targetEnt->s.origin ) + Vec3( 0, 0, targetEnt->viewheight ) );
+	// Do an approximate test whether the bot is behind a wall or an obstacle
+	SolidWorldTrace( &trace, traceStart.Data(), botEnt->s.origin );
+	if( trace.fraction != 1.0f ) {
+		Vec3 traceEnd( Vec3( botEnt->s.origin ) + Vec3( 0, 0, playerbox_stand_maxs[2] ) );
+		SolidWorldTrace( &trace, traceStart.Data(), traceEnd.Data() );
+		if( trace.fraction != 1.0f ) {
+			return false;
+		}
+	}
+
+	// Don't be sneaky. Hurry up to follow the leader.
+	return false;
 }
 
 PlannerNode *RunToNavEntityAction::TryApply( const WorldState &worldState ) {
