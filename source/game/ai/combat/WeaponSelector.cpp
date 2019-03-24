@@ -166,10 +166,13 @@ void BotWeaponSelector::SuggestAimWeapon( const WorldState &worldState ) {
 void BotWeaponSelector::SuggestSniperRangeWeapon( const WorldState &worldState ) {
 	int chosenWeapon = WEAP_NONE;
 
-	// Spam plasma from long range to blind enemy
 	if( bot->selectedEnemies.PendingWeapon() == WEAP_ELECTROBOLT ) {
-		if( PlasmasReadyToFireCount() && weaponChoiceRandom > 0.5f ) {
-			chosenWeapon = WEAP_PLASMAGUN;
+		if( weaponChoiceRandom > 0.5f ) {
+			if( PlasmasReadyToFireCount() && weaponChoiceRandom > 0.75f ) {
+				chosenWeapon = WEAP_PLASMAGUN;
+			} else if( BulletsReadyToFireCount() ) {
+				chosenWeapon = WEAP_MACHINEGUN;
+			}
 		}
 	} else if( !bot->ShouldAimPrecisely() ) {
 		// In this case try preferring weapons that does not require precise aiming.
@@ -197,10 +200,21 @@ void BotWeaponSelector::SuggestSniperRangeWeapon( const WorldState &worldState )
 			}
 		}
 	}
+
 	// Still not chosen
 	if( chosenWeapon == WEAP_NONE ) {
-		if( worldState.DamageToKill() < 25.0f && ShellsReadyToFireCount() ) {
+		// These weapons must have been selected otherwise
+		assert( !BulletsReadyToFireCount() );
+		assert( !BoltsReadyToFireCount() );
+
+		if( ShellsReadyToFireCount() ) {
 			chosenWeapon = WEAP_RIOTGUN;
+		} else if( BlastsReadyToFireCount() ) {
+			chosenWeapon = WEAP_GUNBLADE;
+		} else if( RocketsReadyToFireCount() ) {
+			chosenWeapon = WEAP_ROCKETLAUNCHER;
+		} else if( WavesReadyToFireCount() ) {
+			chosenWeapon = WEAP_SHOCKWAVE;
 		} else {
 			chosenWeapon = WEAP_GUNBLADE;
 		}
@@ -353,16 +367,35 @@ void BotWeaponSelector::SuggestFarRangeWeapon( const WorldState &worldState ) {
 					chosenWeapon = WEAP_SHOCKWAVE;
 				} else if( RocketsReadyToFireCount() ) {
 					chosenWeapon = WEAP_ROCKETLAUNCHER;
-				} else {
+				} else if( BlastsReadyToFireCount() ) {
 					chosenWeapon = WEAP_GUNBLADE;
 				}
 			}
 		} else {
 			if( bot->WillRetreat() && WavesReadyToFireCount() ) {
 				chosenWeapon = WEAP_SHOCKWAVE;
-			} else {
-				chosenWeapon = WEAP_GUNBLADE;
 			}
+		}
+	}
+
+	// Still not chosen
+	if( chosenWeapon == WEAP_NONE ) {
+		// These weapons must have been selected otherwise
+		assert( !BoltsReadyToFireCount() );
+		assert( !BulletsReadyToFireCount() );
+		assert( !PlasmasReadyToFireCount() );
+		assert( !ShellsReadyToFireCount() );
+
+		if( RocketsReadyToFireCount() ) {
+			chosenWeapon = WEAP_ROCKETLAUNCHER;
+		} else if( BlastsReadyToFireCount() ) {
+			chosenWeapon = WEAP_GUNBLADE;
+		} else if( WavesReadyToFireCount() ) {
+			chosenWeapon = WEAP_SHOCKWAVE;
+		} else if( GrenadesReadyToFireCount() ) {
+			chosenWeapon = WEAP_GRENADELAUNCHER;
+		} else {
+			chosenWeapon = WEAP_GUNBLADE;
 		}
 	}
 
@@ -508,7 +541,11 @@ void BotWeaponSelector::SuggestMiddleRangeWeapon( const WorldState &worldState )
 
 	chosenWeapon = ChooseWeaponByScores( weaponScores, weaponScores + WEIGHTS_COUNT );
 	if( chosenWeapon == WEAP_NONE ) {
-		chosenWeapon = WEAP_GUNBLADE;
+		if( BoltsReadyToFireCount() ) {
+			chosenWeapon = WEAP_ELECTROBOLT;
+		} else {
+			chosenWeapon = WEAP_GUNBLADE;
+		}
 	}
 
 	int scriptWeaponTier = 0;
@@ -703,7 +740,7 @@ int BotWeaponSelector::SuggestFinishWeapon( const WorldState &worldState ) {
 			if( targetEnvironment.factor > 0.6f && RocketsReadyToFireCount() ) {
 				return WEAP_ROCKETLAUNCHER;
 			}
-			if( distance < 0.25f * lgRange ) {
+			if( distance < 0.25f * lgRange && BlastsReadyToFireCount() ) {
 				return WEAP_GUNBLADE;
 			}
 		}
