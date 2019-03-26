@@ -39,7 +39,7 @@ PlannerNode *TurnToThreatOriginAction::TryApply( const WorldState &worldState ) 
 		return nullptr;
 	}
 
-	constexpr float squareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	constexpr float squareDistanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
 	if( ( worldState.BotOriginVar().Value() - Self()->Origin() ).SquaredLength() > squareDistanceError ) {
 		Debug( "The action can be applied only to the current bot origin\n" );
 		return nullptr;

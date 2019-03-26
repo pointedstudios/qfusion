@@ -113,7 +113,7 @@ PlannerNode *AttackFromCurrentPositionAction::TryApply( const WorldState &worldS
 
 	plannerNode.WorldState() = worldState;
 	plannerNode.WorldState().BotOriginVar().SetValue( navTargetOrigin )
-		.SetSatisfyOp( WorldState::SatisfyOp::EQ, TACTICAL_SPOT_RADIUS );
+		.SetSatisfyOp( OriginVar::SatisfyOp::EQ, TACTICAL_SPOT_RADIUS );
 	// Setting this is required to satisfy the BotKillEnemyAction preconditions
 	// (even they are not really met from human point of view).
 	plannerNode.WorldState().HasPositionalAdvantageVar().SetValue( true ).SetIgnore( false );

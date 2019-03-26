@@ -156,7 +156,7 @@ PlannerNode *RunToNavEntityAction::TryApply( const WorldState &worldState ) {
 		return nullptr;
 	}
 
-	constexpr float roundingSquareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	constexpr float roundingSquareDistanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
 	if( ( worldState.BotOriginVar().Value() - Self()->Origin() ).SquaredLength() > roundingSquareDistanceError ) {
 		Debug( "Selected goal item is valid only for current bot origin\n" );
 		return nullptr;
@@ -173,7 +173,7 @@ PlannerNode *RunToNavEntityAction::TryApply( const WorldState &worldState ) {
 
 	plannerNode.WorldState() = worldState;
 	plannerNode.WorldState().BotOriginVar().SetValue( itemNavEntity.GetNavEntity()->Origin() );
-	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().ResetTacticalSpots();
 
 	return plannerNode.PrepareActionResult();

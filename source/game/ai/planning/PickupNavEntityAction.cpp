@@ -88,7 +88,7 @@ PlannerNode *PickupNavEntityAction::TryApply( const WorldState &worldState ) {
 	plannerNode.WorldState() = worldState;
 	plannerNode.WorldState().HasJustPickedGoalItemVar().SetValue( true ).SetIgnore( false );
 	plannerNode.WorldState().BotOriginVar().SetValue( itemNavEntity.GetNavEntity()->Origin() );
-	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, 12.0f );
+	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, 12.0f );
 	plannerNode.WorldState().ResetTacticalSpots();
 
 	return plannerNode.PrepareActionResult();

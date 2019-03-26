@@ -43,7 +43,7 @@ PlannerNode *FleeToSpotAction::TryApply( const WorldState &worldState ) {
 	const SelectedNavEntity &selectedNavEntity = Self()->GetSelectedNavEntity();
 	if( selectedNavEntity.IsValid() && !selectedNavEntity.IsEmpty() ) {
 		const Vec3 navEntityOrigin = selectedNavEntity.GetNavEntity()->Origin();
-		constexpr float squareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+		constexpr float squareDistanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
 		if( ( navEntityOrigin - navTargetOrigin ).SquaredLength() < squareDistanceError ) {
 			Debug( "Action is not applicable for goal entities (there are specialized actions for these kinds of nav target\n" );
 			return nullptr;

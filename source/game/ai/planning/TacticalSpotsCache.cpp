@@ -12,7 +12,7 @@ inline float BotTacticalSpotsCache::Skill() const {
 }
 
 inline bool BotTacticalSpotsCache::BotHasAlmostSameOrigin( const Vec3 &unpackedOrigin ) const {
-	constexpr float squareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	constexpr float squareDistanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
 	return DistanceSquared( self->s.origin, unpackedOrigin.Data() ) < squareDistanceError;
 }
 
@@ -351,7 +351,7 @@ void BotTacticalSpotsCache::FindReachableClassEntities( const Vec3 &origin, floa
 	bool testTwoCurrAreas = false;
 	int fromAreaNum = 0;
 	// If an origin matches actual bot origin
-	if( ( origin - self->s.origin ).SquaredLength() < WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR ) {
+	if( ( origin - self->s.origin ).SquaredLength() < OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR ) {
 		// Try testing both areas
 		if( self->ai->botRef->CurrAreaNum() != self->ai->botRef->DroppedToFloorAreaNum() ) {
 			testTwoCurrAreas = true;

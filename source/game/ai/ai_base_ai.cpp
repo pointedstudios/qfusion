@@ -96,7 +96,7 @@ int Ai::CheckTravelTimeMillis( const Vec3& from, const Vec3 &to, bool allowUnrea
 	// because a reachability must have been checked by the spots registry first in a few preceeding calls.
 
 	int fromAreaNum;
-	constexpr float squareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	constexpr float squareDistanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
 	if( ( from - self->s.origin ).SquaredLength() < squareDistanceError ) {
 		fromAreaNum = aasWorld->FindAreaNum( self );
 	} else {

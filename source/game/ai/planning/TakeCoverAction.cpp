@@ -53,7 +53,7 @@ PlannerNode *TakeCoverAction::TryApply( const WorldState &worldState ) {
 		AI_FailWith( "BotTakeCoverAction", "PendingOriginVar() is ignored in the given world state\n" );
 	}
 
-	constexpr float distanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	constexpr float distanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
 	if( ( worldState.PendingOriginVar().Value() - navTargetOrigin ).SquaredLength() > distanceError ) {
 		worldState.DebugPrint( "Given WS" );
 		AI_FailWith( "BotTakeCoverAction", "PendingOrigin and NavTargetOrigin differ in the given world state\n" );

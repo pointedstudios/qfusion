@@ -34,11 +34,11 @@ PlannerNode *StartGotoRunAwayTeleportAction::TryApply( const WorldState &worldSt
 	plannerNode.WorldState().HasPendingRunAwayTeleportVar().SetValue( true ).SetIgnore( false );
 	// Set nav target to the teleport origin
 	plannerNode.WorldState().NavTargetOriginVar().SetValue( worldState.RunAwayTeleportOriginVar().Value() );
-	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().NavTargetOriginVar().SetIgnore( false );
 	// Set pending origin to the teleport destination
 	plannerNode.WorldState().PendingOriginVar().SetValue( worldState.RunAwayTeleportOriginVar().Value2() );
-	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().PendingOriginVar().SetIgnore( false );
 
 	return plannerNode.PrepareActionResult();
@@ -99,7 +99,7 @@ PlannerNode *DoRunAwayViaTeleportAction::TryApply( const WorldState &worldState 
 	plannerNode.WorldState().HasJustTeleportedVar().SetValue( false ).SetIgnore( false );
 	// Set bot origin to the teleport destination
 	plannerNode.WorldState().BotOriginVar().SetValue( worldState.PendingOriginVar().Value() );
-	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	// Reset pending origin
 	plannerNode.WorldState().PendingOriginVar().SetIgnore( true );
 	plannerNode.WorldState().HasPendingRunAwayTeleportVar().SetIgnore( true );

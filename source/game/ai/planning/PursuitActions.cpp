@@ -38,7 +38,7 @@ PlannerNode *StartLostEnemyPursuitAction::TryApply( const WorldState &worldState
 		return nullptr;
 	}
 
-	constexpr float squareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	constexpr float squareDistanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
 	if( ( worldState.BotOriginVar().Value() - Self()->Origin() ).SquaredLength() > squareDistanceError ) {
 		Debug( "The action can be applied only to the current bot origin\n" );
 		return nullptr;
@@ -62,7 +62,7 @@ PlannerNode *StartLostEnemyPursuitAction::TryApply( const WorldState &worldState
 	plannerNode.WorldState() = worldState;
 	plannerNode.WorldState().NavTargetOriginVar().SetValue( worldState.LostEnemyLastSeenOriginVar().Value() );
 	plannerNode.WorldState().NavTargetOriginVar().SetIgnore( false );
-	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, maxDistanceThreshold );
+	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, maxDistanceThreshold );
 	plannerNode.WorldState().IsReactingToEnemyLostVar().SetValue( true ).SetIgnore( false );
 
 	return plannerNode.PrepareActionResult();

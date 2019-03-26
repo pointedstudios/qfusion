@@ -1,4 +1,5 @@
 #include "Planner.h"
+#include "PlanningLocal.h"
 #include "../ai_manager.h"
 #include "../teamplay/BaseTeam.h"
 #include "../ai_base_ai.h"
@@ -7,8 +8,7 @@
 #include "../static_vector.h"
 #include "../../../gameshared/q_collision.h"
 
-PlannerNode::PlannerNode( PoolBase *pool, Ai *self )
-	: PoolItem( pool ),	worldState( self ) {}
+
 
 AiAction::PlannerNodePtr AiAction::NewNodeForRecord( AiActionRecord *record ) {
 	if( !record ) {

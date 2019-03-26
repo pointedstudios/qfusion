@@ -126,7 +126,7 @@ PlannerNode *GotoAvailableGoodPositionAction::TryApply( const WorldState &worldS
 	plannerNode.Cost() = travelTimeMillis * actionPenalty;
 	plannerNode.WorldState() = worldState;
 	plannerNode.WorldState().BotOriginVar().SetValue( spotOrigin );
-	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, TACTICAL_SPOT_RADIUS );
+	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, TACTICAL_SPOT_RADIUS );
 	plannerNode.WorldState().ResetTacticalSpots();
 	// Satisfy conditions for BotKillEnemyGoal
 	plannerNode.WorldState().CanHitEnemyVar().SetValue( true ).SetIgnore( false );

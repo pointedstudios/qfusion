@@ -120,7 +120,7 @@ struct PlannerNode : PoolItem {
 	// A hash of the associated world state (put here for optimal members alignment)
 	uint32_t worldStateHash { 0 };
 
-	PlannerNode( PoolBase *pool, Ai *self );
+	inline PlannerNode( PoolBase *pool, Ai *self );
 
 	~PlannerNode() override {
 		if( actionRecord ) {

@@ -1,3 +1,4 @@
+#include "PlanningLocal.h"
 #include "Goals.h"
 #include "../bot.h"
 #include <cmath>
@@ -417,7 +418,7 @@ void RoamGoal::GetDesiredWorldState( WorldState *worldState ) {
 
 	const Vec3 &spotOrigin = module->roamingManager.GetCachedRoamingSpot();
 	worldState->BotOriginVar().SetValue( spotOrigin );
-	worldState->BotOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, 32.0f );
+	worldState->BotOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, 32.0f );
 	worldState->BotOriginVar().SetIgnore( false );
 }
 

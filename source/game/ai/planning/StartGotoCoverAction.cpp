@@ -39,11 +39,11 @@ PlannerNode *StartGotoCoverAction::TryApply( const WorldState &worldState ) {
 	plannerNode.WorldState().HasPendingCoverSpotVar().SetValue( true ).SetIgnore( false );
 	// Set nav target to the tactical spot
 	plannerNode.WorldState().NavTargetOriginVar().SetValue( spotOrigin );
-	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().NavTargetOriginVar().SetIgnore( false );
 	// Set pending origin to the tactical spot
 	plannerNode.WorldState().PendingOriginVar().SetValue( spotOrigin );
-	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().PendingOriginVar().SetIgnore( false );
 
 	unsigned similarWorldStateInstanceId = Self()->NextSimilarWorldStateInstanceId();

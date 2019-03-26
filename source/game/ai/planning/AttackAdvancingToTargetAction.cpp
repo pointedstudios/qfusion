@@ -28,7 +28,7 @@ AiActionRecord::Status AttackAdvancingToTargetActionRecord::UpdateStatus( const 
 	}
 
 	const auto *const navEntity = selectedNavEntity.GetNavEntity();
-	constexpr float distanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	constexpr float distanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
 	if( navEntity->Origin().SquareDistance2DTo( currWorldState.NavTargetOriginVar().Value() ) > distanceError ) {
 		Debug( "The nav target var value does not match selected nav entity\n" );
 		return INVALID;
@@ -55,7 +55,7 @@ PlannerNode *AttackAdvancingToTargetAction::TryApply( const WorldState &worldSta
 	}
 
 	// Prevent excessive fruitless branching
-	constexpr float distanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	constexpr float distanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
 	if( worldState.BotOriginVar().Value().SquareDistanceTo( Self()->Origin() ) > distanceError ) {
 		Debug( "This action is applicable only for the real bot origin\n" );
 		return nullptr;

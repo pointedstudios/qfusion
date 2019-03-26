@@ -9,46 +9,6 @@ BotActionRecord::BotActionRecord( PoolBase *pool_, Bot *self_, const char *name_
 BotAction::BotAction( BotPlanningModule *module_, const char *name_ )
 	: AiAction( module_->bot, name_ ), module( module_ ) {}
 
-typedef WorldState::SatisfyOp SatisfyOp;
-
-// These methods really belong to the bot logic, not the generic AI ones
-
-const short *WorldState::GetSniperRangeTacticalSpot() {
-	return Self()->planningModule.tacticalSpotsCache.GetSniperRangeTacticalSpot( BotOriginData(), EnemyOriginData() );
-}
-
-const short *WorldState::GetFarRangeTacticalSpot() {
-	return Self()->planningModule.tacticalSpotsCache.GetFarRangeTacticalSpot( BotOriginData(), EnemyOriginData() );
-}
-
-const short *WorldState::GetMiddleRangeTacticalSpot() {
-	return Self()->planningModule.tacticalSpotsCache.GetMiddleRangeTacticalSpot( BotOriginData(), EnemyOriginData() );
-}
-
-const short *WorldState::GetCloseRangeTacticalSpot() {
-	return Self()->planningModule.tacticalSpotsCache.GetCloseRangeTacticalSpot( BotOriginData(), EnemyOriginData() );
-}
-
-const short *WorldState::GetCoverSpot() {
-	return Self()->planningModule.tacticalSpotsCache.GetCoverSpot( BotOriginData(), EnemyOriginData() );
-}
-
-const short *WorldState::GetRunAwayTeleportOrigin() {
-	return Self()->planningModule.tacticalSpotsCache.GetRunAwayTeleportOrigin( BotOriginData(), EnemyOriginData() );
-}
-
-const short *WorldState::GetRunAwayJumppadOrigin() {
-	return Self()->planningModule.tacticalSpotsCache.GetRunAwayJumppadOrigin( BotOriginData(), EnemyOriginData() );
-}
-
-const short *WorldState::GetRunAwayElevatorOrigin() {
-	return Self()->planningModule.tacticalSpotsCache.GetRunAwayElevatorOrigin( BotOriginData(), EnemyOriginData() );
-}
-
-inline const BotWeightConfig &BotAction::WeightConfig() const {
-	return Self()->WeightConfig();
-}
-
 void BotActionRecord::Activate() {
 	AiActionRecord::Activate();
 	Self()->GetMiscTactics().Clear();
