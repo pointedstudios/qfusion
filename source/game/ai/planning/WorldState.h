@@ -66,6 +66,24 @@ public:
 		}
 	}
 
+	template <typename P>
+	bool IgnoredOr( P predicate ) const {
+		return ignore || predicate( value );
+	}
+
+	template <typename P>
+	bool ImportantAnd( P predicate ) const {
+		return !ignore && predicate( value );
+	}
+
+	bool IgnoredOrDifferent( const T &value_ ) const {
+		return ignore || value != value;
+	}
+
+	bool ImportantAndSame( const T &value_ ) const {
+		return !ignore && value == value_;
+	}
+
 	void CopyFromThat( const This &that ) {
 		this->value = that.value;
 		this->satisfyOp = that.satisfyOp;
@@ -146,6 +164,12 @@ public:
 		}
 		return this->value == that.value;
 	}
+
+	bool IgnoredOrTrue() const { return ignore || value; }
+	bool IgnoredOrFalse() const { return ignore || !value; }
+
+	bool ImportantAndTrue() const { return !ignore && value; }
+	bool ImportantAndFalse() const { return !ignore && !value; }
 
 	void CopyFromThat( const BoolVar &that ) {
 		ignore = that.ignore;
@@ -274,6 +298,24 @@ public:
 		int sign = ( (SatisfyOp)Packed().satisfyOp == SatisfyOp::EQ ) ? +1 : -1;
 		assert( (SatisfyOp)Packed().satisfyOp == SatisfyOp::EQ || (SatisfyOp)Packed().satisfyOp == SatisfyOp::NE );
 		return IsOriginSatisfiedBy( sign, Packed().epsilon, data, that.data );
+	}
+
+	bool ImportantAndSame( const Vec3 &value ) const {
+		return !Packed().ignore && Value().SquareDistanceTo( value ) <= MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	}
+
+	template <typename P>
+	bool ImportantAnd( P predicate ) const {
+		return !Packed().ignore && predicate( Value() );
+	}
+
+	bool IgnoredOrDifferent( const Vec3 &value ) const {
+		return Packed().ignore || Value().SquareDistanceTo( value ) > MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	}
+
+	template <typename P>
+	bool IgnoredOr( P predicate ) const {
+		return Packed().ignore || predicate( Value() );
 	}
 };
 
