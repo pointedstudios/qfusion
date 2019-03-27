@@ -483,15 +483,57 @@ void MovementPredictionContext::NearbyTriggersCache::EnsureValidForBounds( const
 	}
 }
 
-void MovementPredictionContext::StopTruncatingStackAt( unsigned frameIndex ) {
-	// Call OnApplicationSequenceStopped() manually
-	this->activeAction->OnApplicationSequenceStopped( this, SWITCHED, this->topOfStackIndex );
-	// Disable the duplicated call in NextPredictionStep();
-	this->activeAction = nullptr;
-	this->isCompleted = true;
-	predictedMovementActions.truncate( frameIndex + 1 );
-	// Do not even bother to restore the entire stack state at frameIndex (including millisAhead, etc)
-	this->isTruncated = true;
+void MovementPredictionContext::CompleteOrSaveGoodEnoughPath( int minTravelTimeSoFar, unsigned penaltyMillis ) {
+	// Sanity check
+	assert( penaltyMillis < 30000 );
+
+	constexpr const char *tag = "MovementPredictionContext::CompleteOrSaveGoodEnoughPath()";
+
+	// We supply millis for convenience but convert to centis in order to match AAS time units
+	int travelTimeToTarget = TravelTimeToNavTarget() + penaltyMillis / 10;
+	if( travelTimeToTarget <= minTravelTimeSoFar ) {
+		Debug( "%s: Stopping prediction\n", tag );
+		isCompleted = true;
+		return;
+	}
+
+	// Check whether we have already saved a better "good enough" path
+	if( travelTimeToTarget > travelTimeForGoodEnoughPath ) {
+		Debug( "%s: The travel time to nav target is worse than known one\n", tag );
+		SetPendingRollback();
+		return;
+	}
+
+	// Sanity check
+	if( predictedMovementActions.size() < 3 ) {
+		Debug( "%s: Insufficient path size\n", tag );
+		SetPendingRollback();
+		return;
+	}
+
+	// Take the second last action as a last saved one.
+	// Properties of the last action of stack may be incomplete to the moment of this call
+	const float *const startOrigin = predictedMovementActions[0].entityPhysicsState.Origin();
+	Assert( topOfStackIndex + 1 == predictedMovementActions.size() );
+	const float *const endOrigin = predictedMovementActions[topOfStackIndex - 1].entityPhysicsState.Origin();
+
+	// Sanity check
+	if( DistanceSquared( startOrigin, endOrigin ) < SQUARE( 72 ) ) {
+		Debug( "%s: Insufficient origin delta for path\n", tag );
+		SetPendingRollback();
+		return;
+	}
+
+	goodEnoughPath.clear();
+
+	// TODO: Copy only few entries? This would make looking at a built path impossible though.
+	for( const PredictedMovementAction &action: predictedMovementActions ) {
+		new( goodEnoughPath.unsafe_grow_back() )PredictedMovementAction( action );
+	}
+
+	Debug( "%s: Saved a good enough path for action %s\n", tag, goodEnoughPath.front().action->Name() );
+	travelTimeForGoodEnoughPath = travelTimeToTarget;
+	SetPendingRollback();
 }
 
 void MovementPredictionContext::SetupStackForStep() {
@@ -500,7 +542,6 @@ void MovementPredictionContext::SetupStackForStep() {
 		Assert( predictedMovementActions.size() );
 		Assert( botMovementStatesStack.size() == predictedMovementActions.size() );
 		Assert( playerStatesStack.size() == predictedMovementActions.size() );
-		Assert( pendingWeaponsStack.size() == predictedMovementActions.size() );
 
 		Assert( defaultBotInputsCachesStack.Size() == predictedMovementActions.size() );
 		Assert( reachChainsCachesStack.Size() == predictedMovementActions.size() );
@@ -517,7 +558,6 @@ void MovementPredictionContext::SetupStackForStep() {
 			predictedMovementActions.truncate( topOfStackIndex );
 			botMovementStatesStack.truncate( topOfStackIndex );
 			playerStatesStack.truncate( topOfStackIndex );
-			pendingWeaponsStack.truncate( topOfStackIndex );
 
 			defaultBotInputsCachesStack.PopToSize( topOfStackIndex );
 			reachChainsCachesStack.PopToSize( topOfStackIndex );
@@ -538,7 +578,6 @@ void MovementPredictionContext::SetupStackForStep() {
 		currPlayerState = &playerStatesStack.back();
 		// Push a copy of previous movement state onto top of the stack
 		botMovementStatesStack.push_back( botMovementStatesStack.back() );
-		pendingWeaponsStack.push_back( belowTopOfStack.record.pendingWeapon );
 
 		oldStepMillis = belowTopOfStack.stepMillis;
 		Assert( belowTopOfStack.stepMillis > 0 );
@@ -547,7 +586,6 @@ void MovementPredictionContext::SetupStackForStep() {
 		predictedMovementActions.clear();
 		botMovementStatesStack.clear();
 		playerStatesStack.clear();
-		pendingWeaponsStack.clear();
 
 		defaultBotInputsCachesStack.PopToSize( 0 );
 		reachChainsCachesStack.PopToSize( 0 );
@@ -564,7 +602,6 @@ void MovementPredictionContext::SetupStackForStep() {
 		currPlayerState = &playerStatesStack.back();
 		// Push the actual bot movement state onto top of the stack
 		botMovementStatesStack.push_back( module->movementState );
-		pendingWeaponsStack.push_back( (signed char)oldPlayerState->stats[STAT_PENDING_WEAPON] );
 
 		oldStepMillis = game.frametime;
 		totalMillisAhead = 0;
@@ -578,7 +615,7 @@ void MovementPredictionContext::SetupStackForStep() {
 
 	// Set the current action record
 	this->record = &topOfStack->record;
-	this->record->pendingWeapon = pendingWeaponsStack.back();
+	this->record->pendingWeapon = -1;
 
 	Assert( reachChainsCachesStack.Size() + 1 == predictedMovementActions.size() );
 	Assert( mayHitWhileRunningCachesStack.Size() + 1 == predictedMovementActions.size() );
@@ -921,6 +958,9 @@ void MovementPredictionContext::BuildPlan() {
 	this->isCompleted = false;
 	this->isTruncated = false;
 	this->shouldRollback = false;
+
+	this->goodEnoughPath.clear();
+	this->travelTimeForGoodEnoughPath = std::numeric_limits<int>::max();
 
 #ifndef CHECK_INFINITE_NEXT_STEP_LOOPS
 	for(;; ) {

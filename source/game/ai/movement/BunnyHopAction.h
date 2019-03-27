@@ -109,7 +109,7 @@ protected:
 
 	void TryMarkingForTruncation( MovementPredictionContext *context );
 
-	bool TryTerminationOnStopAreaNum( MovementPredictionContext *context, int groundedAreaNum );
+	bool TryTerminationOnStopAreaNum( MovementPredictionContext *context, int currTravelTimeToTarget, int groundedAreaNum );
 
 	bool TryTerminationHavingPassedObstacleOrDeltaZ( MovementPredictionContext *context,
 													 int currTravelTimeToTarget,

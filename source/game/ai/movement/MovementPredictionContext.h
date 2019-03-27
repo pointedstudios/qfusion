@@ -70,7 +70,7 @@ class BotMovementModule;
 
 class MovementPredictionContext : public MovementPredictionConstants
 {
-	friend class BotTriggerPendingWeaponJumpMovementAction;
+	friend class FallbackMovementAction;
 
 	Bot *const bot;
 	BotMovementModule *const module;
@@ -118,7 +118,9 @@ private:
 	StaticVector<PredictedMovementAction, MAX_PREDICTED_STATES> predictedMovementActions;
 	StaticVector<BotMovementState, MAX_PREDICTED_STATES> botMovementStatesStack;
 	StaticVector<player_state_t, MAX_PREDICTED_STATES> playerStatesStack;
-	StaticVector<signed char, MAX_PREDICTED_STATES> pendingWeaponsStack;
+
+	StaticVector<PredictedMovementAction, MAX_PREDICTED_STATES> goodEnoughPath;
+	int travelTimeForGoodEnoughPath { std::numeric_limits<int>::max() };
 
 	template <typename T, unsigned N>
 	class CachesStack
@@ -351,8 +353,6 @@ public:
 
 	inline void SaveActionOnStack( BaseMovementAction *action );
 
-	void StopTruncatingStackAt( unsigned frameIndex );
-
 	// Frame index is restricted to topOfStack or topOfStack + 1
 	inline void MarkSavepoint( BaseMovementAction *markedBy, unsigned frameIndex );
 
@@ -362,6 +362,8 @@ public:
 	inline void RollbackToSavepoint();
 	inline void SaveSuggestedActionForNextFrame( BaseMovementAction *action );
 	inline unsigned MillisAheadForFrameStart( unsigned frameIndex ) const;
+
+	void CompleteOrSaveGoodEnoughPath( int minTravelTimeSoFar, unsigned penaltyMillis = 0 );
 
 	class BaseMovementAction *GetCachedActionAndRecordForCurrTime( MovementActionRecord *record_ );
 
