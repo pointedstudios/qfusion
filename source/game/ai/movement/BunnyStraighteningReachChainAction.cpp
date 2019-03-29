@@ -194,7 +194,7 @@ AreaAndScore *BunnyStraighteningReachChainAction::SelectCandidateAreas( Context 
 				continue;
 			}
 		} else {
-			if( !TraceArcInSolidWorld( entityPhysicsState, traceStartPoint.Data(), areaPoint.Data() ) ) {
+			if( !TraceArcInSolidWorld( traceStartPoint.Data(), areaPoint.Data() ) ) {
 				continue;
 			}
 

@@ -114,7 +114,7 @@ bool ReachChainInterpolator::Exec( Context *context ) {
 				break;
 			}
 		} else {
-			if( TraceArcInSolidWorld( entityPhysicsState, origin, reach.start ) ) {
+			if( TraceArcInSolidWorld( origin, reach.start ) ) {
 				break;
 			}
 

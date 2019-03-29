@@ -648,24 +648,16 @@ int TravelTimeWalkingOrFallingShort( const AiAasRouteCache *routeCache, int from
 	}
 }
 
-bool TraceArcInSolidWorld( const AiEntityPhysicsState &startPhysicsState, const vec3_t from, const vec3_t to ) {
+bool TraceArcInSolidWorld( const vec3_t from, const vec3_t to ) {
 	trace_t trace;
 	const auto brushMask = MASK_WATER | MASK_SOLID;
-
-	float velocityZ = startPhysicsState.Velocity()[2];
-	if( startPhysicsState.GroundEntity() ) {
-		// We're going to jump...
-		velocityZ = DEFAULT_JUMPSPEED;
-	} else if( velocityZ < 0.0f ) {
-		StaticWorldTrace( &trace, from, to, brushMask );
-		return trace.fraction == 1.0f;
-	}
 
 	Vec3 midPoint( to );
 	midPoint += from;
 	midPoint *= 0.5f;
 
-	// Lets figure out deltaZ making an assumption that all forward momentum is converted to the direction to the point one
+	// Lets figure out deltaZ making an assumption that all forward momentum is converted to the direction to the point
+	// Note that we got rid of idea making these tests depending of a current AI entity physics state due to flicker issues.
 
 	const float squareDistanceToMidPoint = SQUARE( from[0] - midPoint.X() ) + SQUARE( from[1] - midPoint.Y() );
 	if( squareDistanceToMidPoint < SQUARE( 32 ) ) {
@@ -673,8 +665,11 @@ bool TraceArcInSolidWorld( const AiEntityPhysicsState &startPhysicsState, const 
 		return trace.fraction == 1.0f;
 	}
 
-	const float timeToMidPoint = sqrtf( squareDistanceToMidPoint ) / startPhysicsState.Speed2D();
-	const float deltaZ = velocityZ * timeToMidPoint - 0.5f * level.gravity * ( timeToMidPoint * timeToMidPoint );
+	// Assume a default ground movement speed
+	const float timeToMidPoint = Q_Sqrt( squareDistanceToMidPoint ) * Q_Rcp( DEFAULT_PLAYERSPEED );
+	// Assume an almost default jump speed
+	float deltaZ = ( 0.75f * DEFAULT_JUMPSPEED ) * timeToMidPoint;
+	deltaZ -= 0.5f * level.gravity * ( timeToMidPoint * timeToMidPoint );
 
 	// Does not worth making an arc
 	// Note that we ignore negative deltaZ since the real trajectory differs anyway
