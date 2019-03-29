@@ -2526,14 +2526,27 @@ public:
 
 void AiAasWorld::ComputeAreasVisibility( uint32_t *offsetsDataSize, uint32_t *listsDataSize ) {
 	const int numAreas = numareas;
+	// This also ensures we can use 32-bit indices for total number of areas
 	assert( numAreas && numAreas <= std::numeric_limits<uint16_t>::max() );
 	SparseVisTable table( numAreas );
+
+	int numberSoFar = 0;
+	int lastReportedProgress = 0;
+	// Assuming side = numAreas - 1 the number of elements in the upper part is (side - 1) * side / 2
+	const double progressNormalizer = numAreas <= 1 ? 0 : 100.0 / ( ( numAreas - 2 ) * ( numAreas - 1 ) / 2.0 );
 
 	const auto *const __restrict aasAreas = areas;
 	for( int i = 1; i < numAreas; ++i ) {
 		for( int j = i + 1; j < numAreas; ++j ) {
+			numberSoFar++;
 			if( !AreAreasInPvs( i, j ) ) {
 				continue;
+			}
+
+			int maybeProgress = (int)( numberSoFar * progressNormalizer );
+			if( maybeProgress != lastReportedProgress ) {
+				G_Printf( "AiAasWorld::ComputeAreasVisibility(): %d%%\n", maybeProgress );
+				lastReportedProgress = maybeProgress;
 			}
 
 			trace_t trace;
