@@ -331,6 +331,23 @@ bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 	const float oldSquare2DSpeed = oldEntityPhysicsState.SquareSpeed2D();
 	const float newSquare2DSpeed = newEntityPhysicsState.SquareSpeed2D();
 
+
+	bool hasChangedZ = false;
+	bool continueOnFailure = false;
+	// Skip any further tests if the bot has changed Z substantially or has marked "may stop at origin".
+	// Put cheaper tests first in outer conditions.
+	if( HasSubstantiallyChangedZ( newEntityPhysicsState ) ) {
+		if( originAtSequenceStart.SquareDistance2DTo( newEntityPhysicsState.Origin() ) > SQUARE( 72.0f ) ) {
+			continueOnFailure = true;
+			hasChangedZ = true;
+		}
+	}
+	if( !continueOnFailure && mayStopAtAreaNum ) {
+		if( Distance2DSquared( newEntityPhysicsState.Origin(), mayStopAtOrigin ) > SQUARE( 48.0f ) ) {
+			continueOnFailure = true;
+		}
+	}
+
 	// Check for unintended bouncing back (starting from some speed threshold)
 	if( oldSquare2DSpeed > 100 * 100 && newSquare2DSpeed > 1 * 1 ) {
 		Vec3 oldVelocity2DDir( oldVelocity[0], oldVelocity[1], 0 );
@@ -338,21 +355,24 @@ bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 		Vec3 newVelocity2DDir( newVelocity[0], newVelocity[1], 0 );
 		newVelocity2DDir *= 1.0f / newEntityPhysicsState.Speed2D();
 		if( oldVelocity2DDir.Dot( newVelocity2DDir ) < 0.3f ) {
-			Debug( "A prediction step has lead to an unintended bouncing back\n" );
-			return false;
-		}
-	}
-
-	// Skip any further tests if the bot has changed Z substantially
-	if( HasSubstantiallyChangedZ( newEntityPhysicsState ) ) {
-		if( originAtSequenceStart.SquareDistance2DTo( newEntityPhysicsState.Origin() ) > SQUARE( 72.0f ) ) {
-			return true;
+			if( !continueOnFailure ) {
+				Debug( "A prediction step has lead to an unintended bouncing back\n" );
+				return false;
+			}
+			// Walljumping is fine but in this environment it might hide bouncing of walls of a pit
+			if( hasChangedZ ) {
+				EnsurePathPenalty( 1000 );
+			}
 		}
 	}
 
 	// Avoid bumping into walls.
 	// Note: the lower speed limit is raised to actually trigger this check.
 	if( newSquare2DSpeed < 50 * 50 && oldSquare2DSpeed > 100 * 100 ) {
+		if( continueOnFailure ) {
+			EnsurePathPenalty( 1000 );
+			return true;
+		}
 		Debug( "A prediction step has lead to close to zero 2D speed while it was significant\n" );
 		this->shouldTryObstacleAvoidance = true;
 		return false;
@@ -381,6 +401,10 @@ bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 		// We should not however completely eliminate this interruption
 		// as sometimes it prevents bumping in obstacles pretty well.
 		if( newEntityPhysicsState.Speed2D() < 0.5f * ( context->GetRunSpeed() + context->GetDashSpeed() ) ) {
+			if( continueOnFailure ) {
+				EnsurePathPenalty( 750 );
+				return true;
+			}
 			const char *format_ = "A sequential speed loss interval of %d millis exceeds the tolerable one of %d millis\n";
 			Debug( format_, currentSpeedLossSequentialMillis, tolerableSpeedLossSequentialMillis );
 			this->shouldTryObstacleAvoidance = true;
@@ -461,6 +485,11 @@ void BunnyHopAction::TryMarkingForTruncation( Context *context ) {
 	} else if( WasOnGroundThisFrame( context ) ) {
 		MarkForTruncation( context );
 	}
+}
+
+void BunnyHopAction::CompleteOrSaveGoodEnoughPath( Context *context, unsigned additionalPenalty ) {
+	// Let the penalty be a sum of an accumulated path penalty and a penalty specified at invocation of this method.
+	context->CompleteOrSaveGoodEnoughPath( minTravelTimeToNavTargetSoFar, additionalPenalty + sequencePathPenalty );
 }
 
 void BunnyHopAction::HandleSameOrBetterTravelTimeToTarget( Context *context,
@@ -754,7 +783,7 @@ void BunnyHopAction::CheckPredictionStepResults( Context *context ) {
 	if( const int clusterNum = aasWorld->FloorClusterNum( mayStopAtAreaNum ) ) {
 		if( clusterNum == aasWorld->FloorClusterNum( groundedAreaNum ) ) {
 			if( aasWorld->IsAreaWalkableInFloorCluster( groundedAreaNum, mayStopAtAreaNum ) ) {
-				context->CompleteOrSaveGoodEnoughPath( minTravelTimeToNavTargetSoFar );
+				CompleteOrSaveGoodEnoughPath( context );
 				return;
 			}
 		}
@@ -780,12 +809,12 @@ bool BunnyHopAction::TryTerminationOnStopAreaNum( Context *context, int currTrav
 		// Ignore bumping into walls if we are very likely in stairs-like environment.
 		// Bots have significant movement troubles in this case.
 		if( HasSubstantiallyChangedZ( context->movementState->entityPhysicsState ) ) {
-			context->CompleteOrSaveGoodEnoughPath( minTravelTimeToNavTargetSoFar );
+			CompleteOrSaveGoodEnoughPath( context );
 			return true;
 		}
 
 		if( CheckForActualCompletionOnGround( context ) ) {
-			context->CompleteOrSaveGoodEnoughPath( minTravelTimeToNavTargetSoFar );
+			CompleteOrSaveGoodEnoughPath( context );
 			return true;
 		}
 
@@ -801,7 +830,7 @@ bool BunnyHopAction::TryTerminationOnStopAreaNum( Context *context, int currTrav
 		if( const int floorClusterNum = aasAreaFloorClusterNums[groundedAreaNum] ) {
 			if( CheckForPrematureCompletionInFloorCluster( context, groundedAreaNum, floorClusterNum ) ) {
 				// Allow completion but apply an additional penalty (we're in air and the landing was not checked)
-				context->CompleteOrSaveGoodEnoughPath( minTravelTimeToNavTargetSoFar, 300 );
+				CompleteOrSaveGoodEnoughPath( context, 300 );
 				return true;
 			}
 		} else if( aasWorld->AreaSettings()[groundedAreaNum].areaflags & AREA_NOFALL ) {
@@ -810,7 +839,7 @@ bool BunnyHopAction::TryTerminationOnStopAreaNum( Context *context, int currTrav
 			// Bumping into walls on high speed is the most painful issue.
 			if( GenericCheckForPrematureCompletion( context ) ) {
 				// Allow completion but apply a substantial additional penalty (we're in air and the landing was not checked)
-				context->CompleteOrSaveGoodEnoughPath( minTravelTimeToNavTargetSoFar, 600 );
+				CompleteOrSaveGoodEnoughPath( context, 600 );
 				return true;
 			}
 			// Can't say much, lets continue prediction
@@ -856,7 +885,7 @@ bool BunnyHopAction::TryTerminationHavingPassedObstacleOrDeltaZ( Context *contex
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	if( HasSubstantiallyChangedZ( entityPhysicsState ) ) {
 		// Allow completion in this case but apply a substantial penalty in addition to delta with min travel time
-		context->CompleteOrSaveGoodEnoughPath( minTravelTimeToNavTargetSoFar, wasOnGround ? 300 : 1000 );
+		CompleteOrSaveGoodEnoughPath( context, wasOnGround ? 300 : 1000 );
 		return true;
 	}
 
@@ -873,7 +902,7 @@ bool BunnyHopAction::TryTerminationHavingPassedObstacleOrDeltaZ( Context *contex
 		return false;
 	}
 
-	context->CompleteOrSaveGoodEnoughPath( minTravelTimeToNavTargetSoFar );
+	CompleteOrSaveGoodEnoughPath( context );
 	return true;
 }
 
@@ -916,17 +945,17 @@ bool BunnyHopAction::TryTerminationAtBestGroundPosition( Context *context, int c
 	// and we have a substantial distance for further trajectory correction
 	// (if the distance to the trajectory truncation origin is above the threshold)
 	if( mayStopAtAreaNum && Distance2DSquared( mayStopAtOrigin, entityPhysicsState.Origin() ) > SQUARE( 40 ) ) {
-		context->CompleteOrSaveGoodEnoughPath( minTravelTimeToNavTargetSoFar );
+		CompleteOrSaveGoodEnoughPath( context );
 		return true;
 	}
 
 	if( HasSubstantiallyChangedZ( entityPhysicsState ) ) {
-		context->CompleteOrSaveGoodEnoughPath( minTravelTimeToNavTargetSoFar );
+		CompleteOrSaveGoodEnoughPath( context );
 		return true;
 	}
 
 	if( CheckForActualCompletionOnGround( context ) ) {
-		context->CompleteOrSaveGoodEnoughPath( minTravelTimeToNavTargetSoFar );
+		CompleteOrSaveGoodEnoughPath( context );
 		return true;
 	}
 
@@ -977,7 +1006,7 @@ bool BunnyHopAction::TryTerminationAtGroundInSameStartArea( Context *context ) {
 	}
 
 	// Apply a penalty varying of dot product
-	context->CompleteOrSaveGoodEnoughPath( minTravelTimeToNavTargetSoFar, (unsigned)( 500.0f * ( 1.0f - dot ) ) );
+	CompleteOrSaveGoodEnoughPath( context, (unsigned)( 500.0f * ( 1.0f - dot ) ) );
 	return true;
 }
 
@@ -1126,6 +1155,8 @@ void BunnyHopAction::OnApplicationSequenceStarted( Context *context ) {
 	travelTimeAtSequenceStart = 0;
 	reachAtSequenceStart = 0;
 	groundedAreaAtSequenceStart = context->CurrGroundedAasAreaNum();
+
+	sequencePathPenalty = 0;
 
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	originAtSequenceStart.Set( entityPhysicsState.Origin() );
