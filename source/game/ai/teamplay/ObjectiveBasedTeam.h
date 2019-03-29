@@ -152,6 +152,22 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		 * @return the closest bot. Never fails if the list of bots assigned correctly this frame.
 		 */
 		Bot *FindClosestByDistanceBot( float *squareDistances = nullptr );
+
+		/**
+		 * Suggests number of tactical spots for attacking/defending this one using square euclidean distance tests.
+		 * @param squareDistances an array of square distances to this spot addressed by bot client numbers
+		 * @param maxDistance a maximal distance to the spot
+		 * @param excludeBot a bot that should be excluded
+		 * @return a suggested number of tactical spots.
+		 */
+		int SuggestNumberOfTacticalSpots( const float *squareDistances,
+										  float maxDistance,
+										  const Bot *excludedBot = nullptr );
+
+		/**
+		 * A helper for providing params for {@code SuggestNumberOfTacticalSpots()} and further reusing ones.
+		 */
+		void ComputeBotDistances( float *squareDistances );
 	};
 
 	/**
@@ -208,6 +224,9 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		struct AiAlertSpot ToAlertSpot() const;
 
 		void UpdateBotsStatus() override;
+
+		int FindSpots( vec3_t spots[MAX_HELPER_ENTS], int numRequestedSpots );
+
 		void UpdateBotsStatusForAlert();
 
 		bool IsVisibleForDefenders();
@@ -256,6 +275,8 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		void UpdateBotsStatus() override;
 
 		void SetDefaultSpotWeightsForBots();
+
+		int FindSpots( vec3_t spots[MAX_HELPER_ENTS], int numRequestedSpots );
 
 		void ComputeRawScores( Candidates &candidates ) override;
 	};

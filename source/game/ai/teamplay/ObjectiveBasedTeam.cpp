@@ -579,21 +579,30 @@ void AiObjectiveBasedTeam::OffenseSpot::ComputeRawScores( Candidates &candidates
 	}
 }
 
-void AiObjectiveBasedTeam::DefenceSpot::UpdateBotsStatusForAlert() {
-	int numRequestedSpots = 0;
-
+int AiObjectiveBasedTeam::DefenceSpot::FindSpots( vec3_t spots[MAX_HELPER_ENTS], int numRequestedSpots ) {
 	// Try finding tactical spots around target
 	AdvantageProblemSolver::OriginParams originParams( underlying->entity, this->radius, AiAasRouteCache::Shared() );
 	AdvantageProblemSolver::ProblemParams problemParams( underlying->entity );
+	problemParams.SetMinHeightAdvantageOverEntity( 32.0f );
 	problemParams.SetHeightOverEntityInfluence( 0.75f );
-	problemParams.SetHeightOverOriginInfluence( 0.75f );
-	problemParams.SetSpotProximityThreshold( 128.0f );
-	problemParams.SetTravelTimeInfluence( 0.25f );
-	problemParams.SetEntityDistanceInfluence( 0.25f );
+	problemParams.SetHeightOverOriginInfluence( 0.25f );
+	problemParams.SetSpotProximityThreshold( 192.0f );
+	problemParams.SetOriginWeightFalloffDistanceRatio( 0.5f );
+	problemParams.SetTravelTimeInfluence( 0.125f );
+	problemParams.SetMinSpotDistanceToEntity( 192.0f );
+	problemParams.SetEntityDistanceInfluence( 0.0f );
+	AdvantageProblemSolver solver( originParams, problemParams );
+	return solver.FindMany( spots, std::min( (int)MAX_HELPER_ENTS, numRequestedSpots ) );
+}
+
+void AiObjectiveBasedTeam::DefenceSpot::UpdateBotsStatusForAlert() {
+	float squareDistances[MAX_CLIENTS];
+	ComputeBotDistances( squareDistances );
+
+	const int numRequestedSpots = SuggestNumberOfTacticalSpots( squareDistances, this->radius );
 
 	vec3_t spots[MAX_HELPER_ENTS];
-	AdvantageProblemSolver solver( originParams, problemParams );
-	const int numSpots = solver.FindMany( spots, std::min( (int)MAX_HELPER_ENTS, numRequestedSpots ) );
+	const int numSpots = FindSpots( spots, numRequestedSpots );
 
 	int spotNum = 0;
 	const float *const spotOrigin = this->entity->s.origin;
@@ -695,6 +704,30 @@ Bot *AiObjectiveBasedTeam::ObjectiveSpotImpl::FindClosestByDistanceBot( float *s
 		}
 	}
 	return bestBot;
+}
+
+int AiObjectiveBasedTeam::ObjectiveSpotImpl::SuggestNumberOfTacticalSpots( const float *squareDistances,
+																		   float maxDistance,
+																		   const Bot *excludedBot ) {
+	int numRequestedSpots = 0;
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInObjective() ) {
+		if( bot == excludedBot ) {
+			continue;
+		}
+		if( squareDistances[bot->ClientNum()] > maxDistance * maxDistance ) {
+			continue;
+		}
+		numRequestedSpots++;
+	}
+	return numRequestedSpots;
+}
+
+void AiObjectiveBasedTeam::ObjectiveSpotImpl::ComputeBotDistances( float *squareDistances ) {
+	const float *__restrict origin = this->Origin();
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInObjective() ) {
+		const float *__restrict botOrigin = bot->Origin();
+		squareDistances[bot->ClientNum()] = DistanceSquared( origin, botOrigin );
+	}
 }
 
 void AiObjectiveBasedTeam::DefenceSpot::UpdateBotsStatus() {
@@ -805,6 +838,22 @@ void AiObjectiveBasedTeam::OffenseSpot::SetDefaultSpotWeightsForBots() {
 	}
 }
 
+int AiObjectiveBasedTeam::OffenseSpot::FindSpots( vec3_t spots[MAX_HELPER_ENTS], int numRequestedSpots ) {
+	// Try finding tactical spots around target
+	AdvantageProblemSolver::OriginParams originParams( underlying->entity, 768.0f, AiAasRouteCache::Shared() );
+	AdvantageProblemSolver::ProblemParams problemParams( underlying->entity );
+	problemParams.SetHeightOverEntityInfluence( 0.75f );
+	problemParams.SetHeightOverOriginInfluence( 0.15f );
+	problemParams.SetSpotProximityThreshold( 96.0f );
+	problemParams.SetOriginWeightFalloffDistanceRatio( 0.25f );
+	// Make sure other bots can reach the target quickly if the closest bot gets fragged
+	problemParams.SetTravelTimeInfluence( 0.75f );
+	problemParams.SetEntityDistanceInfluence( 0.5f );
+
+	AdvantageProblemSolver solver( originParams, problemParams );
+	return solver.FindMany( spots, std::min( (int)MAX_HELPER_ENTS, numRequestedSpots ) );
+}
+
 void AiObjectiveBasedTeam::OffenseSpot::UpdateBotsStatus() {
 	if( !botsListHead ) {
 		return;
@@ -829,18 +878,8 @@ void AiObjectiveBasedTeam::OffenseSpot::UpdateBotsStatus() {
 	}
 
 	// Find how many spots do we need.
-	// There's no point to fuse this with FindClosestByDistanceBot()
 	constexpr float rushDistanceThreshold = 768.0f;
-	int numRequestedSpots = 0;
-	for( Bot *bot = botsListHead->NextInObjective(); bot; bot = bot->NextInObjective() ) {
-		if( bot == closestBot ) {
-			continue;
-		}
-		if( squareDistances[bot->ClientNum()] > rushDistanceThreshold * rushDistanceThreshold ) {
-			continue;
-		}
-		numRequestedSpots++;
-	}
+	const int numRequestedSpots = SuggestNumberOfTacticalSpots( squareDistances, 768.0f, closestBot );
 
 	// Nobody else is at least "rush distance threshold" close to the target
 	if( !numRequestedSpots ) {
@@ -848,19 +887,8 @@ void AiObjectiveBasedTeam::OffenseSpot::UpdateBotsStatus() {
 		return;
 	}
 
-	// Try finding tactical spots around target
-	AdvantageProblemSolver::OriginParams originParams( underlying->entity, 768.0f, AiAasRouteCache::Shared() );
-	AdvantageProblemSolver::ProblemParams problemParams( underlying->entity );
-	problemParams.SetHeightOverEntityInfluence( 0.75f );
-	problemParams.SetHeightOverOriginInfluence( 0.75f );
-	problemParams.SetSpotProximityThreshold( 96.0f );
-	// Make sure other bots can reach the target quickly if the closest bot gets fragged
-	problemParams.SetTravelTimeInfluence( 0.75f );
-	problemParams.SetEntityDistanceInfluence( 0.5f );
-
 	vec3_t spots[MAX_HELPER_ENTS];
-	AdvantageProblemSolver solver( originParams, problemParams );
-	const int numSpots = solver.FindMany( spots, std::min( (int)MAX_HELPER_ENTS, numRequestedSpots ) );
+	const int numSpots = FindSpots( spots, numRequestedSpots );
 
 	int spotNum = 0;
 	for( Bot *bot = botsListHead; bot; bot = bot->NextInObjective() ) {
