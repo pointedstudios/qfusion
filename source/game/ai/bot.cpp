@@ -28,7 +28,7 @@ Bot::Bot( edict_t *self_, float skillLevel_ )
 	, lostEnemies( self_ )
 	, selectedNavEntity( nullptr, 0, 0, 0 )
 	, movementModule( this )
-	, awarenessModule( self_, this, skillLevel_ )
+	, awarenessModule( this )
 	, planningModule( self_, this, skillLevel_ )
 	, weightConfig( self_ )
 	, weaponsUsageModule( this ) {

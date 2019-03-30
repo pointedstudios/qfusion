@@ -10,13 +10,14 @@
 #include "PathBlockingTracker.h"
 
 class AiSquad;
+class Bot;
 
 class BotAwarenessModule: public AiFrameAwareUpdatable {
 	friend class Bot;
 
 	AiEnemiesTracker *activeEnemiesTracker { &ownEnemiesTracker };
 	AiSquad *squad { nullptr };
-	const edict_t *const self;
+	Bot *const bot;
 
 	SelectedEnemies &selectedEnemies;
 	SelectedEnemies &lostEnemies;
@@ -41,7 +42,7 @@ public:
 		Vec3 possibleOrigin { 0, 0, 0 };
 		float totalDamage { 0.0f };
 
-		bool IsValidFor( const edict_t *self ) const;
+		bool IsValidFor( const Bot *bot ) const;
 
 		void Invalidate() {
 			// We used to set zero timestamp but the timestamp acts as an instance id now
@@ -66,27 +67,19 @@ private:
 	mutable HurtEvent hurtEvent;
 
 	class EnemiesTracker : public AiEnemiesTracker {
-		edict_t *const self;
-		BotAwarenessModule *const threatTracker;
+		Bot *const bot;
+		BotAwarenessModule *const module;
 	protected:
-		void OnHurtByNewThreat( const edict_t *newThreat ) override {
-			threatTracker->OnHurtByNewThreat( newThreat, this );
-		}
-		bool CheckHasQuad() const override { return ::HasQuad( self ); }
-		bool CheckHasShell() const override { return ::HasShell( self ); }
-		float ComputeDamageToBeKilled() const override { return DamageToKill( self ); }
-		void OnEnemyRemoved( const TrackedEnemy *enemy ) override {
-			threatTracker->OnEnemyRemoved( enemy );
-		}
+		void OnHurtByNewThreat( const edict_t *newThreat ) override;
+		bool CheckHasQuad() const override;
+		bool CheckHasShell() const override;
+		float ComputeDamageToBeKilled() const override;
+		void OnEnemyRemoved( const TrackedEnemy *enemy ) override;
 		void SetBotRoleWeight( const edict_t *bot_, float weight ) override {}
 		float GetAdditionalEnemyWeight( const edict_t *bot_, const edict_t *enemy ) const override { return 0; }
 		void OnBotEnemyAssigned( const edict_t *bot_, const TrackedEnemy *enemy ) override {}
-
 	public:
-		EnemiesTracker( edict_t *self_, BotAwarenessModule *threatTracker_, float skill_ )
-			: AiEnemiesTracker( skill_ ), self( self_ ), threatTracker( threatTracker_ ) {
-			SetTag( va( "BotAwarenessModule(%s)::EnemiesTracker", self_->r.client->netname ) );
-		}
+		EnemiesTracker( Bot *bot_, BotAwarenessModule *module_ );
 	};
 
 	EnemiesTracker ownEnemiesTracker;
@@ -110,8 +103,7 @@ private:
 
 	void CheckForNewHazards();
 public:
-	// We have to provide both entity and Bot class refs due to initialization order issues
-	BotAwarenessModule( edict_t *self_, Bot *bot_, float skill_ );
+	BotAwarenessModule( Bot *bot_ );
 
 	void OnAttachedToSquad( AiSquad *squad_ );
 	void OnDetachedFromSquad( AiSquad *squad_ );
@@ -147,7 +139,7 @@ public:
 	}
 
 	const HurtEvent *GetValidHurtEvent() const {
-		if( !hurtEvent.IsValidFor( self ) ) {
+		if( !hurtEvent.IsValidFor( bot ) ) {
 			hurtEvent.Invalidate();
 			return nullptr;
 		}

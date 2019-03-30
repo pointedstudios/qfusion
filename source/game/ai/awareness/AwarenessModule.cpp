@@ -3,19 +3,19 @@
 #include "../teamplay/SquadBasedTeam.h"
 #include "../bot.h"
 
-BotAwarenessModule::BotAwarenessModule( edict_t *self_, Bot *bot_, float skill_ )
-	: self( self_ )
+BotAwarenessModule::BotAwarenessModule( Bot *bot_ )
+	: bot( bot_ )
 	, selectedEnemies( bot_->selectedEnemies )
 	, lostEnemies( bot_->lostEnemies )
-	, targetChoicePeriod( (unsigned)( 1500 - 500 * skill_ ) )
-	, reactionTime( 320u - (unsigned)( 300 * skill_ ) )
+	, targetChoicePeriod( (unsigned)( 1500 - 500 * bot_->Skill() ) )
+	, reactionTime( 320u - (unsigned)( 300 * bot_->Skill() ) )
 	, alertTracker( bot_ )
 	, hazardsDetector( bot_ )
 	, hazardsSelector( bot_ )
 	, eventsTracker( bot_ )
 	, keptInFovPointTracker( bot_, this )
 	, pathBlockingTracker( bot_ )
-	, ownEnemiesTracker( self_, this, skill_ ) {}
+	, ownEnemiesTracker( bot_, this ) {}
 
 void BotAwarenessModule::OnAttachedToSquad( AiSquad *squad_ ) {
 	this->squad = squad_;
@@ -41,18 +41,19 @@ void BotAwarenessModule::OnDetachedFromSquad( AiSquad *squad_ ) {
 void BotAwarenessModule::OnEnemyViewed( const edict_t *enemy ) {
 	ownEnemiesTracker.OnEnemyViewed( enemy );
 	if( squad ) {
-		squad->OnBotViewedEnemy( self, enemy );
+		squad->OnBotViewedEnemy( game.edicts + bot->EntNum(), enemy );
 	}
 }
 
 void BotAwarenessModule::OnEnemyOriginGuessed( const edict_t *enemy, unsigned minMillisSinceLastSeen, const float *guessedOrigin ) {
 	ownEnemiesTracker.OnEnemyOriginGuessed( enemy, minMillisSinceLastSeen, guessedOrigin );
 	if( squad ) {
-		squad->OnBotGuessedEnemyOrigin( self, enemy, minMillisSinceLastSeen, guessedOrigin );
+		squad->OnBotGuessedEnemyOrigin( game.edicts + bot->EntNum(), enemy, minMillisSinceLastSeen, guessedOrigin );
 	}
 }
 
 void BotAwarenessModule::OnPain( const edict_t *enemy, float kick, int damage ) {
+	const edict_t *self = game.edicts + bot->EntNum();
 	ownEnemiesTracker.OnPain( self, enemy, kick, damage );
 	if( squad ) {
 		squad->OnBotPain( self, enemy, kick, damage );
@@ -60,6 +61,7 @@ void BotAwarenessModule::OnPain( const edict_t *enemy, float kick, int damage ) 
 }
 
 void BotAwarenessModule::OnEnemyDamaged( const edict_t *target, int damage ) {
+	const edict_t *self = game.edicts + bot->EntNum();
 	ownEnemiesTracker.OnEnemyDamaged( self, target, damage );
 	if( squad ) {
 		squad->OnBotDamagedEnemy( self, target, damage );
@@ -67,7 +69,32 @@ void BotAwarenessModule::OnEnemyDamaged( const edict_t *target, int damage ) {
 }
 
 const TrackedEnemy *BotAwarenessModule::ChooseLostOrHiddenEnemy( unsigned timeout ) {
-	return activeEnemiesTracker->ChooseLostOrHiddenEnemy( self, timeout );
+	return activeEnemiesTracker->ChooseLostOrHiddenEnemy( game.edicts + bot->EntNum(), timeout );
+}
+
+BotAwarenessModule::EnemiesTracker::EnemiesTracker( Bot *bot_, BotAwarenessModule *module_ )
+	: AiEnemiesTracker( bot_->Skill() ), bot( bot_ ), module( module_ ) {
+	SetTag( va( "BotAwarenessModule(%s)::EnemiesTracker", bot->Nick() ) );
+}
+
+void BotAwarenessModule::EnemiesTracker::OnHurtByNewThreat( const edict_t *newThreat ) {
+	module->OnHurtByNewThreat( newThreat, this );
+}
+
+bool BotAwarenessModule::EnemiesTracker::CheckHasQuad() const {
+	return ::HasQuad( game.edicts + bot->EntNum() );
+}
+
+bool BotAwarenessModule::EnemiesTracker::CheckHasShell() const {
+	return ::HasShell( game.edicts + bot->EntNum() );
+}
+
+float BotAwarenessModule::EnemiesTracker::ComputeDamageToBeKilled() const {
+	return DamageToKill( game.edicts + bot->EntNum() );
+}
+
+void BotAwarenessModule::EnemiesTracker::OnEnemyRemoved( const TrackedEnemy *enemy )  {
+	module->OnEnemyRemoved( enemy );
 }
 
 void BotAwarenessModule::Frame() {
@@ -108,14 +135,14 @@ void BotAwarenessModule::UpdateSelectedEnemies() {
 
 	float visibleEnemyWeight = 0.0f;
 
-	if( const TrackedEnemy *visibleEnemy = activeEnemiesTracker->ChooseVisibleEnemy( self ) ) {
+	if( const auto *visibleEnemy = activeEnemiesTracker->ChooseVisibleEnemy( game.edicts + bot->EntNum() ) ) {
 		// A compiler prefers a non-const version here, and therefore fails on non-const version of method being private
 		const auto *activeEnemiesHead = ( (const AiEnemiesTracker *)activeEnemiesTracker )->ActiveEnemiesHead();
 		selectedEnemies.Set( visibleEnemy, targetChoicePeriod, activeEnemiesHead );
 		visibleEnemyWeight = 0.5f * ( visibleEnemy->AvgWeight() + visibleEnemy->MaxWeight() );
 	}
 
-	if( const TrackedEnemy *lostEnemy = activeEnemiesTracker->ChooseLostOrHiddenEnemy( self ) ) {
+	if( const auto *lostEnemy = activeEnemiesTracker->ChooseLostOrHiddenEnemy( game.edicts + bot->EntNum() ) ) {
 		float lostEnemyWeight = 0.5f * ( lostEnemy->AvgWeight() + lostEnemy->MaxWeight() );
 		// If there is a lost or hidden enemy of higher weight, store it
 		if( lostEnemyWeight > visibleEnemyWeight ) {
@@ -127,7 +154,7 @@ void BotAwarenessModule::UpdateSelectedEnemies() {
 	}
 }
 
-bool BotAwarenessModule::HurtEvent::IsValidFor( const edict_t *self_ ) const {
+bool BotAwarenessModule::HurtEvent::IsValidFor( const Bot *bot_ ) const {
 	if( level.time - lastHitTimestamp > 350 ) {
 		return false;
 	}
@@ -146,17 +173,14 @@ bool BotAwarenessModule::HurtEvent::IsValidFor( const edict_t *self_ ) const {
 		return false;
 	}
 
-	// It is not cheap to call so do it after all other tests have passed
-	vec3_t lookDir;
-	AngleVectors( self_->s.angles, lookDir, nullptr, nullptr );
-	Vec3 toThreat( inflictor->s.origin );
-	toThreat -= self_->s.origin;
+	Vec3 lookDir( bot_->EntityPhysicsState()->ForwardDir() );
+	Vec3 toThreat( Vec3( inflictor->s.origin ) - bot_->Origin() );
 	toThreat.NormalizeFast();
-	return toThreat.Dot( lookDir ) < self_->ai->botRef->FovDotFactor();
+	return toThreat.Dot( lookDir ) < bot_->FovDotFactor();
 }
 
 void BotAwarenessModule::TryTriggerPlanningForNewHazard() {
-	if( self->ai->botRef->Skill() <= 0.33f ) {
+	if( bot->Skill() <= 0.33f ) {
 		return;
 	}
 
@@ -171,7 +195,7 @@ void BotAwarenessModule::TryTriggerPlanningForNewHazard() {
 
 	if( !triggeredPlanningHazard.IsValid() ) {
 		triggeredPlanningHazard = *hazard;
-		self->ai->botRef->ForcePlanBuilding();
+		bot->ForcePlanBuilding();
 	}
 }
 
@@ -179,11 +203,11 @@ void BotAwarenessModule::OnHurtByNewThreat( const edict_t *newThreat, const AiFr
 	// Reject threats detected by bot brain if there is active squad.
 	// Otherwise there may be two calls for a single or different threats
 	// detected by squad and the bot brain enemy pool itself.
-	if( self->ai->botRef->IsInSquad() && threatDetector == &this->ownEnemiesTracker ) {
+	if( bot->IsInSquad() && threatDetector == &this->ownEnemiesTracker ) {
 		return;
 	}
 
-	bool hadValidThreat = hurtEvent.IsValidFor( self );
+	bool hadValidThreat = hurtEvent.IsValidFor( bot );
 	float totalInflictedDamage = activeEnemiesTracker->TotalDamageInflictedBy( newThreat );
 	if( hadValidThreat ) {
 		// The active threat is more dangerous than a new one
@@ -199,15 +223,14 @@ void BotAwarenessModule::OnHurtByNewThreat( const edict_t *newThreat, const AiFr
 		}
 	}
 
-	vec3_t botLookDir;
-	AngleVectors( self->s.angles, botLookDir, nullptr, nullptr );
-	Vec3 toEnemyDir = Vec3( newThreat->s.origin ) - self->s.origin;
-	float squareDistance = toEnemyDir.SquaredLength();
+	Vec3 botLookDir( bot->EntityPhysicsState()->ForwardDir() );
+	Vec3 toEnemyDir = Vec3( newThreat->s.origin ) - bot->Origin();
+	const float squareDistance = toEnemyDir.SquaredLength();
 	if( squareDistance < 1 ) {
 		return;
 	}
 
-	float invDistance = Q_RSqrt( squareDistance );
+	const float invDistance = Q_RSqrt( squareDistance );
 	toEnemyDir *= invDistance;
 	if( toEnemyDir.Dot( botLookDir ) >= 0 ) {
 		return;
@@ -219,11 +242,11 @@ void BotAwarenessModule::OnHurtByNewThreat( const edict_t *newThreat, const AiFr
 	toEnemyDir.NormalizeFast();
 	hurtEvent.inflictor = newThreat;
 	hurtEvent.lastHitTimestamp = level.time;
-	hurtEvent.possibleOrigin = ( 1.0f / invDistance ) * toEnemyDir + self->s.origin;
+	hurtEvent.possibleOrigin = Q_Rcp( invDistance ) * toEnemyDir + bot->Origin();
 	hurtEvent.totalDamage = totalInflictedDamage;
 	// Force replanning on new threat
 	if( !hadValidThreat ) {
-		self->ai->botRef->ForcePlanBuilding();
+		bot->ForcePlanBuilding();
 	}
 }
 
@@ -235,7 +258,7 @@ void BotAwarenessModule::OnEnemyRemoved( const TrackedEnemy *enemy ) {
 		return;
 	}
 	selectedEnemies.Invalidate();
-	self->ai->botRef->ForcePlanBuilding();
+	bot->ForcePlanBuilding();
 }
 
 void BotAwarenessModule::UpdateBlockedAreasStatus() {
@@ -243,7 +266,7 @@ void BotAwarenessModule::UpdateBlockedAreasStatus() {
 		return;
 	}
 
-	if( !self->ai->botRef->TryGetExpensiveThinkCallQuota() ) {
+	if( !bot->TryGetExpensiveThinkCallQuota() ) {
 		return;
 	}
 
@@ -338,10 +361,8 @@ void BotAwarenessModule::RegisterVisibleEnemies() {
 	}
 
 	// Compute look dir before loop
-	vec3_t lookDir;
-	AngleVectors( self->s.angles, lookDir, nullptr, nullptr );
-
-	const float dotFactor = self->ai->botRef->FovDotFactor();
+	const Vec3 lookDir( bot->EntityPhysicsState()->ForwardDir() );
+	const float dotFactor = bot->FovDotFactor();
 
 	// Note: non-client entities also may be candidate targets.
 	StaticVector<EntAndDistance, MAX_EDICTS> candidateTargets;
@@ -349,13 +370,13 @@ void BotAwarenessModule::RegisterVisibleEnemies() {
 	edict_t *const gameEdicts = game.edicts;
 	for( int i = 1; i < game.numentities; ++i ) {
 		edict_t *ent = gameEdicts + i;
-		if( self->ai->botRef->MayNotBeFeasibleEnemy( ent ) ) {
+		if( bot->MayNotBeFeasibleEnemy( ent ) ) {
 			continue;
 		}
 
 		// Reject targets quickly by fov
 		Vec3 toTarget( ent->s.origin );
-		toTarget -= self->s.origin;
+		toTarget -= bot->Origin();
 		float squareDistance = toTarget.SquaredLength();
 		if( squareDistance < 1 ) {
 			continue;
@@ -376,6 +397,7 @@ void BotAwarenessModule::RegisterVisibleEnemies() {
 	}
 
 	StaticVector<uint16_t, MAX_CLIENTS> visibleTargets;
+	const edict_t *self = game.edicts + bot->EntNum();
 	VisCheckRawEnts( candidateTargets, visibleTargets, self, MAX_CLIENTS, IsGenericEntityInPvs, IsEnemyVisible );
 
 	for( auto entNum: visibleTargets ) {
