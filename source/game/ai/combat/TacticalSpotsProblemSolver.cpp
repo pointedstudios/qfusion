@@ -40,7 +40,7 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::SelectCandidateSpots( const Spo
 
 SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOrigin( SpotsAndScoreVector &candidateSpots,
 																			uint16_t insideSpotNum ) {
-	AiAasRouteCache *routeCache = originParams.routeCache;
+	const auto *routeCache = originParams.routeCache;
 	const int originAreaNum = originParams.originAreaNum;
 	const float *origin = originParams.origin;
 	const float searchRadius = originParams.searchRadius;
@@ -105,7 +105,7 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOrigin( Spot
 
 SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidateSpots,
 																				   uint16_t insideSpotNum ) {
-	AiAasRouteCache *routeCache = originParams.routeCache;
+	const auto *routeCache = originParams.routeCache;
 	const int originAreaNum = originParams.originAreaNum;
 	const float *origin = originParams.origin;
 	const float searchRadius = originParams.searchRadius;

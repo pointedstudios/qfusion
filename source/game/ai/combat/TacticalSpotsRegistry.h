@@ -27,17 +27,17 @@ public:
 		const edict_t *originEntity;
 		vec3_t origin;
 		float searchRadius;
-		AiAasRouteCache *routeCache;
+		const AiAasRouteCache *routeCache;
 		int originAreaNum;
 	public:
-		OriginParams( const edict_t *originEntity_, float searchRadius_, AiAasRouteCache *routeCache_ )
+		OriginParams( const edict_t *originEntity_, float searchRadius_, const AiAasRouteCache *routeCache_ )
 			: originEntity( originEntity_ ), searchRadius( searchRadius_ ), routeCache( routeCache_ ) {
 			VectorCopy( originEntity_->s.origin, this->origin );
 			const AiAasWorld *aasWorld = AiAasWorld::Instance();
 			originAreaNum = aasWorld->IsLoaded() ? aasWorld->FindAreaNum( originEntity ) : 0;
 		}
 
-		OriginParams( const vec3_t origin_, float searchRadius_, AiAasRouteCache *routeCache_ )
+		OriginParams( const vec3_t origin_, float searchRadius_, const AiAasRouteCache *routeCache_ )
 			: originEntity( nullptr ), searchRadius( searchRadius_ ), routeCache( routeCache_ ) {
 			VectorCopy( origin_, this->origin );
 			const AiAasWorld *aasWorld = AiAasWorld::Instance();
@@ -45,7 +45,7 @@ public:
 		}
 
 		OriginParams( const vec3_t origin_, const edict_t *originEntity_,
-					  float searchRadius_, AiAasRouteCache *routeCache_ )
+					  float searchRadius_, const AiAasRouteCache *routeCache_ )
 			: originEntity( originEntity_ ), searchRadius( searchRadius_ ), routeCache( routeCache_ ) {
 			VectorCopy( origin_, this->origin );
 			const AiAasWorld *aasWorld = AiAasWorld::Instance();

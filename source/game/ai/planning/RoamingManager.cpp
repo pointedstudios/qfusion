@@ -272,9 +272,7 @@ void BotRoamingManager::TryResetAllSpotsDisabledState() {
 }
 
 void BotRoamingManager::DisableSpotsInRadius( const vec3_t origin, float radius ) {
-	auto *routeCache = const_cast<AiAasRouteCache *>( bot->RouteCache() );
-	// TODO: Change OriginParams() signature as all ops are const-correct
-	TacticalSpotsRegistry::OriginParams originParams( origin, game.edicts + bot->EntNum(), radius, routeCache );
+	TacticalSpotsRegistry::OriginParams originParams( origin, game.edicts + bot->EntNum(), radius, bot->RouteCache() );
 	uint16_t insideSpotNum = std::numeric_limits<uint16_t>::max();
 	const auto &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
 	const int64_t levelTime = level.time;
