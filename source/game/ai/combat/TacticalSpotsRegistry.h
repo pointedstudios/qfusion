@@ -29,16 +29,12 @@ public:
 		float searchRadius;
 		AiAasRouteCache *routeCache;
 		int originAreaNum;
-		int preferredTravelFlags;
-		int allowedTravelFlags;
 	public:
 		OriginParams( const edict_t *originEntity_, float searchRadius_, AiAasRouteCache *routeCache_ )
 			: originEntity( originEntity_ ), searchRadius( searchRadius_ ), routeCache( routeCache_ ) {
 			VectorCopy( originEntity_->s.origin, this->origin );
 			const AiAasWorld *aasWorld = AiAasWorld::Instance();
 			originAreaNum = aasWorld->IsLoaded() ? aasWorld->FindAreaNum( originEntity ) : 0;
-			preferredTravelFlags = Bot::PREFERRED_TRAVEL_FLAGS;
-			allowedTravelFlags = Bot::ALLOWED_TRAVEL_FLAGS;
 		}
 
 		OriginParams( const vec3_t origin_, float searchRadius_, AiAasRouteCache *routeCache_ )
@@ -46,8 +42,6 @@ public:
 			VectorCopy( origin_, this->origin );
 			const AiAasWorld *aasWorld = AiAasWorld::Instance();
 			originAreaNum = aasWorld->IsLoaded() ? aasWorld->FindAreaNum( origin ) : 0;
-			preferredTravelFlags = Bot::PREFERRED_TRAVEL_FLAGS;
-			allowedTravelFlags = Bot::ALLOWED_TRAVEL_FLAGS;
 		}
 
 		OriginParams( const vec3_t origin_, const edict_t *originEntity_,
@@ -56,8 +50,6 @@ public:
 			VectorCopy( origin_, this->origin );
 			const AiAasWorld *aasWorld = AiAasWorld::Instance();
 			originAreaNum = aasWorld->IsLoaded() ? aasWorld->FindAreaNum( originEntity ) : 0;
-			preferredTravelFlags = Bot::PREFERRED_TRAVEL_FLAGS;
-			allowedTravelFlags = Bot::ALLOWED_TRAVEL_FLAGS;
 		}
 
 		inline Vec3 MinBBoxBounds( float minHeightAdvantage = 0.0f ) const {
