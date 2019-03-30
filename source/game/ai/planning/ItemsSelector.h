@@ -16,15 +16,15 @@ class SelectedNavEntity {
 	int64_t selectedAt;
 	int64_t timeoutAt;
 
-	inline SelectedNavEntity( const NavEntity *navEntity_,
-							  float cost_,
-							  float pickupGoalWeight_,
-							  int64_t timeoutAt_ )
-		: navEntity( navEntity_ ),
-		cost( cost_ ),
-		pickupGoalWeight( pickupGoalWeight_ ),
-		selectedAt( level.time ),
-		timeoutAt( timeoutAt_ ) {}
+	SelectedNavEntity( const NavEntity *navEntity_,
+					   float cost_,
+					   float pickupGoalWeight_,
+					   int64_t timeoutAt_ )
+		: navEntity( navEntity_ )
+		, cost( cost_ )
+		, pickupGoalWeight( pickupGoalWeight_ )
+		, selectedAt( level.time )
+		, timeoutAt( timeoutAt_ ) {}
 
 	void CheckValid( const char *message = nullptr ) const {
 		if( !IsValid() ) {
@@ -63,7 +63,7 @@ public:
 };
 
 class BotItemsSelector {
-	edict_t *self;
+	const Bot *const bot;
 
 	int64_t disabledForSelectionUntil[MAX_EDICTS];
 
@@ -73,7 +73,7 @@ class BotItemsSelector {
 	// For each item contains a goal weight that would a corresponding AI pickup goal have.
 	float internalPickupGoalWeights[MAX_EDICTS];
 
-	float GetEntityWeight( int entNum ) {
+	float GetEntityWeight( int entNum ) const {
 		float overriddenEntityWeight = overriddenEntityWeights[entNum];
 		if( overriddenEntityWeight != 0 ) {
 			return overriddenEntityWeight;
@@ -81,17 +81,15 @@ class BotItemsSelector {
 		return internalEntityWeights[entNum];
 	}
 
-	float GetGoalWeight( int entNum ) {
+	float GetGoalWeight( int entNum ) const {
 		float overriddenEntityWeight = overriddenEntityWeights[entNum];
 		// Make goal weight based on overridden entity weight
 		if( overriddenEntityWeight != 0 ) {
 			// High weight items would have 2.0f goal weight
-			return 2.0f * SQRTFAST( BoundedFraction( overriddenEntityWeight, 10.0f ) );
+			return 2.0f * Q_Sqrt( std::max( overriddenEntityWeight, 10.0f ) * Q_Rcp( 10.0f ) );
 		}
 		return internalPickupGoalWeights[entNum];
 	}
-
-	const int *Inventory() const { return self->r.client->ps.inventory; }
 
 	void UpdateInternalItemAndGoalWeights();
 
@@ -112,16 +110,23 @@ class BotItemsSelector {
 	ItemAndGoalWeights ComputeHealthWeights( const gsitem_t *item ) const;
 	ItemAndGoalWeights ComputePowerupWeights( const gsitem_t *item ) const;
 
-	void Debug( const char *format, ... ) {
-		va_list va;
-		va_start( va, format );
-		AI_Debugv( self->r.client->netname, format, va );
-		va_end( va );
+#ifndef _MSC_VER
+	void Debug( const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
+#else
+	void Debug( _Printf_format_string_ const char *format, ... );
+#endif
+
+	SelectedNavEntity SelectEmpty() {
+		return SelectedNavEntity( nullptr, std::numeric_limits<float>::max(), 0.0f, level.time + 200 );
+	}
+
+	SelectedNavEntity Select( const NavEntity *navEntity, float cost, unsigned timeout ) {
+		return SelectedNavEntity( navEntity, cost, GetGoalWeight( navEntity->Id() ), level.time + timeout );
 	}
 
 	bool IsShortRangeReachable( const NavEntity *navEntity, const int *fromAreaNums, int numFromAreas ) const;
 public:
-	explicit BotItemsSelector( edict_t *self_ ) : self( self_ ) {
+	explicit BotItemsSelector( const Bot *bot_ ) : bot( bot_ ) {
 		// We zero only this array as its content does not get cleared in SuggestGoalEntity() calls
 		memset( disabledForSelectionUntil, 0, sizeof( disabledForSelectionUntil ) );
 	}

@@ -37,7 +37,7 @@ BotPlanningModule::BotPlanningModule( edict_t *self_, Bot *bot_, float skill_ )
 	, startLostEnemyPursuitAction( this )
 	, stopLostEnemyPursuitAction( this )
 	, tacticalSpotsCache( self_ )
-	, itemsSelector( self_ )
+	, itemsSelector( bot_ )
 	, roamingManager( self_ ) {}
 
 BotScriptGoal *BotPlanningModule::InstantiateScriptGoal( void *scriptGoalFactory,

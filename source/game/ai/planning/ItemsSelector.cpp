@@ -6,16 +6,18 @@ void BotItemsSelector::UpdateInternalItemAndGoalWeights() {
 	memset( internalEntityWeights, 0, sizeof( internalEntityWeights ) );
 	memset( internalPickupGoalWeights, 0, sizeof( internalPickupGoalWeights ) );
 
+	const edict_t *self = game.edicts + bot->EntNum();
+	const auto *inventory = self->r.client->ps.inventory;
+
 	// Compute it once, not on each loop step
 	bool onlyGotGB = true;
 	for( int weapon = WEAP_GUNBLADE + 1; weapon < WEAP_TOTAL; ++weapon ) {
-		if( Inventory()[weapon] ) {
+		if( inventory[weapon] ) {
 			onlyGotGB = false;
 			break;
 		}
 	}
 
-	const auto *const bot = self->ai->botRef;
 	const auto *const botTeam = AiBaseTeam::GetTeamForNum( self->s.team );
 	const auto levelTime = level.time;
 	auto *const navEntitiesRegistry = NavEntitiesRegistry::Instance();
@@ -84,16 +86,18 @@ BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeItemWeights( const
 }
 
 BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeWeaponWeights( const gsitem_t *item, bool onlyGotGB ) const {
-	if( Inventory()[item->tag] ) {
+	const auto *const inventory = game.edicts[bot->EntNum()].r.client->ps.inventory;
+
+	if( inventory[item->tag] ) {
 		// TODO: Precache
 		const gsitem_t *ammo = GS_FindItemByTag( item->ammo_tag );
-		if( Inventory()[ammo->tag] >= ammo->inventory_max ) {
+		if( inventory[ammo->tag] >= ammo->inventory_max ) {
 			return ItemAndGoalWeights( 0, 0 );
 		}
 
-		float ammoQuantityFactor = 1.0f - Inventory()[ammo->tag] / (float)ammo->inventory_max;
+		float ammoQuantityFactor = 1.0f - inventory[ammo->tag] * Q_Rcp( ammo->inventory_max );
 		if( ammoQuantityFactor > 0 ) {
-			ammoQuantityFactor = SQRTFAST( ammoQuantityFactor );
+			ammoQuantityFactor = Q_Sqrt( ammoQuantityFactor );
 		}
 
 		switch( item->tag ) {
@@ -116,7 +120,7 @@ BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeWeaponWeights( con
 	// TODO: Precompute
 	float topTierWeaponGreed = 0.0f;
 	for( int i = 0; i < 4; ++i ) {
-		if( !Inventory()[topTierWeapons[i]] ) {
+		if( !inventory[topTierWeapons[i]] ) {
 			topTierWeaponGreed += 1.0f;
 		}
 	}
@@ -132,8 +136,10 @@ BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeWeaponWeights( con
 }
 
 BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeAmmoWeights( const gsitem_t *item ) const {
-	if( Inventory()[item->tag] < item->inventory_max ) {
-		float quantityFactor = 1.0f - Inventory()[item->tag] / (float)item->inventory_max;
+	const auto *const inventory = game.edicts[bot->EntNum()].r.client->ps.inventory;
+
+	if( inventory[item->tag] < item->inventory_max ) {
+		float quantityFactor = 1.0f - inventory[item->tag] * Q_Rcp( item->inventory_max );
 		if( quantityFactor > 0 ) {
 			quantityFactor = SQRTFAST( quantityFactor );
 		}
@@ -142,7 +148,7 @@ BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeAmmoWeights( const
 			// TODO: Preache
 			const gsitem_t *weaponItem = GS_FindItemByTag( weapon );
 			if( weaponItem->ammo_tag == item->tag ) {
-				if( Inventory()[weaponItem->tag] ) {
+				if( inventory[weaponItem->tag] ) {
 					switch( weaponItem->tag ) {
 						case WEAP_ELECTROBOLT:
 							return ItemAndGoalWeights( quantityFactor, quantityFactor );
@@ -168,17 +174,19 @@ BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeHealthWeights( con
 		return ItemAndGoalWeights( 2.5f, 1.5f );
 	}
 
+	const edict_t *self = game.edicts + bot->EntNum();
+
 	// Always set low goal weight for small health bubbles
 	if( item->tag == HEALTH_SMALL ) {
-		return ItemAndGoalWeights( 0.2f + 0.3f * ( 1.0f - self->health / (float) self->max_health ), 0.05f );
+		return ItemAndGoalWeights( 0.2f + 0.3f * ( 1.0f - self->health * Q_Rcp( self->max_health ) ), 0.05f );
 	}
 
-	float healthFactor = std::max( 0.0f, 1.0f - self->health / (float)self->max_health );
+	float healthFactor = std::max( 0.0f, 1.0f - self->health * Q_Rcp( self->max_health ) );
 	return ItemAndGoalWeights( healthFactor, healthFactor );
 }
 
 BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeArmorWeights( const gsitem_t *item ) const {
-	float currArmor = self->r.client->resp.armor;
+	float currArmor = game.edicts[bot->EntNum()].r.client->resp.armor;
 	switch( item->tag ) {
 		case ARMOR_RA:
 			return currArmor < 150.0f ? ItemAndGoalWeights( 2.0f, 1.0f ) : ItemAndGoalWeights( 0, 0 );
@@ -219,6 +227,7 @@ SelectedNavEntity BotItemsSelector::SuggestGoalNavEntity( const SelectedNavEntit
 	StaticVector<NavEntityAndWeight, MAX_NAVENTS> rawWeightCandidates;
 	const auto levelTime = level.time;
 	auto *navEntitiesRegistry = NavEntitiesRegistry::Instance();
+	const auto *routeCache = bot->RouteCache();
 	for( const NavEntity *navEnt = navEntitiesRegistry->Head(); navEnt; navEnt = navEnt->Next() ) {
 		if( navEnt->IsDisabled() ) {
 			continue;
@@ -232,7 +241,7 @@ SelectedNavEntity BotItemsSelector::SuggestGoalNavEntity( const SelectedNavEntit
 		}
 
 		// Since movable goals have been introduced (and clients qualify as movable goals), prevent picking itself as a goal.
-		if( navEnt->Id() == ENTNUM( self ) ) {
+		if( navEnt->Id() == bot->EntNum() ) {
 			continue;
 		}
 
@@ -242,7 +251,7 @@ SelectedNavEntity BotItemsSelector::SuggestGoalNavEntity( const SelectedNavEntit
 
 		// Reject an entity quickly if it looks like blocked by an enemy that is close to the entity.
 		// Note than passing this test does not guarantee that entire path to the entity is not blocked by enemies.
-		if( self->ai->botRef->routeCache->AreaDisabled( navEnt->AasAreaNum() ) ) {
+		if( routeCache->AreaDisabled( navEnt->AasAreaNum() ) ) {
 			continue;
 		}
 
@@ -262,16 +271,15 @@ SelectedNavEntity BotItemsSelector::SuggestGoalNavEntity( const SelectedNavEntit
 	// Make sure the candidates list is not empty and thus we can access the best candidate
 	if( rawWeightCandidates.empty() ) {
 		Debug( "Can't find a feasible long-term goal nav. entity\n" );
-		return SelectedNavEntity( nullptr, std::numeric_limits<float>::max(), 0.0f, level.time + 200 );
+		return SelectEmpty();
 	}
 
 	// Sort all pre-selected candidates by their raw weights
 	std::sort( rawWeightCandidates.begin(), rawWeightCandidates.end() );
 
 	int fromAreaNums[2] = { 0, 0 };
-	const auto &entityPhysicsState = self->ai->botRef->EntityPhysicsState();
+	const auto &entityPhysicsState = bot->EntityPhysicsState();
 	const int numFromAreas = entityPhysicsState->PrepareRoutingStartAreas( fromAreaNums );
-	const auto *routeCache = self->ai->botRef->routeCache;
 
 	// Pick the best raw weight nav entity.
 	// This nav entity is not necessarily the best final nav entity
@@ -291,7 +299,7 @@ SelectedNavEntity BotItemsSelector::SuggestGoalNavEntity( const SelectedNavEntit
 		++rawCandidatesIter;
 		if( rawCandidatesIter == rawCandidatesEnd ) {
 			Debug( "Can't find a feasible long-term goal nav. entity\n" );
-			return SelectedNavEntity( nullptr, std::numeric_limits<float>::max(), 0.0f, level.time + 200 );
+			return SelectEmpty();
 		}
 		rawBestNavEnt = ( *rawCandidatesIter ).goal;
 		rawBestAreaNum = rawBestNavEnt->AasAreaNum();
@@ -414,35 +422,45 @@ SelectedNavEntity BotItemsSelector::SuggestGoalNavEntity( const SelectedNavEntit
 
 	if( !bestNavEnt ) {
 		Debug( "Can't find a feasible long-term goal nav. entity\n" );
-		return SelectedNavEntity( nullptr, std::numeric_limits<float>::max(), 0.0f, level.time + 200 );
+		return SelectEmpty();
 	}
 
 	// If it is time to pick a new goal (not just re-evaluate current one), do not be too sticky to the current goal
 	const float currToBestWeightThreshold = currGoalNavEntity != nullptr ? 0.6f : 0.8f;
 
 	if( currGoalNavEntity && currGoalNavEntity == bestNavEnt ) {
-		constexpr const char *format = "current goal entity %s is kept as still having best weight %.3f\n";
+		constexpr const char *format = "The current goal entity %s is kept as still having best weight %.2f\n";
 		Debug( format, currGoalNavEntity->Name(), bestWeight );
-		return SelectedNavEntity( bestNavEnt, bestNavEntCost, GetGoalWeight( bestNavEnt->Id() ), level.time + 4000 );
-	} else if( currGoalEntWeight > 0 && currGoalEntWeight / bestWeight > currToBestWeightThreshold ) {
-		constexpr const char *format =
-			"current goal entity %s is kept as having weight %.3f good enough to not consider picking another one\n";
+		return Select( bestNavEnt, bestNavEntCost, 4000u );
+	}
+
+	if( currGoalEntWeight > 0 && currGoalEntWeight / bestWeight > currToBestWeightThreshold ) {
+		constexpr const char *format = "The current goal entity %s is kept as having weight %.2f good enough\n";
 		// If currGoalEntWeight > 0, currLongTermGoalEnt is guaranteed to be non-null
 		Debug( format, currGoalNavEntity->Name(), currGoalEntWeight );
-		return SelectedNavEntity( currGoalNavEntity, currGoalEntCost, GetGoalWeight( bestNavEnt->Id() ), level.time + 2500 );
-	} else {
-		if( currGoalNavEntity ) {
-			const char *format = "suggested %s weighted %.3f as a long-term goal instead of %s weighted now as %.3f\n";
-			Debug( format, bestNavEnt->Name(), bestWeight, currGoalNavEntity->Name(), currGoalEntWeight );
-		} else {
-			Debug( "suggested %s weighted %.3f as a new long-term goal\n", bestNavEnt->Name(), bestWeight );
-		}
-		return SelectedNavEntity( bestNavEnt, bestNavEntCost, GetGoalWeight( bestNavEnt->Id() ), level.time + 2500 );
+		return Select( currGoalNavEntity, currGoalEntCost, 2500u );
 	}
+
+	if( currGoalNavEntity ) {
+		const char *format = "Suggested %s weighted %.2f as a long-term goal instead of %s weighted now as %.2f\n";
+		Debug( format, bestNavEnt->Name(), bestWeight, currGoalNavEntity->Name(), currGoalEntWeight );
+	} else {
+		Debug( "Suggested %s weighted %.2f as a new long-term goal\n", bestNavEnt->Name(), bestWeight );
+	}
+
+	return Select( bestNavEnt, bestNavEntCost, 2500u );
+}
+
+void BotItemsSelector::Debug( const char *format, ... ) {
+	char tagBuffer[64];
+	va_list va;
+	va_start( va, format );
+	AI_Debugv( va_r( tagBuffer, sizeof( tagBuffer ), "ItemsSelector(%s)", bot->Nick() ), format, va );
+	va_end( va );
 }
 
 bool BotItemsSelector::IsShortRangeReachable( const NavEntity *navEnt, const int *fromAreaNums, int numFromAreas ) const {
-	if( navEnt->Origin().SquareDistanceTo( self->s.origin ) > 256.0f * 256.0f ) {
+	if( navEnt->Origin().SquareDistanceTo( bot->Origin() ) > 256.0f * 256.0f ) {
 		return false;
 	}
 
@@ -451,6 +469,7 @@ bool BotItemsSelector::IsShortRangeReachable( const NavEntity *navEnt, const int
 	}
 
 	const auto *ent = game.edicts + navEnt->Id();
+	const auto *self = game.edicts + bot->EntNum();
 	if( !EntitiesPvsCache::Instance()->AreInPvs( self, ent ) ) {
 		return false;
 	}
