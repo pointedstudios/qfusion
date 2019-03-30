@@ -10,7 +10,7 @@ class EventsTracker: public AiFrameAwareUpdatable {
 	friend class HazardsDetector;
 	friend class JumppadUsersTracker;
 
-	edict_t *const self;
+	Bot *const bot;
 	float viewDirDotTeammateDir[MAX_CLIENTS];
 	float distancesToTeammates[MAX_CLIENTS];
 	uint8_t testedTeammatePlayerNums[MAX_CLIENTS];
@@ -77,24 +77,9 @@ class EventsTracker: public AiFrameAwareUpdatable {
 		eventsQueue.emplace_front( DetectedEvent( origin, ENTNUM( enemy ) ) );
 	}
 
-	bool CanPlayerBeHeardAsEnemy( const edict_t *ent, float distanceThreshold ) {
-		if( self->s.team != ent->s.team || self->s.team == TEAM_PLAYERS ) {
-			if( DistanceSquared( self->s.origin, ent->s.origin ) < distanceThreshold * distanceThreshold ) {
-				return true;
-			}
-		}
-		return false;
-	}
+	bool CanPlayerBeHeardAsEnemy( const edict_t *ent, float distanceThreshold );
 
-	bool CanEntityBeHeardAsEnemy( const edict_t *ent, float distanceThreshold ) {
-		const edict_t *owner = game.edicts + ent->s.ownerNum;
-		if( self->s.team != owner->s.team || self->s.team == TEAM_PLAYERS ) {
-			if( DistanceSquared( self->s.origin, ent->s.origin ) < distanceThreshold * distanceThreshold ) {
-				return true;
-			}
-		}
-		return false;
-	}
+	bool CanEntityBeHeardAsEnemy( const edict_t *ent, float distanceThreshold );
 
 	void HandleGenericPlayerEntityEvent( const edict_t *player, float distanceThreshold );
 	void HandleGenericEventAtPlayerOrigin( const edict_t *event, float distanceThreshold );
@@ -138,7 +123,7 @@ class EventsTracker: public AiFrameAwareUpdatable {
 
 	JumppadUsersTracker jumppadUsersTracker;
 public:
-	explicit EventsTracker( edict_t *self_ ): self( self_ ), jumppadUsersTracker( this ) {
+	explicit EventsTracker( Bot *bot_ ): bot( bot_ ), jumppadUsersTracker( this ) {
 		SetupEventHandlers();
 	}
 

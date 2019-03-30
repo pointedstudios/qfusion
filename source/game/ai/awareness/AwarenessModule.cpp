@@ -12,7 +12,7 @@ BotAwarenessModule::BotAwarenessModule( edict_t *self_, Bot *bot_, float skill_ 
 	, alertTracker( bot_ )
 	, hazardsDetector( self_ )
 	, hazardsSelector( self_ )
-	, eventsTracker( self_ )
+	, eventsTracker( bot_ )
 	, keptInFovPointTracker( bot_, this )
 	, pathBlockingTracker( bot_ )
 	, ownEnemiesTracker( self_, this, skill_ ) {}
