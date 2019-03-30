@@ -36,7 +36,7 @@ BotPlanningModule::BotPlanningModule( edict_t *self_, Bot *bot_, float skill_ )
 	, turnToLostEnemyAction( this )
 	, startLostEnemyPursuitAction( this )
 	, stopLostEnemyPursuitAction( this )
-	, tacticalSpotsCache( self_ )
+	, tacticalSpotsCache( bot_ )
 	, itemsSelector( bot_ )
 	, roamingManager( bot_ ) {}
 

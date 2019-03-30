@@ -62,7 +62,7 @@ class BotTacticalSpotsCache {
 	DualOriginSpotsCache runAwayJumppadOriginsCache;
 	DualOriginSpotsCache runAwayElevatorOriginsCache;
 
-	edict_t *self;
+	Bot *const bot;
 
 	bool FindSniperRangeTacticalSpot( const Vec3 &origin, const Vec3 &enemyOrigin, vec3_t result );
 	bool FindFarRangeTacticalSpot( const Vec3 &origin, const Vec3 &enemyOrigin, vec3_t result );
@@ -119,7 +119,7 @@ public:
 
 	// These functions are extracted to be able to mock a bot entity
 	// by a player entity easily for testing and tweaking the cache
-	inline class AiAasRouteCache *RouteCache();
+	inline const class AiAasRouteCache *RouteCache();
 	inline float Skill() const;
 	inline bool BotHasAlmostSameOrigin( const Vec3 &unpackedOrigin ) const;
 
@@ -132,7 +132,7 @@ public:
 									const short *enemyOrigin, DualOriginFindMethod findMethod );
 
 public:
-	explicit BotTacticalSpotsCache( edict_t *self_ ) : self( self_ ) {}
+	explicit BotTacticalSpotsCache( Bot *bot_ ) : bot( bot_ ) {}
 
 	inline void Clear() {
 		sniperRangeTacticalSpotsCache.Clear();
