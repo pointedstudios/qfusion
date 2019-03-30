@@ -1,6 +1,6 @@
 #include "HazardsSelector.h"
 #include "AwarenessModule.h"
-
+#include "../bot.h"
 #include "../../../qalgo/Links.h"
 
 void HazardsSelector::BeginUpdate() {
@@ -396,6 +396,7 @@ void PlasmaBeamsBuilder::FindMostHazardousBeams() {
 void HazardsSelector::FindWaveHazards( const EntNumsVector &entNums ) {
 	auto *const gameEdicts = game.edicts;
 	const auto *weaponDef = GS_GetWeaponDef( WEAP_SHOCKWAVE );
+	const edict_t *self = game.edicts + bot->EntNum();
 	trace_t trace;
 	for( auto entNum: entNums ) {
 		edict_t *wave = gameEdicts + entNum;
@@ -464,8 +465,8 @@ void HazardsSelector::FindWaveHazards( const EntNumsVector &entNums ) {
 }
 
 void HazardsSelector::FindPlasmaHazards( const EntNumsVector &entNums ) {
-	PlasmaBeamsBuilder plasmaBeamsBuilder( self, this );
 	const edict_t *gameEdicts = game.edicts;
+	PlasmaBeamsBuilder plasmaBeamsBuilder( gameEdicts + bot->EntNum(), this );
 
 	for( unsigned i = 0; i < entNums.size(); ++i ) {
 		plasmaBeamsBuilder.AddProjectile( gameEdicts + entNums[i] );
@@ -476,6 +477,7 @@ void HazardsSelector::FindPlasmaHazards( const EntNumsVector &entNums ) {
 void HazardsSelector::FindLaserHazards( const EntNumsVector &entNums ) {
 	trace_t trace;
 	edict_t *const gameEdicts = game.edicts;
+	const edict_t *self = game.edicts + bot->EntNum();
 	float maxDamageScore = 0.0f;
 
 	for( unsigned i = 0; i < entNums.size(); ++i ) {
@@ -530,7 +532,6 @@ void HazardsSelector::FindProjectileHazards( const EntNumsVector &entNums ) {
 	trace_t trace;
 	float minPrjFraction = 1.0f;
 	float minDamageScore = 0.0f;
-	Vec3 botOrigin( self->s.origin );
 	edict_t *const gameEdicts = game.edicts;
 
 	for( unsigned i = 0; i < entNums.size(); ++i ) {
@@ -542,7 +543,7 @@ void HazardsSelector::FindProjectileHazards( const EntNumsVector &entNums ) {
 		}
 
 		minPrjFraction = trace.fraction;
-		float hitVecLen = botOrigin.FastDistanceTo( trace.endpos );
+		float hitVecLen = DistanceFast( bot->Origin(), trace.endpos );
 		if( hitVecLen >= 1.25f * target->projectileInfo.radius ) {
 			continue;
 		}

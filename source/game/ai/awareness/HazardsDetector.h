@@ -41,7 +41,7 @@ class HazardsDetector {
 							   EntsAndDistancesVector &dangerousEntities,
 							   EntsAndDistancesVector &otherEntities );
 
-	const edict_t *const self;
+	const Bot *const bot;
 
 	EntsAndDistancesVector maybeDangerousRockets;
 	EntNumsVector dangerousRockets;
@@ -69,7 +69,7 @@ class HazardsDetector {
 	EntsAndDistancesVector maybeVisibleOtherLasers;
 	EntNumsVector visibleOtherLasers;
 
-	explicit HazardsDetector( const edict_t *self_ ) : self( self_ ) {}
+	explicit HazardsDetector( const Bot *bot_ ) : bot( bot_ ) {}
 
 	void Exec();
 };

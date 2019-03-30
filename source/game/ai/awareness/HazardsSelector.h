@@ -40,7 +40,7 @@ struct Hazard : public PoolItem {
 class HazardsSelector {
 	friend class BotAwarenessModule;
 
-	edict_t *const self;
+	Bot *const bot;
 
 	static constexpr auto MAX_CLASS_HAZARDS = 1;
 	typedef Pool<Hazard, MAX_CLASS_HAZARDS> HazardsPool;
@@ -56,7 +56,7 @@ class HazardsSelector {
 	void FindPlasmaHazards( const EntNumsVector &entNums );
 	void FindLaserHazards( const EntNumsVector &entNums );
 public:
-	explicit HazardsSelector( edict_t *self_ ): self( self_ ) {}
+	explicit HazardsSelector( Bot *bot_ ): bot( bot_ ) {}
 
 	void BeginUpdate();
 	void EndUpdate();
