@@ -3,7 +3,7 @@
 
 BotPlanningModule::BotPlanningModule( edict_t *self_, Bot *bot_, float skill_ )
 	: bot( bot_ )
-	, planner( self_, this, skill_ )
+	, planner( bot_, this )
 	, grabItemGoal( this )
 	, killEnemyGoal( this )
 	, runAwayGoal( this )

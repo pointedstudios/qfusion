@@ -220,7 +220,7 @@ public:
 	static constexpr unsigned MAX_ACTIONS = 36;
 
 protected:
-	edict_t *const self;
+	Ai *const ai;
 
 	AiActionRecord *planHead { nullptr };
 	AiGoal *activeGoal { nullptr };
@@ -232,7 +232,7 @@ protected:
 	static constexpr unsigned MAX_PLANNER_NODES = 384;
 	Pool<PlannerNode, MAX_PLANNER_NODES> plannerNodesPool { "PlannerNodesPool" };
 
-	explicit AiPlanner( edict_t *self_ ): self( self_ ) {}
+	explicit AiPlanner( Ai *ai_ ): ai( ai_ ) {}
 
 	virtual void PrepareCurrWorldState( WorldState *worldState ) = 0;
 

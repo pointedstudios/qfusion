@@ -8,8 +8,6 @@
 #include "../static_vector.h"
 #include "../../../gameshared/q_collision.h"
 
-
-
 AiAction::PlannerNodePtr AiAction::NewNodeForRecord( AiActionRecord *record ) {
 	if( !record ) {
 		Debug( "Can't allocate an action record\n" );
@@ -476,7 +474,7 @@ public:
 AiActionRecord *AiPlanner::BuildPlan( AiGoal *goal, const WorldState &currWorldState ) {
 	goal->OnPlanBuildingStarted();
 
-	PlannerNode *startNode = plannerNodesPool.New( self->ai->aiRef );
+	PlannerNode *startNode = plannerNodesPool.New( ai );
 	startNode->worldState = currWorldState;
 	startNode->worldStateHash = startNode->worldState.Hash();
 	startNode->transitionCost = 0.0f;
@@ -486,7 +484,7 @@ AiActionRecord *AiPlanner::BuildPlan( AiGoal *goal, const WorldState &currWorldS
 	startNode->nextTransition = nullptr;
 	startNode->actionRecord = nullptr;
 
-	WorldState goalWorldState( self->ai->aiRef );
+	WorldState goalWorldState( ai );
 	goal->GetDesiredWorldState( &goalWorldState );
 
 	// Use prime numbers as hash bins count parameters
@@ -607,7 +605,10 @@ void AiPlanner::SetGoalAndPlan( AiGoal *activeGoal_, AiActionRecord *planHead_ )
 
 	this->activeGoal = activeGoal_;
 #if 0
-	AITools_DrawColorLine( self->s.origin, ( Vec3( 0, 0, 56 ) + self->s.origin ).Data(), activeGoal_->DebugColor(), 0 );
+	if( Bot *bot = dynamic_cast<Bot *>( ai ) ) {
+		const edict_t *self = game.edicts + bot->EntNum();
+		AITools_DrawColorLine( self->s.origin, ( Vec3( 0, 0, 56 ) + self->s.origin ).Data(), activeGoal_->DebugColor(), 0 );
+	}
 #endif
 
 	this->planHead = planHead_;
@@ -635,12 +636,15 @@ void AiPlanner::DeletePlan( AiActionRecord *head ) {
 }
 
 void AiPlanner::Think() {
-	if( G_ISGHOSTING( self ) ) {
-		return;
+	// TODO: This all is not needed once we get sane entities in /game
+	if( Bot *bot = dynamic_cast<Bot *>( ai ) ) {
+		if( G_ISGHOSTING( game.edicts + bot->EntNum() ) ) {
+			return;
+		}
 	}
 
 	// Prepare current world state for planner
-	WorldState currWorldState( self->ai->aiRef );
+	WorldState currWorldState( ai );
 	PrepareCurrWorldState( &currWorldState );
 
 	// If there is no active plan (the active plan was not assigned or has been completed in previous think frame)

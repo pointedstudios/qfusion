@@ -15,8 +15,8 @@ struct Hazard;
 class BotPlanner : public AiPlanner {
 	friend class BotPlanningModule;
 	friend class BotItemsSelector;
-	friend class BotBaseGoal;
 
+	Bot *const bot;
 	BotPlanningModule *const module;
 
 	StaticVector<BotScriptGoal, MAX_GOALS> scriptGoals;
@@ -28,7 +28,7 @@ class BotPlanner : public AiPlanner {
 	BotScriptGoal *AllocScriptGoal() { return scriptGoals.unsafe_grow_back(); }
 	BotScriptAction *AllocScriptAction() { return scriptActions.unsafe_grow_back(); }
 
-	const int *Inventory() const { return self->r.client->ps.inventory; }
+	const int *Inventory() const;
 
 	template <int Weapon>
 	int AmmoReadyToFireCount() const {
@@ -63,7 +63,7 @@ public:
 	// A WorldState cached from the moment of last world state update
 	WorldState cachedWorldState;
 
-	BotPlanner( edict_t *self_, BotPlanningModule *module_, float skillLevel_ );
+	BotPlanner( Bot *bot_, BotPlanningModule *module_ );
 };
 
 #endif
