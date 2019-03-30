@@ -1010,8 +1010,8 @@ void CM_BoundBrush( cmodel_state_t *cms, cbrush_t *brush ) {
 	int i;
 
 	for( i = 0; i < 3; i++ ) {
-		brush->mins[i] = -brush->brushsides[i * 2 + 0].plane.dist;
-		brush->maxs[i] = +brush->brushsides[i * 2 + 1].plane.dist;
+		brush->mins[i] = -brush->brushsides[i * 2 + 0].plane.dist - 1.0f;
+		brush->maxs[i] = +brush->brushsides[i * 2 + 1].plane.dist + 1.0f;
 	}
 
 	brush->radius = CM_AddSphericalBounds( brush->mins, brush->maxs, brush->center );
