@@ -2,15 +2,10 @@
 #include "../combat/TacticalSpotsRegistry.h"
 
 // Cannot be defined in the header
-BotRoamingManager::BotRoamingManager( edict_t *self_ )
-	: self( self_ ),
-	tmpSpotOrigin( 0, 0, 0 ),
-	cachedSpotOrigin( 0, 0, 0 ),
-	spotSelectedAt( 0 ),
-	currTacticalSpotNum( -1 ),
-	numVisitedSpots( 0 ),
-	tacticalSpotsRegistry( TacticalSpotsRegistry::Instance() ),
-	aasWorld( AiAasWorld::Instance() ) {
+BotRoamingManager::BotRoamingManager( Bot *bot_ )
+	: bot( bot_ )
+	, tacticalSpotsRegistry( TacticalSpotsRegistry::Instance() )
+	, aasWorld( AiAasWorld::Instance() ) {
 	visitedAt = (int64_t *)G_LevelMalloc( sizeof( int64_t ) * tacticalSpotsRegistry->numSpots );
 	ClearVisitedSpots();
 }
@@ -23,7 +18,11 @@ const Vec3 &BotRoamingManager::GetCachedRoamingSpot() {
 	return cachedSpotOrigin;
 }
 
-inline void BotRoamingManager::ClearVisitedSpots() {
+void BotRoamingManager::CheckSpotsProximity() {
+	DisableSpotsInRadius( bot->Origin(), 96.0f );
+}
+
+void BotRoamingManager::ClearVisitedSpots() {
 	if( !tacticalSpotsRegistry->numSpots ) {
 		AI_FailWith( "BotRoamingManager::ClearVisitedSpots()", "There is no tactical spots\n" );
 	}
@@ -31,7 +30,7 @@ inline void BotRoamingManager::ClearVisitedSpots() {
 }
 
 const Vec3 &BotRoamingManager::GetRoamingSpot() {
-	const auto *routeCache = self->ai->botRef->routeCache;
+	const auto *routeCache = bot->RouteCache();
 
 	// If the bot is using a tactical spot as a roaming spot
 	if( currTacticalSpotNum >= 0 ) {
@@ -40,18 +39,10 @@ const Vec3 &BotRoamingManager::GetRoamingSpot() {
 			currTacticalSpotNum = -1;
 		} else {
 			// Check whether it is still reachable
-			const int allowedTravelFlags = self->ai->botRef->AllowedTravelFlags();
+			int fromAreaNums[2] { 0, 0 };
 			const int spotAreaNum = tacticalSpotsRegistry->spots[currTacticalSpotNum].aasAreaNum;
-			int fromAreaNums[2];
-			const int numFromAreas = self->ai->botRef->EntityPhysicsState()->PrepareRoutingStartAreas( fromAreaNums );
-			int travelTime = 0;
-			for( int i = 0; i < numFromAreas; ++i ) {
-				travelTime = routeCache->TravelTimeToGoalArea( fromAreaNums[i], spotAreaNum, allowedTravelFlags );
-				if( travelTime > 0 ) {
-					break;
-				}
-			}
-			if( !travelTime ) {
+			const int numFromAreas = bot->EntityPhysicsState()->PrepareRoutingStartAreas( fromAreaNums );
+			if( !routeCache->PreferredRouteToGoalArea( fromAreaNums, numFromAreas, spotAreaNum ) ) {
 				currTacticalSpotNum = -1;
 			}
 		}
@@ -103,7 +94,7 @@ int BotRoamingManager::TrySuggestTacticalSpot() {
 		}
 
 		const auto &spot = spots[spotNum];
-		if( DistanceSquared( self->s.origin, spot.origin ) < 384 * 384 ) {
+		if( DistanceSquared( bot->Origin(), spot.origin ) < 384 * 384 ) {
 			continue;
 		}
 
@@ -115,11 +106,18 @@ int BotRoamingManager::TrySuggestTacticalSpot() {
 		TryResetAllSpotsDisabledState();
 	}
 
-	int fromAreas[2];
-	const int numFromAreas = self->ai->botRef->EntityPhysicsState()->PrepareRoutingStartAreas( fromAreas );
-	for( int travelFlags: self->ai->botRef->TravelFlags() ) {
-		int spotNum = TryFindReachableSpot( candidateSpots, travelFlags, fromAreas, numFromAreas );
-		if( spotNum >= 0 ) {
+	int fromAreas[2] { 0, 0 };
+	const int numFromAreas = bot->EntityPhysicsState()->PrepareRoutingStartAreas( fromAreas );
+	return TryFindReachableSpot( candidateSpots, fromAreas, numFromAreas );
+}
+
+int BotRoamingManager::TryFindReachableSpot( const Candidates &candidateSpots, const int *fromAreaNums, int numFromAreas ) {
+	const auto *spots = tacticalSpotsRegistry->spots;
+	const auto *routeCache = bot->RouteCache();
+
+	for( const int spotNum: candidateSpots ) {
+		const int spotAreaNum = spots[spotNum].aasAreaNum;
+		if( ( routeCache->PreferredRouteToGoalArea( fromAreaNums, numFromAreas, spotAreaNum ) ) ) {
 			return spotNum;
 		}
 	}
@@ -127,56 +125,12 @@ int BotRoamingManager::TrySuggestTacticalSpot() {
 	return -1;
 }
 
-int BotRoamingManager::TryFindReachableSpot( const Candidates &candidateSpots, int travelFlags,
-											 const int *fromAreaNums, int numFromAreas ) {
-	const auto *spots = tacticalSpotsRegistry->spots;
-	const auto *routeCache = self->ai->botRef->routeCache;
+int BotRoamingManager::TryFindReachableArea( const Candidates &candidateAreas, const int *fromAreaNums, int numFromAreas ) {
+	const auto *routeCache = bot->RouteCache();
 
-	int travelTime = 0;
-	// Add an optimized branch for this common case
-	if( numFromAreas == 1 ) {
-		for( unsigned i = 0; i < candidateSpots.size(); ++i ) {
-			const auto spotNum = candidateSpots[i];
-			const int spotAreaNum = spots[spotNum].aasAreaNum;
-			if( ( travelTime = routeCache->TravelTimeToGoalArea( fromAreaNums[0], spotAreaNum, travelFlags ) ) ) {
-				return spotNum;
-			}
-		}
-	} else {
-		for( unsigned i = 0; i < candidateSpots.size(); ++i ) {
-			const auto spotNum = candidateSpots[i];
-			const int spotAreaNum = spots[spotNum].aasAreaNum;
-			for( int j = 0; j < numFromAreas; ++j ) {
-				if( ( travelTime = routeCache->TravelTimeToGoalArea( fromAreaNums[j], spotAreaNum, travelFlags ) ) ) {
-					return spotNum;
-				}
-			}
-		}
-	}
-
-	return -1;
-}
-
-int BotRoamingManager::TryFindReachableArea( const Candidates &candidateAreas, int travelFlags,
-											 const int *fromAreaNums, int numFromAreas ) {
-	const auto *routeCache = self->ai->botRef->routeCache;
-
-	int travelTime = 0;
-	if( numFromAreas == 1 ) {
-		for( unsigned i = 0; i < candidateAreas.size(); ++i ) {
-			const auto areaNum = candidateAreas[i];
-			if( ( travelTime = routeCache->TravelTimeToGoalArea( fromAreaNums[0], areaNum, travelFlags ) ) ) {
-				return areaNum;
-			}
-		}
-	} else {
-		for( unsigned i = 0; i < candidateAreas.size(); ++i ) {
-			const auto areaNum = candidateAreas[i];
-			for( int j = 0; j < numFromAreas; ++j ) {
-				if( ( travelTime = routeCache->TravelTimeToGoalArea( fromAreaNums[j], areaNum, travelFlags ) ) ) {
-					return areaNum;
-				}
-			}
+	for( const int areaNum: candidateAreas ) {
+		if( ( routeCache->PreferredRouteToGoalArea( fromAreaNums, numFromAreas, areaNum ) ) ) {
+			return areaNum;
 		}
 	}
 
@@ -184,8 +138,8 @@ int BotRoamingManager::TryFindReachableArea( const Candidates &candidateAreas, i
 }
 
 int BotRoamingManager::TrySuggestRandomAasArea() {
-	const int currAreaNum = self->ai->botRef->EntityPhysicsState()->CurrAasAreaNum();
-	const int groundedAreaNum = self->ai->botRef->EntityPhysicsState()->DroppedToFloorAasAreaNum();
+	const int currAreaNum = bot->EntityPhysicsState()->CurrAasAreaNum();
+	const int groundedAreaNum = bot->EntityPhysicsState()->DroppedToFloorAasAreaNum();
 
 	const int numAreas = aasWorld->NumAreas();
 	const auto *aasAreas = aasWorld->Areas();
@@ -212,25 +166,18 @@ int BotRoamingManager::TrySuggestRandomAasArea() {
 
 	int fromAreaNums[] = { currAreaNum, groundedAreaNum };
 	int numFromAreas = fromAreaNums[0] == fromAreaNums[1] ? 2 : 1;
-	for( int travelFlags: self->ai->botRef->TravelFlags() ) {
-		if( int areaNum = TryFindReachableArea( candidateAreas, travelFlags, fromAreaNums, numFromAreas ) ) {
-			return areaNum;
-		}
-	}
-
-	return 0;
+	return TryFindReachableArea( candidateAreas, fromAreaNums, numFromAreas );
 }
 
 int BotRoamingManager::TrySuggestNearbyAasArea() {
-	Vec3 mins( -192, -192, -128 );
-	Vec3 maxs( +192, +192, +128 );
-	mins += self->s.origin;
-	maxs += self->s.origin;
+	const Vec3 mins( Vec3( -192, -192, -128 ) + bot->Origin() );
+	const Vec3 maxs( Vec3( +192, +192, +128 ) + bot->Origin() );
+
 	int bboxAreaNums[64];
 	const int numBBoxAreas = aasWorld->BBoxAreas( mins, maxs, bboxAreaNums, 64 );
 
-	const int currAreaNum = self->ai->botRef->EntityPhysicsState()->CurrAasAreaNum();
-	const int groundedAreaNum = self->ai->botRef->EntityPhysicsState()->DroppedToFloorAasAreaNum();
+	const int currAreaNum = bot->EntityPhysicsState()->CurrAasAreaNum();
+	const int groundedAreaNum = bot->EntityPhysicsState()->DroppedToFloorAasAreaNum();
 
 	const auto *aasAreas = aasWorld->Areas();
 	const auto *aasAreaSettings = aasWorld->AreaSettings();
@@ -278,13 +225,7 @@ int BotRoamingManager::TrySuggestNearbyAasArea() {
 
 	int fromAreaNums[] = { currAreaNum, groundedAreaNum };
 	int numFromAreas = fromAreaNums[0] == fromAreaNums[1] ? 1 : 2;
-	for( int travelFlags: self->ai->botRef->TravelFlags() ) {
-		if( int areaNum = TryFindReachableArea( candidateAreas, travelFlags, fromAreaNums, numFromAreas ) ) {
-			return areaNum;
-		}
-	}
-
-	return 0;
+	return TryFindReachableArea( candidateAreas, fromAreaNums, numFromAreas );
 }
 
 bool BotRoamingManager::IsFeasibleArea( const aas_area_t &area, const aas_areasettings_t &areaSettings ) {
@@ -306,7 +247,7 @@ bool BotRoamingManager::IsFeasibleArea( const aas_area_t &area, const aas_arease
 
 	Vec3 areaPoint( area.center );
 	areaPoint.Z() = area.mins[2] + 16.0f;
-	if( areaPoint.SquareDistanceTo( self->s.origin ) <= 144.0f ) {
+	if( areaPoint.SquareDistanceTo( bot->Origin() ) <= 144.0f ) {
 		return false;
 	}
 
@@ -331,7 +272,9 @@ void BotRoamingManager::TryResetAllSpotsDisabledState() {
 }
 
 void BotRoamingManager::DisableSpotsInRadius( const vec3_t origin, float radius ) {
-	TacticalSpotsRegistry::OriginParams originParams( self, radius, self->ai->botRef->routeCache );
+	auto *routeCache = const_cast<AiAasRouteCache *>( bot->RouteCache() );
+	// TODO: Change OriginParams() signature as all ops are const-correct
+	TacticalSpotsRegistry::OriginParams originParams( origin, game.edicts + bot->EntNum(), radius, routeCache );
 	uint16_t insideSpotNum = std::numeric_limits<uint16_t>::max();
 	const auto &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
 	const int64_t levelTime = level.time;
@@ -341,7 +284,8 @@ void BotRoamingManager::DisableSpotsInRadius( const vec3_t origin, float radius 
 	for( const auto spotNum: spotsFromQuery  ) {
 		if( spotNum != insideSpotNum ) {
 			const auto &spot = tacticalSpotsRegistry->spots[spotNum];
-			SolidWorldTrace( &trace, self->s.origin, spot.origin );
+			// TODO: Use PVS/AASArea vis?
+			SolidWorldTrace( &trace, bot->Origin(), spot.origin );
 			if( trace.fraction != 1.0f ) {
 				continue;
 			}

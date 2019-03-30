@@ -12,12 +12,12 @@ class BotRoamingManager {
 	static constexpr unsigned VISITED_SPOT_EXPIRATION_TIME = 10 * 1000;
 
 	int64_t *visitedAt;
-	edict_t *self;
-	Vec3 tmpSpotOrigin;
-	Vec3 cachedSpotOrigin;
-	int64_t spotSelectedAt;
-	int currTacticalSpotNum;
-	unsigned numVisitedSpots;
+	Bot *const bot;
+	Vec3 tmpSpotOrigin { 0, 0, 0 };
+	Vec3 cachedSpotOrigin { 0, 0, 0 };
+	int64_t spotSelectedAt { 0 };
+	int currTacticalSpotNum { -1 };
+	unsigned numVisitedSpots { 0 };
 	const class TacticalSpotsRegistry *tacticalSpotsRegistry;
 	const class AiAasWorld *aasWorld;
 
@@ -37,18 +37,18 @@ class BotRoamingManager {
 	// Non-negative return values are feasible
 	int TrySuggestTacticalSpot();
 	// Non-negative return values are feasible
-	int TryFindReachableSpot( const Candidates &candidateSpots, int travelFlags, const int *fromAreaNums, int numFromAreas );
+	int TryFindReachableSpot( const Candidates &candidateSpots, const int *fromAreaNums, int numFromAreas );
 	// Positive return values are feasible
-	int TryFindReachableArea( const Candidates &candidateAreas, int travelFlags, const int *fromAreaNums, int numFromAreas );
+	int TryFindReachableArea( const Candidates &candidateAreas, const int *fromAreaNums, int numFromAreas );
 	void TryResetAllSpotsDisabledState();
 	// Positive return values are feasible
 	int TrySuggestRandomAasArea();
 	int TrySuggestNearbyAasArea();
 	bool IsFeasibleArea( const aas_area_t &area, const aas_areasettings_t &areaSettings );
 
-	inline void ClearVisitedSpots();
+	void ClearVisitedSpots();
 public:
-	explicit BotRoamingManager( edict_t *self_ );
+	explicit BotRoamingManager( Bot *bot_ );
 
 	~BotRoamingManager() {
 		G_LevelFree( visitedAt );
@@ -73,9 +73,7 @@ public:
 	// All calls during a single frame are guaranteed to return the same result
 	const Vec3 &GetCachedRoamingSpot();
 
-	void CheckSpotsProximity() {
-		DisableSpotsInRadius( self->s.origin, 96.0f );
-	}
+	void CheckSpotsProximity();
 };
 
 #endif
