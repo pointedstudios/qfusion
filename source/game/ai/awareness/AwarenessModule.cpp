@@ -134,11 +134,9 @@ void BotAwarenessModule::UpdateSelectedEnemies() {
 	lostEnemies.Invalidate();
 
 	float visibleEnemyWeight = 0.0f;
-
 	if( const auto *visibleEnemy = activeEnemiesTracker->ChooseVisibleEnemy( game.edicts + bot->EntNum() ) ) {
-		// A compiler prefers a non-const version here, and therefore fails on non-const version of method being private
-		const auto *activeEnemiesHead = ( (const AiEnemiesTracker *)activeEnemiesTracker )->ActiveEnemiesHead();
-		selectedEnemies.Set( visibleEnemy, targetChoicePeriod, activeEnemiesHead );
+		assert( visibleEnemy == activeEnemiesTracker->ActiveEnemiesHead() );
+		selectedEnemies.SetToListOfActive( visibleEnemy, targetChoicePeriod );
 		visibleEnemyWeight = 0.5f * ( visibleEnemy->AvgWeight() + visibleEnemy->MaxWeight() );
 	}
 
@@ -146,10 +144,7 @@ void BotAwarenessModule::UpdateSelectedEnemies() {
 		float lostEnemyWeight = 0.5f * ( lostEnemy->AvgWeight() + lostEnemy->MaxWeight() );
 		// If there is a lost or hidden enemy of higher weight, store it
 		if( lostEnemyWeight > visibleEnemyWeight ) {
-			// Provide a pair of iterators to the Set call:
-			// lostEnemies.activeEnemies must contain the lostEnemy.
-			const TrackedEnemy *enemies[] = { lostEnemy };
-			lostEnemies.Set( lostEnemy, targetChoicePeriod, enemies, enemies + 1 );
+			lostEnemies.SetToLostOrHidden( lostEnemy, targetChoicePeriod );
 		}
 	}
 }

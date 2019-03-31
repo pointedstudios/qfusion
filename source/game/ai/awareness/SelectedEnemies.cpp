@@ -3,7 +3,7 @@
 #include "../bot.h"
 
 bool SelectedEnemies::AreValid() const {
-	for( const auto *enemy: activeEnemies ) {
+	for( const auto *enemy: enemies ) {
 		if( !enemy->IsValid() ) {
 			return false;
 		}
@@ -12,45 +12,48 @@ bool SelectedEnemies::AreValid() const {
 	return timeoutAt > level.time;
 }
 
-void SelectedEnemies::Set( const TrackedEnemy *primaryEnemy_,
-						   unsigned timeoutPeriod,
-						   const TrackedEnemy **activeEnemiesBegin,
-						   const TrackedEnemy **activeEnemiesEnd ) {
-	this->primaryEnemy = primaryEnemy_;
-	this->timeoutAt = level.time + timeoutPeriod;
+void SelectedEnemies::Invalidate() {
+	enemies.clear();
+	timeoutAt = 0;
 
-#ifndef _DEBUG
-	if( !activeEnemies.empty() ) {
-		AI_FailWith( "SelectedEnemies::Set()", "activeEnemies.size() %d > 0", activeEnemies.size() );
+	for( auto &value: threatFactors ) {
+		value.Invalidate();
 	}
-#endif
+	for( auto &value: canEnemyHit ) {
+		value.Invalidate();
+	}
 
-	for( const auto **enemy = activeEnemiesBegin; enemy != activeEnemiesEnd; ++enemy ) {
-		this->activeEnemies.push_back( *enemy );
+	maxThreatFactor.Invalidate();
+	canEnemiesHit.Invalidate();
+	couldHitIfTurns.Invalidate();
+	botViewDirDotToEnemyDir.Invalidate();
+	enemyViewDirDotToBotDir.Invalidate();
+	aboutToHitEBorIG.Invalidate();
+	aboutToHitLGorPG.Invalidate();
+	aboutToHitRLorSW.Invalidate();
+	arePotentiallyHittable.Invalidate();
+}
+
+void SelectedEnemies::SetToListOfActive( const TrackedEnemy *listHead, unsigned timeout ) {
+	this->timeoutAt = level.time + timeout;
+
+	assert( enemies.empty() );
+	for( const auto *enemy = listHead; enemy; enemy = enemy->NextInActiveList() ) {
+		enemies.push_back( enemy );
 	}
 }
 
-void SelectedEnemies::Set( const TrackedEnemy *primaryEnemy_,
-						   unsigned timeoutPeriod,
-						   const TrackedEnemy *firstActiveEnemy ) {
-	this->primaryEnemy = primaryEnemy_;
-	this->timeoutAt = level.time + timeoutPeriod;
+void SelectedEnemies::SetToLostOrHidden( const TrackedEnemy *enemy, unsigned timeout ) {
+	this->timeoutAt = level.time + timeout;
 
-#ifndef _DEBUG
-	if( !activeEnemies.empty() ) {
-		AI_FailWith( "SelectedEnemies::Set()", "activeEnemies.size() %d > 0", activeEnemies.size() );
-	}
-#endif
-
-	for( const auto *enemy = firstActiveEnemy; enemy; enemy = enemy->NextInActiveList() ) {
-		this->activeEnemies.push_back( enemy );
-	}
+	assert( enemies.empty() );
+	enemies.push_back( enemy );
 }
 
 Vec3 SelectedEnemies::ClosestEnemyOrigin( const vec3_t relativelyTo ) const {
 	const TrackedEnemy *closestEnemy = nullptr;
 	float minSquareDistance = std::numeric_limits<float>::max();
-	for( const auto *enemy: activeEnemies ) {
+	for( const auto *enemy: enemies ) {
 		float squareDistance = enemy->LastSeenOrigin().SquareDistanceTo( relativelyTo );
 		if( minSquareDistance > squareDistance ) {
 			minSquareDistance = squareDistance;
@@ -62,11 +65,26 @@ Vec3 SelectedEnemies::ClosestEnemyOrigin( const vec3_t relativelyTo ) const {
 	return closestEnemy->LastSeenOrigin();
 }
 
+Vec3 SelectedEnemies::LookDir() const {
+	CheckValid( "LookDir" );
+
+	if( const auto *ai = enemies.front()->ent->ai ) {
+		// TODO: Once again remove this awkward pointer chasing
+		if( const auto *bot = ai->botRef ) {
+			return bot->EntityPhysicsState()->ForwardDir();
+		}
+	}
+
+	vec3_t lookDir;
+	AngleVectors( enemies.front()->ent->s.angles, lookDir, nullptr, nullptr );
+	return Vec3( lookDir );
+}
+
 float SelectedEnemies::DamageToKill() const {
-	CheckValid( __FUNCTION__ );
+	CheckValid( "DamageToKill" );
 
 	float result = 0.0f;
-	for( const auto *enemy: activeEnemies ) {
+	for( const auto *enemy: enemies ) {
 		float damageToKill = ::DamageToKill( enemy->ent, g_armor_protection->value, g_armor_degradation->value );
 		if( enemy->HasShell() ) {
 			damageToKill *= 4.0f;
@@ -77,10 +95,22 @@ float SelectedEnemies::DamageToKill() const {
 	return result;
 }
 
+int SelectedEnemies::PendingWeapon() const {
+	if( const auto *enemy = enemies.front() ) {
+		if( const auto *ent = enemy->ent ) {
+			if( const auto *client = ent->r.client ) {
+				return client->ps.stats[STAT_PENDING_WEAPON];
+			}
+		}
+	}
+
+	return -1;
+}
+
 unsigned SelectedEnemies::FireDelay() const {
 	unsigned minDelay = std::numeric_limits<unsigned>::max();
-	for( const auto *enemy: activeEnemies ) {
-		auto delay = (unsigned)enemy->FireDelay();
+	for( const auto *enemy: enemies ) {
+		auto delay = enemy->FireDelay();
 		if( delay < minDelay ) {
 			minDelay = delay;
 		}
@@ -90,9 +120,9 @@ unsigned SelectedEnemies::FireDelay() const {
 }
 
 bool SelectedEnemies::HaveQuad() const {
-	CheckValid( __FUNCTION__ );
+	CheckValid( "HaveQuad" );
 
-	for( const auto *enemy: activeEnemies ) {
+	for( const auto *enemy: enemies ) {
 		if( enemy->HasQuad() ) {
 			return true;
 		}
@@ -102,9 +132,9 @@ bool SelectedEnemies::HaveQuad() const {
 }
 
 bool SelectedEnemies::HaveCarrier() const {
-	CheckValid( __FUNCTION__ );
+	CheckValid( "HaveCarrier" );
 
-	for( const auto *enemy: activeEnemies ) {
+	for( const auto *enemy: enemies ) {
 		if( enemy->IsCarrier() ) {
 			return true;
 		}
@@ -114,9 +144,9 @@ bool SelectedEnemies::HaveCarrier() const {
 }
 
 bool SelectedEnemies::Contain( const TrackedEnemy *enemy ) const {
-	CheckValid( __FUNCTION__ );
+	CheckValid( "Contain" );
 
-	for( const auto *activeEnemy: activeEnemies ) {
+	for( const auto *activeEnemy: enemies ) {
 		if( activeEnemy == enemy ) {
 			return true;
 		}
@@ -126,47 +156,50 @@ bool SelectedEnemies::Contain( const TrackedEnemy *enemy ) const {
 }
 
 float SelectedEnemies::MaxThreatFactor() const {
-	if( maxThreatFactorComputedAt == level.time ) {
+	const auto levelTime = level.time;
+	if( level.time == maxThreatFactor.computedAt ) {
 		return maxThreatFactor;
 	}
 
-	if( activeEnemies.empty() ) {
+	if( enemies.empty() ) {
 		return 0.0f;
 	}
 
-	maxThreatFactor = 0;
-	for( int i = 0, end = (int)activeEnemies.size(); i < end; ++i ) {
+	maxThreatFactor.value = 0;
+	for( unsigned i = 0; i < enemies.size(); ++i ) {
 		float factor = GetThreatFactor( i );
-		if( factor > maxThreatFactor ) {
-			maxThreatFactor = factor;
+		if( factor > maxThreatFactor.value ) {
+			maxThreatFactor.value = factor;
 		}
 	}
 
+	maxThreatFactor.computedAt = levelTime;
 	return maxThreatFactor;
 }
 
-float SelectedEnemies::GetThreatFactor( int enemyNum ) const {
-	if( threatFactorsComputedAt[enemyNum] == level.time ) {
-		return threatFactors[enemyNum];
+float SelectedEnemies::GetThreatFactor( unsigned enemyNum ) const {
+	FrameCachedFloat &value = threatFactors[enemyNum];
+	if( value.computedAt == level.time ) {
+		return value;
 	}
 
-	threatFactorsComputedAt[enemyNum] = level.time;
-	threatFactors[enemyNum] = ComputeThreatFactor( enemyNum );
-	return threatFactors[enemyNum];
+	value.computedAt = level.time;
+	value.value = ComputeThreatFactor( enemyNum );
+	return value;
 }
 
-float SelectedEnemies::ComputeThreatFactor( int enemyNum ) const {
+float SelectedEnemies::ComputeThreatFactor( unsigned enemyNum ) const {
 	assert( enemyNum >= 0 );
-	const auto *enemy = activeEnemies[enemyNum];
-	float entFactor = ComputeThreatFactor( enemy->ent, enemyNum );
-	if( level.time - activeEnemies[enemyNum]->LastAttackedByTime() < 1000 ) {
-		entFactor = sqrtf( entFactor );
+	const auto *enemy = enemies[enemyNum];
+	float entFactor = ComputeThreatFactor( enemy->ent, &enemyNum );
+	if( level.time - enemy->LastAttackedByTime() < 1000 ) {
+		entFactor = Q_Sqrt( entFactor );
 	}
 
 	return entFactor;
 }
 
-float SelectedEnemies::ComputeThreatFactor( const edict_t *ent, int enemyNum ) const {
+float SelectedEnemies::ComputeThreatFactor( const edict_t *ent, unsigned *enemyNum ) const {
 	if( !ent ) {
 		return 0.0f;
 	}
@@ -179,14 +212,14 @@ float SelectedEnemies::ComputeThreatFactor( const edict_t *ent, int enemyNum ) c
 		}
 	}
 
-	Vec3 enemyToBotDir( self->s.origin );
+	Vec3 enemyToBotDir( bot->Origin() );
 	enemyToBotDir -= ent->s.origin;
 	enemyToBotDir.NormalizeFast();
 
 	float dot;
-	if( enemyNum >= 0 ) {
+	if( enemyNum != nullptr ) {
 		// Try reusing this value that is very likely to be cached
-		dot = GetEnemyViewDirDotToBotDirValues()[enemyNum];
+		dot = GetEnemyViewDirDotToBotDirValues()[*enemyNum];
 	} else {
 		vec3_t enemyLookDir;
 		AngleVectors( ent->s.angles, enemyLookDir, nullptr, nullptr );
@@ -206,7 +239,7 @@ float SelectedEnemies::ComputeThreatFactor( const edict_t *ent, int enemyNum ) c
 		return 0.0f;
 	}
 
-	if( !EntitiesPvsCache::Instance()->AreInPvs( ent, self ) ) {
+	if( !EntitiesPvsCache::Instance()->AreInPvs( ent, game.edicts + bot->EntNum() ) ) {
 		return 0.0f;
 	}
 
@@ -214,7 +247,7 @@ float SelectedEnemies::ComputeThreatFactor( const edict_t *ent, int enemyNum ) c
 		return 1.0f;
 	}
 
-	if( const auto *hazard = self->ai->botRef->PrimaryHazard() ) {
+	if( const auto *hazard = bot->PrimaryHazard() ) {
 		if( hazard->attacker == ent ) {
 			return 0.5f + 0.5f * BoundedFraction( hazard->damage, 75 );
 		}
@@ -228,43 +261,45 @@ float SelectedEnemies::ComputeThreatFactor( const edict_t *ent, int enemyNum ) c
 	float result = dot;
 	// If the enemy belongs to these "selected enemies", try using a probably cached value of the "can hit" test.
 	// Otherwise perform a computation (there is no cache for enemies not belonging to this selection)
-	if( enemyNum >= 0 ) {
-		if( !GetCanHit( enemyNum, dot ) ) {
+	if( enemyNum != nullptr ) {
+		if( !GetCanHit( *enemyNum, dot ) ) {
 			result *= 0.5f;
 		}
-	} else if( !TestCanHit( ent, self, dot ) ) {
+	} else if( !TestCanHit( ent, game.edicts + bot->EntNum(), dot ) ) {
 		result *= 0.5f;
 	}
 
-	return sqrtf( result );
+	return Q_Sqrt( result );
 }
 
 float SelectedEnemies::TotalInflictedDamage() const {
-	CheckValid( __FUNCTION__ );
+	CheckValid( "TotalInflictedDamage" );
 
-	float damage = 0;
-	for( const auto *activeEnemy: activeEnemies )
+	float damage = 0.0f;
+	for( const auto *activeEnemy: enemies ) {
 		damage += activeEnemy->TotalInflictedDamage();
+	}
 
 	return damage;
 }
 
 bool SelectedEnemies::ArePotentiallyHittable() const {
-	CheckValid( __FUNCTION__ );
+	CheckValid( "ArePotentiallyHittable" );
 
-	if( arePotentiallyHittableComputedAt == level.time ) {
+	const auto levelTime = level.time;
+	if( arePotentiallyHittable.computedAt == levelTime ) {
 		return arePotentiallyHittable;
 	}
 
-	const auto *viewDots = GetBotViewDirDotToEnemyDirValues();
+	const auto *__restrict pvsCache = EntitiesPvsCache::Instance();
+	const auto *__restrict viewDots = GetBotViewDirDotToEnemyDirValues();
+	const auto *__restrict self = game.edicts + bot->EntNum();
 
 	trace_t trace;
 	Vec3 viewPoint( self->s.origin );
 	viewPoint.Z() += self->viewheight;
-	const auto *pvsCache = EntitiesPvsCache::Instance();
-	for( unsigned i = 0; i < activeEnemies.size(); ++i ) {
-		const auto *enemy = activeEnemies[i];
-		const auto *enemyEnt = enemy->ent;
+	for( unsigned i = 0; i < enemies.size(); ++i ) {
+		const auto *enemyEnt = enemies[i]->ent;
 		if( !enemyEnt ) {
 			continue;
 		}
@@ -276,47 +311,50 @@ bool SelectedEnemies::ArePotentiallyHittable() const {
 		}
 		SolidWorldTrace( &trace, viewPoint.Data(), enemyEnt->s.origin );
 		if( trace.fraction == 1.0f ) {
-			arePotentiallyHittableComputedAt = level.time;
-			arePotentiallyHittable = true;
+			arePotentiallyHittable.computedAt = levelTime;
+			arePotentiallyHittable.value = true;
 			return true;
 		}
 	}
 
-	arePotentiallyHittableComputedAt = level.time;
-	arePotentiallyHittable = false;
+	arePotentiallyHittable.computedAt = levelTime;
+	arePotentiallyHittable.value = false;
 	return false;
 }
 
 bool SelectedEnemies::CanHit() const {
-	CheckValid( __FUNCTION__ );
+	CheckValid( "CanHit" );
 
 	const auto *viewDots = GetEnemyViewDirDotToBotDirValues();
 
-	if( canEnemiesHitComputedAt == level.time ) {
+	const auto levelTime = level.time;
+	if( canEnemiesHit.computedAt == levelTime ) {
 		return canEnemiesHit;
 	}
 
-	for( int i = 0, end = (int)activeEnemies.size(); i < end; ++i ) {
+	for( unsigned i = 0; i < enemies.size(); ++i ) {
 		if( GetCanHit( i, viewDots[i] ) ) {
-			canEnemiesHitComputedAt = level.time;
-			canEnemiesHit = true;
+			canEnemiesHit.computedAt = levelTime;
+			canEnemiesHit.value = true;
 			return true;
 		}
 	}
 
-	canEnemiesHitComputedAt = level.time;
-	canEnemiesHit = false;
+	canEnemiesHit.computedAt = levelTime;
+	canEnemiesHit.value = false;
 	return false;
 }
 
-bool SelectedEnemies::GetCanHit( int enemyNum, float viewDot ) const {
-	if( canEnemyHitComputedAt[enemyNum] == level.time ) {
-		return canEnemyHit[enemyNum];
+bool SelectedEnemies::GetCanHit( unsigned enemyNum, float viewDot ) const {
+	FrameCachedBool &value = canEnemyHit[enemyNum];
+	const auto levelTime = level.time;
+	if( levelTime == value.computedAt ) {
+		return value;
 	}
 
-	canEnemyHitComputedAt[enemyNum] = level.time;
-	canEnemyHit[enemyNum] = TestCanHit( activeEnemies[enemyNum]->ent, self, viewDot );
-	return canEnemyHit[enemyNum];
+	value.computedAt = level.time;
+	value.value = TestCanHit( enemies[enemyNum]->ent, game.edicts + bot->EntNum(), viewDot );
+	return value;
 }
 
 bool SelectedEnemies::TestCanHit( const edict_t *attacker, const edict_t *victim, float viewDot ) const {
@@ -344,7 +382,7 @@ bool SelectedEnemies::TestCanHit( const edict_t *attacker, const edict_t *victim
 	}
 
 	// If there is a distinct chest point (we call it chest since it is usually on chest position)
-	if( abs( targetEnt->viewheight ) > 8 ) {
+	if( std::abs( targetEnt->viewheight ) > 8 ) {
 		Vec3 targetPoint( targetEnt->s.origin );
 		targetPoint.Z() += targetEnt->viewheight;
 		G_Trace( &trace, traceStart.Data(), nullptr, nullptr, targetPoint.Data(), enemyEnt, MASK_AISOLID );
@@ -360,27 +398,27 @@ bool SelectedEnemies::TestCanHit( const edict_t *attacker, const edict_t *victim
 }
 
 bool SelectedEnemies::CouldBeHitIfBotTurns() const {
-	CheckValid( __FUNCTION__ );
+	CheckValid( "CouldBeHitIfBotTurns" );
 
-	if( couldHitIfTurnsComputedAt == level.time ) {
+	const auto levelTime = level.time;
+	if( levelTime == couldHitIfTurns.computedAt ) {
 		return couldHitIfTurns;
 	}
 
 	// Lets take into account only primary enemy
-	assert( primaryEnemy == activeEnemies.front() );
-	couldHitIfTurns = TestCanHit( self, primaryEnemy->ent, 1.0f );
-	couldHitIfTurnsComputedAt = level.time;
+	couldHitIfTurns.value = TestCanHit( game.edicts + bot->EntNum(), enemies.front()->ent, 1.0f );
+	couldHitIfTurns.computedAt = levelTime;
 	return couldHitIfTurns;
 }
 
 bool SelectedEnemies::CanBeHit() const {
 	// Check whether it could be possibly hit from bot origin and the bot is looking at it
-	return CouldBeHitIfBotTurns() && GetBotViewDirDotToEnemyDirValues()[0] > self->ai->botRef->FovDotFactor();
+	return CouldBeHitIfBotTurns() && GetBotViewDirDotToEnemyDirValues()[0] > bot->FovDotFactor();
 }
 
 bool SelectedEnemies::HaveGoodSniperRangeWeapons() const {
-	CheckValid( __FUNCTION__ );
-	for( const auto *activeEnemy: activeEnemies ) {
+	CheckValid( "HaveGoodSniperRangeWeapons" );
+	for( const auto *activeEnemy: enemies ) {
 		if( activeEnemy->BoltsReadyToFireCount() ) {
 			return true;
 		}
@@ -395,8 +433,8 @@ bool SelectedEnemies::HaveGoodSniperRangeWeapons() const {
 }
 
 bool SelectedEnemies::HaveGoodFarRangeWeapons() const {
-	CheckValid( __FUNCTION__ );
-	for( const auto *activeEnemy: activeEnemies ) {
+	CheckValid( "HaveGoodFarRangeWeapons" );
+	for( const auto *activeEnemy: enemies ) {
 		if( activeEnemy->BoltsReadyToFireCount() ) {
 			return true;
 		}
@@ -414,8 +452,8 @@ bool SelectedEnemies::HaveGoodFarRangeWeapons() const {
 }
 
 bool SelectedEnemies::HaveGoodMiddleRangeWeapons() const {
-	CheckValid( __FUNCTION__ );
-	for( const auto *activeEnemy: activeEnemies ) {
+	CheckValid( "HaveGoodMiddleRangeWeapons" );
+	for( const auto *activeEnemy: enemies ) {
 		if( activeEnemy->RocketsReadyToFireCount() ) {
 			return true;
 		}
@@ -442,8 +480,8 @@ bool SelectedEnemies::HaveGoodMiddleRangeWeapons() const {
 }
 
 bool SelectedEnemies::HaveGoodCloseRangeWeapons() const {
-	CheckValid( __FUNCTION__ );
-	for( const auto *activeEnemy: activeEnemies ) {
+	CheckValid( "HaveGoodCloseRangeWeapons" );
+	for( const auto *activeEnemy: enemies ) {
 		if( activeEnemy->RocketsReadyToFireCount() ) {
 			return true;
 		}
@@ -462,47 +500,51 @@ bool SelectedEnemies::HaveGoodCloseRangeWeapons() const {
 
 const float *SelectedEnemies::GetBotViewDirDotToEnemyDirValues() const {
 	const auto levelTime = level.time;
-	if( levelTime == botViewDirDotToEnemyDirComputedAt ) {
+	if( levelTime == botViewDirDotToEnemyDir.computedAt ) {
 		return botViewDirDotToEnemyDir;
 	}
 
-	Vec3 botViewDir( self->ai->botRef->EntityPhysicsState()->ForwardDir() );
-	for( unsigned i = 0; i < activeEnemies.size(); ++i ) {
-		Vec3 botToEnemyDir( activeEnemies[i]->LastSeenOrigin() );
-		botToEnemyDir -= self->s.origin;
-		botToEnemyDir.Z() -= playerbox_stand_viewheight;
+	const float viewHeight = playerbox_stand_viewheight;
+	Vec3 botViewDir( bot->EntityPhysicsState()->ForwardDir() );
+	for( unsigned i = 0; i < enemies.size(); ++i ) {
+		Vec3 botToEnemyDir( enemies[i]->LastSeenOrigin() );
+		botToEnemyDir -= bot->Origin();
+		botToEnemyDir.Z() -= viewHeight;
 		botToEnemyDir.NormalizeFast();
-		botViewDirDotToEnemyDir[i] = botViewDir.Dot( botToEnemyDir );
+		botViewDirDotToEnemyDir.values[i] = botViewDir.Dot( botToEnemyDir );
 	}
 
-	botViewDirDotToEnemyDirComputedAt = levelTime;
+	botViewDirDotToEnemyDir.computedAt = levelTime;
 	return botViewDirDotToEnemyDir;
 }
 
 const float *SelectedEnemies::GetEnemyViewDirDotToBotDirValues() const {
 	const auto levelTime = level.time;
-	if( levelTime == enemyViewDirDotToBotDirComputedAt ) {
+	if( levelTime == enemyViewDirDotToBotDir.computedAt ) {
 		return enemyViewDirDotToBotDir;
 	}
 
-	for( unsigned i = 0; i < activeEnemies.size(); ++i ) {
-		Vec3 enemyToBotDir( self->s.origin );
-		enemyToBotDir -= activeEnemies[i]->LastSeenOrigin();
-		enemyToBotDir.Z() -= playerbox_stand_viewheight;
+	const float viewHeight = playerbox_stand_viewheight;
+	for( unsigned i = 0; i < enemies.size(); ++i ) {
+		Vec3 enemyToBotDir( bot->Origin() );
+		enemyToBotDir -= enemies[i]->LastSeenOrigin();
+		enemyToBotDir.Z() -= viewHeight;
 		enemyToBotDir.NormalizeFast();
-		enemyViewDirDotToBotDir[i] = activeEnemies[i]->LookDir().Dot( enemyToBotDir );
+		enemyViewDirDotToBotDir.values[i] = enemies[i]->LookDir().Dot( enemyToBotDir );
 	}
 
-	enemyViewDirDotToBotDirComputedAt = level.time;
+	enemyViewDirDotToBotDir.computedAt = levelTime;
 	return enemyViewDirDotToBotDir;
 }
 
 bool SelectedEnemies::TestAboutToHitEBorIG( int64_t levelTime ) const {
+	const auto *__restrict pvsCache = EntitiesPvsCache::Instance();
+	const auto *__restrict viewDots = GetEnemyViewDirDotToBotDirValues();
+	const auto *__restrict botOrigin = bot->Origin();
+
 	trace_t trace;
-	const auto *pvsCache = EntitiesPvsCache::Instance();
-	const auto *const viewDots = GetEnemyViewDirDotToBotDirValues();
-	for( unsigned i = 0; i < activeEnemies.size(); ++i ) {
-		const auto *const enemy = activeEnemies[i];
+	for( unsigned i = 0; i < enemies.size(); ++i ) {
+		const auto *const enemy = enemies[i];
 		if( !enemy->IsShootableCurrOrPendingWeapon( WEAP_ELECTROBOLT ) ) {
 			if( !enemy->IsShootableCurrOrPendingWeapon( WEAP_INSTAGUN ) ) {
 				continue;
@@ -520,14 +562,14 @@ bool SelectedEnemies::TestAboutToHitEBorIG( int64_t levelTime ) const {
 			continue;
 		}
 
-		if( !pvsCache->AreInPvs( self, enemy->ent ) ) {
+		if( !pvsCache->AreInPvs( game.edicts + bot->EntNum(), enemy->ent ) ) {
 			continue;
 		}
 
 		const Vec3 enemyOrigin( enemy->LastSeenOrigin() );
 		Vec3 traceStart( enemyOrigin );
 		traceStart.Z() += playerbox_stand_viewheight;
-		SolidWorldTrace( &trace, traceStart.Data(), self->s.origin );
+		SolidWorldTrace( &trace, traceStart.Data(), botOrigin );
 		if( trace.fraction != 1.0f ) {
 			continue;
 		}
@@ -551,7 +593,7 @@ bool SelectedEnemies::TestAboutToHitEBorIG( int64_t levelTime ) const {
 
 		// If not zooming
 		if( !client->ps.stats[PM_STAT_ZOOMTIME] ) {
-			const float squareDistance = enemyOrigin.SquareDistanceTo( self->s.origin );
+			const float squareDistance = enemyOrigin.SquareDistanceTo( bot->Origin() );
 			// It's unlikely to hit at this distance
 			if( squareDistance > 1250 * 1250 ) {
 				continue;
@@ -568,14 +610,16 @@ bool SelectedEnemies::TestAboutToHitEBorIG( int64_t levelTime ) const {
 }
 
 bool SelectedEnemies::TestAboutToHitLGorPG( int64_t levelTime ) const {
-	trace_t trace;
-	const auto *pvsCache = EntitiesPvsCache::Instance();
-	const auto *const viewDots = GetEnemyViewDirDotToBotDirValues();
+	const auto *__restrict pvsCache = EntitiesPvsCache::Instance();
+	const auto *__restrict viewDots = GetEnemyViewDirDotToBotDirValues();
+	const auto *__restrict botOrigin = bot->Origin();
 	constexpr float squareDistanceThreshold = WorldState::MIDDLE_RANGE_MAX * WorldState::MIDDLE_RANGE_MAX;
-	for( unsigned i = 0; i < activeEnemies.size(); ++i ) {
-		const auto *const enemy = activeEnemies[i];
+
+	trace_t trace;
+	for( unsigned i = 0; i < enemies.size(); ++i ) {
+		const auto *const enemy = enemies[i];
 		// Skip enemies that are out of LG range. (Consider PG to be inefficient outside of this range too)
-		if( enemy->LastSeenOrigin().SquareDistanceTo( self->s.origin ) > squareDistanceThreshold ) {
+		if( enemy->LastSeenOrigin().SquareDistanceTo( botOrigin ) > squareDistanceThreshold ) {
 			continue;
 		}
 
@@ -597,13 +641,13 @@ bool SelectedEnemies::TestAboutToHitLGorPG( int64_t levelTime ) const {
 
 		// TODO: Check past view dots and derive direction?
 
-		if( !pvsCache->AreInPvs( self, enemy->ent ) ) {
+		if( !pvsCache->AreInPvs( game.edicts + bot->EntNum(), enemy->ent ) ) {
 			continue;
 		}
 
 		Vec3 traceStart( enemy->LastSeenOrigin() );
 		traceStart.Z() += playerbox_stand_viewheight;
-		SolidWorldTrace( &trace, traceStart.Data(), self->s.origin );
+		SolidWorldTrace( &trace, traceStart.Data(), botOrigin );
 		if( trace.fraction == 1.0f ) {
 			return true;
 		}
@@ -612,22 +656,24 @@ bool SelectedEnemies::TestAboutToHitLGorPG( int64_t levelTime ) const {
 }
 
 bool SelectedEnemies::TestAboutToHitRLorSW( int64_t levelTime ) const {
+	const auto *__restrict pvsCache = EntitiesPvsCache::Instance();
+	const auto *__restrict viewDots = GetEnemyViewDirDotToBotDirValues();
+	const float *__restrict botOrigin = bot->Origin();
+
 	trace_t trace;
-	const auto *pvsCache = EntitiesPvsCache::Instance();
-	const auto *const viewDots = GetEnemyViewDirDotToBotDirValues();
-	for( unsigned i = 0; i < activeEnemies.size(); ++i ) {
-		const auto *const enemy = activeEnemies[i];
+	for( unsigned i = 0; i < enemies.size(); ++i ) {
+		const auto *const enemy = enemies[i];
 
 		float distanceThreshold = 512.0f;
 		// Ideally should check the bot environment too
-		const float deltaZ = enemy->LastSeenOrigin().Z() - self->s.origin[2];
+		const float deltaZ = enemy->LastSeenOrigin().Z() - botOrigin[2];
 		if( deltaZ > 16.0f ) {
 			distanceThreshold += 2.0f * BoundedFraction( deltaZ, 128.0f );
 		} else if( deltaZ < -16.0f ) {
 			distanceThreshold -= BoundedFraction( deltaZ, 128.0f );
 		}
 
-		const float squareDistance = enemy->LastSeenOrigin().SquareDistanceTo( self->s.origin );
+		const float squareDistance = enemy->LastSeenOrigin().SquareDistanceTo( botOrigin );
 		if( squareDistance > distanceThreshold * distanceThreshold ) {
 			continue;
 		}
@@ -638,8 +684,8 @@ bool SelectedEnemies::TestAboutToHitRLorSW( int64_t levelTime ) const {
 			}
 		}
 
-		const float distance = SQRTFAST( squareDistance );
-		const float distanceFraction = BoundedFraction( distance, distanceThreshold );
+		const float distance = Q_Sqrt( squareDistance );
+		const float distanceFraction = std::min( distance, distanceThreshold ) * Q_Rcp( distanceThreshold );
 		// Do not wait for an actual shot on a short distance.
 		// Its impossible to dodge on a short distance due to damage splash.
 		// If the distance is close to zero 750 millis of reloading left must be used for making a dodge.
@@ -652,14 +698,14 @@ bool SelectedEnemies::TestAboutToHitRLorSW( int64_t levelTime ) const {
 			continue;
 		}
 
-		if( !pvsCache->AreInPvs( self, enemy->ent ) ) {
+		if( !pvsCache->AreInPvs( game.edicts + bot->EntNum(), enemy->ent ) ) {
 			continue;
 		}
 
 		// TODO: Check view dot and derive direction?
 		Vec3 enemyViewOrigin( enemy->LastSeenOrigin() );
 		enemyViewOrigin.Z() += playerbox_stand_viewheight;
-		SolidWorldTrace( &trace, enemyViewOrigin.Data(), self->s.origin );
+		SolidWorldTrace( &trace, enemyViewOrigin.Data(), botOrigin );
 		if( trace.fraction == 1.0f ) {
 			return true;
 		}
@@ -668,10 +714,10 @@ bool SelectedEnemies::TestAboutToHitRLorSW( int64_t levelTime ) const {
 		// around the bot that are visible for the enemy
 		for( int x = -1; x <= 1; x += 2 ) {
 			for( int y = -1; y <= 1; y += 2 ) {
-				Vec3 sidePoint( self->s.origin );
+				Vec3 sidePoint( botOrigin );
 				sidePoint.X() += 64.0f * x;
 				sidePoint.Y() += 64.0f * y;
-				SolidWorldTrace( &trace, self->s.origin, sidePoint.Data() );
+				SolidWorldTrace( &trace, botOrigin, sidePoint.Data() );
 				if( trace.fraction == 1.0f || ( trace.surfFlags & SURF_NOIMPACT ) ) {
 					continue;
 				}
