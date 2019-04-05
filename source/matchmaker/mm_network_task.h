@@ -62,9 +62,27 @@ protected:
 		}
 	}
 
-	virtual bool AllowQueryRetry() {
-		return query && query->ShouldRetry();
-	};
+	//virtual bool AllowQueryRetry() {
+	//	return query && query->ShouldRetry();
+	//};
+
+	/**
+	 * Checks whether a query result forbids a retry.
+	 * @warning this method must be executed having "ready" query status.
+	 * @return true if retry is disallowed
+	 */
+	virtual bool QueryResultForbidsRetry() {
+		return !( query && query->ShouldRetry() );
+	}
+
+	/**
+	 * Checks whether a query retry is permitted.
+	 * This method has a lesser priority than {@code QueryResultForbidsRetry()}.
+	 * Calling this method for any query object status should be safe.
+	 * This method can be overridden for cutting off retries by timeout expiration.
+	 * @return true if a query retry is permitted at this moment.
+	 */
+	virtual bool IsRetryPermittedNow() { return false; }
 
 	virtual void OnQueryResult( bool succeeded ) {
 		if( succeeded ) {
@@ -119,7 +137,7 @@ protected:
 			return;
 		}
 
-		if( !AllowQueryRetry() ) {
+		if( QueryResultForbidsRetry() ) {
 			OnQueryResult( false );
 			return;
 		}
@@ -231,11 +249,7 @@ protected:
 		: StatsowNetworkTask( NewQuery( resource_, outgoingIp_, isAPostQuery_ ) )
 		, parent( parent_ ), name( name_ ) {}
 
-	bool AllowQueryRetry() override {
-		if( !StatsowNetworkTask::AllowQueryRetry() ) {
-			return false;
-		}
-
+	bool IsRetryPermittedNow() override {
 		assert( startedAt >= 0 && maxRetryDuration >= 0 );
 		const auto now = Sys_Milliseconds();
 		assert( now >= startedAt );
@@ -243,6 +257,11 @@ protected:
 	}
 
 	bool ScheduleForRetry() override {
+		if( !IsRetryPermittedNow() ) {
+			Com_Printf( "%s: Retry is no longer permitted\n", name );
+			return false;
+		}
+
 		if( !retryDelay ) {
 			Com_Printf( "%s: About to retry\n", name );
 			return query->SendForStatusPolling();
@@ -287,14 +306,13 @@ protected:
 
 		// Check whether we have not fired the query again
 		if( !query->HasStarted() ) {
-			// Check whether a retry is allowed using generic facilities.
-			// This allows to stop explicit retries on timeout.
-			if( !AllowQueryRetry() ) {
+			if( !IsRetryPermittedNow() ) {
+				OnQueryFailure();
+			} else if( !query->SendForStatusPolling() ) {
 				OnQueryFailure();
 			}
-			if( !query->SendForStatusPolling() ) {
-				OnQueryFailure();
-			}
+			// Prevent entering this branch again (the query remains in non-started state)
+			nextRetryAt = 0;
 			return;
 		}
 

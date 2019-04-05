@@ -198,7 +198,14 @@ public:
 		}
 	}
 
-	bool AllowQueryRetry() override {
+	bool QueryResultForbidsRetry() override {
+		// Keep attempts to fetch a match ID in any case.
+		// No error such as network error, server error, etc can stop it.
+		// We hope these troubles get finally resolved at some attempt.
+		return false;
+	}
+
+	bool IsRetryPermittedNow() override {
 		return parent->continueFetchUuidTask;
 	}
 
@@ -584,10 +591,10 @@ void SVLogoutTask::OnQuerySuccess() {
 
 void SVStatsowFacade::OnLoginFailure() {
 	if( sv_mm_loginonly->integer ) {
-		Com_Error( ERR_FATAL, "Statsow authentication has failed. sv_mm_loginonly value forbids running the server\n" );
+		Com_Error( ERR_FATAL, "Statsow authentication has failed. `sv_mm_loginonly` value forbids running the server.\n" );
 	}
 
-	Com_Printf( S_COLOR_YELLOW "Statsow login has failed. Disabling server Statsow services" );
+	Com_Printf( S_COLOR_YELLOW "Statsow login has failed. Disabling server Statsow services.\n" );
 	Cvar_ForceSet( sv_mm_enable->name, "0" );
 	ourSession = Uuid_FFFsUuid();
 	isLoggingIn = false;

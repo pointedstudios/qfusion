@@ -195,7 +195,12 @@ class CLContinueLoggingInTask : public CLStatsowTask {
 		}
 	}
 
-	bool AllowQueryRetry() override {
+	bool QueryResultForbidsRetry() override {
+		// See comments to this overridden method in SVFetchMatchUuidTask
+		return false;
+	}
+
+	bool IsRetryPermittedNow() override {
 		return parent->continueLogin2ndStageTask;
 	}
 public:
