@@ -539,7 +539,15 @@ void SVStatsowFacade::Frame() {
 		return;
 	}
 
+	// Disallow logging in for listen servers. Use a dummy server session.
 	if( Cvar_Value( "dedicated" ) == 0 ) {
+		ourSession = Uuid_FFFsUuid();
+		return;
+	}
+
+	// Disallow logging in if MM services are not explicitly enabled. Use a dummy server session.
+	if( !sv_mm_enable->integer ) {
+		ourSession = Uuid_FFFsUuid();
 		return;
 	}
 
