@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // common.c -- misc functions used in client and server
 #include "qcommon.h"
 
-#if ( defined( _M_IX86 ) && defined( _MSC_VER ) )
+#if ( defined( _MSC_VER ) && ( defined( _M_IX86 ) || defined( _M_AMD64 ) || defined( _M_X64 ) ) )
 // For __cpuid() intrinsic
 #include <intrin.h>
 #endif
