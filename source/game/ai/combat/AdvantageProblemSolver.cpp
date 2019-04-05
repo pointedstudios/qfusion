@@ -1,5 +1,6 @@
 #include "AdvantageProblemSolver.h"
 #include "SpotsProblemSolversLocal.h"
+#include "../navigation/AasElementsMask.h"
 
 int AdvantageProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 	uint16_t insideSpotNum;
@@ -75,50 +76,60 @@ SpotsAndScoreVector &AdvantageProblemSolver::CheckOriginVisibility( SpotsAndScor
 
 	edict_t *passent = const_cast<edict_t*>( originParams.originEntity );
 	edict_t *keepVisibleEntity = const_cast<edict_t *>( problemParams.keepVisibleEntity );
-	Vec3 entityOrigin( problemParams.keepVisibleOrigin );
+	Vec3 keepVisibleOrigin( problemParams.keepVisibleOrigin );
+	int keepVisibleAreaNum = 0;
 	// If not only origin but an entity too is supplied
 	if( keepVisibleEntity ) {
 		// Its a good idea to add some offset from the ground
-		entityOrigin.Z() += 0.66f * keepVisibleEntity->r.maxs[2];
+		keepVisibleOrigin.Z() += 0.66f * keepVisibleEntity->r.maxs[2];
+		if( const auto *ai = keepVisibleEntity->ai ) {
+			if( const auto *bot = ai->botRef ) {
+				int areaNums[] { 0, 0 };
+				bot->EntityPhysicsState()->PrepareRoutingStartAreas( areaNums );
+				keepVisibleAreaNum = areaNums[0];
+			}
+		}
 	}
 
 	// Copy to locals for faster access
 	const edict_t *gameEdicts = game.edicts;
 	const auto *const spots = tacticalSpotsRegistry->spots;
 	const auto *aasWorld = AiAasWorld::Instance();
+	if( !keepVisibleAreaNum ) {
+		keepVisibleAreaNum = aasWorld->FindAreaNum( keepVisibleOrigin );
+	}
+
+	// Decompress an AAS areas vis row for the origin area
+	auto *originVisRow = aasWorld->DecompressAreaVis( originParams.originAreaNum, AasElementsMask::TmpAreasVisRow( 0 ) );
+	// Decompress an AAS areas vis row for the area of the "keep visible origin/entity"
+	auto *keepVisEntRow = aasWorld->DecompressAreaVis( keepVisibleAreaNum, AasElementsMask::TmpAreasVisRow( 1 ) );
 
 	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
-
-	int originLeafNums[4], topNode;
-	Vec3 mins( originParams.origin );
-	Vec3 maxs( originParams.origin );
-	// We need some small and feasible box for BoxLeafNums() call,
-	// player bounds are not obligatory but suit this purpose well
-	mins += playerbox_stand_mins;
-	maxs += playerbox_stand_maxs;
-	const int numOriginLeafs = trap_CM_BoxLeafnums( mins.Data(), maxs.Data(), originLeafNums, 4, &topNode );
 
 	trace_t trace;
 	for( const SpotAndScore &spotAndScore : reachCheckedSpots ) {
 		const auto &spot = spots[spotAndScore.spotNum];
-		// Use area leaf nums for PVS tests
-		for( int i = 0; i < numOriginLeafs; ++i ) {
-			auto *areaLeafNums = aasWorld->AreaMapLeafsList( spot.aasAreaNum ) + 1;
-			for( int j = 0; j < areaLeafNums[-1]; ++j ) {
-				if( trap_CM_LeafsInPVS( originLeafNums[i], areaLeafNums[j] ) ) {
-					goto pvsTestPassed;
-				}
-			}
+		// Skip area if the vis row value for the spot is false.
+		// This does not guarantee it cannot be visible from the origin area
+		// as the vis table computations are coarse and yield some false negatives.
+		// However it substantially reduces an inclusive cost of calling this routine.
+		if( !originVisRow[spot.aasAreaNum] ) {
+			continue;
 		}
 
-		continue;
-pvsTestPassed:
+		// Now check whether the keep visible entity/origin is considered visible from the spot.
+		// Generally speaking the visibility relation should not be symmetric
+		// but the AAS area table vis computations are made only against a solid collision world.
+		// Consider the entity non-visible from spot if the spot is not considered visible from the entity.
+		if( !keepVisEntRow[spot.aasAreaNum] ) {
+			continue;
+		}
 
 		//.Spot origins are dropped to floor (only few units above)
 		// Check whether we can hit standing on this spot (having the gun at viewheight)
 		Vec3 from( spots[spotAndScore.spotNum].origin );
 		from.Z() += -playerbox_stand_mins[2] + playerbox_stand_viewheight;
-		G_Trace( &trace, from.Data(), nullptr, nullptr, entityOrigin.Data(), passent, MASK_AISOLID );
+		G_Trace( &trace, from.Data(), nullptr, nullptr, keepVisibleOrigin.Data(), passent, MASK_AISOLID );
 		if( trace.fraction != 1.0f && gameEdicts + trace.ent != keepVisibleEntity ) {
 			continue;
 		}
