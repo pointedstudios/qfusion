@@ -81,8 +81,8 @@ int CM_BoxLeafnums( const cmodel_state_t *cms,
 
 	CM_BoxLeafnums_r( cms, topNodeHint );
 
-	// Make sure the hinted top node is a parent of found split node
-	assert( !topNodeHint || cms->leaf_topnode > topNodeHint );
+	// Make sure the hinted top node is a parent of (maybe) found split node
+	assert( !topNodeHint || cms->leaf_topnode < 0 || cms->leaf_topnode > topNodeHint );
 
 	if( topnode ) {
 		*topnode = cms->leaf_topnode;
@@ -236,9 +236,9 @@ int CM_FindTopNodeForBox( const cmodel_state_t *cms, const vec3_t mins, const ve
 	VectorAdd( mins, testedMins, testedMins );
 	VectorAdd( maxs, testedMaxs, testedMaxs );
 
-	int lastGoodNode = 0;
+	int currNode = 0, lastGoodNode = 0;
 	for(;; ) {
-		const cnode_t *node = &cms->map_nodes[lastGoodNode];
+		const cnode_t *node = &cms->map_nodes[currNode];
 		int side = BOX_ON_PLANE_SIDE( testedMins, testedMaxs, node->plane );
 		// Stop at finding a splitting node
 		if( side == 3 ) {
@@ -247,13 +247,14 @@ int CM_FindTopNodeForBox( const cmodel_state_t *cms, const vec3_t mins, const ve
 		int child = node->children[side - 1];
 		// Stop at leaves
 		if( child < 0 ) {
-			return lastGoodNode;
+			return currNode;
 		}
 		// Stop at maximum allowed numeric value of a child
 		if( (unsigned)child > maxValue ) {
-			return lastGoodNode;
+			return currNode;
 		}
-		lastGoodNode = child;
+		lastGoodNode = currNode;
+		currNode = child;
 	}
 }
 
@@ -263,9 +264,9 @@ int CM_FindTopNodeForSphere( const cmodel_state_t *cms, const vec3_t center, flo
 	const cnode_t *const __restrict nodes = cms->map_nodes;
 	const float *const __restrict c = center;
 
-	int lastGoodNode = 0;
+	int currNode = 0, lastGoodNode = 0;
 	for(;; ) {
-		const cnode_t *__restrict node = nodes + lastGoodNode;
+		const cnode_t *__restrict node = nodes + currNode;
 		const cplane_t *__restrict plane = node->plane;
 		float distanceToPlane = DotProduct( plane->normal, c ) - plane->dist;
 		int child;
@@ -277,11 +278,12 @@ int CM_FindTopNodeForSphere( const cmodel_state_t *cms, const vec3_t center, flo
 			return lastGoodNode;
 		}
 		if( child < 0 ) {
-			return lastGoodNode;
+			return currNode;
 		}
 		if( (unsigned)child > maxValue ) {
-			return lastGoodNode;
+			return currNode;
 		}
-		lastGoodNode = child;
+		lastGoodNode = currNode;
+		currNode = child;
 	}
 }
