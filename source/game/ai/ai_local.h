@@ -241,7 +241,7 @@ unsigned GetHashForLength( const char *str, unsigned length );
 
 // A cheaper version of G_Trace() that does not check against entities
 inline void StaticWorldTrace( trace_t *trace, const vec3_t from, const vec3_t to, int contentsMask,
-							  const vec3_t mins = vec3_origin, const vec3_t maxs = vec3_origin ) {
+							  const vec3_t mins = vec3_origin, const vec3_t maxs = vec3_origin, int topNodeHint = 0 ) {
 	assert( from );
 	float *from_ = const_cast<float *>( from );
 	assert( to );
@@ -250,7 +250,7 @@ inline void StaticWorldTrace( trace_t *trace, const vec3_t from, const vec3_t to
 	float *mins_ = const_cast<float *>( mins );
 	assert( maxs );
 	float *maxs_ = const_cast<float *>( maxs );
-	trap_CM_TransformedBoxTrace( trace, from_, to_, mins_, maxs_, nullptr, contentsMask, nullptr, nullptr );
+	trap_CM_TransformedBoxTrace( trace, from_, to_, mins_, maxs_, nullptr, contentsMask, nullptr, nullptr, topNodeHint );
 }
 
 // This shorthand is for backward compatibility and some degree of convenience

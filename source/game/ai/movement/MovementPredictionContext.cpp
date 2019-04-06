@@ -302,7 +302,8 @@ static void Intercepted_PMoveTouchTriggers( pmove_t *pm, vec3_t previous_origin 
 
 static void Intercepted_Trace( trace_t *t, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end,
 							   int ignore, int contentmask, int timeDelta ) {
-	trap_CM_TransformedBoxTrace( t, start, end, mins, maxs, nullptr, contentmask, nullptr, nullptr );
+	int topNodeHint = ::collisionTopNodeCache.GetTopNode( start, mins, maxs, end );
+	trap_CM_TransformedBoxTrace( t, start, end, mins, maxs, nullptr, contentmask, nullptr, nullptr, topNodeHint );
 }
 
 static int Intercepted_PointContents( vec3_t p, int timeDelta ) {

@@ -467,7 +467,7 @@ class CollisionTopNodeCache {
 
 	mutable int cachedNode { 0 };
 
-	// This approach looks much cleaner rather multiple ifdefs spreaded over the code
+	// This approach looks much cleaner rather multiple ifdefs spread over the code
 #ifndef PUBLIC_BUILD
 	static constexpr auto profileHits = true;
 #else

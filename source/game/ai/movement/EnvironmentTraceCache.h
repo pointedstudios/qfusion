@@ -83,6 +83,8 @@ private:
 	bool TrySkipTracingForCurrOrigin( class MovementPredictionContext *context,
 									  const vec3_t front2DDir, const vec3_t right2DDir );
 
+	int ComputeCollisionTopNodeHint( class MovementPredictionContext *context ) const;
+
 	/**
 	 * Selects indices of non-blocked dirs among 8 full-height ones.
 	 * @param context a current state of movement prediction context

@@ -223,6 +223,9 @@ bool EnvironmentTraceCache::TrySkipTracingForCurrOrigin( Context *context, const
 		}
 	}
 
+	// Compute the top node hint while the bounds are absolute
+	const int topNodeHint = ::collisionTopNodeCache.GetTopNode( mins, maxs );
+
 	// Test bounds around the origin.
 	// Doing these tests can save expensive trace calls for separate directions
 
@@ -232,14 +235,14 @@ bool EnvironmentTraceCache::TrySkipTracingForCurrOrigin( Context *context, const
 
 	trace_t trace;
 	mins.Z() += 0.25f;
-	StaticWorldTrace( &trace, origin, origin, MASK_SOLID | MASK_WATER, mins.Data(), maxs.Data() );
+	StaticWorldTrace( &trace, origin, origin, MASK_SOLID | MASK_WATER, mins.Data(), maxs.Data(), topNodeHint );
 	if( trace.fraction == 1.0f ) {
 		SetAllResultsToEmpty( front2DDir, right2DDir );
 		return true;
 	}
 
 	mins.Z() += AI_JUMPABLE_HEIGHT - 1.0f;
-	StaticWorldTrace( &trace, origin, origin, MASK_SOLID | MASK_WATER, mins.Data(), maxs.Data() );
+	StaticWorldTrace( &trace, origin, origin, MASK_SOLID | MASK_WATER, mins.Data(), maxs.Data(), topNodeHint );
 	if( trace.fraction == 1.0f ) {
 		SetAllJumpableToEmpty( front2DDir, right2DDir );
 		// We might still need to perform full height traces in TestForResultsMask()
@@ -247,6 +250,13 @@ bool EnvironmentTraceCache::TrySkipTracingForCurrOrigin( Context *context, const
 	}
 
 	return false;
+}
+
+int EnvironmentTraceCache::ComputeCollisionTopNodeHint( Context *context ) const {
+	const float *botOrigin = context->movementState->entityPhysicsState.Origin();
+	Vec3 nodeHintMins( Vec3( Vec3( -TRACE_DEPTH, -TRACE_DEPTH, 0 ) + playerbox_stand_mins ) + botOrigin );
+	Vec3 nodeHintMaxs( Vec3( Vec3( +TRACE_DEPTH, +TRACE_DEPTH, 0 ) + playerbox_stand_maxs ) + botOrigin );
+	return ::collisionTopNodeCache.GetTopNode( nodeHintMins, nodeHintMaxs );
 }
 
 void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requiredResultsMask ) {
@@ -273,6 +283,8 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 	const float *origin = entityPhysicsState.Origin();
 	constexpr auto contentsMask = MASK_SOLID | MASK_WATER;
 
+	int collisionTopNodeHint = -1;
+
 	// First, test all full side traces.
 	// If a full side trace is empty, a corresponding "jumpable" side trace can be set as empty too.
 
@@ -281,6 +293,8 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 	const unsigned resultFullSides = requiredResultsMask & 0xFFu;
 	// If we do not have some of required result bit set
 	if( ( actualFullSides & resultFullSides ) != resultFullSides ) {
+		collisionTopNodeHint = ComputeCollisionTopNodeHint( context );
+
 		vec3_t mins;
 		VectorCopy( playerbox_stand_mins, mins );
 		mins[2] += 1.0f;
@@ -303,7 +317,7 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 			VectorScale( traceEnd, TRACE_DEPTH, traceEnd );
 			VectorAdd( traceEnd, origin, traceEnd );
 			// Compute the trace of the cached result
-			StaticWorldTrace( &fullResult->trace, origin, traceEnd, contentsMask, mins, maxs );
+			StaticWorldTrace( &fullResult->trace, origin, traceEnd, contentsMask, mins, maxs, collisionTopNodeHint );
 			this->resultsMask |= mask;
 			if( fullResult->trace.fraction != 1.0f ) {
 				continue;
@@ -323,6 +337,12 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 	const unsigned resultJumpableSides = requiredResultsMask & 0xFF00u;
 	// If we do not have some of required result bit set
 	if( ( actualJumpableSides & resultJumpableSides ) != resultJumpableSides ) {
+		// If we have not computed a hint yet
+		if( collisionTopNodeHint < 0 ) {
+			// Use full-height bounds as the cached value for these bounds is more useful for other purposes
+			collisionTopNodeHint = ComputeCollisionTopNodeHint( context );
+		}
+
 		vec3_t mins;
 		VectorCopy( playerbox_stand_mins, mins );
 		mins[2] += AI_JUMPABLE_HEIGHT;
@@ -345,7 +365,7 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 			VectorScale( traceEnd, TRACE_DEPTH, traceEnd );
 			VectorAdd( traceEnd, origin, traceEnd );
 			// Compute the trace of the cached result
-			StaticWorldTrace( &result->trace, origin, traceEnd, contentsMask, mins, maxs );
+			StaticWorldTrace( &result->trace, origin, traceEnd, contentsMask, mins, maxs, collisionTopNodeHint );
 			this->resultsMask |= mask;
 		}
 	}
