@@ -701,11 +701,6 @@ void SnapPlane( vec3_t normal, vec_t *dist ) {
 	}
 }
 
-void ClearBounds( vec3_t mins, vec3_t maxs ) {
-	mins[0] = mins[1] = mins[2] = 99999;
-	maxs[0] = maxs[1] = maxs[2] = -99999;
-}
-
 bool BoundsAndSphereIntersect( const vec3_t mins, const vec3_t maxs, const vec3_t centre, float radius ) {
 	int i;
 	float dmin = 0;
@@ -723,21 +718,6 @@ bool BoundsAndSphereIntersect( const vec3_t mins, const vec3_t maxs, const vec3_
 		return true;
 	}
 	return false;
-}
-
-void AddPointToBounds( const vec3_t v, vec3_t mins, vec3_t maxs ) {
-	int i;
-	vec_t val;
-
-	for( i = 0; i < 3; i++ ) {
-		val = v[i];
-		if( val < mins[i] ) {
-			mins[i] = val;
-		}
-		if( val > maxs[i] ) {
-			maxs[i] = val;
-		}
-	}
 }
 
 /*

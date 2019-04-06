@@ -253,8 +253,22 @@ void _VectorSubtract( const vec3_t veca, const vec3_t vecb, vec3_t out );
 void _VectorAdd( const vec3_t veca, const vec3_t vecb, vec3_t out );
 void _VectorCopy( const vec3_t in, vec3_t out );
 
-void ClearBounds( vec3_t mins, vec3_t maxs );
-void AddPointToBounds( const vec3_t v, vec3_t mins, vec3_t maxs );
+static inline void ClearBounds( vec3_t mins, vec3_t maxs ) {
+	mins[0] = mins[1] = mins[2] = 99999;
+	maxs[0] = maxs[1] = maxs[2] = -99999;
+}
+
+static inline void AddPointToBounds( const vec3_t v, vec3_t mins, vec3_t maxs ) {
+	// A sane compiler should produce a branchless code.
+	// We should also use SIMD intrinsics manually if a code path is really hot.
+	mins[0] = v[0] < mins[0] ? v[0] : mins[0];
+	mins[1] = v[1] < mins[1] ? v[1] : mins[1];
+	mins[2] = v[2] < mins[2] ? v[2] : mins[2];
+	maxs[0] = v[0] > maxs[0] ? v[0] : maxs[0];
+	maxs[1] = v[1] > maxs[1] ? v[1] : maxs[1];
+	maxs[2] = v[2] > maxs[2] ? v[2] : maxs[2];
+}
+
 float RadiusFromBounds( const vec3_t mins, const vec3_t maxs );
 
 static inline bool BoundsIntersect( const vec3_t mins1, const vec3_t maxs1, const vec3_t mins2, const vec3_t maxs2 ) {
