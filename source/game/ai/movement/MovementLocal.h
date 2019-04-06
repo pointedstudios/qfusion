@@ -461,6 +461,80 @@ public:
 
 extern TriggerAreaNumsCache triggerAreaNumsCache;
 
+class CollisionTopNodeCache {
+	mutable vec3_t cachedForMins { 0, 0, 0 };
+	mutable vec3_t cachedForMaxs { 0, 0, 0 };
+
+	mutable int cachedNode { 0 };
+
+	// This approach looks much cleaner rather multiple ifdefs spreaded over the code
+#ifndef PUBLIC_BUILD
+	static constexpr auto profileHits = true;
+#else
+	static constexpr auto profileHits = false;
+#endif
+
+	mutable int64_t hits { 0 };
+	mutable int64_t total { 0 };
+	mutable int64_t nodeValuesSum { 0 };
+
+	bool WithinCachedBounds( const float *mins, const float *maxs ) const {
+		// TODO: Use SIMD if it becomes noticeable at profiling results
+		return
+			( mins[0] > cachedForMins[0] ) & ( mins[1] > cachedForMins[1] ) & ( mins[2] > cachedForMins[2] ) &
+			( maxs[0] < cachedForMaxs[0] ) & ( maxs[1] < cachedForMaxs[1] ) & ( maxs[2] < cachedForMaxs[2] );
+	}
+
+	void SaveCachedBounds( const float *testedForMins, const float *testedForMaxs ) const {
+		VectorSet( cachedForMins, -56, -56, -24 );
+		VectorSet( cachedForMaxs, +56, +56, +24 );
+		VectorAdd( testedForMins, cachedForMins, cachedForMins );
+		VectorAdd( testedForMaxs, cachedForMaxs, cachedForMaxs );
+	}
+public:
+	~CollisionTopNodeCache() {
+		if( !profileHits ) {
+			return;
+		}
+
+		double hitRate = total ? hits / ( (double)total ) : 0.0;
+		// Divide the node values sum by count of misses
+		int avgTopNode = total ? (int)( nodeValuesSum / ( (double)( total - hits ) ) ) : 0;
+		// We are unsure if calling G_Printf() is valid at the moment of this object destruction
+		constexpr const char *tag = "CollisionTopNodeCache::~CollisionTopNodeCache()";
+		printf( "%s: Hit rate: %.3lf, avg. top node: %d\n", tag, hitRate, avgTopNode );
+	}
+
+	int GetTopNode( const float *traceStart, const float *traceMins, const float *traceMaxs, const float *traceEnd ) const;
+
+	int GetTopNode( const Vec3 &absMins, const Vec3 &absMaxs ) const {
+		return GetTopNode( absMins.Data(), absMaxs.Data() );
+	}
+
+	int GetTopNode( const float *absMins, const float *absMaxs ) const {
+		if( profileHits ) {
+			total++;
+		}
+		if( WithinCachedBounds( absMins, absMaxs ) ) {
+			if( profileHits ) {
+				hits++;
+			}
+			return cachedNode;
+		}
+
+		SaveCachedBounds( absMins, absMaxs );
+		cachedNode = trap_CM_FindTopNodeForBox( cachedForMins, cachedForMaxs );
+		if( profileHits ) {
+			// The CM call must not return leaves
+			assert( cachedNode >= 0 );
+			nodeValuesSum += cachedNode;
+		}
+		return cachedNode;
+	}
+};
+
+extern CollisionTopNodeCache collisionTopNodeCache;
+
 int TravelTimeWalkingOrFallingShort( const AiAasRouteCache *routeCache, int fromAreaNum, int toAreaNum );
 
 /**

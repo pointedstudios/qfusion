@@ -688,3 +688,43 @@ bool TraceArcInSolidWorld( const vec3_t from, const vec3_t to ) {
 	StaticWorldTrace( &trace, midPoint.Data(), to, brushMask );
 	return trace.fraction == 1.0f;
 }
+
+CollisionTopNodeCache collisionTopNodeCache;
+
+int CollisionTopNodeCache::GetTopNode( const float *traceStart, const float *traceMins,
+									   const float *traceMaxs, const float *traceEnd ) const {
+	if( profileHits ) {
+		total++;
+	}
+
+	vec3_t bounds[2];
+	ClearBounds( bounds[0], bounds[1] );
+
+	vec3_t startMins, startMaxs;
+	VectorAdd( traceStart, traceMins, startMins );
+	AddPointToBounds( startMins, bounds[0], bounds[1] );
+	VectorAdd( traceStart, traceMaxs, startMaxs );
+	AddPointToBounds( startMaxs, bounds[0], bounds[1] );
+
+	vec3_t endMins, endMaxs;
+	VectorAdd( traceEnd, traceMins, endMins );
+	AddPointToBounds( endMins, bounds[0], bounds[1] );
+	VectorAdd( traceEnd, traceMaxs, endMaxs );
+	AddPointToBounds( endMaxs, bounds[0], bounds[1] );
+
+	if( WithinCachedBounds( bounds[0], bounds[1] ) ) {
+		if( profileHits ) {
+			hits++;
+		}
+		return cachedNode;
+	}
+
+	SaveCachedBounds( bounds[0], bounds[1] );
+	cachedNode = trap_CM_FindTopNodeForBox( cachedForMins, cachedForMaxs );
+	if( profileHits ) {
+		// The CM call must not return leaves
+		assert( cachedNode >= 0 );
+		nodeValuesSum += cachedNode;
+	}
+	return cachedNode;
+}
