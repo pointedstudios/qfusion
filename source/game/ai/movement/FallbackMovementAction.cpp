@@ -256,11 +256,7 @@ MovementScript *FallbackMovementAction::TryNodeBasedFallbacksLeft( Context *cont
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 
 	const unsigned millisInBlockedState = bot->MillisInBlockedState();
-	const bool isBotEasy = bot->Skill() < 0.33f;
-	// This is a very conservative condition that however should prevent looping these node-based fallbacks are prone to.
-	// Prefer jumping fallbacks that are almost seamless to the bunnying movement.
-	// Note: threshold values are significanly lower for easy bots since they almost never use bunnying movement.
-	if( millisInBlockedState < ( isBotEasy ? 500 : 1500 ) ) {
+	if( millisInBlockedState < 500 ) {
 		return nullptr;
 	}
 
@@ -277,28 +273,30 @@ MovementScript *FallbackMovementAction::TryNodeBasedFallbacksLeft( Context *cont
 		}
 	}
 
-	if( millisInBlockedState > ( isBotEasy ? 700 : 2000 ) ) {
-		vec3_t areaPoint;
-		int areaNum;
-		if( context->sameFloorClusterAreasCache.GetClosestToTargetPoint( context, areaPoint, &areaNum ) ) {
-			nodeFallback->Activate( areaPoint, 48.0f, areaNum );
+	if( millisInBlockedState < 750 ) {
+		return nullptr;
+	}
+
+	vec3_t areaPoint;
+	int areaNum;
+	if( context->sameFloorClusterAreasCache.GetClosestToTargetPoint( context, areaPoint, &areaNum ) ) {
+		nodeFallback->Activate( areaPoint, 48.0f, areaNum );
+		return nodeFallback;
+	}
+
+	if( context->navMeshQueryCache.GetClosestToTargetPoint( context, areaPoint ) ) {
+		float squareDistance = Distance2DSquared( context->movementState->entityPhysicsState.Origin(), areaPoint );
+		if( squareDistance > SQUARE( 8 ) ) {
+			areaNum = AiAasWorld::Instance()->FindAreaNum( areaPoint );
+			float reachRadius = std::min( 64.0f, Q_Sqrt( squareDistance ) );
+			nodeFallback->Activate( areaPoint, reachRadius, areaNum );
 			return nodeFallback;
 		}
+	}
 
-		if( context->navMeshQueryCache.GetClosestToTargetPoint( context, areaPoint ) ) {
-			float squareDistance = Distance2DSquared( context->movementState->entityPhysicsState.Origin(), areaPoint );
-			if( squareDistance > SQUARE( 8 ) ) {
-				areaNum = AiAasWorld::Instance()->FindAreaNum( areaPoint );
-				float reachRadius = std::min( 64.0f, SQRTFAST( squareDistance ) );
-				nodeFallback->Activate( areaPoint, reachRadius, areaNum );
-				return nodeFallback;
-			}
-		}
-
-		if( millisInBlockedState > ( isBotEasy ? 1250 : 2500 ) ) {
-			// Notify the nav target selection code
-			bot->OnMovementToNavTargetBlocked();
-		}
+	if( millisInBlockedState > 1500 ) {
+		// Notify the nav target selection code
+		bot->OnMovementToNavTargetBlocked();
 	}
 
 	return nullptr;
