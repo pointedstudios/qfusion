@@ -1,7 +1,7 @@
 #include "PlanningModule.h"
 #include "PlanningLocal.h"
 
-BotPlanningModule::BotPlanningModule( edict_t *self_, Bot *bot_, float skill_ )
+BotPlanningModule::BotPlanningModule( Bot *bot_ )
 	: bot( bot_ )
 	, planner( bot_, this )
 	, grabItemGoal( this )

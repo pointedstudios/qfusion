@@ -29,7 +29,7 @@ Bot::Bot( edict_t *self_, float skillLevel_ )
 	, selectedNavEntity( nullptr, 0, 0, 0 )
 	, movementModule( this )
 	, awarenessModule( this )
-	, planningModule( self_, this, skillLevel_ )
+	, planningModule( this )
 	, weightConfig( self_ )
 	, weaponsUsageModule( this ) {
 	self->r.client->movestyle = GS_CLASSICBUNNY;

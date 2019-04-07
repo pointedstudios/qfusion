@@ -72,8 +72,7 @@ class BotPlanningModule {
 	BotItemsSelector itemsSelector;
 	BotRoamingManager roamingManager;
 public:
-	// We have to provide both entity and Bot class refs due to initialization order issues
-	BotPlanningModule( edict_t *self_, Bot *bot_, float skill_ );
+	BotPlanningModule( Bot *bot_ );
 
 	BotGoal *GetGoalByName( const char *name ) { return planner.GetGoalByName( name ); }
 	BotAction *GetActionByName( const char *name ) { return planner.GetActionByName( name ); }
