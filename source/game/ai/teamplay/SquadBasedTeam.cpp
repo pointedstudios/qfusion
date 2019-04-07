@@ -1681,6 +1681,7 @@ void AiSquadBasedTeam::PlayerAssistanceTracker::UpdateInfluence() {
 	auto *const __restrict gameEdicts = game.edicts;
 	const auto *const __restrict pvsCache = EntitiesPvsCache::Instance();
 	auto *const __restrict scores_ = this->influenceScores;
+	const auto levelTime = level.time;
 
 	trace_t trace;
 	// Iterate over all teammates in the outer loop to reuse some checks
@@ -1695,16 +1696,24 @@ void AiSquadBasedTeam::PlayerAssistanceTracker::UpdateInfluence() {
 			continue;
 		}
 
+		const auto *__restrict client = ent->r.client;
+
+		// Ignore clients that were not active for a half of a second or longer.
+		// Otherwise getting assisted just by happening to be spawned in a group at round start is annoying.
+		if( client->level.last_activity + 500 < levelTime ) {
+			continue;
+		}
+
 		vec3_t mateForwardDir;
 		AngleVectors( ent->s.angles, mateForwardDir, nullptr, nullptr );
 
-		const bool isZooming = ent->r.client->ps.pmove.stats[PM_STAT_ZOOMTIME] > 0;
+		const bool isZooming = client->ps.pmove.stats[PM_STAT_ZOOMTIME] > 0;
 		// Avoid excessive branching on `isZooming` in the loop below
 		const float squareDistanceThreshold = isZooming ? std::numeric_limits<float>::max() : 1250.0f * 1250.0f;
 		const float dotThreshold = isZooming ? 0.95f : 0.85f;
 
 		// Pick faster if the mate is crouching. "slice" suggested this.
-		const int refillScore = ent->r.client->ps.pmove.stats[PM_STAT_CROUCHTIME] ? 2 * REFILL_SCORE : REFILL_SCORE;
+		const int refillScore = client->ps.pmove.stats[PM_STAT_CROUCHTIME] ? 2 * REFILL_SCORE : REFILL_SCORE;
 
 		for( Bot *bot = parent->teamBotsHead; bot; bot = bot->NextInBotsTeam() ) {
 			const auto botClientNum = bot->ClientNum();
