@@ -863,7 +863,7 @@ int BotWeaponSelector::SuggestHitEscapingEnemyWeapon( const WorldState &worldSta
 	Vec3 predictedBotOrigin( extrapolatedBotOrigin );
 
 	// Extrapolate enemy origin
-	float *initialEnemyOrigin = selectedEnemies.LastSeenOrigin().Data();
+	Vec3 initialEnemyOrigin( selectedEnemies.LastSeenOrigin() );
 	Vec3 extrapolatedEnemyOrigin( selectedEnemies.LastSeenVelocity() );
 	extrapolatedEnemyOrigin *= predictionSeconds;
 	extrapolatedEnemyOrigin += initialEnemyOrigin;
@@ -885,7 +885,7 @@ int BotWeaponSelector::SuggestHitEscapingEnemyWeapon( const WorldState &worldSta
 
 	// Get a coarse predicted enemy origin
 	auto *skip = const_cast<edict_t *>( selectedEnemies.Ent() );
-	G_Trace( &trace, initialEnemyOrigin, mins, maxs, extrapolatedEnemyOrigin.Data(), skip, MASK_AISOLID );
+	G_Trace( &trace, initialEnemyOrigin.Data(), mins, maxs, extrapolatedEnemyOrigin.Data(), skip, MASK_AISOLID );
 	if( trace.fraction != 1.0f ) {
 		predictedEnemyOrigin.Set( trace.endpos );
 		if( trace.endpos[2] > extrapolatedEnemyOrigin.Z() ) {

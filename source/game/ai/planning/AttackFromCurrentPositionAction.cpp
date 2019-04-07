@@ -22,7 +22,7 @@ AiActionRecord::Status AttackFromCurrentPositionActionRecord::UpdateStatus( cons
 		vec3_t spotOrigin;
 		const edict_t *ent = game.edicts + Self()->EntNum();
 		SideStepDodgeProblemSolver::OriginParams originParams( ent, 192.0f, AiAasRouteCache::Shared() );
-		const float *keepVisibleOrigin = Self()->GetSelectedEnemies().LastSeenOrigin().Data();
+		const Vec3 keepVisibleOrigin( Self()->GetSelectedEnemies().LastSeenOrigin() );
 		SideStepDodgeProblemSolver::ProblemParams problemParams( keepVisibleOrigin );
 		SideStepDodgeProblemSolver solver( originParams, problemParams );
 		if( solver.FindSingle( spotOrigin ) ) {

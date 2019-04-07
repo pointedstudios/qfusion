@@ -12,6 +12,10 @@ public:
 		explicit ProblemParams( const vec3_t keepVisibleOrigin_ ) {
 			VectorCopy( keepVisibleOrigin_, this->keepVisibleOrigin );
 		}
+
+		explicit ProblemParams( const Vec3 &keepVisibleOrigin_ ) {
+			keepVisibleOrigin_.CopyTo( this->keepVisibleOrigin );
+		}
 	};
 private:
 	ProblemParams &problemParams;
