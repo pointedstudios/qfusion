@@ -47,7 +47,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifdef PUBLIC_BUILD
 #define APP_PROTOCOL_VERSION            23
 #else
-#define APP_PROTOCOL_VERSION            2300
+#define APP_PROTOCOL_VERSION            23
 #endif
 
 #ifdef PUBLIC_BUILD
