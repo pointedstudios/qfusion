@@ -545,4 +545,6 @@ int TravelTimeWalkingOrFallingShort( const AiAasRouteCache *routeCache, int from
  */
 bool TraceArcInSolidWorld( const vec3_t from, const vec3_t to );
 
+void DirToKeyInput( const Vec3 &desiredDir, const vec3_t actualForwardDir, const vec3_t actualRightDir, BotInput *input );
+
 #endif

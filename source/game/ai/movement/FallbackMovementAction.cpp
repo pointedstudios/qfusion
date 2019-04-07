@@ -6,45 +6,6 @@
 #include "../ai_manager.h"
 #include "../ai_trajectory_predictor.h"
 
-TriggerAreaNumsCache triggerAreaNumsCache;
-
-int TriggerAreaNumsCache::GetAreaNum( int entNum ) const {
-	int *const areaNumRef = &areaNums[entNum];
-	// Put the likely case first
-	if( *areaNumRef ) {
-		return *areaNumRef;
-	}
-
-	// Find an area that has suitable flags matching the trigger type
-	const auto *aasWorld = AiAasWorld::Instance();
-	const auto *aasAreaSettings = aasWorld->AreaSettings();
-	const auto *aiManager = AiManager::Instance();
-
-	int desiredAreaContents = ~0;
-	const edict_t *ent = game.edicts + entNum;
-	if( ent->classname ) {
-		if( !Q_stricmp( ent->classname, "trigger_push" ) ) {
-			desiredAreaContents = AREACONTENTS_JUMPPAD;
-		} else if( !Q_stricmp( ent->classname, "trigger_teleport" ) ) {
-			desiredAreaContents = AREACONTENTS_TELEPORTER;
-		}
-	}
-
-	int boxAreaNums[32];
-	int numBoxAreas = aasWorld->BBoxAreas( ent->r.absmin, ent->r.absmax, boxAreaNums, 32 );
-	for( int i = 0; i < numBoxAreas; ++i ) {
-		int areaNum = boxAreaNums[i];
-		if( aasAreaSettings[areaNum].contents & desiredAreaContents ) {
-			if( aiManager->IsAreaReachableFromHubAreas( areaNum ) ) {
-				*areaNumRef = areaNum;
-				break;
-			}
-		}
-	}
-
-	return *areaNumRef;
-}
-
 void FallbackMovementAction::PlanPredictionStep( Context *context ) {
 	bool handledSpecialMovement = false;
 	if( auto *fallback = module->activeMovementScript ) {

@@ -69,8 +69,6 @@ void RidePlatformAction::OnApplicationSequenceStopped( Context *context,
 	currTestedAreaIndex++;
 }
 
-void DirToKeyInput( const Vec3 &desiredDir, const vec3_t actualForwardDir, const vec3_t actualRightDir, BotInput *input );
-
 inline void DirToKeyInput( const Vec3 &desiredDir, const AiEntityPhysicsState &entityPhysicsState, BotInput *input ) {
 	DirToKeyInput( desiredDir, entityPhysicsState.ForwardDir().Data(), entityPhysicsState.RightDir().Data(), input );
 }
