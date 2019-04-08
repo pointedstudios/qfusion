@@ -85,17 +85,15 @@ protected:
 
 	virtual SpotsAndScoreVector &SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery );
 
-	virtual SpotsAndScoreVector &CheckSpotsReachFromOrigin( SpotsAndScoreVector &candidateSpots,
-															uint16_t insideSpotNum );
+	virtual SpotsAndScoreVector &CheckSpotsReachFromOrigin( SpotsAndScoreVector &candidateSpots );
 
-	virtual SpotsAndScoreVector &CheckSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidateSpots,
-																   uint16_t insideSpotNum );
+	virtual SpotsAndScoreVector &CheckSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidateSpots );
 
-	SpotsAndScoreVector &CheckSpotsReach( SpotsAndScoreVector &candidateSpots, uint16_t insideSpotNum ) {
+	SpotsAndScoreVector &CheckSpotsReach( SpotsAndScoreVector &candidateSpots ) {
 		if( problemParams.checkToAndBackReach ) {
-			return CheckSpotsReachFromOriginAndBack( candidateSpots, insideSpotNum );
+			return CheckSpotsReachFromOriginAndBack( candidateSpots );
 		}
-		return CheckSpotsReachFromOrigin( candidateSpots, insideSpotNum );
+		return CheckSpotsReachFromOrigin( candidateSpots );
 	}
 
 	virtual SpotsAndScoreVector &CheckEnemiesInfluence( SpotsAndScoreVector &candidateSpots );
