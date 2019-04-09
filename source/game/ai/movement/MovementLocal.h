@@ -535,6 +535,35 @@ public:
 
 extern CollisionTopNodeCache collisionTopNodeCache;
 
+class ReachChainWalker {
+protected:
+	const AiAasRouteCache *const routeCache;
+	int targetAreaNum { -1 };
+	int startAreaNums[2] { 0, 0 };
+	int numStartAreas { -1 };
+	// Step temporaries that might be useful
+	int lastTravelTime { 0 };
+	int lastReachNum { 0 };
+
+	virtual bool Accept( int reachNum, const aas_reachability_t &reach, int travelTime ) = 0;
+public:
+	void SetAreaNums( const int *startAreaNums_, int numStartAreas_, int targetAreaNum_ ) {
+		Vector2Copy( startAreaNums_, startAreaNums );
+		this->numStartAreas = numStartAreas_;
+		this->targetAreaNum = targetAreaNum_;
+	}
+
+	void SetAreaNums( const AiEntityPhysicsState &physicsState, int targetAreaNum_ ) {
+		numStartAreas = physicsState.PrepareRoutingStartAreas( startAreaNums );
+		this->targetAreaNum = targetAreaNum_;
+	}
+
+	explicit ReachChainWalker( const AiAasRouteCache *routeCache_ )
+		: routeCache( routeCache_ ) {}
+
+	virtual bool Exec();
+};
+
 int TravelTimeWalkingOrFallingShort( const AiAasRouteCache *routeCache, int fromAreaNum, int toAreaNum );
 
 /**

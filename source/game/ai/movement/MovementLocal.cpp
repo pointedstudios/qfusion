@@ -84,6 +84,42 @@ int CollisionTopNodeCache::GetTopNode( const float *traceStart, const float *tra
 	return cachedNode;
 }
 
+bool ReachChainWalker::Exec() {
+	assert( targetAreaNum >= 0 );
+	assert( numStartAreas >= 0 );
+
+	lastReachNum = 0;
+	// We have to handle the first reach. separately as we start from up to 2 alternative areas
+	lastTravelTime = routeCache->PreferredRouteToGoalArea( startAreaNums, numStartAreas, targetAreaNum, &lastReachNum );
+	if( !lastTravelTime ) {
+		return false;
+	}
+
+	const auto *const aasWorld = AiAasWorld::Instance();
+	const auto *const aasReach = aasWorld->Reachabilities();
+
+	assert( (unsigned)lastReachNum < (unsigned)aasWorld->NumReach() );
+	if( !Accept( lastReachNum, aasReach[lastReachNum], lastTravelTime ) ) {
+		return true;
+	}
+
+	int areaNum = aasReach[lastReachNum].areanum;
+	while( areaNum != targetAreaNum ) {
+		lastTravelTime = routeCache->PreferredRouteToGoalArea( areaNum, targetAreaNum, &lastReachNum );
+		if( !lastTravelTime ) {
+			return false;
+		}
+		assert( (unsigned)lastReachNum < (unsigned)aasWorld->NumReach() );
+		const auto &reach = aasReach[lastReachNum];
+		if( !Accept( lastReachNum, reach, lastTravelTime ) ) {
+			return true;
+		}
+		areaNum = reach.areanum;
+	}
+
+	return true;
+}
+
 int TravelTimeWalkingOrFallingShort( const AiAasRouteCache *routeCache, int fromAreaNum, int toAreaNum ) {
 	const auto *const aasReach = AiAasWorld::Instance()->Reachabilities();
 	constexpr const auto travelFlags = TFL_WALK | TFL_AIR | TFL_WALKOFFLEDGE;
