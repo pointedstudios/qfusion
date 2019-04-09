@@ -241,13 +241,3 @@ void BotPlanner::BeforePlanning() {
 
 	module->tacticalSpotsCache.Clear();
 }
-
-float Bot::GetEffectiveOffensiveness() const {
-	if( squad ) {
-		return squad->IsSupporter( self ) ? 1.0f : 0.0f;
-	}
-	if( selectedEnemies.AreValid() && selectedEnemies.HaveCarrier() ) {
-		return 0.75f;
-	}
-	return baseOffensiveness;
-}
