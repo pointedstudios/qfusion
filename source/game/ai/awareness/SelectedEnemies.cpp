@@ -615,17 +615,74 @@ bool SelectedEnemies::TestAboutToHitLGorPG( int64_t levelTime ) const {
 	const auto *__restrict botOrigin = bot->Origin();
 	constexpr float squareDistanceThreshold = WorldState::MIDDLE_RANGE_MAX * WorldState::MIDDLE_RANGE_MAX;
 
+	// It's better to avoid fighting vs LG using dodging on ground and flee away
+	// if the bot is in a "nofall" area and is running away from an enemy
+	bool skipIfKnockBackWontMakeWorse = false;
+	const auto &physicsState = bot->EntityPhysicsState();
+	const float botSpeed2D = physicsState->Speed2D();
+	Vec3 botVelocity2DDir( bot->EntityPhysicsState()->Velocity() );
+	// Hack! We assume WillRetreat() flag really produces retreating.
+	if( botSpeed2D > 300.0f || ( bot->WillRetreat() && botSpeed2D > 1 ) ) {
+		int botAreaNums[2] { 0, 0 };
+		const auto *aasAreaSettings = AiAasWorld::Instance()->AreaSettings();
+		const int numBotAreas = physicsState->PrepareRoutingStartAreas( botAreaNums );
+		for( int i = 0; i < numBotAreas; ++i ) {
+			const auto flags = aasAreaSettings[botAreaNums[i]].areaflags;
+			// If there are grounded areas they must be NOFALL
+			if( !( flags & AREA_GROUNDED ) ) {
+				continue;
+			}
+			if( !( flags & AREA_NOFALL ) ) {
+				break;
+			}
+			skipIfKnockBackWontMakeWorse = true;
+			// Actually make a dir on demand
+			botVelocity2DDir.Z() = 0;
+			botVelocity2DDir *= Q_Rcp( botSpeed2D );
+			break;
+		}
+	}
+
 	trace_t trace;
 	for( unsigned i = 0; i < enemies.size(); ++i ) {
 		const auto *const enemy = enemies[i];
+		const Vec3 enemyOrigin( enemy->LastSeenOrigin() );
+
 		// Skip enemies that are out of LG range. (Consider PG to be inefficient outside of this range too)
-		if( enemy->LastSeenOrigin().SquareDistanceTo( botOrigin ) > squareDistanceThreshold ) {
+		const float squareDistance = enemyOrigin.SquareDistanceTo( botOrigin );
+		if( squareDistance > squareDistanceThreshold ) {
 			continue;
 		}
 
 		if( !enemy->IsShootableCurrOrPendingWeapon( WEAP_LASERGUN ) ) {
 			if( !enemy->IsShootableCurrOrPendingWeapon( WEAP_PLASMAGUN ) ) {
 				continue;
+			}
+			// Check whether this PG can be matched against LG
+			const auto *ent = enemy->ent;
+			if( !ent ) {
+				continue;
+			}
+			if( !ent->ai ) {
+				// Check whether PG is usable at this ping
+				const float ping = -ent->r.client->timeDelta;
+				// Make sure we got timeDelta sign right
+				assert( ping >= 0.0f );
+				if( ping >= 100 ) {
+					continue;
+				}
+				const float pingFactor = 1e-2f * ping;
+				assert( pingFactor >= 0.0f && pingFactor < 1.0f );
+				// Skip if the client is fairly far to adjust PG tracking for this ping.
+				// Lower the skip distance threshold for high-ping clients.
+				if( Q_Sqrt( squareDistance ) > 768.0f - 384.0f * pingFactor ) {
+					continue;
+				}
+			} else if( const Bot *thatBot = ent->ai->botRef ) {
+				// Raise the skip distance threshold for hard bots
+				if( Q_Sqrt( squareDistance ) > 384.0f + 512.0f * thatBot->Skill() ) {
+					continue;
+				}
 			}
 		}
 
@@ -636,6 +693,12 @@ bool SelectedEnemies::TestAboutToHitLGorPG( int64_t levelTime ) const {
 
 		// Is not going to put crosshair right now
 		if( viewDots[i] < 0.85f ) {
+			continue;
+		}
+
+		// Apply this "skip" flag only if the distance is large enough.
+		// Otherwise we could've just return early before the loop.
+		if( skipIfKnockBackWontMakeWorse && ( Q_Sqrt( squareDistance ) > 256.0f ) ) {
 			continue;
 		}
 
