@@ -3,6 +3,7 @@
 
 #include "../ai_local.h"
 #include "../static_vector.h"
+#include "../ai_frame_aware_updatable.h"
 
 /**
  * An alert spot definition that is visible for scripts
@@ -26,7 +27,6 @@ struct AiAlertSpot {
 		, carrierEnemyInfluenceScale( carrierEnemyInfluenceScale_ ) {}
 };
 
-class AiFrameAwareUpdatable;
 class Bot;
 
 /**
