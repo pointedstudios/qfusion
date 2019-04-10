@@ -615,16 +615,20 @@ bool SelectedEnemies::TestAboutToHitLGorPG( int64_t levelTime ) const {
 	const auto *__restrict botOrigin = bot->Origin();
 	constexpr float squareDistanceThreshold = WorldState::MIDDLE_RANGE_MAX * WorldState::MIDDLE_RANGE_MAX;
 
+	trace_t trace;
+
 	// It's better to avoid fighting vs LG using dodging on ground and flee away
 	// if the bot is in a "nofall" area and is running away from an enemy
 	bool skipIfKnockBackWontMakeWorse = false;
 	const auto &physicsState = bot->EntityPhysicsState();
 	const float botSpeed2D = physicsState->Speed2D();
+	float speedFactor = 0.0f;
 	Vec3 botVelocity2DDir( bot->EntityPhysicsState()->Velocity() );
 	// Hack! We assume WillRetreat() flag really produces retreating.
 	if( botSpeed2D > 300.0f || ( bot->WillRetreat() && botSpeed2D > 1 ) ) {
 		int botAreaNums[2] { 0, 0 };
-		const auto *aasAreaSettings = AiAasWorld::Instance()->AreaSettings();
+		const auto *const aasWorld = AiAasWorld::Instance();
+		const auto *const aasAreaSettings = aasWorld->AreaSettings();
 		const int numBotAreas = physicsState->PrepareRoutingStartAreas( botAreaNums );
 		for( int i = 0; i < numBotAreas; ++i ) {
 			const auto flags = aasAreaSettings[botAreaNums[i]].areaflags;
@@ -635,15 +639,40 @@ bool SelectedEnemies::TestAboutToHitLGorPG( int64_t levelTime ) const {
 			if( !( flags & AREA_NOFALL ) ) {
 				break;
 			}
-			skipIfKnockBackWontMakeWorse = true;
+
 			// Actually make a dir on demand
 			botVelocity2DDir.Z() = 0;
 			botVelocity2DDir *= Q_Rcp( botSpeed2D );
+
+			// Check whether we're going to hit an obstacle on knockback
+			speedFactor = Q_Sqrt( std::min( botSpeed2D, 1000.0f ) * 1e-3f );
+			Vec3 testedPoint( Vec3( botOrigin ) + ( ( 64.0f + 96.0f * speedFactor ) * botVelocity2DDir ) );
+			edict_t *self = game.edicts + bot->EntNum();
+			// Let's check against other players as well to prevent blocking of teammates
+			G_Trace( &trace, self->s.origin, nullptr, nullptr, testedPoint.Data(), self, MASK_PLAYERSOLID );
+			if( trace.fraction != 1.0f ) {
+				break;
+			}
+
+			// Check whether we're not going to have worse travel time to target
+			const int targetAreaNum = bot->NavTargetAasAreaNum();
+			const int testedAreaNum = aasWorld->FindAreaNum( testedPoint );
+			int currTravelTime = bot->RouteCache()->PreferredRouteToGoalArea( botAreaNums, numBotAreas, targetAreaNum );
+			// Can't say much in this case
+			if( !currTravelTime ) {
+				break;
+			}
+			int testedTravelTime = bot->RouteCache()->PreferredRouteToGoalArea( testedAreaNum, targetAreaNum );
+			// If the nav target is going to become unreachable or the travel time is worse
+			if( !testedTravelTime || testedTravelTime > currTravelTime ) {
+				break;
+			}
+
+			skipIfKnockBackWontMakeWorse = true;
 			break;
 		}
 	}
 
-	trace_t trace;
 	for( unsigned i = 0; i < enemies.size(); ++i ) {
 		const auto *const enemy = enemies[i];
 		const Vec3 enemyOrigin( enemy->LastSeenOrigin() );
@@ -696,10 +725,20 @@ bool SelectedEnemies::TestAboutToHitLGorPG( int64_t levelTime ) const {
 			continue;
 		}
 
-		// Apply this "skip" flag only if the distance is large enough.
-		// Otherwise we could've just return early before the loop.
-		if( skipIfKnockBackWontMakeWorse && ( Q_Sqrt( squareDistance ) > 256.0f ) ) {
-			continue;
+		if( skipIfKnockBackWontMakeWorse ) {
+			assert( speedFactor >= 0.0f && speedFactor <= 1.0f );
+			// Make the skip distance depend of the bot speed.
+			// If the speed is fairly large we can jump/bunny-hop back even being close.
+			float distanceThreshold = 64.0f + 256.0f * ( 1.0f - speedFactor );
+			if( squareDistance > distanceThreshold * distanceThreshold ) {
+				// The look dir cache is maintained by TrackedEnemy itself.
+				// Besides it this is a quite rarely executed code path
+
+				// If the knockback is going to assist a leap back
+				if( enemy->LookDir().Dot( botVelocity2DDir ) > 0.90f - 0.20f * speedFactor ) {
+					continue;
+				}
+			}
 		}
 
 		// TODO: Check past view dots and derive direction?
