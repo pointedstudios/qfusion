@@ -51,6 +51,57 @@ void BunnyStraighteningReachChainAction::BeforePlanning() {
 	maxSuggestedLookDirs = std::min( maxSuggestedLookDirs, (unsigned)MAX_SUGGESTED_LOOK_DIRS );
 }
 
+class StraighteningReachChainWalker final : public ReachChainWalker {
+	friend class BunnyStraighteningReachChainAction;
+
+	Context *const context;
+	const AiAasWorld *const aasWorld;
+	const aas_area_t *const aasAreas;
+	const aas_areasettings_t *const aasAreaSettings;
+	const uint16_t *const aasFloorClusterNums;
+	const uint16_t *const aasStairsClusterNums;
+	const Hazard *hazardToEvade;
+	AreaAndScore *const candidatesBegin;
+	Vec3 traceStartPoint;
+	int metStairsClusterNum { 0 };
+	int stairsExitAreaNum { 0 };
+	int groundedStartAreaNum { 0 };
+	int startFloorClusterNum { 0 };
+	unsigned numCandidates { 0 };
+	const unsigned maxCandidates;
+
+	inline bool CheckForStairsCluster( int areaNum );
+public:
+	StraighteningReachChainWalker( const Bot *bot_, Context *context_, AreaAndScore *candidates_, unsigned maxCandidates_ )
+		: ReachChainWalker( context_->RouteCache() )
+		, context( context_ )
+		, aasWorld( AiAasWorld::Instance() )
+		, aasAreas( aasWorld->Areas() )
+		, aasAreaSettings( aasWorld->AreaSettings() )
+		, aasFloorClusterNums( aasWorld->AreaFloorClusterNums() )
+		, aasStairsClusterNums( aasWorld->AreaStairsClusterNums() )
+		, candidatesBegin( candidates_ )
+		, traceStartPoint( context->movementState->entityPhysicsState.Origin() )
+		, maxCandidates( maxCandidates_ ) {
+		const auto &physicsState = context->movementState->entityPhysicsState;
+		SetAreaNums( physicsState, context->NavTargetAasAreaNum() );
+		traceStartPoint.Z() += playerbox_stand_viewheight;
+
+		hazardToEvade = bot_->PrimaryHazard();
+		if( bot_->ShouldRushHeadless() || ( hazardToEvade && !hazardToEvade->SupportsImpactTests() ) ) {
+			hazardToEvade = nullptr;
+		}
+
+		if( ( groundedStartAreaNum = context->CurrGroundedAasAreaNum() ) ) {
+			startFloorClusterNum = aasWorld->FloorClusterNum( groundedStartAreaNum );
+			// Non-grounded areas cannot belong to a stairs cluster
+			CheckForStairsCluster( groundedStartAreaNum );
+		}
+	}
+
+	bool Accept( int, const aas_reachability_t &reach, int ) override;
+};
+
 void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context ) {
 	Assert( suggestedLookDirs.empty() );
 
@@ -58,192 +109,140 @@ void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context
 		return;
 	}
 
-	const auto &nextReachChain = context->NextReachChain();
-	if( nextReachChain.empty() ) {
-		Debug( "Cannot straighten look vec: next reach. chain is empty\n" );
-		return;
+	AreaAndScore candidates[MAX_SUGGESTED_LOOK_DIRS];
+	StraighteningReachChainWalker walker( bot, context, candidates, MAX_SUGGESTED_LOOK_DIRS );
+	if( !walker.Exec() ) {
+		Debug( "Can't find areas for straightening a look dir\n" );
 	}
 
-	const AiAasWorld *aasWorld = AiAasWorld::Instance();
-	const aas_reachability_t *aasReach = aasWorld->Reachabilities();
-
-	int lastValidReachIndex = -1;
-	constexpr unsigned MAX_TESTED_REACH = Ai::ReachChainVector::capacity();
-	const unsigned maxTestedReach = std::min( MAX_TESTED_REACH, nextReachChain.size() );
-	const aas_reachability_t *reachStoppedAt = nullptr;
-	for( unsigned i = 0; i < maxTestedReach; ++i ) {
-		const auto &reach = aasReach[nextReachChain[i].ReachNum()];
-		// Avoid inclusion of TRAVEL_JUMP and TRAVEL_STRAFEJUMP reach.
-		// as they are prone to falling down in this case
-		// (Jumping over gaps should be timed precisely)
-		if( reach.traveltype != TRAVEL_WALK && reach.traveltype != TRAVEL_WALKOFFLEDGE ) {
-			reachStoppedAt = &reach;
-			break;
-		}
-
-		lastValidReachIndex++;
-	}
-
-	if( lastValidReachIndex < 0 || lastValidReachIndex >= (int)maxTestedReach ) {
-		Debug( "There were no supported for bunnying reachabilities\n" );
-		return;
-	}
-	Assert( lastValidReachIndex < (int)maxTestedReach );
-
-	AreaAndScore candidates[MAX_TESTED_REACH];
-	AreaAndScore *candidatesEnd = SelectCandidateAreas( context, candidates, (unsigned)lastValidReachIndex );
-
-	// Limit candidates range
-	const auto numCandidates = (unsigned)( candidatesEnd - candidates );
-	candidatesEnd = candidates + std::min( numCandidates, maxSuggestedLookDirs );
-
-	SaveCandidateAreaDirs( context, candidates, candidatesEnd );
+	SaveCandidateAreaDirs( context, candidates, candidates + walker.numCandidates );
 	Assert( suggestedLookDirs.size() <= maxSuggestedLookDirs );
 
-	// If there is a trigger entity in the reach chain, try keep looking at it
-	if( reachStoppedAt ) {
-		const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-		int travelType = reachStoppedAt->traveltype;
-		if( travelType == TRAVEL_TELEPORT || travelType == TRAVEL_JUMPPAD || travelType == TRAVEL_ELEVATOR ) {
-			Assert( maxSuggestedLookDirs > 0 );
-			// Evict the last dir, the trigger should have a priority over it
-			if( suggestedLookDirs.size() == maxSuggestedLookDirs ) {
-				suggestedLookDirs.pop_back();
-			}
-			Vec3 toTriggerDir( reachStoppedAt->start );
-			toTriggerDir -= entityPhysicsState.Origin();
-			toTriggerDir.Normalize();
-			// The target area of reachStoppedAt is the area "behind" trigger.
-			// The prediction gets always interrupted on touching trigger.
-			// Just supply a dummy value and rely on touching the trigger during prediction.
-			suggestedLookDirs.emplace_back( DirAndArea( toTriggerDir, 0 ) );
-			return;
-		}
+	if( !walker.lastReachNum ) {
+		return;
 	}
 
-	if( suggestedLookDirs.size() == 0 ) {
-		Debug( "Cannot straighten look vec: cannot find a suitable area in reach. chain to aim for\n" );
+	const auto &stoppedAtReach = AiAasWorld::Instance()->Reachabilities()[walker.lastReachNum];
+	const auto travelType = stoppedAtReach.traveltype & TRAVELTYPE_MASK;
+	if( travelType != TRAVEL_TELEPORT && travelType != TRAVEL_JUMPPAD && travelType != TRAVEL_ELEVATOR ) {
+		return;
 	}
+
+	// TODO: Check a trace/an coarse arc trace to the trigger and ensure we do not hit anything besides maybe the trigger
+
+	// If there is a trigger entity in the reach chain, try keep looking at it
+	Assert( maxSuggestedLookDirs > 0 );
+	// Evict the last dir, the trigger should have a priority over it
+	if( suggestedLookDirs.size() == maxSuggestedLookDirs ) {
+		suggestedLookDirs.pop_back();
+	}
+
+	Vec3 toTriggerDir( stoppedAtReach.start );
+	toTriggerDir -= context->movementState->entityPhysicsState.Origin();
+	toTriggerDir.Normalize();
+	// The target area of reachStoppedAt is the area "behind" trigger.
+	// The prediction gets always interrupted on touching trigger.
+	// Just supply a dummy value and rely on touching the trigger during prediction.
+	suggestedLookDirs.emplace_back( DirAndArea( toTriggerDir, 0 ) );
 }
 
-AreaAndScore *BunnyStraighteningReachChainAction::SelectCandidateAreas( Context *context,
- 																		AreaAndScore *candidatesBegin,
-																		unsigned lastValidReachIndex ) {
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	const auto &nextReachChain = context->NextReachChain();
-	const auto *aasWorld = AiAasWorld::Instance();
-	const auto *routeCache = context->RouteCache();
-	const auto *aasReach = aasWorld->Reachabilities();
-	const auto *aasAreas = aasWorld->Areas();
-	const auto *aasAreaSettings = aasWorld->AreaSettings();
-	const auto *aasAreaFloorClusterNums = aasWorld->AreaFloorClusterNums();
-	const auto *aasAreaStairsClusterNums = aasWorld->AreaStairsClusterNums();
-	const int navTargetAasAreaNum = context->NavTargetAasAreaNum();
-	const float pointZOffset = -playerbox_stand_mins[2];
-
-	const auto *hazardToEvade = bot->PrimaryHazard();
-	// Reduce branching in the loop below
-	if( bot->ShouldRushHeadless() || ( hazardToEvade && !hazardToEvade->SupportsImpactTests() ) ) {
-		hazardToEvade = nullptr;
+inline bool StraighteningReachChainWalker::CheckForStairsCluster( int areaNum ) {
+	// Skip if a stairs cluster has been already met
+	// (limiting to a single handled stairs cluster is satisfactory)
+	if( metStairsClusterNum ) {
+		return true;
 	}
 
-	int metStairsClusterNum = 0;
-
-	int currAreaNum = context->CurrAasAreaNum();
-	int floorClusterNum = 0;
-	const int groundedAreaNum = context->CurrGroundedAasAreaNum();
-	if( groundedAreaNum ) {
-		floorClusterNum = aasAreaFloorClusterNums[groundedAreaNum];
+	const int stairsClusterNum = aasStairsClusterNums[areaNum];
+	if( !stairsClusterNum ) {
+		return true;
 	}
 
-	AreaAndScore *candidatesPtr = candidatesBegin;
-	Vec3 traceStartPoint( entityPhysicsState.Origin() );
-	traceStartPoint.Z() += playerbox_stand_viewheight;
-
-	for( int i = lastValidReachIndex; i >= 0; --i ) {
-		const int reachNum = nextReachChain[i].ReachNum();
-		const auto &reach = aasReach[reachNum];
-		int areaNum = reach.areanum;
-		const auto &area = aasAreas[areaNum];
-		const auto &areaSettings = aasAreaSettings[areaNum];
-
-		if( const int stairsClusterNum = aasAreaStairsClusterNums[areaNum] ) {
-			// If a stairs cluster has not been met yet
-			// (its currently limited to a single cluster but that's satisfactory)
-			if( !metStairsClusterNum ) {
-				if( const auto *exitAreaNum = TryFindBestStairsExitArea( context, stairsClusterNum ) ) {
-					// Do further tests for exit area num instead of the stairs cluster area
-					areaNum = *exitAreaNum;
-				}
-				metStairsClusterNum = stairsClusterNum;
-			} else {
-				// Skip the stairs area. A test for the exit area of the cluster has been already done.
-				continue;
-			}
-		}
-
-		if( areaSettings.contents & AREACONTENTS_DONOTENTER ) {
-			continue;
-		}
-
-		int areaFlags = areaSettings.areaflags;
-		if( !( areaFlags & AREA_GROUNDED ) ) {
-			continue;
-		}
-		if( areaFlags & AREA_DISABLED ) {
-			continue;
-		}
-
-		Vec3 areaPoint( area.center[0], area.center[1], area.mins[2] + pointZOffset );
-
-		const float squareDistanceToArea = areaPoint.SquareDistanceTo( entityPhysicsState.Origin() );
-		// Skip way too close areas (otherwise the bot might fall into endless looping)
-		if( squareDistanceToArea < SQUARE( 96 ) ) {
-			continue;
-		}
-
-		// Skip way too far areas (this is mainly an optimization for the following SolidWorldTrace() call)
-		if( squareDistanceToArea > SQUARE( 1024 + 512 ) ) {
-			continue;
-		}
-
-		if( hazardToEvade && hazardToEvade->HasImpactOnPoint( areaPoint ) ) {
-			continue;
-		}
-
-		// Give far areas greater initial score
-		float score = 999999.0f;
-		if( areaNum != navTargetAasAreaNum ) {
-			score = 0.1f + 0.9f * ( (float)( i + 1 ) / (float)( lastValidReachIndex + 1 ) );
-		}
-
-		// Make sure the bot can see the ground
-		// On failure, restore minScore (it might have been set to the value of the rejected area score on this loop step)
-		if( floorClusterNum && floorClusterNum == aasAreaFloorClusterNums[areaNum] ) {
-			if( !aasWorld->IsAreaWalkableInFloorCluster( currAreaNum, areaNum ) ) {
-				continue;
-			}
-		} else {
-			if( !TraceArcInSolidWorld( traceStartPoint.Data(), areaPoint.Data() ) ) {
-				continue;
-			}
-
-			// This is very likely to indicate a significant elevation of the area over the bot area.
-			// TODO: This test leads to a failure if the target area is direct-reachable via falling
-			if( !TravelTimeWalkingOrFallingShort( routeCache, areaNum, groundedAreaNum ) ) {
-				continue;
-			}
-		}
-
-		if( candidatesPtr - candidatesBegin == maxSuggestedLookDirs ) {
-			// Evict the worst element (with the lowest score and with the last order by the operator < in the max-heap)
-			std::pop_heap( candidatesBegin, candidatesPtr );
-			candidatesPtr--;
-		}
-
-		new ( candidatesPtr++ )AreaAndScore( areaNum, score );
-		std::push_heap( candidatesBegin, candidatesPtr );
+	if( stairsExitAreaNum == areaNum ) {
+		return true;
 	}
 
-	return candidatesPtr;
+	if( const auto *exitAreaNum = TryFindBestStairsExitArea( context, stairsClusterNum ) ) {
+		stairsExitAreaNum = *exitAreaNum;
+		return true;
+	}
+
+	// Exclude all other areas for this
+	return false;
+}
+
+bool StraighteningReachChainWalker::Accept( int, const aas_reachability_t &reach, int ) {
+	const auto travelType = ( reach.traveltype & TRAVELTYPE_MASK );
+	if( travelType != TRAVEL_WALK && travelType != TRAVEL_WALKOFFLEDGE ) {
+		// Interrupt walking reach chain at this
+		return false;
+	}
+
+	const int areaNum = reach.areanum;
+	if( !CheckForStairsCluster( areaNum ) ) {
+		// Skip the area and continue walking
+		return true;
+	}
+
+	const auto &__restrict areaSettings = aasAreaSettings[areaNum];
+	// Skip the area and continue walking if these conditions are unmet
+	if( areaSettings.contents & AREACONTENTS_DONOTENTER ) {
+		return true;
+	}
+	if( !( areaSettings.areaflags & AREA_GROUNDED ) || ( areaSettings.areaflags & AREA_DISABLED ) ) {
+		return true;
+	}
+
+	const auto &__restrict area = aasAreas[areaNum];
+	Vec3 areaPoint( area.center[0], area.center[1], area.mins[2] - playerbox_stand_mins[2] );
+
+	const float squareDistanceToArea = areaPoint.SquareDistanceTo( traceStartPoint );
+	// Skip way too close areas (otherwise the bot might fall into endless looping)
+	if( squareDistanceToArea < SQUARE( 128 ) ) {
+		return true;
+	}
+
+	// Skip way too far areas (this is mainly an optimization for the following SolidWorldTrace() call)
+	if( squareDistanceToArea > SQUARE( 1024 + 512 ) ) {
+		return true;
+	}
+
+	// Skip "junk" areas if they are far.
+	// Avoid wasting CPU cycles for these areas.
+	// They might still be useful being close to a bot, e.g. if a bot is trapped at unrecognized stairs cluster.
+	if( squareDistanceToArea > SQUARE( 256 + 64 ) && ( areaSettings.areaflags & AREA_JUNK ) ) {
+		return true;
+	}
+
+	if( hazardToEvade && hazardToEvade->HasImpactOnPoint( areaPoint ) ) {
+		return true;
+	}
+
+	// Make sure the bot can see the ground
+	// On failure, restore minScore (it might have been set to the value of the rejected area score on this loop step)
+	if( startFloorClusterNum && startFloorClusterNum == aasFloorClusterNums[areaNum] ) {
+		if( !aasWorld->IsAreaWalkableInFloorCluster( groundedStartAreaNum, areaNum ) ) {
+			return true;
+		}
+	} else {
+		if( !TraceArcInSolidWorld( traceStartPoint.Data(), areaPoint.Data() ) ) {
+			return true;
+		}
+
+		// This is very likely to indicate a significant elevation of the area over the bot area.
+		// TODO: This test leads to a failure if the target area is direct-reachable via falling
+		if( !TravelTimeWalkingOrFallingShort( routeCache, areaNum, groundedStartAreaNum ) ) {
+			return true;
+		}
+	}
+
+	if( numCandidates == maxCandidates ) {
+		// Interrupt walking at this
+		return false;
+	}
+
+	// Give next-in-chain areas greater scores
+	new( candidatesBegin + numCandidates )AreaAndScore( areaNum, numCandidates );
+	numCandidates++;
+	return true;
 }

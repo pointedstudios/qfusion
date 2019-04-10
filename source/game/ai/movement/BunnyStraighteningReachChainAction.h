@@ -8,11 +8,6 @@ class BunnyStraighteningReachChainAction final : public BunnyTestingSavedLookDir
 
 	friend class BunnyToBestNavMeshPointAction;
 
-	// Returns candidates end iterator
-	AreaAndScore *SelectCandidateAreas( MovementPredictionContext *context,
-										AreaAndScore *candidatesBegin,
-										unsigned lastValidReachIndex );
-
 	void SaveSuggestedLookDirs( MovementPredictionContext *context ) override;
 public:
 	explicit BunnyStraighteningReachChainAction( BotMovementModule *module_ );
