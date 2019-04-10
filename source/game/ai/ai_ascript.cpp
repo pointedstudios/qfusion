@@ -785,64 +785,64 @@ static const asClassDescriptor_t asAiSelectedEnemiesClassDescriptor =
     NULL, NULL
 };
 
-static AiBaseWeightConfigVar *objectWeightConfigVarGroup_get_varsListHead(AiBaseWeightConfigVarGroup *obj)
+static AiWeightConfigVar *objectWeightConfigVarGroup_get_varsListHead(AiWeightConfigVarGroup *obj)
 {
     return CHECK_ARG(obj)->VarsListHead();
 }
 
-static AiBaseWeightConfigVarGroup *objectWeightConfigVarGroup_get_groupsListHead(AiBaseWeightConfigVarGroup *obj)
+static AiWeightConfigVarGroup *objectWeightConfigVarGroup_get_groupsListHead(AiWeightConfigVarGroup *obj)
 {
     return CHECK_ARG(obj)->GroupsListHead();
 }
 
-static AiBaseWeightConfigVarGroup *objectWeightConfigVarGroup_get_next(AiBaseWeightConfigVarGroup *obj)
+static AiWeightConfigVarGroup *objectWeightConfigVarGroup_get_next(AiWeightConfigVarGroup *obj)
 {
     return CHECK_ARG(obj)->Next();
 }
 
-static unsigned objectWeightConfigVarGroup_get_nameHash(const AiBaseWeightConfigVarGroup *obj)
+static unsigned objectWeightConfigVarGroup_get_nameHash(const AiWeightConfigVarGroup *obj)
 {
     return CHECK_ARG(obj)->NameHash();
 }
 
-static const asstring_t *objectWeightConfigVarGroup_get_name(const AiBaseWeightConfigVarGroup *obj)
+static const asstring_t *objectWeightConfigVarGroup_get_name(const AiWeightConfigVarGroup *obj)
 {
     const char *nameData = CHECK_ARG(obj)->Name();
     return angelExport->asStringFactoryBuffer(nameData, (unsigned)strlen(nameData));
 }
 
-static AiBaseWeightConfigVar *objectWeightConfigVarGroup_getVarByName(AiBaseWeightConfigVarGroup *group, const asstring_t *name, unsigned nameHash)
+static AiWeightConfigVar *objectWeightConfigVarGroup_getVarByName(AiWeightConfigVarGroup *group, const asstring_t *name, unsigned nameHash)
 {
     const char *nameData = CHECK_ARG(CHECK_ARG(name)->buffer);
     return CHECK_ARG(group)->GetVarByName(nameData, nameHash);
 }
 
-static AiBaseWeightConfigVarGroup *objectWeightConfigVarGroup_getGroupByName(AiBaseWeightConfigVarGroup *group, const asstring_t *name, unsigned nameHash)
+static AiWeightConfigVarGroup *objectWeightConfigVarGroup_getGroupByName(AiWeightConfigVarGroup *group, const asstring_t *name, unsigned nameHash)
 {
     const char *nameData = CHECK_ARG(CHECK_ARG(name)->buffer);
     return CHECK_ARG(group)->GetGroupByName(nameData, nameHash);
 }
 
-static AiBaseWeightConfigVar *objectWeightConfigVarGroup_getVarByPath(AiBaseWeightConfigVarGroup *group, const asstring_t *name)
+static AiWeightConfigVar *objectWeightConfigVarGroup_getVarByPath(AiWeightConfigVarGroup *group, const asstring_t *name)
 {
     const char *nameData = CHECK_ARG(CHECK_ARG(name)->buffer);
     return CHECK_ARG(group)->GetVarByPath(nameData);
 }
 
-static AiBaseWeightConfigVarGroup *objectWeightConfigVarGroup_getGroupByPath(AiBaseWeightConfigVarGroup *group, const asstring_t *name)
+static AiWeightConfigVarGroup *objectWeightConfigVarGroup_getGroupByPath(AiWeightConfigVarGroup *group, const asstring_t *name)
 {
     const char *nameData = CHECK_ARG(CHECK_ARG(name)->buffer);
     return CHECK_ARG(group)->GetGroupByPath(nameData);
 }
 
-static void objectWeightConfigVarGroup_addScriptVar(AiBaseWeightConfigVarGroup *group, CScriptAny *varObjAnyRef, const asstring_t *name)
+static void objectWeightConfigVarGroup_addScriptVar(AiWeightConfigVarGroup *group, CScriptAny *varObjAnyRef, const asstring_t *name)
 {
     void *scriptObject = scriptWeightConfigVarTypeHolder.GetValueRef(CHECK_ARG(varObjAnyRef));
     const char *nameData = CHECK_ARG(CHECK_ARG(name)->buffer);
     CHECK_ARG(group)->AddScriptVar(nameData, scriptObject);
 }
 
-static void objectWeightConfigVarGroup_addScriptGroup(AiBaseWeightConfigVarGroup *group, CScriptAny *groupObjAnyRef, const asstring_t *name)
+static void objectWeightConfigVarGroup_addScriptGroup(AiWeightConfigVarGroup *group, CScriptAny *groupObjAnyRef, const asstring_t *name)
 {
     void *scriptObject = scriptWeightConfigVarGroupTypeHolder.GetValueRef(CHECK_ARG(groupObjAnyRef));
     const char *nameData = CHECK_ARG(CHECK_ARG(name)->buffer);
@@ -883,33 +883,33 @@ static const asClassDescriptor_t asAiWeightConfigVarGroupClassDescriptor =
     NULL, NULL
 };
 
-static AiBaseWeightConfigVar *objectWeightConfigVar_get_next(AiBaseWeightConfigVar *obj)
+static AiWeightConfigVar *objectWeightConfigVar_get_next(AiWeightConfigVar *obj)
 {
     return CHECK_ARG(obj)->Next();
 }
 
-static unsigned objectWeightConfigVar_get_nameHash(const AiBaseWeightConfigVar *obj)
+static unsigned objectWeightConfigVar_get_nameHash(const AiWeightConfigVar *obj)
 {
     return CHECK_ARG(obj)->NameHash();
 }
 
-static const asstring_t *objectWeightConfigVar_get_name(const AiBaseWeightConfigVar *obj)
+static const asstring_t *objectWeightConfigVar_get_name(const AiWeightConfigVar *obj)
 {
     const char *nameData = CHECK_ARG(obj)->Name();
     return angelExport->asStringFactoryBuffer(nameData, (unsigned)strlen(nameData));
 }
 
-static void objectWeightConfigVar_getValueProps(const AiBaseWeightConfigVar *obj, float *value, float *minValue, float *maxValue, float *defaultValue)
+static void objectWeightConfigVar_getValueProps(const AiWeightConfigVar *obj, float *value, float *minValue, float *maxValue, float *defaultValue)
 {
     CHECK_ARG(obj)->GetValueProps(CHECK_ARG(value), CHECK_ARG(minValue), CHECK_ARG(maxValue), CHECK_ARG(defaultValue));
 }
 
-static void objectWeightConfigVar_setValue(AiBaseWeightConfigVar *obj, float value)
+static void objectWeightConfigVar_setValue(AiWeightConfigVar *obj, float value)
 {
     CHECK_ARG(obj)->SetValue(value);
 }
 
-static void objectWeightConfigVar_resetToDefaultValues(AiBaseWeightConfigVar *obj)
+static void objectWeightConfigVar_resetToDefaultValues(AiWeightConfigVar *obj)
 {
     return CHECK_ARG(obj)->ResetToDefaultValues();
 }

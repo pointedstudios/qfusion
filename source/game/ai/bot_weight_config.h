@@ -5,108 +5,77 @@
 
 // Var names might seem to be way too shortened, but its silly to replace each minor numeric constant by a 30 chars name
 
-class BotWeightConfig : public AiWeightConfig
-{
+class BotWeightConfig : public AiWeightConfig {
+	using Var = AiNativeWeightConfigVar;
 public:
-	class NativeGoalsGroup : public AiNativeWeightConfigVarGroup
-	{
+	class NativeGoalsGroup : public AiNativeWeightConfigVarGroup {
 public:
 		struct GrabItemGroup : public AiNativeWeightConfigVarGroup {
-			AiNativeWeightConfigVar baseWeight;
-			AiNativeWeightConfigVar selectedGoalWeightScale;
+			Var baseWeight { this, "BaseWeight", 0.00f, 0.50f, 0.00f };
+			Var selectedGoalWeightScale { this, "SelectedGoalWeightScale", 0.75f, 1.25f, 1.00f };
 
-			GrabItemGroup( AiBaseWeightConfigVarGroup *parent )
-				: AiNativeWeightConfigVarGroup( parent, "GrabItem" ),
-				baseWeight( this, "BaseWeight", 0.00f, 0.50f, 0.00f ),
-				selectedGoalWeightScale( this, "SelectedGoalWeightScale", 0.75f, 1.25f, 1.00f ) {}
-		} grabItem;
+			explicit GrabItemGroup( AiWeightConfigVarGroup *parent )
+				: AiNativeWeightConfigVarGroup( parent, "GrabItem" ) {}
+		} grabItem { this };
 
 		struct KillEnemyGroup : public AiNativeWeightConfigVarGroup {
-			AiNativeWeightConfigVar baseWeight;
-			AiNativeWeightConfigVar offCoeff;
-			AiNativeWeightConfigVar nmyThreatCoeff;
+			Var baseWeight { this, "BaseWeight", 0.00f, 0.50f, 0.00f };
+			Var offCoeff { this, "OffCoeff", 0.50f, 3.00f, 1.75f };
+			Var nmyThreatCoeff { this, "NmyThreatCoeff", 1.10f, 2.00f, 1.25f };
 
-			KillEnemyGroup( AiBaseWeightConfigVarGroup *parent )
-				: AiNativeWeightConfigVarGroup( parent, "KillEnemy" ),
-				baseWeight( this, "BaseWeight", 0.00f, 0.50f, 0.00f ),
-				offCoeff( this, "OffCoeff", 0.50f, 3.00f, 1.75f ),
-				nmyThreatCoeff( this, "NmyThreatCoeff", 1.10f, 2.00f, 1.25f ) {}
-		} killEnemy;
+			explicit KillEnemyGroup( AiWeightConfigVarGroup *parent )
+				: AiNativeWeightConfigVarGroup( parent, "KillEnemy" ) {}
+		} killEnemy { this };
 
 		struct RunAwayGroup : public AiNativeWeightConfigVarGroup {
-			AiNativeWeightConfigVar baseWeight;
-			AiNativeWeightConfigVar offCoeff;
-			AiNativeWeightConfigVar nmyThreatCoeff;
+			Var baseWeight { this, "BaseWeight", 0.00f, 0.50f, 0.00f };
+			Var offCoeff { this, "OffCoeff", 1.00f, 3.00f, 1.75f };
+			Var nmyThreatCoeff { this, "NmyThreatCoeff", 1.10f, 3.00f, 1.50f };
 
-			RunAwayGroup( AiBaseWeightConfigVarGroup *parent )
-				: AiNativeWeightConfigVarGroup( parent, "RunAway" ),
-				baseWeight( this, "BaseWeight", 0.00f, 0.50f, 0.00f ),
-				offCoeff( this, "OffCoeff", 1.00f, 3.00f, 1.75f ),
-				nmyThreatCoeff( this, "NmyThreatCoeff", 1.10f, 3.00f, 1.50f ) {}
-		} runAway;
+			explicit RunAwayGroup( AiWeightConfigVarGroup *parent )
+				: AiNativeWeightConfigVarGroup( parent, "RunAway" ) {}
+		} runAway { this };
 
 		struct ReactToHazardGroup : public AiNativeWeightConfigVarGroup {
-			AiNativeWeightConfigVar baseWeight;
-			AiNativeWeightConfigVar dmgFracCoeff;
-			AiNativeWeightConfigVar weightBound;
+			Var baseWeight { this, "BaseWeight", 0.50f, 1.00f, 0.75f };
+			Var dmgFracCoeff { this, "DmgFracCoeff", 0.50f, 5.00f, 2.00f };
+			Var weightBound { this, "WeightBound", 1.00f, 5.00f, 2.00f };
 
-			ReactToHazardGroup( AiBaseWeightConfigVarGroup *parent )
-				: AiNativeWeightConfigVarGroup( parent, "ReactToHazard" ),
-				baseWeight( this, "BaseWeight", 0.50f, 1.00f, 0.75f ),
-				dmgFracCoeff( this, "DmgFracCoeff", 0.50f, 5.00f, 2.00f ),
-				weightBound( this, "WeightBound", 1.00f, 5.00f, 2.00f ) {}
-		} reactToHazard;
+			explicit ReactToHazardGroup( AiWeightConfigVarGroup *parent )
+				: AiNativeWeightConfigVarGroup( parent, "ReactToHazard" ) {}
+		} reactToHazard { this };
 
 		struct ReactToThreatGroup : public AiNativeWeightConfigVarGroup {
-			AiNativeWeightConfigVar baseWeight;
-			AiNativeWeightConfigVar dmgFracCoeff;
-			AiNativeWeightConfigVar weightBound;
-			AiNativeWeightConfigVar offCoeff;
+			Var baseWeight { this, "BaseWeight", 0.50f, 1.00f, 0.50f };
+			Var dmgFracCoeff { this, "DmgFracCoeff", 1.00f, 5.00f, 3.00f };
+			Var weightBound { this, "WeightBound", 1.00f, 3.00f, 1.75f };
+			Var offCoeff { this, "OffCoeff", 0.00f, 2.00f, 1.00f };
 
-			ReactToThreatGroup( AiBaseWeightConfigVarGroup *parent )
-				: AiNativeWeightConfigVarGroup( parent, "ReactToThreat" ),
-				baseWeight( this, "BaseWeight", 0.50f, 1.00f, 0.50f ),
-				dmgFracCoeff( this, "DmgFracCoeff", 1.00f, 5.00f, 3.00f ),
-				weightBound( this, "WeightBound", 1.00f, 3.00f, 1.75f ),
-				offCoeff( this, "OffCoeff", 0.00f, 2.00f, 1.00f ) {}
-		} reactToThreat;
+			explicit ReactToThreatGroup( AiWeightConfigVarGroup *parent )
+				: AiNativeWeightConfigVarGroup( parent, "ReactToThreat" ) {}
+		} reactToThreat { this };
 
 		struct ReactToEnemyLostGroup : public AiNativeWeightConfigVarGroup {
-			AiNativeWeightConfigVar baseWeight;
-			AiNativeWeightConfigVar offCoeff;
+			Var baseWeight { this, "BaseWeight", 0.50f, 1.00f, 0.50f };
+			Var offCoeff { this, "OffCoeff", 0.50f, 6.00f, 2.00f };
 
-			ReactToEnemyLostGroup( AiBaseWeightConfigVarGroup *parent )
-				: AiNativeWeightConfigVarGroup( parent, "ReactToEnemyLost" ),
-				baseWeight( this, "BaseWeight", 0.50f, 1.00f, 0.50f ),
-				offCoeff( this, "OffCoeff", 0.50f, 6.00f, 2.00f ) {}
-		} reactToEnemyLost;
+			explicit ReactToEnemyLostGroup( AiWeightConfigVarGroup *parent )
+				: AiNativeWeightConfigVarGroup( parent, "ReactToEnemyLost" ) {}
+		} reactToEnemyLost { this };
 
 		struct AttackOutOfDespairGroup : public AiNativeWeightConfigVarGroup {
-			AiNativeWeightConfigVar nmyFireDelayThreshold;
-			AiNativeWeightConfigVar baseWeight;
-			AiNativeWeightConfigVar nmyThreatExtraWeight;
-			AiNativeWeightConfigVar dmgFracCoeff;
-			AiNativeWeightConfigVar dmgUpperBound;
+			Var nmyFireDelayThreshold { this, "NmyFireDelayThreshold", 200, 800, 600 };
+			Var baseWeight { this, "BaseWeight", 0.25f, 1.00f, 0.50f };
+			Var nmyThreatExtraWeight { this, "NmyThreatExtraWeight", 0.10f, 1.00f, 0.50f };
+			Var dmgFracCoeff { this, "DmgFracCoeff", 0.50f, 1.75f, 1.25f };
+			Var dmgUpperBound { this, "DmgUpperBound", 50.0f, 200.0f, 100.0f };
 
-			AttackOutOfDespairGroup( AiBaseWeightConfigVarGroup *parent )
-				: AiNativeWeightConfigVarGroup( parent, "AttackOutOfDespair" ),
-				nmyFireDelayThreshold( this, "NmyFireDelayThreshold", 200, 800, 600 ),
-				baseWeight( this, "BaseWeight", 0.25f, 1.00f, 0.50f ),
-				nmyThreatExtraWeight( this, "NmyThreatExtraWeight", 0.10f, 1.00f, 0.50f ),
-				dmgFracCoeff( this, "DmgFracCoeff", 0.50f, 1.75f, 1.25f ),
-				dmgUpperBound( this, "DmgUpperBound", 50.0f, 200.0f, 100.0f ) {}
-		} attackOutOfDespair;
+			explicit AttackOutOfDespairGroup( AiWeightConfigVarGroup *parent )
+				: AiNativeWeightConfigVarGroup( parent, "AttackOutOfDespair" ) {}
+		} attackOutOfDespair { this };
 
-		NativeGoalsGroup( AiBaseWeightConfigVarGroup *parent )
-			: AiNativeWeightConfigVarGroup( parent, "NativeGoals" ),
-			grabItem( this ),
-			killEnemy( this ),
-			runAway( this ),
-			reactToHazard( this ),
-			reactToThreat( this ),
-			reactToEnemyLost( this ),
-			attackOutOfDespair( this ) {}
-
+		explicit NativeGoalsGroup( AiWeightConfigVarGroup *parent )
+			: AiNativeWeightConfigVarGroup( parent, "NativeGoals" ) {}
 	} nativeGoals;
 
 	// We have decided to remove "native actions group" as weights tweaking on this level
@@ -118,7 +87,7 @@ public:
 	// There should be an option to freeze goal weights and interbreed only weights for the suggested groups.
 	// This is doable via using scripted evolution manager.
 
-	BotWeightConfig( const edict_t *owner )
+	explicit BotWeightConfig( const edict_t *owner )
 		: AiWeightConfig( owner ),
 		nativeGoals( Root() ) {
 		RegisterInScript();

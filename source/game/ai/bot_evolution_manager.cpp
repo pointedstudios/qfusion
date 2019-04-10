@@ -135,12 +135,13 @@ static inline float GetNextGaussianRandom( float stdDev ) {
 	return stdDev * distribution( generator );
 }
 
-void CopyWeightConfigRandomizing( const AiBaseWeightConfigVarGroup *from, AiBaseWeightConfigVarGroup *to, float stdDev ) {
-	auto groupsIterator = ZipItemChains( from->GroupsListHead(), to->GroupsListHead(), "Randomizing child groups" );
-	for(; groupsIterator.HasNext(); groupsIterator.Next() )
+void CopyWeightConfigRandomizing( const AiWeightConfigVarGroup *from, AiWeightConfigVarGroup *to, float stdDev ) {
+	auto groupsIterator( ZipItemChains( from->GroupsListHead(), to->GroupsListHead(), "Randomizing child groups" ) );
+	for(; groupsIterator.HasNext(); groupsIterator.Next() ) {
 		CopyWeightConfigRandomizing( groupsIterator.First(), groupsIterator.Second(), stdDev );
+	}
 
-	auto varsIterator = ZipItemChains( from->VarsListHead(), to->VarsListHead(), "Randomizing child vars" );
+	auto varsIterator( ZipItemChains( from->VarsListHead(), to->VarsListHead(), "Randomizing child vars" ) );
 	for(; varsIterator.HasNext(); varsIterator.Next() ) {
 		float value, minValue, maxValue, defaultValue;
 		varsIterator.First()->GetValueProps( &value, &minValue, &maxValue, &defaultValue );
@@ -186,8 +187,8 @@ void DefaultBotEvolutionManager::OnBotConnected( edict_t *ent ) {
 		return;
 	}
 
-	CopyWeightConfigRandomizing( (AiBaseWeightConfigVarGroup *)&referenceConfig,
-								 (AiBaseWeightConfigVarGroup *)&ent->ai->botRef->WeightConfig(),
+	CopyWeightConfigRandomizing( (AiWeightConfigVarGroup *)&referenceConfig,
+								 (AiWeightConfigVarGroup *)&ent->ai->botRef->WeightConfig(),
 								 0.25f * ( botNumRatio - 0.5f ) );
 }
 
