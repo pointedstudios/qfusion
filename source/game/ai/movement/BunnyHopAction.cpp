@@ -552,7 +552,16 @@ bool BunnyHopAction::TryHandlingWorseTravelTimeToTarget( Context *context,
 														 int currTravelTimeToTarget,
 														 int groundedAreaNum ) {
 	constexpr const char *format = "A prediction step has lead to increased travel time to nav target\n";
-	if( currTravelTimeToTarget > (int)( minTravelTimeToNavTargetSoFar + tolerableWalkableIncreasedTravelTimeMillis ) ) {
+	// Convert minTravelTimeToNavTargetSoFar to millis to have the same units for comparison
+	int maxTolerableTravelTimeMillis = 10 * minTravelTimeToNavTargetSoFar;
+	maxTolerableTravelTimeMillis += tolerableWalkableIncreasedTravelTimeMillis;
+	// Use more lenient checks if we've marked mayStopAtAreaNum
+	if( mayStopAtAreaNum ) {
+		maxTolerableTravelTimeMillis += 1000;
+	}
+
+	// Convert currTravelTime from seconds^-2 to millis to have the same units for comparison
+	if( 10 * currTravelTimeToTarget > maxTolerableTravelTimeMillis ) {
 		Debug( format );
 		return false;
 	}

@@ -46,7 +46,7 @@ protected:
 	// Allow increased final travel time if the min travel time area is reachable by walking
 	// from the final area and walking travel time is lower than this limit.
 	// It allows to follow the reachability chain less strictly while still being close to it.
-	unsigned tolerableWalkableIncreasedTravelTimeMillis { 2000 };
+	unsigned tolerableWalkableIncreasedTravelTimeMillis { 3000 };
 
 	// There is a mechanism for completely disabling an action for further planning by setting isDisabledForPlanning flag.
 	// However we need a more flexible way of disabling an action after an failed application sequence.
