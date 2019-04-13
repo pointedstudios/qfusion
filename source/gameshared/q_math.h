@@ -307,7 +307,43 @@ void ByteToDir( int b, vec3_t dir );
 void NormToLatLong( const vec3_t normal, float latlong[2] );
 
 void MakeNormalVectors( const vec3_t forward, vec3_t right, vec3_t up );
-void AngleVectors( const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up );
+
+static inline void AngleVectors( const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up ) {
+	const float deg2Rad = (float)( M_PI ) / 180.0f;
+
+	const float yaw = deg2Rad * angles[YAW];
+	const float sy = sinf( yaw );
+	const float cy = cosf( yaw );
+
+	const float pitch = deg2Rad * angles[PITCH];
+	const float sp = sinf( pitch );
+	const float cp = cosf( pitch );
+
+	const float roll = deg2Rad * angles[ROLL];
+	const float sr = sinf( roll );
+	const float cr = cosf( roll );
+
+	if( forward ) {
+		forward[0] = cp * cy;
+		forward[1] = cp * sy;
+		forward[2] = -sp;
+	}
+
+	if( right ) {
+		const float t = sr * sp;
+		right[0] = ( -1 * t * cy + -1 * cr * -sy );
+		right[1] = ( -1 * t * sy + -1 * cr * cy );
+		right[2] = -1 * sr * cp;
+	}
+
+	if( up ) {
+		const float t = cr * sp;
+		up[0] = ( t * cy + -sr * -sy );
+		up[1] = ( t * sy + -sr * cy );
+		up[2] = cr * cp;
+	}
+}
+
 int BoxOnPlaneSide( const vec3_t emins, const vec3_t emaxs, const struct cplane_s *plane );
 float anglemod( float a );
 float LerpAngle( float a1, float a2, const float frac );
