@@ -307,7 +307,8 @@ static void Intercepted_Trace( trace_t *t, vec3_t start, vec3_t mins, vec3_t max
 }
 
 static int Intercepted_PointContents( vec3_t p, int timeDelta ) {
-	return trap_CM_TransformedPointContents( p, nullptr, nullptr, nullptr );
+	int topNodeHint = ::collisionTopNodeCache.GetTopNode( p, p );
+	return trap_CM_TransformedPointContents( p, nullptr, nullptr, nullptr, topNodeHint );
 }
 
 void MovementPredictionContext::OnInterceptedPredictedEvent( int ev, int parm ) {
