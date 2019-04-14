@@ -94,7 +94,7 @@ void WalkOrSlideInterpolatingReachChainAction::PlanPredictionStep( Context *cont
 		( 1u << TRAVEL_WALKOFFLEDGE ) | ( 1u << TRAVEL_JUMP ) | ( 1u << TRAVEL_TELEPORT ) |
 		( 1u << TRAVEL_JUMPPAD ) | ( 1u << TRAVEL_ELEVATOR ) | ( 1u << TRAVEL_LADDER );
 
-	ReachChainInterpolator interpolator( context, compatibleReachTypes, allowedEndReachTypes, 128.0f );
+	ReachChainInterpolator interpolator( bot, context, compatibleReachTypes, allowedEndReachTypes, 128.0f );
 	if( !interpolator.Exec() ) {
 		this->isDisabledForPlanning = true;
 		context->SetPendingRollback();

@@ -10,7 +10,9 @@ class ReachChainInterpolator final : public ReachChainWalker {
 	friend class BunnyInterpolatingReachChainAction;
 
 	MovementPredictionContext *const context;
+	const Hazard *hazardToEvade { nullptr };
 	AiAasWorld *const aasWorld;
+	const aas_area_t *const aasAreas;
 	const uint16_t *const aasFloorClustserNums;
 	const aas_reachability_t *singleFarReach { nullptr };
 	int startGroundedAreaNum { 0 };
@@ -51,18 +53,29 @@ class ReachChainInterpolator final : public ReachChainWalker {
 
 	bool TrySettingDirToRegionExitArea( int exitAreaNum );
 public:
-	ReachChainInterpolator( MovementPredictionContext *context_,
+	ReachChainInterpolator( const Bot *bot_,
+							MovementPredictionContext *context_,
 							uint32_t compatibleReachTravelTypesMask_,
 							uint32_t allowedReachTravelTypesMask_,
 							float stopAtDistance_ )
 		: ReachChainWalker( context_->RouteCache() )
 		, context( context_ )
 		, aasWorld( AiAasWorld::Instance() )
+		, aasAreas( aasWorld->Areas() )
 		, aasFloorClustserNums( aasWorld->AreaFloorClusterNums() )
 		, compatibleReachTravelTypesMask( compatibleReachTravelTypesMask_ )
 		, allowedReachTravelTypesMask( allowedReachTravelTypesMask_ )
 		, stopAtDistance( stopAtDistance_ ) {
 		SetAreaNums( context_->movementState->entityPhysicsState, context_->NavTargetAasAreaNum() );
+
+		if( bot_->ShouldRushHeadless() ) {
+			return;
+		}
+
+		hazardToEvade = bot_->PrimaryHazard();
+		if( hazardToEvade && !hazardToEvade->SupportsImpactTests() ) {
+			hazardToEvade = nullptr;
+		}
 	}
 
 	bool Exec() override;

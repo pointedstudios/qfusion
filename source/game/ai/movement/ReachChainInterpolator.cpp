@@ -141,6 +141,11 @@ bool ReachChainInterpolator::Accept( int, const aas_reachability_t &reach, int )
 		return false;
 	}
 
+	// Let's assume that a hazard impact on a single far area is acceptable
+	if( hazardToEvade && hazardToEvade->HasImpactOnPoint( aasAreas[reachAreaNum].center ) ) {
+		return false;
+	}
+
 	// Check for possible CM trace replacement by much cheaper 2D raycasting in floor cluster
 	if( startFloorClusterNum && startFloorClusterNum == aasFloorClustserNums[reachAreaNum] ) {
 		if( !aasWorld->IsAreaWalkableInFloorCluster( startGroundedAreaNum, reachAreaNum ) ) {

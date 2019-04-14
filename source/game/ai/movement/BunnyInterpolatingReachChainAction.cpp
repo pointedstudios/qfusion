@@ -25,7 +25,7 @@ void BunnyInterpolatingReachChainAction::PlanPredictionStep( Context *context ) 
 	}
 
 	context->record->botInput.isUcmdSet = true;
-	ReachChainInterpolator interpolator( context, COMPATIBLE_REACH_TYPES, ALLOWED_REACH_END_REACH_TYPES, 256.0f );
+	ReachChainInterpolator interpolator( bot, context, COMPATIBLE_REACH_TYPES, ALLOWED_REACH_END_REACH_TYPES, 256.0f );
 	if( !interpolator.Exec() ) {
 		context->SetPendingRollback();
 		Debug( "Cannot apply action: cannot interpolate reach chain\n" );
@@ -56,7 +56,7 @@ BunnyInterpolatingChainAtStartAction::BunnyInterpolatingChainAtStartAction( BotM
 void BunnyInterpolatingChainAtStartAction::SaveSuggestedLookDirs( Context *context ) {
 	Assert( suggestedLookDirs.empty() );
 
-	ReachChainInterpolator interpolator( context, COMPATIBLE_REACH_TYPES, ALLOWED_REACH_END_REACH_TYPES, 192.0f );
+	ReachChainInterpolator interpolator( bot, context, COMPATIBLE_REACH_TYPES, ALLOWED_REACH_END_REACH_TYPES, 192.0f );
 	for( int i = 0; i < 5; ++i ) {
 		interpolator.stopAtDistance = 192.0f + 192.0f * i;
 		if( !interpolator.Exec() ) {
