@@ -581,7 +581,8 @@ bool BunnyHopAction::TryHandlingWorseTravelTimeToTarget( Context *context,
 	}
 
 	// Allow further prediction if we're in a NOFALL area.
-	if( aasWorld->AreaSettings()[groundedAreaNum].areaflags & AREA_NOFALL ) {
+	const auto &groundedAreaSettings = aasWorld->AreaSettings()[groundedAreaNum];
+	if( groundedAreaSettings.areaflags & AREA_NOFALL ) {
 		const auto *aasAreas = aasWorld->Areas();
 		// Delta Z relative to the best area so far must be positive
 		if( aasAreas[groundedAreaNum].mins[2] > aasAreas[minTravelTimeAreaNumSoFar].mins[2] ) {
@@ -595,17 +596,32 @@ bool BunnyHopAction::TryHandlingWorseTravelTimeToTarget( Context *context,
 		}
 	}
 
-	// Disallow moving into an area if the min travel time area cannot be reached by walking from the area
-	int areaNums[2];
-	const int numAreas = context->movementState->entityPhysicsState.PrepareRoutingStartAreas( areaNums );
-	constexpr auto travelFlags = GenericGroundMovementScript::TRAVEL_FLAGS;
-	for( int i = 0; i < numAreas; ++i ) {
-		int aasTime = bot->RouteCache()->TravelTimeToGoalArea( areaNums[i], minTravelTimeAreaNumSoFar, travelFlags );
-		// aasTime is in seconds^-2
-		if( aasTime && aasTime * 10 < (int) tolerableWalkableIncreasedTravelTimeMillis ) {
-			EnsurePathPenalty( 100 );
+	// Disallow moving into an area if the min travel time area cannot be reached by walking from the area.
+	// Use a simple reverse reach. test instead of router calls (that turned out to be expensive/non-scalable).
+
+	// Limit number of tested rev. reach.
+	// TODO: Add and use reverse reach. table for this and many other purposes
+	int maxReachNum = groundedAreaSettings.firstreachablearea + std::min( groundedAreaSettings.numreachableareas, 8 );
+	const auto *aasReach = aasWorld->Reachabilities();
+	for( int revReachNum = groundedAreaSettings.firstreachablearea; revReachNum != maxReachNum; revReachNum++ ) {
+		const auto &reach = aasReach[revReachNum];
+		if( reach.areanum != minTravelTimeAreaNumSoFar ) {
+			continue;
+		}
+		const auto travelType = reach.traveltype & TRAVELTYPE_MASK;
+		if( travelType == TRAVEL_WALK ) {
+			EnsurePathPenalty( 300 );
 			return true;
 		}
+		if( travelType == TRAVEL_WALKOFFLEDGE ) {
+			// Make sure the fall distance is insufficient
+			if( reach.start[2] - reach.end[2] < 64.0f ) {
+				EnsurePathPenalty( 400 );
+				return true;
+			}
+		}
+		// We've found a rev. reach. (even if it did not pass additional tests). Avoid doing further tests.
+		break;
 	}
 
 	Debug( format );
