@@ -2,12 +2,13 @@
 #include "ReachChainInterpolator.h"
 #include "FloorClusterAreasCache.h"
 
-bool ReachChainInterpolator::TrySetDirToRegionExitArea( Context *context, const aas_area_t &area, float distanceThreshold ) {
+bool ReachChainInterpolator::TrySettingDirToRegionExitArea( int exitAreaNum ) {
 	const float *origin = context->movementState->entityPhysicsState.Origin();
 
+	const auto &area = aasWorld->Areas()[exitAreaNum];
 	Vec3 areaPoint( area.center );
 	areaPoint.Z() = area.mins[2] + 32.0f;
-	if( areaPoint.SquareDistanceTo( origin ) < SQUARE( distanceThreshold ) ) {
+	if( areaPoint.SquareDistanceTo( origin ) < SQUARE( 64.0f ) ) {
 		return false;
 	}
 
@@ -21,48 +22,37 @@ bool ReachChainInterpolator::TrySetDirToRegionExitArea( Context *context, const 
 	return true;
 }
 
-bool ReachChainInterpolator::Exec( Context *context ) {
-	trace_t trace;
-	vec3_t firstReachDir;
-	const auto &reachChain = context->NextReachChain();
-	const auto *aasWorld = AiAasWorld::Instance();
-	const auto *routeCache = context->RouteCache();
-	const auto *aasAreas = aasWorld->Areas();
-	const auto *aasReach = aasWorld->Reachabilities();
-	const auto *aasAreaSettings = aasWorld->AreaSettings();
-	const auto *aasAreaFloorClusterNums = aasWorld->AreaFloorClusterNums();
-	const auto *aasAreaStairsClusterNums = aasWorld->AreaStairsClusterNums();
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	const float *origin = entityPhysicsState.Origin();
-	const aas_reachability_t *singleFarReach = nullptr;
-	const float squareDistanceThreshold = SQUARE( stopAtDistance );
-	const int navTargetAreaNum = context->NavTargetAasAreaNum();
-	unsigned numReachFound = 0;
-	int currAreaFloorClusterNum = 0;
-	int currAreaNum = context->CurrAasAreaNum();
-	const int botGroundedAreaNum = context->CurrGroundedAasAreaNum();
-	bool endsInNavTargetArea = false;
+bool ReachChainInterpolator::Exec() {
+	lastReachNum = 0;
+	lastTravelTime = 0;
 
 	dirs.clear();
 	dirsAreas.clear();
+	singleFarReach = nullptr;
+	endsInNavTargetArea = false;
+
+	startGroundedAreaNum = 0;
+	startFloorClusterNum = 0;
+	for( int i = 0; i < numStartAreas; ++i ) {
+		if( aasWorld->AreaGrounded( startAreaNums[0] ) ) {
+			startGroundedAreaNum = startAreaNums[0];
+		}
+	}
 
 	// Check for quick shortcuts for special cases when a bot is already inside a stairs cluster or a ramp.
 	// This should reduce CPU cycles wasting on interpolation attempts inside these kinds of environment.
-	// Using this when a bot is not already in the special kind of environemnt is more complicated,
-	// the question is what rules should be followed? So it is not implemented.
-	if( int currGroundedAreaNum = context->CurrGroundedAasAreaNum() ) {
-		currAreaNum = currGroundedAreaNum;
-		currAreaFloorClusterNum = aasAreaFloorClusterNums[currGroundedAreaNum];
+	if( startGroundedAreaNum ) {
+		startFloorClusterNum = aasFloorClustserNums[startGroundedAreaNum];
 		// Stairs clusters and inclined floor areas are mutually exclusive
-		if( aasAreaSettings[currGroundedAreaNum].areaflags & AREA_INCLINED_FLOOR ) {
-			if( const auto *exitAreaNum = TryFindBestInclinedFloorExitArea( context, currGroundedAreaNum ) ) {
-				if( TrySetDirToRegionExitArea( context, aasAreas[*exitAreaNum] ) ) {
+		if( aasWorld->AreaSettings()[startGroundedAreaNum].areaflags & AREA_INCLINED_FLOOR ) {
+			if( const auto *exitAreaNum = TryFindBestInclinedFloorExitArea( context, startGroundedAreaNum ) ) {
+				if( TrySettingDirToRegionExitArea( *exitAreaNum ) ) {
 					return true;
 				}
 			}
-		} else if( int stairsClusterNum = aasAreaStairsClusterNums[currGroundedAreaNum] ) {
+		} else if( int stairsClusterNum = aasWorld->StairsClusterNum( startGroundedAreaNum ) ) {
 			if( const auto *exitAreaNum = TryFindBestStairsExitArea( context, stairsClusterNum ) ) {
-				if( TrySetDirToRegionExitArea( context, aasAreas[*exitAreaNum] ) ) {
+				if( TrySettingDirToRegionExitArea( *exitAreaNum ) ) {
 					return true;
 				}
 			}
@@ -71,101 +61,12 @@ bool ReachChainInterpolator::Exec( Context *context ) {
 
 	intendedLookDir.Set( 0, 0, 0 );
 
-	// The area the reachability starts in
-	int reachStartArea = context->CurrAasAreaNum();
-	for( unsigned i = 0; i < reachChain.size(); ++i ) {
-		const auto &reach = aasReach[reachChain[i].ReachNum()];
-
-		int travelType = reach.traveltype & TRAVELTYPE_MASK;
-		// If the reach type is not in compatible types, we will have to make an immediate or pending break of the loop
-		if( !IsCompatibleReachType( travelType ) ) {
-			// If the reach type is not even mentioned in the allowed stop reach types, break immediately
-			if( !IsAllowedEndReachType( travelType ) ) {
-				break;
-			}
-
-			// If the reach type is mentioned in the allowed stop reach types, process the reach but stop at it.
-			// This line acts as a pending break after the iteration
-			i = reachChain.size() + 1;
-		}
-
-		if( DistanceSquared( origin, reach.start ) > squareDistanceThreshold ) {
-			assert( !singleFarReach );
-			// Check for possible CM trace replacement by much cheaper 2D raycasting in floor cluster
-			if( currAreaFloorClusterNum && currAreaFloorClusterNum == aasAreaFloorClusterNums[reachStartArea] ) {
-				if( aasWorld->IsAreaWalkableInFloorCluster( currAreaNum, reachStartArea ) ) {
-					singleFarReach = &reach;
-				}
-			} else {
-				// The trace segment might be very long, test PVS first
-				if( trap_inPVS( origin, reach.start ) ) {
-					SolidWorldTrace( &trace, origin, reach.start );
-					if( trace.fraction == 1.0f ) {
-						singleFarReach = &reach;
-					}
-				}
-			}
-			break;
-		}
-
-		// Check for possible CM trace replacement by much cheaper 2D raycasting in floor cluster
-		if( currAreaFloorClusterNum && currAreaFloorClusterNum == aasAreaFloorClusterNums[reachStartArea] ) {
-			if( !aasWorld->IsAreaWalkableInFloorCluster( currAreaNum, reachStartArea ) ) {
-				break;
-			}
-		} else {
-			if( TraceArcInSolidWorld( origin, reach.start ) ) {
-				break;
-			}
-
-			// This is very likely to indicate a significant elevation of the reach area over the bot area
-			if( !TravelTimeWalkingOrFallingShort( routeCache, reach.areanum, botGroundedAreaNum ) ) {
-				break;
-			}
-		}
-
-		if( reach.areanum == navTargetAreaNum ) {
-			endsInNavTargetArea = true;
-		}
-
-		// The next reachability starts in this area
-		reachStartArea = reach.areanum;
-
-		Vec3 *reachDir = dirs.unsafe_grow_back();
-		reachDir->Set( reach.start );
-		*reachDir -= origin;
-		reachDir->Z() *= Z_NO_BEND_SCALE;
-		reachDir->NormalizeFast();
-		// Add a reach dir to the dirs list (be optimistic to avoid extra temporaries)
-		if( !numReachFound ) {
-			reachDir->CopyTo( firstReachDir );
-		}
-
-		intendedLookDir += *reachDir;
-		numReachFound++;
-
-		dirsAreas.push_back( reach.areanum );
-		if( dirs.size() == dirs.capacity() ) {
-			break;
-		}
-
-		// If the trace test seems to be valid for reach end too
-		if( DistanceSquared( reach.start, reach.end ) < SQUARE( 20 ) ) {
-			reachDir->Set( reach.end );
-			*reachDir -= origin;
-			reachDir->Z() *= Z_NO_BEND_SCALE;
-			reachDir->NormalizeFast();
-			intendedLookDir += *reachDir;
-			numReachFound++;
-
-			dirsAreas.push_back( reach.areanum );
-			if( dirs.size() == dirs.capacity() ) {
-				break;
-			}
-		}
+	if( !ReachChainWalker::Exec() ) {
+		return false;
 	}
 
-	if( !numReachFound ) {
+	const float *origin = context->movementState->entityPhysicsState.Origin();
+	if( dirs.empty() ) {
 		if( !singleFarReach ) {
 			if( context->IsInNavTargetArea() ) {
 				intendedLookDir.Set( context->NavTargetOrigin() );
@@ -191,6 +92,7 @@ bool ReachChainInterpolator::Exec( Context *context ) {
 
 	if( endsInNavTargetArea ) {
 		Vec3 navTargetOrigin( context->NavTargetOrigin() );
+		trace_t trace;
 		SolidWorldTrace( &trace, origin, navTargetOrigin.Data() );
 		if( trace.fraction == 1.0f ) {
 			// Add the direction to the nav target to the interpolated dir
@@ -198,15 +100,118 @@ bool ReachChainInterpolator::Exec( Context *context ) {
 			toTargetDir -= origin;
 			toTargetDir.NormalizeFast();
 			intendedLookDir += toTargetDir;
-			// Count it as an additional interpolated reachability
-			numReachFound++;
 		}
 	}
 
-	// If there were more than a single reach dir added to the look dir, it requires normalization
-	if( numReachFound > 1 ) {
-		intendedLookDir.NormalizeFast();
+	intendedLookDir.Normalize();
+	return true;
+}
+
+bool ReachChainInterpolator::Accept( int, const aas_reachability_t &reach, int ) {
+	const auto travelType = reach.traveltype & TRAVELTYPE_MASK;
+	bool continueOnSuccess = true;
+	if( !IsCompatibleReachType( travelType ) ) {
+		if( IsAllowedEndReachType( travelType ) ) {
+			// Perform a step body but interrupt after this
+			continueOnSuccess = false;
+		} else {
+			return false;
+		}
 	}
 
-	return true;
+	const auto reachAreaNum = reach.areanum;
+	const float *__restrict origin = context->movementState->entityPhysicsState.Origin();
+	if( DistanceSquared( origin, reach.start ) > SQUARE( stopAtDistance ) ) {
+		assert( !singleFarReach );
+		// Check for possible CM trace replacement by much cheaper 2D raycasting in floor cluster
+		if( startFloorClusterNum && startFloorClusterNum == aasFloorClustserNums[reachAreaNum] ) {
+			if( aasWorld->IsAreaWalkableInFloorCluster( startGroundedAreaNum, reachAreaNum ) ) {
+				singleFarReach = &reach;
+			}
+		} else {
+			// The trace segment might be very long, test PVS first
+			if( trap_inPVS( origin, reach.start ) ) {
+				trace_t trace;
+				SolidWorldTrace( &trace, origin, reach.start );
+				if( trace.fraction == 1.0f ) {
+					singleFarReach = &reach;
+				}
+			}
+		}
+		return false;
+	}
+
+	// Check for possible CM trace replacement by much cheaper 2D raycasting in floor cluster
+	if( startFloorClusterNum && startFloorClusterNum == aasFloorClustserNums[reachAreaNum] ) {
+		if( !aasWorld->IsAreaWalkableInFloorCluster( startGroundedAreaNum, reachAreaNum ) ) {
+			return false;
+		}
+	} else {
+		if( !TraceArcInSolidWorld( origin, reach.start ) ) {
+			return false;
+		}
+
+		// This is very likely to indicate a significant elevation of the reach area over the bot area
+		if( !TravelTimeWalkingOrFallingShort( routeCache, reach.areanum, startGroundedAreaNum ) ) {
+			return false;
+		}
+	}
+
+	if( reach.areanum == targetAreaNum ) {
+		endsInNavTargetArea = true;
+	}
+
+	Vec3 *reachDir = dirs.unsafe_grow_back();
+	reachDir->Set( reach.start );
+	*reachDir -= origin;
+	reachDir->Z() *= Z_NO_BEND_SCALE;
+	reachDir->NormalizeFast();
+	// Add a reach dir to the dirs list (be optimistic to avoid extra temporaries)
+
+	intendedLookDir += *reachDir;
+
+	dirsAreas.push_back( reach.areanum );
+	// Interrupt walking at this
+	if( dirs.size() == dirs.capacity() ) {
+		return false;
+	}
+
+	// Check whether the trace test seems to be valid for reach end too
+	if( DistanceSquared( reach.start, reach.end ) > SQUARE( 20 ) ) {
+		return continueOnSuccess;
+	}
+
+	reachDir = dirs.unsafe_grow_back();
+	reachDir->Set( reach.end );
+	*reachDir -= origin;
+	reachDir->Z() *= Z_NO_BEND_SCALE;
+	reachDir->NormalizeFast();
+	intendedLookDir += *reachDir;
+
+	dirsAreas.push_back( reach.areanum );
+	// Interrupt walking at this
+	if( dirs.size() == dirs.capacity() ) {
+		return false;
+	}
+
+	return continueOnSuccess;
+}
+
+int ReachChainInterpolator::SuggestStopAtAreaNum() const {
+	Vec3 pivotDir( Result() );
+
+	float bestDot = -1.01f;
+	int bestAreaNum = -1;
+
+	assert( dirs.size() == dirsAreas.size() );
+	for( int i = 0; i < dirs.size(); ++i ) {
+		float dot = pivotDir.Dot( dirs[i] );
+		if( dot > bestDot ) {
+			bestDot = dot;
+			bestAreaNum = dirsAreas[i];
+		}
+	}
+
+	assert( bestAreaNum );
+	return bestAreaNum;
 }

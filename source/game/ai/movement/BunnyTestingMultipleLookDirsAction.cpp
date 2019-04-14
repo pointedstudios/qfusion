@@ -137,3 +137,15 @@ void BunnyTestingSavedLookDirsAction::SaveCandidateAreaDirs( MovementPredictionC
 		}
 	}
 }
+
+bool BunnyTestingSavedLookDirsAction::HasSavedSimilarDir( const float *dir, float dotThreshold ) {
+	assert( dotThreshold >= 0 && dotThreshold <= 1.0f );
+
+	for( const DirAndArea &saved: suggestedLookDirs ) {
+		if( saved.dir.Dot( dir ) >= dotThreshold ) {
+			return true;
+		}
+	}
+
+	return false;
+}

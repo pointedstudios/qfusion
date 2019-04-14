@@ -94,8 +94,8 @@ void WalkOrSlideInterpolatingReachChainAction::PlanPredictionStep( Context *cont
 		( 1u << TRAVEL_WALKOFFLEDGE ) | ( 1u << TRAVEL_JUMP ) | ( 1u << TRAVEL_TELEPORT ) |
 		( 1u << TRAVEL_JUMPPAD ) | ( 1u << TRAVEL_ELEVATOR ) | ( 1u << TRAVEL_LADDER );
 
-	ReachChainInterpolator interpolator( compatibleReachTypes, allowedEndReachTypes, 128.0f );
-	if( !interpolator.Exec( context ) ) {
+	ReachChainInterpolator interpolator( context, compatibleReachTypes, allowedEndReachTypes, 128.0f );
+	if( !interpolator.Exec() ) {
 		this->isDisabledForPlanning = true;
 		context->SetPendingRollback();
 		Debug( "Cannot apply action: cannot interpolate reach chain\n" );
