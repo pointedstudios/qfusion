@@ -34,9 +34,27 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::SelectCandidateSpots( const Spo
 		result.push_back( SpotAndScore( spotNum, score ) );
 	}
 
-	// Sort result so best score areas are first
-	std::sort( result.begin(), result.end() );
 	return result;
+}
+
+SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOrigin( SpotsAndScoreVector &spots ) {
+	// AAS uses travel time in centiseconds
+	const int maxFeasibleTravelTimeCentis = problemParams.maxFeasibleTravelTimeMillis / 10;
+	const int originAreaNum = originParams.originAreaNum;
+
+	unsigned numFilteredSpots = 0;
+	// Filter spots in-place
+	for( unsigned i = 0; i < spots.size(); ++i ) {
+		const int tableTravelTime = tacticalSpotsRegistry->TravelTimeFromAreaToSpot( originAreaNum, spots[i].spotNum );
+		if( !tableTravelTime || tableTravelTime > maxFeasibleTravelTimeCentis ) {
+			continue;
+		}
+
+		spots[numFilteredSpots++] = spots[i];
+	}
+
+	spots.truncate( numFilteredSpots );
+	return spots;
 }
 
 SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOrigin( SpotsAndScoreVector &candidateSpots ) {
@@ -55,38 +73,10 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOrigin( Spot
 
 	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
 
-	constexpr const char *tag = "TacticalSpotsProblemSolver::CheckSpotsReachFromOrigin()";
-#ifndef PUBLIC_BUILD
-	static constexpr bool checkTravelTimes = true;
-#else
-	static constexpr bool checkTravelTimes = false;
-#endif
-
 	// The outer index of the table corresponds to an area to aid cache-friendly iteration in these checks
 	for( const SpotAndScore &spotAndScore: candidateSpots ) {
 		const TacticalSpot &spot = spots[spotAndScore.spotNum];
-		// If zero the spot should be considered a-priori non-reachable from the origin area.
-		// The same applies to the upper travel time bounds
-
-		// Area-to-spot time is the first element in the pair
-		const int tableTravelTime = tacticalSpotsRegistry->TravelTimeFromAreaToSpot( originAreaNum, spotAndScore.spotNum );
-		if( !tableTravelTime || tableTravelTime > maxFeasibleTravelTimeCentis ) {
-			// TODO: Being strict with checks we should test whether an actual travel time is defined
-			continue;
-		}
-
-		// Get an actual travel time using the route cache that is very likely has additional restrictions
 		const int travelTime = routeCache->TravelTimeToGoalArea( originAreaNum, spot.aasAreaNum, travelFlags );
-		// Check travel times if we are using the same travel flags the table is compiled for
-		if( checkTravelTimes && ( travelFlags == Bot::ALLOWED_TRAVEL_FLAGS ) ) {
-			// The actual travel time may be undefined or greater than the table one
-			// due to excluding areas from routing but the table time must not be greater
-			if( travelTime && travelTime < tableTravelTime ) {
-				const char *format = "The table travel time %d > actual one %d for traveling from area %d to spot %d\n";
-				AI_FailWith( tag, format, tableTravelTime, travelTime, originAreaNum, spotAndScore.spotNum );
-			}
-		}
-
 		if( !travelTime || travelTime > maxFeasibleTravelTimeCentis ) {
 			continue;
 		}
@@ -99,9 +89,34 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOrigin( Spot
 		result.push_back( SpotAndScore( spotAndScore.spotNum, newScore ) );
 	}
 
-	// Sort result so best score areas are first
-	std::sort( result.begin(), result.end() );
 	return result;
+}
+
+SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOriginAndBack( SpotsAndScoreVector &spots ) {
+	// A round trip time can't be 2x larger
+	const int maxFeasibleSumTravelTimeCentis = 2 * ( problemParams.maxFeasibleTravelTimeMillis / 10 );
+	const int originAreaNum = originParams.originAreaNum;
+
+	unsigned numFilteredSpots = 0;
+	// Filter spots in-place
+	for( unsigned i = 0; i < spots.size(); ++i ) {
+		const auto spotNum = spots[i].spotNum;
+		const int tableToTravelTime = tacticalSpotsRegistry->TravelTimeFromAreaToSpot( originAreaNum, spotNum );
+		if( !tableToTravelTime ) {
+			continue;
+		}
+		const int tableBackTravelTime = tacticalSpotsRegistry->TravelTimeFromSpotToArea( spotNum, originAreaNum );
+		if( !tableBackTravelTime ) {
+			continue;
+		}
+		if( tableToTravelTime + tableBackTravelTime > maxFeasibleSumTravelTimeCentis ) {
+			continue;
+		}
+		spots[numFilteredSpots++] = spots[i];
+	}
+
+	spots.truncate( numFilteredSpots );
+	return spots;
 }
 
 SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidateSpots ) {
@@ -119,56 +134,18 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOriginAndBac
 	const auto travelFlags = Bot::ALLOWED_TRAVEL_FLAGS;
 
 	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
-	constexpr const char *tag = "TacticalSpotsProblemSolver::CheckSpotsReachFromOriginAndBack()";
-#ifndef PUBLIC_BUILD
-	static constexpr bool checkTravelTimes = true;
-#else
-	static constexpr bool checkTravelTimes = false;
-#endif
 
 	// The outer index of the table corresponds to an area to aid cache-friendly iteration in these checks
 	for( const SpotAndScore &spotAndScore : candidateSpots ) {
 		const auto spotNum = spotAndScore.spotNum;
 		const TacticalSpot &spot = spots[spotNum];
-		const int tableToTravelTime = tacticalSpotsRegistry->TravelTimeFromAreaToSpot( originAreaNum, spotNum );
-		if( !tableToTravelTime ) {
-			// TODO: Being strict with checks we should test whether an actual travel time is defined
-			continue;
-		}
-		const int tableBackTravelTime = tacticalSpotsRegistry->TravelTimeFromSpotToArea( spotNum, originAreaNum );
-		if( !tableBackTravelTime ) {
-			// TODO: Being strict with checks we should test whether an actual travel time is defined
-			continue;
-		}
-		// A round trip time can't be 2x larger
-		if( tableToTravelTime + tableBackTravelTime > 2 * maxFeasibleTravelTimeCentis ) {
-			// TODO: Being strict with checks we should test whether actual travel times are not less
-			continue;
-		}
-
-		// Get an actual travel time (non-zero table values do not guarantee reachability)
 		const int toTravelTime = routeCache->TravelTimeToGoalArea( originAreaNum, spot.aasAreaNum, travelFlags );
-		// Check travel times if we are using the same travel flags the table is compiled for
-		if( checkTravelTimes && ( travelFlags == Bot::ALLOWED_TRAVEL_FLAGS ) ) {
-			if( toTravelTime && toTravelTime < tableToTravelTime ) {
-				const char *format = "The table travel time %d > actual one %d for traveling from area %d to spot %d\n";
-				AI_FailWith( tag, format, tableToTravelTime, toTravelTime, originAreaNum, spotNum );
-			}
-		}
-
 		// If `to` travel time is apriori greater than maximum allowed one (and thus the sum would be), reject early.
 		if( !toTravelTime || toTravelTime > maxFeasibleTravelTimeCentis ) {
 			continue;
 		}
 
 		const int backTravelTime = routeCache->TravelTimeToGoalArea( spot.aasAreaNum, originAreaNum, travelFlags );
-		if( checkTravelTimes && ( travelFlags == Bot::ALLOWED_TRAVEL_FLAGS ) ) {
-			if( backTravelTime && backTravelTime < tableBackTravelTime ) {
-				const char *format = "The table travel time %d > actual %d one for traveling from spot %d to area %d\n";
-				AI_FailWith( tag, format, tableBackTravelTime, backTravelTime, spotNum, originAreaNum );
-			}
-		}
-
 		if( !backTravelTime || toTravelTime + backTravelTime > 2 * maxFeasibleTravelTimeCentis ) {
 			continue;
 		}
@@ -182,8 +159,6 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOriginAndBac
 		result.push_back( SpotAndScore( spotAndScore.spotNum, newScore ) );
 	}
 
-	// Sort result so best score areas are first
-	std::sort( result.begin(), result.end() );
 	return result;
 }
 
@@ -333,8 +308,6 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckEnemiesInfluence( SpotsAnd
 		const float enemyInfluenceFactor = Q_Rcp( 1.0f + spotVisScore );
 		spotAndScore.score = ApplyFactor( spotAndScore.score, enemyInfluenceFactor, problemParams.enemiesInfluence );
 	}
-
-	std::sort( candidateSpots.begin(), candidateSpots.end() );
 
 	return candidateSpots;
 }

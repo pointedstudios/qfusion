@@ -7,6 +7,8 @@ int DodgeHazardProblemSolver::FindMany( vec3_t *spotOrigins, int maxSpots ) {
 	SpotsAndScoreVector &candidateSpots =  SelectCandidateSpots( spotsFromQuery );
 	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( candidateSpots );
 	TryModifyingScoreByVelocityConformance( reachCheckedSpots );
+	// Sort spots before a final selection so best spots are first
+	std::sort( reachCheckedSpots.begin(), reachCheckedSpots.end() );
 	return CleanupAndCopyResults( reachCheckedSpots, spotOrigins, maxSpots );
 }
 
@@ -120,8 +122,6 @@ SpotsAndScoreVector &DodgeHazardProblemSolver::SelectCandidateSpots( const Spots
 		}
 	}
 
-	// Sort result so best score areas are first
-	std::sort( result.begin(), result.end() );
 	return result;
 }
 

@@ -22,8 +22,8 @@ public:
 		}
 	};
 private:
-	SpotsAndScoreVector &SelectCoverSpots( const SpotsAndScoreVector &reachCheckedSpots, int maxSpots );
-	bool LooksLikeACoverSpot( uint16_t spotNum ) const;
+	SpotsAndScoreVector &FilterByCoarseVisTests( SpotsAndScoreVector &spotsAndScores );
+	SpotsAndScoreVector &SelectCoverSpots( SpotsAndScoreVector &candidateSpots );
 
 	const ProblemParams &problemParams;
 public:

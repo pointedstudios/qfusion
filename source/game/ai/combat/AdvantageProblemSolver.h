@@ -44,7 +44,7 @@ public:
 private:
 	const ProblemParams &problemParams;
 
-	SpotsAndScoreVector &CheckOriginVisibility( SpotsAndScoreVector &candidateSpots, int maxSpots );
+	SpotsAndScoreVector &CheckOriginVisibility( SpotsAndScoreVector &candidateSpots );
 
 	void SortByVisAndOtherFactors( SpotsAndScoreVector &spots );
 

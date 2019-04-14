@@ -85,9 +85,20 @@ protected:
 
 	virtual SpotsAndScoreVector &SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery );
 
+	virtual SpotsAndScoreVector &FilterByReachTablesFromOrigin( SpotsAndScoreVector &spots );
+
 	virtual SpotsAndScoreVector &CheckSpotsReachFromOrigin( SpotsAndScoreVector &candidateSpots );
 
+	virtual SpotsAndScoreVector &FilterByReachTablesFromOriginAndBack( SpotsAndScoreVector &spots );
+
 	virtual SpotsAndScoreVector &CheckSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidateSpots );
+
+	SpotsAndScoreVector &FilterByReachTables( SpotsAndScoreVector &spots ) {
+		if( problemParams.checkToAndBackReach ) {
+			return FilterByReachTablesFromOriginAndBack( spots );
+		}
+		return FilterByReachTablesFromOrigin( spots );
+	}
 
 	SpotsAndScoreVector &CheckSpotsReach( SpotsAndScoreVector &candidateSpots ) {
 		if( problemParams.checkToAndBackReach ) {

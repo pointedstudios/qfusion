@@ -5,15 +5,20 @@
 int AdvantageProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 	uint16_t insideSpotNum;
 	SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
-	// First filter retrieved spots using very cheap tables tests.
-	// Reachability tests turned out to be very expensive/non-scalable.
-	SpotsQueryVector &filteredByTablesSpots = FilterByVisTables( spotsFromQuery, insideSpotNum );
-	SpotsAndScoreVector &candidateSpots = SelectCandidateSpots( filteredByTablesSpots );
-	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( candidateSpots );
-	SpotsAndScoreVector &enemyCheckedSpots = CheckEnemiesInfluence( reachCheckedSpots );
-	SpotsAndScoreVector &visCheckedSpots = CheckOriginVisibility( enemyCheckedSpots, maxSpots );
-	SortByVisAndOtherFactors( visCheckedSpots );
-	return CleanupAndCopyResults( visCheckedSpots, spots, maxSpots );
+	// Cut off some raw spots from query by vis tables
+	SpotsQueryVector &filteredByVisTablesSpots = FilterByVisTables( spotsFromQuery, insideSpotNum );
+	// This should be cheap as well
+	SpotsAndScoreVector &candidateSpots = SelectCandidateSpots( filteredByVisTablesSpots );
+	// Cut off expensive routing calls for spots that a-priori do not have a feasible travel time
+	SpotsAndScoreVector &filteredByReachTablesSpots = FilterByReachTables( candidateSpots );
+	// Now cast rays in a collision world... it's actually cheaper than pathfinding
+	SpotsAndScoreVector &visCheckedSpots = CheckOriginVisibility( filteredByReachTablesSpots );
+	// Apply enemy influence... this is not that expensive
+	SpotsAndScoreVector &enemyCheckedSpots = CheckEnemiesInfluence( visCheckedSpots );
+	// Prepare to stop at the first feasible spot
+	SortByVisAndOtherFactors( enemyCheckedSpots );
+	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( enemyCheckedSpots );
+	return CleanupAndCopyResults( reachCheckedSpots, spots, maxSpots );
 }
 
 SpotsAndScoreVector &AdvantageProblemSolver::SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) {
@@ -145,10 +150,7 @@ TacticalSpotsRegistry::SpotsQueryVector &AdvantageProblemSolver::FilterByVisTabl
 	return spotsFromQuery;
 }
 
-SpotsAndScoreVector &AdvantageProblemSolver::CheckOriginVisibility( SpotsAndScoreVector &reachCheckedSpots,
-																	int maxSpots ) {
-	assert( maxSpots >= 0 );
-
+SpotsAndScoreVector &AdvantageProblemSolver::CheckOriginVisibility( SpotsAndScoreVector &reachCheckedSpots ) {
 	edict_t *passent = const_cast<edict_t*>( originParams.originEntity );
 	edict_t *keepVisibleEntity = const_cast<edict_t *>( problemParams.keepVisibleEntity );
 	Vec3 keepVisibleOrigin( problemParams.keepVisibleOrigin );
@@ -174,10 +176,6 @@ SpotsAndScoreVector &AdvantageProblemSolver::CheckOriginVisibility( SpotsAndScor
 		}
 
 		result.push_back( spotAndScore );
-		// Stop immediately after we have reached the needed spots count
-		if( (int)result.size() == maxSpots ) {
-			break;
-		}
 	}
 
 	return result;
