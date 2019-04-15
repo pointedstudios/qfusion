@@ -48,7 +48,7 @@ private:
 
 	void SortByVisAndOtherFactors( SpotsAndScoreVector &spots );
 
-	SpotsQueryVector &FilterByVisTables( SpotsQueryVector &spotsFromQuery, int16_t insideSpotNum );
+	SpotsQueryVector &FilterByVisTables( SpotsQueryVector &spotsFromQuery );
 
 	SpotsAndScoreVector &SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) override;
 public:

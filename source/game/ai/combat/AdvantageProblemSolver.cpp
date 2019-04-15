@@ -6,7 +6,7 @@ int AdvantageProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 	uint16_t insideSpotNum;
 	SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
 	// Cut off some raw spots from query by vis tables
-	SpotsQueryVector &filteredByVisTablesSpots = FilterByVisTables( spotsFromQuery, insideSpotNum );
+	SpotsQueryVector &filteredByVisTablesSpots = FilterByVisTables( spotsFromQuery );
 	// This should be cheap as well
 	SpotsAndScoreVector &candidateSpots = SelectCandidateSpots( filteredByVisTablesSpots );
 	// Cut off expensive routing calls for spots that a-priori do not have a feasible travel time
@@ -78,8 +78,7 @@ SpotsAndScoreVector &AdvantageProblemSolver::SelectCandidateSpots( const SpotsQu
 	return result;
 }
 
-TacticalSpotsRegistry::SpotsQueryVector &AdvantageProblemSolver::FilterByVisTables( SpotsQueryVector &spotsFromQuery,
-																					int16_t insideSpotNum ) {
+TacticalSpotsRegistry::SpotsQueryVector &AdvantageProblemSolver::FilterByVisTables( SpotsQueryVector &spotsFromQuery ) {
 	int keepVisibleAreaNum = 0;
 	Vec3 keepVisibleOrigin( problemParams.keepVisibleOrigin );
 	if( const auto *keepVisibleEntity = problemParams.keepVisibleEntity ) {
@@ -99,42 +98,14 @@ TacticalSpotsRegistry::SpotsQueryVector &AdvantageProblemSolver::FilterByVisTabl
 		keepVisibleAreaNum = aasWorld->FindAreaNum( keepVisibleOrigin );
 	}
 
-	unsigned numKeptSpots = 0;
 	// Decompress an AAS areas vis row for the area of the "keep visible origin/entity"
-	auto *keepVisEntRow = aasWorld->DecompressAreaVis( keepVisibleAreaNum, AasElementsMask::TmpAreasVisRow( 0 ) );
-	// We can use mutual spots visibility table if an "inside spot num" spot encloses OriginParams
-	if( insideSpotNum >= 0 ) {
-		// Select a row of spot visible from "inside spot num"
-		const auto *spotsVisRow = tacticalSpotsRegistry->spotVisibilityTable + insideSpotNum;
-		for( auto spotNum: spotsFromQuery ) {
-			// If the spot is not visible from the spot that encloses OriginParams
-			if( !spotsVisRow[spotNum] ) {
-				continue;
-			}
-			// This will be explained below for the generic path branch
-			if( !keepVisEntRow[spots[spotNum].aasAreaNum] ) {
-				continue;
-			}
-			// Store spot num in-place
-			spotsFromQuery[numKeptSpots++] = spotNum;
-		}
-		spotsFromQuery.truncate( numKeptSpots );
-		return spotsFromQuery;
-	}
+	const auto *keepVisEntRow = aasWorld->DecompressAreaVis( keepVisibleAreaNum, AasElementsMask::TmpAreasVisRow() );
 
-	// Decompress an AAS areas vis row for the origin area
-	auto *originVisRow = aasWorld->DecompressAreaVis( originParams.originAreaNum, AasElementsMask::TmpAreasVisRow( 1 ) );
+	unsigned numKeptSpots = 0;
+	// Filter spots in-place
 	for( auto spotNum: spotsFromQuery ) {
 		const auto spotAreaNum = spots[spotNum].aasAreaNum;
-		// Skip area if the vis row value for the spot is false.
-		// This does not guarantee it cannot be visible from the origin area
-		// as the vis table computations are coarse and yield some false negatives.
-		// However it substantially reduces an inclusive cost of calling this routine.
-		if( !originVisRow[spotAreaNum] ) {
-			continue;
-		}
-
-		// Now check whether the keep visible entity/origin is considered visible from the spot.
+		// Check whether the keep visible entity/origin is considered visible from the spot.
 		// Generally speaking the visibility relation should not be symmetric
 		// but the AAS area table vis computations are made only against a solid collision world.
 		// Consider the entity non-visible from spot if the spot is not considered visible from the entity.
