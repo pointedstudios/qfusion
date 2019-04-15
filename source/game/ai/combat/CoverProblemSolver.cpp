@@ -9,11 +9,22 @@ int CoverProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 	SpotsAndScoreVector &candidateSpots = SelectCandidateSpots( spotsFromQuery );
 	SpotsAndScoreVector &filteredByReachTablesSpots = FilterByReachTables( candidateSpots );
 	SpotsAndScoreVector &filteredByVisTablesSpots = FilterByAreaVisTables( filteredByReachTablesSpots );
+
+	// Return early in this case.
+	// All expensive stuff starts below.
+	if( filteredByVisTablesSpots.empty() ) {
+		tacticalSpotsRegistry->temporariesAllocator.Release();
+		return 0;
+	}
+
+	StaticVector<int, MAX_EDICTS> entNums;
+	const int topNode = FindTopNodeAndEntNums( filteredByVisTablesSpots, entNums );
+
 	// These calls rely on vis tables to some degree and thus should not be extremely expensive
-	SpotsAndScoreVector &filteredByCoarseRayTestsSpots = FilterByCoarseRayTests( filteredByVisTablesSpots );
-	SpotsAndScoreVector &enemyCheckedSpots = CheckEnemiesInfluence( filteredByCoarseRayTestsSpots );
+	SpotsAndScoreVector &filteredByCoarseRayTests = FilterByCoarseRayTests( filteredByVisTablesSpots, topNode, entNums );
+	SpotsAndScoreVector &enemyCheckedSpots = CheckEnemiesInfluence( filteredByCoarseRayTests );
 	// Even "fine" collision checks are actually faster than pathfinding
-	SpotsAndScoreVector &coverSpots = SelectCoverSpots( enemyCheckedSpots );
+	SpotsAndScoreVector &coverSpots = SelectCoverSpots( enemyCheckedSpots, topNode, entNums );
 	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( coverSpots );
 	// Sort spots before a final selection so best spots are first
 	std::sort( reachCheckedSpots.begin(), reachCheckedSpots.end() );
@@ -62,22 +73,106 @@ SpotsAndScoreVector &CoverProblemSolver::FilterByAreaVisTables( SpotsAndScoreVec
 	return spotsAndScores;
 }
 
-SpotsAndScoreVector &CoverProblemSolver::FilterByCoarseRayTests( SpotsAndScoreVector &spotsAndScores ) {
-	edict_t *ignore = const_cast<edict_t *>( problemParams.attackerEntity );
-	float *attackerOrigin = const_cast<float *>( problemParams.attackerOrigin );
-	const edict_t *doNotHitEntity = originParams.originEntity;
-	const edict_t *gameEdicts = game.edicts;
-	const auto *spots = tacticalSpotsRegistry->spots;
+int CoverProblemSolver::FindTopNodeAndEntNums( SpotsAndScoreVector &spotsAndScores, EntNumsVector &entNums ) {
+	// Should not be called for these parameters
+	assert( !spotsAndScores.empty() );
+	assert( entNums.empty() );
 
-	trace_t trace;
+	vec3_t bounds[2];
+	ClearBounds( bounds[0], bounds[1] );
+
+	// We're building a box for an attacker and all spots
+	if( const auto *__restrict ent = problemParams.attackerEntity ) {
+		AddPointToBounds( ent->r.absmin, bounds[0], bounds[1] );
+		AddPointToBounds( ent->r.absmax, bounds[0], bounds[1] );
+	} else {
+		AddPointToBounds( problemParams.attackerOrigin, bounds[0], bounds[1] );
+	}
+
+	const auto *const spots = tacticalSpotsRegistry->spots;
+	for( const SpotAndScore &spotAndScore: spotsAndScores ) {
+		const auto &__restrict spot = spots[spotAndScore.spotNum];
+		AddPointToBounds( spot.absMins, bounds[0], bounds[1] );
+		AddPointToBounds( spot.absMaxs, bounds[0], bounds[1] );
+	}
+
+	const int topNode = trap_CM_FindTopNodeForBox( bounds[0], bounds[1] );
+
+	const auto numRawEnts = (unsigned)GClip_AreaEdicts( bounds[0], bounds[1], entNums.begin(), MAX_EDICTS, AREA_SOLID, 0 );
+	assert( numRawEnts < entNums.capacity() );
+	entNums.unsafe_set_size( numRawEnts );
+
+	FilterRawEntNums( entNums );
+
+	return topNode;
+}
+
+void CoverProblemSolver::FilterRawEntNums( EntNumsVector &entNums ) {
+	unsigned numFilteredEnts = 0;
+
+	// Filter out entities that should be excluded from collision tests for raycasts from attacker origin to spots.
+	// TODO: Use much more aggressive cutoffs
+
+	const auto *const gameEdicts = game.edicts;
+	// May be null but harmless in this case
+	const auto *const originEntity = originParams.originEntity;
+	const auto *const attackerEntity = problemParams.attackerEntity;
+	if( !attackerEntity ) {
+		const auto *const attackerOrigin = problemParams.attackerOrigin;
+		for( int entNum: entNums ) {
+			const auto *const ent = gameEdicts + entNum;
+			// Skip the origin entity (that asks for cover).
+			// We assume that the entity is going to flee from its current position.
+			if( ent == originEntity ) {
+				continue;
+			}
+			// Consider that only these entities can block attacker view
+			if( ent->movetype != MOVETYPE_NONE ) {
+				continue;
+			}
+			// TODO: Precache the attacker leaf num if the PVS test is kept
+			if( !trap_inPVS( attackerOrigin, ent->s.origin ) ) {
+				continue;
+			}
+			entNums[numFilteredEnts++] = entNum;
+		}
+
+		entNums.truncate( numFilteredEnts );
+		return;
+	}
+
+	const auto *const pvsCache = EntitiesPvsCache::Instance();
+	for( int entNum: entNums ) {
+		const auto *const ent = gameEdicts + entNum;
+		// Exclude the attacker entity from further collision tests.
+		// Otherwise we're going to keep hitting it on every raycast.
+		// Exclude the origin entity (if any) for reasons described above.
+		if( ent == attackerEntity || ent == originEntity ) {
+			continue;
+		}
+		if( ent->movetype != MOVETYPE_NONE ) {
+			continue;
+		}
+		if( !pvsCache->AreInPvs( attackerEntity, ent ) ) {
+			continue;
+		}
+		entNums[numFilteredEnts++] = entNum;
+	}
+
+	entNums.truncate( numFilteredEnts );
+}
+
+SpotsAndScoreVector &CoverProblemSolver::FilterByCoarseRayTests( SpotsAndScoreVector &spotsAndScores,
+	                                                             int collisionTopNodeHint,
+	                                                             const EntNumsVector &entNums ) {
+	const auto *const spots = tacticalSpotsRegistry->spots;
 
 	unsigned numFeasibleSpots = 0;
 	// Filter spots in-place
 	for( const SpotAndScore &spotAndScore: spotsAndScores ) {
 		const TacticalSpot &spot = spots[spotAndScore.spotNum];
-		float *spotOrigin = const_cast<float *>( spot.origin );
-		G_Trace( &trace, attackerOrigin, nullptr, nullptr, spotOrigin, ignore, MASK_AISOLID );
-		if( trace.fraction == 1.0f || gameEdicts + trace.ent == doNotHitEntity ) {
+		// Check whether spot is certainly visible
+		if( CastRay( problemParams.attackerOrigin, spot.origin, collisionTopNodeHint, entNums ) ) {
 			continue;
 		}
 		spotsAndScores[numFeasibleSpots++] = spotAndScore;
@@ -87,44 +182,77 @@ SpotsAndScoreVector &CoverProblemSolver::FilterByCoarseRayTests( SpotsAndScoreVe
 	return spotsAndScores;
 }
 
-SpotsAndScoreVector &CoverProblemSolver::SelectCoverSpots( SpotsAndScoreVector &reachCheckedSpots ) {
-	edict_t *ignore = const_cast<edict_t *>( problemParams.attackerEntity );
-	float *attackerOrigin = const_cast<float *>( problemParams.attackerOrigin );
-	const edict_t *doNotHitEntity = originParams.originEntity;
+SpotsAndScoreVector &CoverProblemSolver::SelectCoverSpots( SpotsAndScoreVector &spotsAndScores,
+	                                                       int collisionTopNodeHint,
+	                                                       const EntNumsVector &entNums ) {
+	const float harmfulRayThickness = problemParams.harmfulRayThickness;
+	const auto *const spots = tacticalSpotsRegistry->spots;
 
-	float harmfulRayThickness = problemParams.harmfulRayThickness;
-
-	vec3_t relativeBounds[2] = {
+	const vec3_t rayBounds[2] = {
 		{ -harmfulRayThickness, -harmfulRayThickness, -harmfulRayThickness },
 		{ +harmfulRayThickness, +harmfulRayThickness, +harmfulRayThickness }
 	};
 
-	trace_t trace;
-	vec3_t bounds[2];
-
-	auto &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
-	for( const SpotAndScore &spotAndScore: reachCheckedSpots ) {
-		const TacticalSpot &spot = tacticalSpotsRegistry->spots[spotAndScore.spotNum];
-
-		// Convert bounds from relative to absolute
-		VectorAdd( relativeBounds[0], spot.origin, bounds[0] );
-		VectorAdd( relativeBounds[1], spot.origin, bounds[1] );
-
-		bool failedAtTest = false;
-		for( int i = 0; i < 8; ++i ) {
-			vec3_t traceEnd = { bounds[( i >> 2 ) & 1][0], bounds[( i >> 1 ) & 1][1], bounds[( i >> 0 ) & 1][2] };
-			G_Trace( &trace, attackerOrigin, nullptr, nullptr, traceEnd, ignore, MASK_AISOLID );
-			if( trace.fraction == 1.0f || game.edicts + trace.ent == doNotHitEntity ) {
-				failedAtTest = true;
-				break;
-			}
-		}
-		if( failedAtTest ) {
+	unsigned numFilteredSpots = 0;
+	// Filter spots in-place
+	for( const SpotAndScore &spotAndScore: spotsAndScores ) {
+		const TacticalSpot &spot = spots[spotAndScore.spotNum];
+		if( !LooksLikeACoverSpot( spot, rayBounds, collisionTopNodeHint, entNums ) ) {
 			continue;
 		}
 
-		result.push_back( spotAndScore );
+		spotsAndScores[numFilteredSpots++] = spotAndScore;
 	}
 
-	return result;
+	spotsAndScores.truncate( numFilteredSpots );
+	return spotsAndScores;
+}
+
+bool CoverProblemSolver::LooksLikeACoverSpot( const TacticalSpot &spot, const vec3_t *rayBounds,
+											  int topNode, const EntNumsVector &entNums ) {
+	vec3_t bounds[2];
+	// Convert bounds from relative to absolute
+	VectorAdd( rayBounds[0], spot.absMins, bounds[0] );
+	VectorAdd( rayBounds[1], spot.absMaxs, bounds[1] );
+
+	// TODO: Reduce the number of tested corners by using a projection onto view plane for the attacker
+	for( int i = 0; i < 8; ++i ) {
+		const vec3_t testedPoint = {
+			bounds[( i >> 2 ) & 1][0],
+			bounds[( i >> 1 ) & 1][1],
+			bounds[( i >> 0 ) & 1][2]
+		};
+		// If the corner is certainly visible
+		if( CastRay( problemParams.attackerOrigin, testedPoint, topNode, entNums ) ) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool CoverProblemSolver::CastRay( const float *from, const float *to, int topNode, const EntNumsVector &entNums ) {
+	trace_t trace;
+
+	// Test against blocking view entities first.
+	// Either number of these entities is low or we can cut off expensive long raycasts in the static world.
+
+	const auto *const gameEdicts = game.edicts;
+	for( int entNum: entNums ) {
+		const auto *ent = gameEdicts + entNum;
+
+		// TODO: Optimize using AABB/line intersection
+		const auto *model = trap_CM_ModelForBBox( ent->r.mins, ent->r.maxs );
+		trap_CM_TransformedBoxTrace( &trace, from, to, vec3_origin, vec3_origin, model,
+			                         MASK_SHOT, ent->s.origin, ent->s.angles, topNode );
+
+		// A ray is blocked by some other solid entity
+		if( trace.fraction != 1.0f ) {
+			return false;
+		}
+	}
+
+	StaticWorldTrace( &trace, from, to, MASK_SHOT, vec3_origin, vec3_origin, topNode );
+	// Check whether a ray is blocked by a solid world
+	return trace.fraction == 1.0f;
 }

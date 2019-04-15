@@ -132,6 +132,15 @@ public:
 		return basePointer + count++;
 	}
 
+	inline void unsafe_set_size( size_type newSize ) {
+#ifdef _DEBUG
+		if( newSize > capacity() ) {
+			fail_with( "unsafe_set_size(): newSize = %d, capacity = %d\n", newSize, capacity() );
+		}
+#endif
+		count = newSize;
+	}
+
 	inline void pop_back() {
 #ifdef _DEBUG
 		if( count == 0 ) {
