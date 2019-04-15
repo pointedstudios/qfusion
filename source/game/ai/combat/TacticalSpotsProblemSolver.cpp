@@ -37,24 +37,31 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::SelectCandidateSpots( const Spo
 	return result;
 }
 
-SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOrigin( SpotsAndScoreVector &spots ) {
+SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOrigin( SpotsAndScoreVector &spotsAndScores ) {
 	// AAS uses travel time in centiseconds
 	const int maxFeasibleTravelTimeCentis = problemParams.maxFeasibleTravelTimeMillis / 10;
 	const int originAreaNum = originParams.originAreaNum;
+	const auto *const routeCache = originParams.routeCache;
+	const auto *const spots = tacticalSpotsRegistry->spots;
 
 	unsigned numFilteredSpots = 0;
 	// Filter spots in-place
-	for( unsigned i = 0; i < spots.size(); ++i ) {
-		const int tableTravelTime = tacticalSpotsRegistry->TravelTimeFromAreaToSpot( originAreaNum, spots[i].spotNum );
+	for( unsigned i = 0; i < spotsAndScores.size(); ++i ) {
+		const int spotNum = spotsAndScores[i].spotNum;
+		const int tableTravelTime = tacticalSpotsRegistry->TravelTimeFromAreaToSpot( originAreaNum, spotNum );
 		if( !tableTravelTime || tableTravelTime > maxFeasibleTravelTimeCentis ) {
 			continue;
 		}
+		// Cut off blocked spots early without draining the router cache by making requests
+		if( routeCache->AreaDisabled( spots[spotNum].aasAreaNum ) ) {
+			continue;
+		}
 
-		spots[numFilteredSpots++] = spots[i];
+		spotsAndScores[numFilteredSpots++] = spotsAndScores[i];
 	}
 
-	spots.truncate( numFilteredSpots );
-	return spots;
+	spotsAndScores.truncate( numFilteredSpots );
+	return spotsAndScores;
 }
 
 SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOrigin( SpotsAndScoreVector &candidateSpots ) {
@@ -92,15 +99,17 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOrigin( Spot
 	return result;
 }
 
-SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOriginAndBack( SpotsAndScoreVector &spots ) {
+SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOriginAndBack( SpotsAndScoreVector &spotsAndScores ) {
 	// A round trip time can't be 2x larger
 	const int maxFeasibleSumTravelTimeCentis = 2 * ( problemParams.maxFeasibleTravelTimeMillis / 10 );
 	const int originAreaNum = originParams.originAreaNum;
+	const auto *const routeCache = originParams.routeCache;
+	const auto *const spots = tacticalSpotsRegistry->spots;
 
 	unsigned numFilteredSpots = 0;
 	// Filter spots in-place
-	for( unsigned i = 0; i < spots.size(); ++i ) {
-		const auto spotNum = spots[i].spotNum;
+	for( unsigned i = 0; i < spotsAndScores.size(); ++i ) {
+		const auto spotNum = spotsAndScores[i].spotNum;
 		const int tableToTravelTime = tacticalSpotsRegistry->TravelTimeFromAreaToSpot( originAreaNum, spotNum );
 		if( !tableToTravelTime ) {
 			continue;
@@ -112,11 +121,15 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOriginAn
 		if( tableToTravelTime + tableBackTravelTime > maxFeasibleSumTravelTimeCentis ) {
 			continue;
 		}
-		spots[numFilteredSpots++] = spots[i];
+		// Cut off blocked spots early without draining the router cache by making requests
+		if( routeCache->AreaDisabled( spots[spotNum].aasAreaNum ) ) {
+			continue;
+		}
+		spotsAndScores[numFilteredSpots++] = spotsAndScores[i];
 	}
 
-	spots.truncate( numFilteredSpots );
-	return spots;
+	spotsAndScores.truncate( numFilteredSpots );
+	return spotsAndScores;
 }
 
 SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidateSpots ) {

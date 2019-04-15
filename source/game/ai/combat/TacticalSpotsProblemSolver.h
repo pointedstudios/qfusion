@@ -85,11 +85,11 @@ protected:
 
 	virtual SpotsAndScoreVector &SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery );
 
-	virtual SpotsAndScoreVector &FilterByReachTablesFromOrigin( SpotsAndScoreVector &spots );
+	virtual SpotsAndScoreVector &FilterByReachTablesFromOrigin( SpotsAndScoreVector &spotsAndScores );
 
 	virtual SpotsAndScoreVector &CheckSpotsReachFromOrigin( SpotsAndScoreVector &candidateSpots );
 
-	virtual SpotsAndScoreVector &FilterByReachTablesFromOriginAndBack( SpotsAndScoreVector &spots );
+	virtual SpotsAndScoreVector &FilterByReachTablesFromOriginAndBack( SpotsAndScoreVector &spotsAndScores );
 
 	virtual SpotsAndScoreVector &CheckSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidateSpots );
 
