@@ -7,10 +7,11 @@ int CoverProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 	const SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
 	// Use these cheap calls to cut off as many spots as possible before a first collision filter
 	SpotsAndScoreVector &candidateSpots = SelectCandidateSpots( spotsFromQuery );
-	SpotsAndScoreVector &filteredByReachSpots = FilterByReachTables( candidateSpots );
+	SpotsAndScoreVector &filteredByReachTablesSpots = FilterByReachTables( candidateSpots );
+	SpotsAndScoreVector &filteredByVisTablesSpots = FilterByAreaVisTables( filteredByReachTablesSpots );
 	// These calls rely on vis tables to some degree and thus should not be extremely expensive
-	SpotsAndScoreVector &filteredByCoarseVisSpots = FilterByCoarseVisTests( filteredByReachSpots );
-	SpotsAndScoreVector &enemyCheckedSpots = CheckEnemiesInfluence( filteredByCoarseVisSpots );
+	SpotsAndScoreVector &filteredByCoarseRayTestsSpots = FilterByCoarseRayTests( filteredByVisTablesSpots );
+	SpotsAndScoreVector &enemyCheckedSpots = CheckEnemiesInfluence( filteredByCoarseRayTestsSpots );
 	// Even "fine" collision checks are actually faster than pathfinding
 	SpotsAndScoreVector &coverSpots = SelectCoverSpots( enemyCheckedSpots );
 	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( coverSpots );
@@ -19,33 +20,67 @@ int CoverProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 	return CleanupAndCopyResults( reachCheckedSpots, spots, maxSpots );
 }
 
-SpotsAndScoreVector &CoverProblemSolver::FilterByCoarseVisTests( SpotsAndScoreVector &spotsAndScores ) {
+SpotsAndScoreVector &CoverProblemSolver::FilterByAreaVisTables( SpotsAndScoreVector &spotsAndScores ) {
+	const auto *const aasWorld = AiAasWorld::Instance();
+	const auto *const aasAreas = aasWorld->Areas();
+	const int attackerAreaNum = aasWorld->FindAreaNum( problemParams.attackerOrigin );
+
+	// Check whether we may consider that an an area is fully visible for attacker if the table data indicates visibility.
+	// Currently table data is very coarse and is computed by a raycast from an area center to another area center.
+	// This might matter for this subtle cover problem that often is vital for a bot.
+	const auto &attackerArea = aasAreas[attackerAreaNum];
+	const float threshold = 64.0f + problemParams.harmfulRayThickness;
+	// Check XY area dimensions
+	for( int i = 0; i < 2; ++i ) {
+		if( attackerArea.maxs[i] - attackerArea.mins[i] > threshold ) {
+			// Can't do conclusions for the attacker area based on table data
+			return spotsAndScores;
+		}
+	}
+
+	const auto *const spots = tacticalSpotsRegistry->spots;
+	const bool *attackerVisRow = aasWorld->DecompressAreaVis( attackerAreaNum, AasElementsMask::TmpAreasVisRow() );
+
+	unsigned numFeasibleSpots = 0;
+	// Filter spots in-place
+	for( const SpotAndScore &spotAndScore: spotsAndScores ) {
+		const int spotAreaNum = spots[spotAndScore.spotNum].aasAreaNum;
+		const auto &spotArea = aasAreas[spotAreaNum];
+		// Check area XY dimensions
+		if( spotArea.maxs[0] - spotArea.mins[0] > threshold || spotArea.maxs[1] - spotArea.mins[1] > threshold ) {
+			// Can't do conclusions for the spot area based on table data
+			continue;
+		}
+		// Given the fact we've checked dimensions this test should produce very few false negatives
+		if( attackerVisRow[spotAreaNum] ) {
+			continue;
+		}
+		spotsAndScores[numFeasibleSpots++] = spotAndScore;
+	}
+
+	spotsAndScores.truncate( numFeasibleSpots );
+	return spotsAndScores;
+}
+
+SpotsAndScoreVector &CoverProblemSolver::FilterByCoarseRayTests( SpotsAndScoreVector &spotsAndScores ) {
 	edict_t *ignore = const_cast<edict_t *>( problemParams.attackerEntity );
 	float *attackerOrigin = const_cast<float *>( problemParams.attackerOrigin );
 	const edict_t *doNotHitEntity = originParams.originEntity;
 	const edict_t *gameEdicts = game.edicts;
 	const auto *spots = tacticalSpotsRegistry->spots;
 
-	const auto *aasWorld = AiAasWorld::Instance();
-	const int attackerAreaNum = aasWorld->FindAreaNum( attackerOrigin );
-	const bool *attackerVisRow = aasWorld->DecompressAreaVis( attackerAreaNum, AasElementsMask::TmpAreasVisRow() );
-
 	trace_t trace;
 
 	unsigned numFeasibleSpots = 0;
 	// Filter spots in-place
-	for( unsigned i = 0, end = spotsAndScores.size(); i < end; ++i ) {
-		const TacticalSpot &spot = spots[spotsAndScores[i].spotNum];
-		// This should never produce false negatives for a cover problem (except maybe map entities)
-		if( attackerVisRow[spot.aasAreaNum] ) {
-			continue;
-		}
+	for( const SpotAndScore &spotAndScore: spotsAndScores ) {
+		const TacticalSpot &spot = spots[spotAndScore.spotNum];
 		float *spotOrigin = const_cast<float *>( spot.origin );
 		G_Trace( &trace, attackerOrigin, nullptr, nullptr, spotOrigin, ignore, MASK_AISOLID );
 		if( trace.fraction == 1.0f || gameEdicts + trace.ent == doNotHitEntity ) {
 			continue;
 		}
-		spotsAndScores[numFeasibleSpots++] = spotsAndScores[i];
+		spotsAndScores[numFeasibleSpots++] = spotAndScore;
 	}
 
 	spotsAndScores.truncate( numFeasibleSpots );

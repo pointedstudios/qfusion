@@ -22,7 +22,8 @@ public:
 		}
 	};
 private:
-	SpotsAndScoreVector &FilterByCoarseVisTests( SpotsAndScoreVector &spotsAndScores );
+	SpotsAndScoreVector &FilterByAreaVisTables( SpotsAndScoreVector &spotsAndScores );
+	SpotsAndScoreVector &FilterByCoarseRayTests( SpotsAndScoreVector &spotsAndScores );
 	SpotsAndScoreVector &SelectCoverSpots( SpotsAndScoreVector &candidateSpots );
 
 	const ProblemParams &problemParams;
