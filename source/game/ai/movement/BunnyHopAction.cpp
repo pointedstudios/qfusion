@@ -395,23 +395,41 @@ bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 	Debug( format, actualSpeedGainPerSecond, minDesiredSpeedGainPerSecond );
 
 	currentSpeedLossSequentialMillis += context->predictionStepMillis;
-	if( tolerableSpeedLossSequentialMillis < currentSpeedLossSequentialMillis ) {
-		// Let actually interrupt it if the new speed is less than this threshold.
-		// Otherwise many trajectories that look feasible get rejected.
-		// We should not however completely eliminate this interruption
-		// as sometimes it prevents bumping in obstacles pretty well.
-		if( newEntityPhysicsState.Speed2D() < 0.5f * ( context->GetRunSpeed() + context->GetDashSpeed() ) ) {
-			if( continueOnFailure ) {
-				EnsurePathPenalty( 750 );
-				return true;
-			}
-			const char *format_ = "A sequential speed loss interval of %d millis exceeds the tolerable one of %d millis\n";
-			Debug( format_, currentSpeedLossSequentialMillis, tolerableSpeedLossSequentialMillis );
-			this->shouldTryObstacleAvoidance = true;
-			return false;
-		}
+	if( tolerableSpeedLossSequentialMillis > currentSpeedLossSequentialMillis ) {
+		return true;
 	}
 
+	// Let actually interrupt it if the new speed is less than this threshold.
+	// Otherwise many trajectories that look feasible get rejected.
+	// We should not however completely eliminate this interruption
+	// as sometimes it prevents bumping in obstacles pretty well.
+	const float speed2D = newEntityPhysicsState.Speed2D();
+	const float threshold = 0.5f * ( context->GetRunSpeed() + context->GetDashSpeed() );
+	if( speed2D >= threshold ) {
+		return true;
+	}
+
+	if( continueOnFailure ) {
+		EnsurePathPenalty( 750 );
+		return true;
+	}
+
+	// Stop in this seemingly unrecoverable case
+	if( speed2D < 100 ) {
+		const char *format_ = "A sequential speed loss interval of %d millis exceeds the tolerable one of %d millis\n";
+		Debug( format_, currentSpeedLossSequentialMillis, tolerableSpeedLossSequentialMillis );
+		this->shouldTryObstacleAvoidance = true;
+		return false;
+	}
+
+	unsigned penalty = 0;
+	// If the area is not a "skip collision" area
+	if( !( AiAasWorld::Instance()->AreaSettings()[context->CurrAasAreaNum()].areaflags & AREA_SKIP_COLLISION_16 ) ) {
+		const float frac = ( threshold - speed2D ) * Q_Rcp( threshold );
+		penalty = (unsigned)( 250 + 1250 * Q_Sqrt( frac ) );
+	}
+
+	EnsurePathPenalty( penalty );
 	return true;
 }
 
