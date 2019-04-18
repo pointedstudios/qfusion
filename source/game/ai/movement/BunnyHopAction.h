@@ -137,6 +137,8 @@ protected:
 	}
 
 	void CompleteOrSaveGoodEnoughPath( MovementPredictionContext *context, unsigned additionalPenalty = 0 );
+
+	bool CheckDirectReachWalkingOrFallingShort( int fromAreaNum, int toAreaNum );
 public:
 	BunnyHopAction( BotMovementModule *module_, const char *name_, int debugColor_ = 0 )
 		: BaseMovementAction( module_, name_, debugColor_ ) {

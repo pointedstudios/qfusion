@@ -599,8 +599,7 @@ bool BunnyHopAction::TryHandlingWorseTravelTimeToTarget( Context *context,
 	}
 
 	// Allow further prediction if we're in a NOFALL area.
-	const auto &groundedAreaSettings = aasWorld->AreaSettings()[groundedAreaNum];
-	if( groundedAreaSettings.areaflags & AREA_NOFALL ) {
+	if( aasWorld->AreaSettings()[groundedAreaNum].areaflags & AREA_NOFALL ) {
 		const auto *aasAreas = aasWorld->Areas();
 		// Delta Z relative to the best area so far must be positive
 		if( aasAreas[groundedAreaNum].mins[2] > aasAreas[minTravelTimeAreaNumSoFar].mins[2] ) {
@@ -616,14 +615,35 @@ bool BunnyHopAction::TryHandlingWorseTravelTimeToTarget( Context *context,
 
 	// Disallow moving into an area if the min travel time area cannot be reached by walking from the area.
 	// Use a simple reverse reach. test instead of router calls (that turned out to be expensive/non-scalable).
+	if( CheckDirectReachWalkingOrFallingShort( groundedAreaNum, minTravelTimeAreaNumSoFar ) ) {
+		return true;
+	}
+
+	// Allow an increased travel time if the bot is far from "may stop at" area.
+	// The path beginning should be good and the rest gets truncated/never used.
+	if( mayStopAtAreaNum ) {
+		const float *origin = context->movementState->entityPhysicsState.Origin();
+		if( DistanceSquared( origin, mayStopAtOrigin ) > SQUARE( 96 ) ) {
+			EnsurePathPenalty( 350 );
+			return true;
+		}
+	}
+
+	Debug( format );
+	return false;
+}
+
+bool BunnyHopAction::CheckDirectReachWalkingOrFallingShort( int fromAreaNum, int toAreaNum ) {
+	const auto *aasWorld = AiAasWorld::Instance();
+	const auto *aasReach = aasWorld->Reachabilities();
+	const auto &areaSettings = aasWorld->AreaSettings()[fromAreaNum];
 
 	// Limit number of tested rev. reach.
 	// TODO: Add and use reverse reach. table for this and many other purposes
-	int maxReachNum = groundedAreaSettings.firstreachablearea + std::min( groundedAreaSettings.numreachableareas, 8 );
-	const auto *aasReach = aasWorld->Reachabilities();
-	for( int revReachNum = groundedAreaSettings.firstreachablearea; revReachNum != maxReachNum; revReachNum++ ) {
+	int maxReachNum = areaSettings.firstreachablearea + std::min( areaSettings.numreachableareas, 16 );
+	for( int revReachNum = areaSettings.firstreachablearea; revReachNum != maxReachNum; revReachNum++ ) {
 		const auto &reach = aasReach[revReachNum];
-		if( reach.areanum != minTravelTimeAreaNumSoFar ) {
+		if( reach.areanum != toAreaNum ) {
 			continue;
 		}
 		const auto travelType = reach.traveltype & TRAVELTYPE_MASK;
@@ -642,7 +662,6 @@ bool BunnyHopAction::TryHandlingWorseTravelTimeToTarget( Context *context,
 		break;
 	}
 
-	Debug( format );
 	return false;
 }
 
@@ -845,6 +864,15 @@ void BunnyHopAction::CheckPredictionStepResults( Context *context ) {
 				CompleteOrSaveGoodEnoughPath( context );
 				return;
 			}
+		}
+	}
+
+	if( CheckDirectReachWalkingOrFallingShort( groundedAreaNum, mayStopAtAreaNum ) ) {
+		trace_t trace;
+		SolidWorldTrace( &trace, mayStopAtOrigin, newEntityPhysicsState.Origin() );
+		if( trace.fraction == 1.0f ) {
+			CompleteOrSaveGoodEnoughPath( context );
+			return;
 		}
 	}
 
