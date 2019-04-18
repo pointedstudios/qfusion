@@ -3,6 +3,8 @@
 #include "../navigation/AasElementsMask.h"
 
 int CoverProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
+	volatile TemporariesCleanupGuard cleanupGuard( this );
+
 	uint16_t insideSpotNum;
 	const SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
 	// Use these cheap calls to cut off as many spots as possible before a first collision filter
@@ -13,7 +15,6 @@ int CoverProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 	// Return early in this case.
 	// All expensive stuff starts below.
 	if( filteredByVisTablesSpots.empty() ) {
-		tacticalSpotsRegistry->temporariesAllocator.Release();
 		return 0;
 	}
 

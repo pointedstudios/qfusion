@@ -83,6 +83,16 @@ protected:
 	const OriginParams &originParams;
 	TacticalSpotsRegistry *const tacticalSpotsRegistry;
 
+	struct TemporariesCleanupGuard {
+		TacticalSpotsProblemSolver *const solver;
+
+		explicit TemporariesCleanupGuard( TacticalSpotsProblemSolver *solver_ ): solver( solver_ ) {}
+
+		~TemporariesCleanupGuard() {
+			solver->tacticalSpotsRegistry->temporariesAllocator.Release();
+		}
+	};
+
 	virtual SpotsAndScoreVector &SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery );
 
 	virtual SpotsAndScoreVector &FilterByReachTablesFromOrigin( SpotsAndScoreVector &spotsAndScores );

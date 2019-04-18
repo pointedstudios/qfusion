@@ -2,6 +2,8 @@
 #include "SpotsProblemSolversLocal.h"
 
 int DodgeHazardProblemSolver::FindMany( vec3_t *spotOrigins, int maxSpots ) {
+	volatile TemporariesCleanupGuard cleanupGuard( this );
+
 	uint16_t insideSpotNum;
 	const SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
 	SpotsAndScoreVector &candidateSpots =  SelectCandidateSpots( spotsFromQuery );

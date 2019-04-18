@@ -329,7 +329,6 @@ int TacticalSpotsProblemSolver::CleanupAndCopyResults( const ArrayRange<SpotAndS
 													   vec3_t *spotOrigins, int maxSpots ) {
 	const auto resultsSize = (unsigned)spotsRange.size();
 	if( maxSpots == 0 || resultsSize == 0 ) {
-		tacticalSpotsRegistry->temporariesAllocator.Release();
 		return 0;
 	}
 
@@ -339,7 +338,6 @@ int TacticalSpotsProblemSolver::CleanupAndCopyResults( const ArrayRange<SpotAndS
 	// Its a common case so give it an optimized branch
 	if( maxSpots == 1 ) {
 		VectorCopy( spots[spotsAndScores[0].spotNum].origin, spotOrigins[0] );
-		tacticalSpotsRegistry->temporariesAllocator.Release();
 		return 1;
 	}
 
@@ -350,11 +348,9 @@ int TacticalSpotsProblemSolver::CleanupAndCopyResults( const ArrayRange<SpotAndS
 	unsigned keptSpotIndex = 0;
 	for(;; ) {
 		if( keptSpotIndex >= resultsSize ) {
-			tacticalSpotsRegistry->temporariesAllocator.Release();
 			return numSpots_;
 		}
 		if( numSpots_ >= maxSpots ) {
-			tacticalSpotsRegistry->temporariesAllocator.Release();
 			return numSpots_;
 		}
 

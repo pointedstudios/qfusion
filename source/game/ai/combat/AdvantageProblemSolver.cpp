@@ -3,6 +3,8 @@
 #include "../navigation/AasElementsMask.h"
 
 int AdvantageProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
+	volatile TemporariesCleanupGuard cleanupGuard( this );
+
 	uint16_t insideSpotNum;
 	SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
 	// Cut off some raw spots from query by vis tables
