@@ -71,7 +71,7 @@ void TrackedEnemy::OnViewed( const float *specifiedOrigin ) {
 	VectorCopy( ent->velocity, lastSeenVelocity.Data() );
 	lastSeenAt = level.time;
 	// Store in a queue then for history
-	lastSeenSnapshots.emplace_back( Snapshot( ent->s.origin, ent->velocity, level.time ) );
+	lastSeenSnapshots.emplace_back( Snapshot( ent->s.origin, ent->velocity, ent->s.angles, level.time ) );
 	assert( IsInTrackedList() );
 }
 
@@ -106,6 +106,59 @@ bool TrackedEnemy::IsShootableCurrOrPendingWeapon( int weapon ) const {
 	if( inventory[weapon] ) {
 		constexpr int shifts[2] = { ( AMMO_GUNBLADE - WEAP_GUNBLADE ), ( AMMO_WEAK_GUNBLADE - WEAP_GUNBLADE ) };
 		return inventory[weapon + shifts[0]] || inventory[weapon + shifts[1]];
+	}
+
+	return false;
+}
+
+bool TrackedEnemy::TriesToKeepUnderXhair( const float *origin ) const {
+	float lastDot = -1.0f - 0.01f;
+	float bestDot = -1.0f - 0.01f;
+	float prevDot = -1.0f - 0.01f;
+	const auto levelTime = level.time;
+	bool isMonotonicallyIncreasing = true;
+	for( const auto &snapshot: lastSeenSnapshots ) {
+		if( levelTime - snapshot.Timestamp() > 500 ) {
+			continue;
+		}
+
+		prevDot = lastDot;
+
+		Vec3 toOriginDir( snapshot.Origin() );
+		toOriginDir.Z() += playerbox_stand_viewheight;
+		toOriginDir -= origin;
+		float squareDistance = toOriginDir.SquaredLength();
+		if( squareDistance < 1 ) {
+			lastDot = bestDot = 1.0f;
+			continue;
+		}
+
+		toOriginDir *= -1.0f * Q_RSqrt( squareDistance );
+		vec3_t lookDir;
+		AngleVectors( snapshot.Angles().Data(), lookDir, nullptr, nullptr );
+
+		const float dot = toOriginDir.Dot( lookDir );
+		if( dot > bestDot ) {
+			// Return immediately in this case
+			if( dot > 0.995f ) {
+				return true;
+			}
+			bestDot = dot;
+		}
+		if( isMonotonicallyIncreasing ) {
+			if( dot <= lastDot ) {
+				isMonotonicallyIncreasing = false;
+			}
+		}
+		lastDot = dot;
+	}
+
+	if( lastDot > prevDot && lastDot > 0.99f ) {
+		return true;
+	}
+
+	if( isMonotonicallyIncreasing && bestDot > 0.95f ) {
+		return true;
 	}
 
 	return false;

@@ -741,15 +741,28 @@ bool SelectedEnemies::TestAboutToHitLGorPG( int64_t levelTime ) const {
 			}
 		}
 
-		// TODO: Check past view dots and derive direction?
-
 		if( !pvsCache->AreInPvs( game.edicts + bot->EntNum(), enemy->ent ) ) {
 			continue;
 		}
 
-		Vec3 traceStart( enemy->LastSeenOrigin() );
+		// Check whether the enemy really tries to track the bot
+		if( !enemy->TriesToKeepUnderXhair( botOrigin ) ) {
+			continue;
+		}
+
+		Vec3 traceStart( enemyOrigin );
 		traceStart.Z() += playerbox_stand_viewheight;
 		SolidWorldTrace( &trace, traceStart.Data(), botOrigin );
+		if( trace.fraction != 1.0f ) {
+			for( float deltaZ: { playerbox_stand_maxs[2] - 2.0f, playerbox_stand_mins[2] + 2.0f } ) {
+				Vec3 traceEnd( botOrigin[0], botOrigin[1], botOrigin[2] + deltaZ );
+				SolidWorldTrace( &trace, traceStart.Data(), traceEnd.Data() );
+				if( trace.fraction == 1.0f ) {
+					break;
+				}
+			}
+		}
+
 		if( trace.fraction == 1.0f ) {
 			return true;
 		}

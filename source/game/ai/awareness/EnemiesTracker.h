@@ -222,6 +222,8 @@ public:
 
 	bool IsShootableCurrOrPendingWeapon( int weapon ) const;
 
+	bool TriesToKeepUnderXhair( const float *origin ) const;
+
 	inline unsigned FireDelay() const {
 		return ent->r.client ? ent->r.client->ps.stats[STAT_WEAPON_TIME] : 0u;
 	}
@@ -247,16 +249,27 @@ public:
 		Int64Align4 timestamp;
 		int16_t packedOrigin[3];
 		int16_t packedVelocity[3];
+		int16_t angles[2];
 	public:
-		Snapshot( const vec3_t origin_, const vec3_t velocity_, int64_t timestamp_ ) {
+		Snapshot( const vec3_t origin_, const vec3_t velocity_, const vec3_t angles_, int64_t timestamp_ ) {
 			this->timestamp = timestamp_;
 			SetPacked4uVec( origin_, this->packedOrigin );
 			SetPacked4uVec( velocity_, this->packedVelocity );
+			angles[0] = (int16_t)angles_[PITCH];
+			angles[1] = (int16_t)angles_[YAW];
 		}
 
 		int64_t Timestamp() const { return timestamp; }
 		Vec3 Origin() const { return GetUnpacked4uVec( packedOrigin ); }
 		Vec3 Velocity() const { return GetUnpacked4uVec( packedVelocity ); }
+
+		Vec3 Angles() const {
+			vec3_t result;
+			result[PITCH] = angles[0];
+			result[YAW] = angles[1];
+			result[ROLL] = 0;
+			return Vec3( result );
+		}
 	};
 
 	typedef StaticDeque<Snapshot, MAX_TRACKED_SNAPSHOTS> SnapshotsQueue;
