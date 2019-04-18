@@ -217,6 +217,9 @@ int ReachChainInterpolator::SuggestStopAtAreaNum() const {
 		}
 	}
 
-	assert( bestAreaNum );
+	// We sometimes supply zero area numbers
+	// (e.g for "synthetic" dirs that do not really correspond to areas).
+	// Just make sure we've made at least a single iteration.
+	assert( bestAreaNum >= 0 );
 	return bestAreaNum;
 }
