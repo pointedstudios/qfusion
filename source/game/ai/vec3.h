@@ -130,10 +130,10 @@ public:
 	}
 
 	vec_t Dot( const Vec3 &that ) const {
-		return _DotProduct( vec, that.vec );
+		return DotProduct( vec, that.vec );
 	}
 	float Dot( const vec3_t that ) const {
-		return _DotProduct( vec, that );
+		return DotProduct( vec, that );
 	}
 
 	inline Vec3 Cross( const Vec3 &that ) const {
