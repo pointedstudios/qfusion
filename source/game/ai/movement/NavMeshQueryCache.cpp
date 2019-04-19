@@ -5,17 +5,15 @@
 
 BotNavMeshQueryCache::BotNavMeshQueryCache( Bot *bot_ )
 	: bot( bot_ )
-	, aasWorld( AiAasWorld::Instance() )
-	, computedAt( 0 )
-	, startOrigin( 0, 0, 0 ) {
+	, aasWorld( AiAasWorld::Instance() ) {
 	TacticalSpotsRegistry::GetSpotsWalkabilityTraceBounds( walkabilityTraceMins, walkabilityTraceMaxs );
 }
 
 bool BotNavMeshQueryCache::GetClosestToTargetPoint( Context *context, float *resultPoint ) const {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	if( computedAt == level.time && VectorCompare( entityPhysicsState.Origin(), computedForOrigin ) ) {
-		if( fabsf( computedResultPoint[0] ) < std::numeric_limits<float>::max() ) {
-			VectorCopy( computedResultPoint, resultPoint );
+		if( fabsf( cachedPoint[0] ) < std::numeric_limits<float>::max() ) {
+			VectorCopy( cachedPoint, resultPoint );
 			return true;
 		}
 		return false;
@@ -23,57 +21,68 @@ bool BotNavMeshQueryCache::GetClosestToTargetPoint( Context *context, float *res
 
 	computedAt = level.time;
 	VectorCopy( entityPhysicsState.Origin(), computedForOrigin );
-	computedResultPoint[0] = std::numeric_limits<float>::infinity();
-	if( FindClosestToTargetPoint( context, computedResultPoint ) ) {
-		VectorCopy( computedResultPoint, resultPoint );
+	cachedPoint[0] = std::numeric_limits<float>::infinity();
+	if( const Vec3 *point = FindClosestToTargetPoint( context ) ) {
+		point->CopyTo( cachedPoint );
+		point->CopyTo( resultPoint );
 		return true;
 	}
 	return false;
 }
 
-bool BotNavMeshQueryCache::FindClosestToTargetPoint( Context *context, float *resultPoint ) const {
-	const auto *aasWorld = AiAasWorld::Instance();
-	const auto *aasReach = aasWorld->Reachabilities();
+class ReachChainCollector final : public ReachChainWalker {
+	friend class BotNavMeshQueryCache;
 
+	const Vec3 startOrigin;
+	BotNavMeshQueryCache::ReachChainVector values;
+public:
+	explicit ReachChainCollector( Context *context )
+		: ReachChainWalker( context->RouteCache() )
+		, startOrigin( context->movementState->entityPhysicsState.Origin() ) {
+		SetAreaNums( context->movementState->entityPhysicsState, context->NavTargetAasAreaNum() );
+	}
+
+	bool Accept( int reachNum, const aas_reachability_t &reach, int ) override {
+		if( ( reach.traveltype & TRAVELTYPE_MASK ) != TRAVEL_WALK ) {
+			return false;
+		}
+		if( startOrigin.SquareDistanceTo( reach.start ) > SQUARE( 768.0f ) ) {
+			if( values.size() > 1 ) {
+				return false;
+			}
+		}
+		values.push_back( reachNum );
+		return values.size() != values.capacity();
+	}
+
+	bool Exec() override {
+		assert( values.empty() );
+		return ReachChainWalker::Exec() && !values.empty();
+	}
+};
+
+const Vec3 *BotNavMeshQueryCache::FindClosestToTargetPoint( Context *context ) const {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	this->startOrigin.Set( entityPhysicsState.Origin() );
 
-	int lastReachIndex = -1;
-	const auto &reachChain = context->NextReachChain();
-	for( unsigned i = 0; i < reachChain.size(); ++i ) {
-		const auto &reach = aasReach[reachChain[i].ReachNum()];
-		int travelType = reach.traveltype;
-		if( travelType != TRAVEL_WALK ) {
-			break;
-		}
-		// Skip far areas, except they are next in the chain
-		if( this->startOrigin.SquareDistanceTo( reach.start ) > SQUARE( 768.0f )) {
-			if( lastReachIndex > 2 ) {
-				break;
-			}
-		}
-		lastReachIndex++;
-		// Make sure reach indices are in [0, MAX_TESTED_REACH) range
-		if( lastReachIndex + 1 == MAX_TESTED_REACH ) {
-			break;
-		}
+	ReachChainCollector reachChainCollector( context );
+	if( !reachChainCollector.Exec() ) {
+		return nullptr;
 	}
 
-	// There were no reachabilities having the given criteria found
-	if( lastReachIndex < 0 ) {
-		return false;
-	}
+	startOrigin.Set( entityPhysicsState.Origin() );
 
-	BotNavMeshQueryCache *mutableThis = const_cast<BotNavMeshQueryCache *>( this );
 	// Try finding a path to each area on the nav mesh, test and mark path polys using nav mesh raycasting
-	if( !mutableThis->TryNavMeshWalkabilityTests( context, lastReachIndex, resultPoint ) ) {
-		// Try testing and marking paths polys using collision/aas raycasting
-		if( !mutableThis->TryTraceAndAasWalkabilityTests( context, lastReachIndex, resultPoint ) ) {
-			return false;
-		}
+	if( const Vec3 *point = TryNavMeshWalkabilityTests( context, reachChainCollector.values ) ) {
+		return point;
 	}
 
-	return true;
+	// Try testing and marking paths polys using collision/aas raycasting
+	if( const Vec3 *point = TryTraceAndAasWalkabilityTests( context, reachChainCollector.values ) ) {
+		return point;
+	}
+
+	return nullptr;
 }
 
 template<typename T>
@@ -163,9 +172,8 @@ public:
 
 static BloomFilterSet<uint32_t> polysBloomFilterSet;
 
-bool BotNavMeshQueryCache::TryNavMeshWalkabilityTests( Context *context, int lastReachIndex, float *resultPoint ) {
+const Vec3 *BotNavMeshQueryCache::TryNavMeshWalkabilityTests( Context *context, const ReachChainVector &reachChain ) const {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	const auto &reachChain = context->NextReachChain();
 
 	const auto *aasWorld = AiAasWorld::Instance();
 	const auto *aasAreas = aasWorld->Areas();
@@ -178,7 +186,7 @@ bool BotNavMeshQueryCache::TryNavMeshWalkabilityTests( Context *context, int las
 	startAbsMaxs += this->startOrigin;
 	if( !entityPhysicsState.GroundEntity() ) {
 		if( entityPhysicsState.IsHighAboveGround() ) {
-			return false;
+			return nullptr;
 		}
 		float heightOverGround = entityPhysicsState.HeightOverGround();
 		startAbsMins.Z() -= heightOverGround;
@@ -188,14 +196,14 @@ bool BotNavMeshQueryCache::TryNavMeshWalkabilityTests( Context *context, int las
 
 	if( !bot->navMeshQuery ) {
 		if( !( bot->navMeshQuery = AiNavMeshManager::Instance()->AllocQuery( game.edicts[bot->EntNum()].r.client ) ) ) {
-			return false;
+			return nullptr;
 		}
 	}
 
 	auto *query = bot->navMeshQuery;
 	const uint32_t startPolyRef = query->FindNearestPoly( startAbsMins.Data(), startAbsMaxs.Data() );
 	if( !startPolyRef ) {
-		return false;
+		return nullptr;
 	}
 
 	const auto *navMeshManager = AiNavMeshManager::Instance();
@@ -204,9 +212,9 @@ bool BotNavMeshQueryCache::TryNavMeshWalkabilityTests( Context *context, int las
 	polysSet->Clear();
 
 	trace_t trace;
-	for( int reachChainIndex = lastReachIndex; reachChainIndex >= 0; --reachChainIndex ) {
+	for( int reachChainIndex = ( (int)reachChain.size() ) - 1; reachChainIndex >= 0; --reachChainIndex ) {
 		uint32_t *const pathPolyRefs = this->paths[reachChainIndex];
-		const auto &area = aasAreas[aasReach[reachChain[reachChainIndex].ReachNum()].areanum];
+		const auto &area = aasAreas[aasReach[reachChain[reachChainIndex]].areanum];
 		const uint32_t areaPolyRef = query->FindNearestPoly( area.mins, area.maxs );
 		if( !areaPolyRef ) {
 			continue;
@@ -234,12 +242,12 @@ bool BotNavMeshQueryCache::TryNavMeshWalkabilityTests( Context *context, int las
 
 			if( query->TraceWalkability( startPolyRef, startOrigin.Data(), pathPolyRefs[pathPolyIndex] ) ) {
 				// We have to check a real trace as well since Detour raycast ignores height
-				navMeshManager->GetPolyCenter( pathPolyRefs[pathPolyIndex], resultPoint );
-				resultPoint[2] += 1.0f - playerbox_stand_mins[2];
-				StaticWorldTrace( &trace, startOrigin.Data(), resultPoint, MASK_SOLID | MASK_WATER,
+				navMeshManager->GetPolyCenter( pathPolyRefs[pathPolyIndex], tmpOrigin.Data() );
+				tmpOrigin.Z() += 1.0f - playerbox_stand_mins[2];
+				StaticWorldTrace( &trace, startOrigin.Data(), tmpOrigin.Data(), MASK_SOLID | MASK_WATER,
 								  walkabilityTraceMins, walkabilityTraceMaxs );
 				if( trace.fraction == 1.0f ) {
-					return true;
+					return &tmpOrigin;
 				}
 
 				// Invalidate poly ref for further trace tests
@@ -248,12 +256,11 @@ bool BotNavMeshQueryCache::TryNavMeshWalkabilityTests( Context *context, int las
 		}
 	}
 
-	return false;
+	return nullptr;
 }
 
-bool BotNavMeshQueryCache::TryTraceAndAasWalkabilityTests( Context *context, int lastReachIndex, float *resultPoint ) {
+const Vec3 *BotNavMeshQueryCache::TryTraceAndAasWalkabilityTests( Context *, const ReachChainVector &reachChain ) const {
 	const auto *aasReach = aasWorld->Reachabilities();
-	const auto &reachChain = context->NextReachChain();
 	const auto *navMeshManager = AiNavMeshManager::Instance();
 
 	auto *const polysSet = &::polysBloomFilterSet;
@@ -268,12 +275,12 @@ bool BotNavMeshQueryCache::TryTraceAndAasWalkabilityTests( Context *context, int
 	// in all cases where it is possible (nav mesh is primarily used for fallback movement).
 
 	trace_t trace;
-	for( int reachChainIndex = lastReachIndex; reachChainIndex >= 0; --reachChainIndex ) {
+	for( int reachChainIndex = ( (int)reachChain.size() ) - 1; reachChainIndex >= 0; --reachChainIndex ) {
 		if( !pathLengths[reachChainIndex] ) {
 			continue;
 		}
 
-		const auto &reach = aasReach[reachChain[reachChainIndex].ReachNum()];
+		const auto &reach = aasReach[reachChain[reachChainIndex]];
 		// The poly is way too far and tracing through collision world/areas will be too expensive.
 		if( startOrigin.SquareDistanceTo( reach.start ) > SQUARE( 384.0f ) ) {
 			continue;
@@ -291,27 +298,25 @@ bool BotNavMeshQueryCache::TryTraceAndAasWalkabilityTests( Context *context, int
 				continue;
 			}
 
-			vec3_t pathPolyOrigin;
-			navMeshManager->GetPolyCenter( pathPolyRefs[pathPolyIndex], pathPolyOrigin );
-			pathPolyOrigin[2] += 1.0f - playerbox_stand_mins[2];
+			navMeshManager->GetPolyCenter( pathPolyRefs[pathPolyIndex], tmpOrigin.Data() );
+			tmpOrigin.Z() += 1.0f - playerbox_stand_mins[2];
 
-			if( !InspectAasWorldTraceToPoly( pathPolyOrigin ) ) {
+			if( !InspectAasWorldTraceToPoly( tmpOrigin.Data() ) ) {
 				continue;
 			}
 
-			StaticWorldTrace( &trace, startOrigin.Data(), pathPolyOrigin, MASK_SOLID | MASK_WATER,
+			StaticWorldTrace( &trace, startOrigin.Data(), tmpOrigin.Data(), MASK_SOLID | MASK_WATER,
 							  walkabilityTraceMins, walkabilityTraceMaxs );
 			if( trace.fraction == 1.0f ) {
-				VectorCopy( pathPolyOrigin, resultPoint );
-				return true;
+				return &tmpOrigin;
 			}
 		}
 	}
 
-	return false;
+	return nullptr;
 }
 
-bool BotNavMeshQueryCache::InspectAasWorldTraceToPoly( const vec3_t polyOrigin ) {
+bool BotNavMeshQueryCache::InspectAasWorldTraceToPoly( const vec3_t polyOrigin ) const {
 	const int polyAreaNum = aasWorld->FindAreaNum( polyOrigin );
 	if( !polyAreaNum ) {
 		return false;
