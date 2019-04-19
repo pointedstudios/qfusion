@@ -180,7 +180,6 @@ private:
 		}
 	};
 
-	CachesStack<Ai::ReachChainVector, MAX_PREDICTED_STATES> reachChainsCachesStack;
 	CachesStack<BotInput, MAX_PREDICTED_STATES> defaultBotInputsCachesStack;
 	CachesStack<HitWhileRunningTestResult, MAX_PREDICTED_STATES> mayHitWhileRunningCachesStack;
 	CachesStack<bool, MAX_PREDICTED_STATES> canSafelyKeepHighSpeedCachesStack;
@@ -310,7 +309,6 @@ public:
 
 	inline unsigned DefaultFrameTime() const;
 
-	const Ai::ReachChainVector &NextReachChain();
 	inline EnvironmentTraceCache &TraceCache();
 	inline ObstacleAvoidanceResult TryAvoidFullHeightObstacles( float correctionFraction );
 	inline ObstacleAvoidanceResult TryAvoidJumpableObstacles( float correctionFraction );

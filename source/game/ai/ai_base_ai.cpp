@@ -50,45 +50,6 @@ void Ai::SetAttitude( const edict_t *ent, int attitude_ ) {
 	}
 }
 
-void Ai::UpdateReachChain( const ReachChainVector &oldReachChain,
-						   ReachChainVector *currReachChain,
-						   const AiEntityPhysicsState &state ) const {
-	currReachChain->clear();
-	if( !navTarget ) {
-		return;
-	}
-
-	const aas_reachability_t *reachabilities = AiAasWorld::Instance()->Reachabilities();
-	const int goalAreaNum = NavTargetAasAreaNum();
-	// First skip reaches to reached area
-	unsigned i = 0;
-	for( i = 0; i < oldReachChain.size(); ++i ) {
-		if( reachabilities[oldReachChain[i].ReachNum()].areanum == state.CurrAasAreaNum() ) {
-			break;
-		}
-	}
-	// Copy remaining reachabilities
-	for( unsigned j = i + 1; j < oldReachChain.size(); ++j )
-		currReachChain->push_back( oldReachChain[j] );
-
-	int areaNum;
-	if( currReachChain->empty() ) {
-		areaNum = state.currAasAreaNum;
-	} else {
-		areaNum = reachabilities[currReachChain->back().ReachNum()].areanum;
-	}
-
-	int reachNum, travelTime;
-	while( areaNum != goalAreaNum && currReachChain->size() != currReachChain->capacity() ) {
-		// We hope we'll be pushed in some other area during movement, and goal area will become reachable. Leave as is.
-		if( !( travelTime = routeCache->PreferredRouteToGoalArea( areaNum, goalAreaNum, &reachNum ) ) ) {
-			break;
-		}
-		areaNum = reachabilities[reachNum].areanum;
-		currReachChain->emplace_back( ReachAndTravelTime( reachNum, (short)travelTime ) );
-	}
-}
-
 int Ai::CheckTravelTimeMillis( const Vec3& from, const Vec3 &to, bool allowUnreachable ) {
 
 	// We try to use the same checks the TacticalSpotsRegistry performs to find spots.

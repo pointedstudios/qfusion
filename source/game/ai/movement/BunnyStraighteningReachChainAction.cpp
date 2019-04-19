@@ -8,8 +8,7 @@ BunnyStraighteningReachChainAction::BunnyStraighteningReachChainAction( BotMovem
 	supportsObstacleAvoidance = false;
 	// The constructor cannot be defined in the header due to this bot member access
 	suggestedAction = &module->bunnyToBestNavMeshPointAction;
-	maxSuggestedLookDirs = Ai::ReachChainVector::capacity();
-	Assert( maxSuggestedLookDirs < MAX_SUGGESTED_LOOK_DIRS );
+	maxSuggestedLookDirs = MAX_SUGGESTED_LOOK_DIRS;
 }
 
 void BunnyStraighteningReachChainAction::BeforePlanning() {

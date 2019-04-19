@@ -276,22 +276,6 @@ void MovementPredictionContext::ShowBuiltPlanPath( bool useActionsColor ) const 
 	}
 }
 
-const Ai::ReachChainVector &MovementPredictionContext::NextReachChain() {
-	if( const auto *cachedReachChain = reachChainsCachesStack.GetCached() ) {
-		return *cachedReachChain;
-	}
-
-	Ai::ReachChainVector dummy;
-	const Ai::ReachChainVector *oldReachChain = &dummy;
-	if( const auto *cachedOldReachChain = reachChainsCachesStack.GetCachedValueBelowTopOfStack() ) {
-		oldReachChain = cachedOldReachChain;
-	}
-
-	auto *newReachChain = new( reachChainsCachesStack.GetUnsafeBufferForCachedValue() ) Ai::ReachChainVector;
-	bot->UpdateReachChain( *oldReachChain, newReachChain, movementState->entityPhysicsState );
-	return *newReachChain;
-};
-
 static void Intercepted_PredictedEvent( int entNum, int ev, int parm ) {
 	game.edicts[entNum].ai->botRef->OnInterceptedPredictedEvent( ev, parm );
 }
@@ -546,7 +530,6 @@ void MovementPredictionContext::SetupStackForStep() {
 		Assert( playerStatesStack.size() == predictedMovementActions.size() );
 
 		Assert( defaultBotInputsCachesStack.Size() == predictedMovementActions.size() );
-		Assert( reachChainsCachesStack.Size() == predictedMovementActions.size() );
 		Assert( mayHitWhileRunningCachesStack.Size() == predictedMovementActions.size() );
 		Assert( canSafelyKeepHighSpeedCachesStack.Size() == predictedMovementActions.size() );
 		Assert( environmentTestResultsStack.size() == predictedMovementActions.size() );
@@ -562,7 +545,6 @@ void MovementPredictionContext::SetupStackForStep() {
 			playerStatesStack.truncate( topOfStackIndex );
 
 			defaultBotInputsCachesStack.PopToSize( topOfStackIndex );
-			reachChainsCachesStack.PopToSize( topOfStackIndex );
 			mayHitWhileRunningCachesStack.PopToSize( topOfStackIndex );
 			canSafelyKeepHighSpeedCachesStack.PopToSize( topOfStackIndex );
 			environmentTestResultsStack.truncate( topOfStackIndex );
@@ -590,7 +572,6 @@ void MovementPredictionContext::SetupStackForStep() {
 		playerStatesStack.clear();
 
 		defaultBotInputsCachesStack.PopToSize( 0 );
-		reachChainsCachesStack.PopToSize( 0 );
 		mayHitWhileRunningCachesStack.PopToSize( 0 );
 		canSafelyKeepHighSpeedCachesStack.PopToSize( 0 );
 		environmentTestResultsStack.clear();
@@ -619,14 +600,12 @@ void MovementPredictionContext::SetupStackForStep() {
 	this->record = &topOfStack->record;
 	this->record->pendingWeapon = -1;
 
-	Assert( reachChainsCachesStack.Size() + 1 == predictedMovementActions.size() );
 	Assert( mayHitWhileRunningCachesStack.Size() + 1 == predictedMovementActions.size() );
 	// Check caches size, a cache size must match the stack size after addition of a single placeholder element.
 	Assert( defaultBotInputsCachesStack.Size() + 1 == predictedMovementActions.size() );
 	// Then put placeholders for non-cached yet values onto top of caches stack
 	defaultBotInputsCachesStack.PushDummyNonCachedValue();
 	// The different method is used (there is no copy/move constructors for the template type)
-	reachChainsCachesStack.UnsafeGrowForNonCachedValue();
 	mayHitWhileRunningCachesStack.PushDummyNonCachedValue();
 	canSafelyKeepHighSpeedCachesStack.PushDummyNonCachedValue();
 	new ( environmentTestResultsStack.unsafe_grow_back() )EnvironmentTraceCache;

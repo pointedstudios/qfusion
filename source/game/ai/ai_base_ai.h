@@ -307,32 +307,6 @@ protected:
 		prevThinkAt = level.time;
 	}
 public:
-	static constexpr unsigned MAX_REACH_CACHED = 20;
-	struct alignas ( 2 )ReachAndTravelTime {
-private:
-		// Split an integer value in two parts to allow 2-byte alignment
-		uint16_t reachNumHiPart;
-		uint16_t reachNumLoPart;
-
-public:
-		// AAS travel time to a nav target in centiseconds (seconds ^-2).
-		// Do not confuse with travel time required to pass the reach. itself.
-		// The intrinsic reach. travel time can be retrieved from the reach. properties addressed by the reachNum.
-		short aasTravelTimeToTarget;
-
-		ReachAndTravelTime( int reachNum_, short aasTravelTimeToTarget_ )
-		{
-			this->reachNumHiPart = (uint16_t)( (unsigned)reachNum_ >> 16 );
-			this->reachNumLoPart = (uint16_t)( (unsigned)reachNum_ & 0xFFFF );
-			this->aasTravelTimeToTarget = aasTravelTimeToTarget_;
-		}
-
-		int ReachNum() const { return (int)( ( reachNumHiPart << 16 ) | reachNumLoPart ); }
-	};
-	static_assert( sizeof( ReachAndTravelTime ) == 6, "" );
-
-	typedef StaticVector<ReachAndTravelTime, MAX_REACH_CACHED> ReachChainVector;
-
 	static constexpr float DEFAULT_YAW_SPEED = 330.0f;
 	static constexpr float DEFAULT_PITCH_SPEED = 170.0f;
 
@@ -457,11 +431,6 @@ protected:
 
 	virtual Vec3 GetNewViewAngles( const vec3_t oldAngles, const Vec3 &desiredDirection,
 								   unsigned frameTime, float angularSpeedMultiplier ) const;
-
-	void UpdateReachChain( const ReachChainVector &oldReachChain,
-						   ReachChainVector *currReachChain,
-						   const AiEntityPhysicsState &state ) const;
-
 private:
 	float GetChangedAngle( float oldAngle, float desiredAngle, unsigned frameTime,
 						   float angularSpeedMultiplier, int angleIndex ) const;
