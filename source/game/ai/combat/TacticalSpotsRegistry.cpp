@@ -102,6 +102,14 @@ bool TacticalSpotsRegistry::Load( const char *mapname ) {
 
 constexpr const uint32_t PRECOMPUTED_DATA_VERSION = 0x1337A001;
 
+static void *SpotsAlloc( size_t size ) {
+	return G_Malloc( size );
+}
+
+static void SpotsFree( void *p ) {
+	G_Free( p );
+}
+
 static const char *MakePrecomputedFilePath( char *buffer, size_t bufferSize, const char *mapName ) {
 	Q_snprintfz( buffer, bufferSize, "ai/%s.spots", mapName );
 	return buffer;
@@ -113,7 +121,8 @@ bool TacticalSpotsRegistry::TryLoadPrecomputedData( const char *mapName ) {
 
 	constexpr const char *function = "TacticalSpotsRegistry::TryLoadPrecomputedData()";
 
-	AiPrecomputedFileReader reader( "PrecomputedFileReader@TacticalSpotsRegistry", PRECOMPUTED_DATA_VERSION );
+	AiPrecomputedFileReader reader( "PrecomputedFileReader@TacticalSpotsRegistry",
+									PRECOMPUTED_DATA_VERSION, SpotsAlloc, SpotsFree );
 
 	uint32_t dataLength;
 	uint8_t *data;
@@ -252,7 +261,8 @@ void TacticalSpotsRegistry::SavePrecomputedData( const char *mapName ) {
 	char fileName[MAX_QPATH];
 	MakePrecomputedFilePath( fileName, sizeof( fileName ), mapName );
 
-	AiPrecomputedFileWriter writer( "PrecomputedFileWriter@TacticalSpotsRegistry", PRECOMPUTED_DATA_VERSION );
+	AiPrecomputedFileWriter writer( "PrecomputedFileWriter@TacticalSpotsRegistry",
+									PRECOMPUTED_DATA_VERSION, SpotsAlloc, SpotsFree );
 	if( !writer.BeginWriting( fileName ) ) {
 		return;
 	}
@@ -275,7 +285,7 @@ void TacticalSpotsRegistry::SavePrecomputedData( const char *mapName ) {
 	}
 
 	// Prevent using byte-swapped spots
-	G_LevelFree( spots );
+	G_Free( spots );
 	spots = nullptr;
 
 	const int numAreas = AiAasWorld::Instance()->NumAreas();
@@ -292,7 +302,7 @@ void TacticalSpotsRegistry::SavePrecomputedData( const char *mapName ) {
 	}
 
 	// Prevent using byte-swapped travel times table
-	G_LevelFree( spotsAndAreasTravelTimeTable );
+	G_Free( spotsAndAreasTravelTimeTable );
 	spotsAndAreasTravelTimeTable = nullptr;
 
 	static_assert( sizeof( *spotVisibilityTable ) == 1, "Byte swapping is required" );
@@ -302,7 +312,7 @@ void TacticalSpotsRegistry::SavePrecomputedData( const char *mapName ) {
 	}
 
 	// Release the data for conformance with the rest of the saved data
-	G_LevelFree( spotVisibilityTable );
+	G_Free( spotVisibilityTable );
 	spotVisibilityTable = nullptr;
 
 	spotsGrid.Save( writer );
@@ -331,7 +341,7 @@ void TacticalSpotsRegistry::PrecomputedSpotsGrid::Save( AiPrecomputedFileWriter 
 	}
 
 	// Prevent using byte-swapped grid list offsets
-	G_LevelFree( gridListOffsets );
+	G_Free( gridListOffsets );
 	gridListOffsets = nullptr;
 
 	dataLength = sizeof( uint16_t ) * ( NumGridCells() + numSpots );
@@ -340,7 +350,7 @@ void TacticalSpotsRegistry::PrecomputedSpotsGrid::Save( AiPrecomputedFileWriter 
 	}
 
 	// Prevent using byte-swapped grid spots lists
-	G_LevelFree( gridSpotsLists );
+	G_Free( gridSpotsLists );
 	gridSpotsLists = nullptr;
 }
 
@@ -364,13 +374,13 @@ TacticalSpotsRegistry::~TacticalSpotsRegistry() {
 
 	numSpots = 0;
 	if( spots ) {
-		G_LevelFree( spots );
+		G_Free( spots );
 	}
 	if( spotVisibilityTable ) {
-		G_LevelFree( spotVisibilityTable );
+		G_Free( spotVisibilityTable );
 	}
 	if( spotsAndAreasTravelTimeTable ) {
-		G_LevelFree( spotsAndAreasTravelTimeTable );
+		G_Free( spotsAndAreasTravelTimeTable );
 	}
 }
 
@@ -378,7 +388,7 @@ void TacticalSpotsBuilder::ComputeMutualSpotsVisibility() {
 	G_Printf( "Computing mutual tactical spots visibility (it might take a while)...\n" );
 
 	unsigned uNumSpots = (unsigned)numSpots;
-	spotVisibilityTable = (unsigned char *)G_LevelMalloc( uNumSpots * uNumSpots );
+	spotVisibilityTable = (unsigned char *)G_Malloc( uNumSpots * uNumSpots );
 
 	float *mins = vec3_origin;
 	float *maxs = vec3_origin;
@@ -461,7 +471,7 @@ void TacticalSpotsBuilder::ComputeTravelTimeTable() {
 	constexpr auto badAreaFlags = AREA_DISABLED;
 	constexpr auto badAreaContents = AREACONTENTS_LAVA | AREACONTENTS_SLIME | AREACONTENTS_DONOTENTER;
 
-	spotsAndAreasTravelTimeTable = (uint16_t *)G_LevelMalloc( 2 *  sizeof( uint16_t ) * numSpots * numAreas );
+	spotsAndAreasTravelTimeTable = (uint16_t *)G_Malloc( 2 *  sizeof( uint16_t ) * numSpots * numAreas );
 
 	int rowOffset = 0;
 	for( int areaNum = 0; areaNum < numAreas; ++areaNum ) {
@@ -484,19 +494,19 @@ void TacticalSpotsBuilder::ComputeTravelTimeTable() {
 
 TacticalSpotsBuilder::~TacticalSpotsBuilder() {
 	if( candidateAreas ) {
-		G_LevelFree( candidateAreas );
+		G_Free( candidateAreas );
 	}
 	if ( candidatePoints ) {
-		G_LevelFree( candidatePoints );
+		G_Free( candidatePoints );
 	}
 	if( spots ) {
-		G_LevelFree( spots );
+		G_Free( spots );
 	}
 	if( spotVisibilityTable ) {
-		G_LevelFree( spotVisibilityTable );
+		G_Free( spotVisibilityTable );
 	}
 	if( spotsAndAreasTravelTimeTable ) {
-		G_LevelFree( spotsAndAreasTravelTimeTable );
+		G_Free( spotsAndAreasTravelTimeTable );
 	}
 }
 
@@ -870,10 +880,10 @@ T *TacticalSpotsBuilder::AllocItem( T **items, int *numItems, int *itemsCapacity
 	} else {
 		*itemsCapacity = ( 3 * ( *itemsCapacity ) ) / 2;
 	}
-	T *newData = (T *)G_LevelMalloc( sizeof( T ) * ( *itemsCapacity ) );
+	T *newData = (T *)G_Malloc( sizeof( T ) * ( *itemsCapacity ) );
 	if( *items ) {
 		memcpy( newData, *items, sizeof( T ) * ( *numItems ) );
-		G_LevelFree( *items );
+		G_Free( *items );
 	}
 	*items = newData;
 	return ( *items ) + ( *numItems )++;
@@ -1002,10 +1012,10 @@ SpotsQueryVector &TacticalSpotsRegistry::BaseSpotsGrid::FindSpotsInRadius( const
 
 TacticalSpotsRegistry::PrecomputedSpotsGrid::~PrecomputedSpotsGrid() {
 	if( gridListOffsets ) {
-		G_LevelFree( gridListOffsets );
+		G_Free( gridListOffsets );
 	}
 	if( gridSpotsLists ) {
-		G_LevelFree( gridSpotsLists );
+		G_Free( gridSpotsLists );
 	}
 }
 
@@ -1034,7 +1044,7 @@ TacticalSpotsRegistry::SpotsGridBuilder::SpotsGridBuilder( TacticalSpotsRegistry
 	: BaseSpotsGrid( parent_ ) {
 	SetupGridParams();
 
-	gridSpotsArrays = ( GridSpotsArray ** )( G_LevelMalloc( NumGridCells() * sizeof( GridSpotsArray * ) ) );
+	gridSpotsArrays = ( GridSpotsArray ** )( G_Malloc( NumGridCells() * sizeof( GridSpotsArray * ) ) );
 }
 
 TacticalSpotsRegistry::SpotsGridBuilder::~SpotsGridBuilder() {
@@ -1042,10 +1052,10 @@ TacticalSpotsRegistry::SpotsGridBuilder::~SpotsGridBuilder() {
 		for( unsigned i = 0, end = NumGridCells(); i < end; ++i ) {
 			if( gridSpotsArrays[i] ) {
 				gridSpotsArrays[i]->~GridSpotsArray();
-				G_LevelFree( gridSpotsArrays[i] );
+				G_Free( gridSpotsArrays[i] );
 			}
 		}
-		G_LevelFree( gridSpotsArrays );
+		G_Free( gridSpotsArrays );
 	}
 }
 
@@ -1072,7 +1082,7 @@ void TacticalSpotsRegistry::SpotsGridBuilder::AddSpotToGridList( unsigned gridCe
 		return;
 	}
 
-	array = new( G_LevelMalloc( sizeof( GridSpotsArray ) ) )GridSpotsArray;
+	array = new( G_Malloc( sizeof( GridSpotsArray ) ) )GridSpotsArray;
 	array->AddSpot( spotNum );
 	gridSpotsArrays[gridCellNum] = array;
 }
@@ -1083,10 +1093,10 @@ void TacticalSpotsRegistry::SpotsGridBuilder::GridSpotsArray::AddSpot( uint16_t 
 		return;
 	}
 
-	uint16_t *newData = (uint16_t *)G_LevelMalloc( sizeof( uint16_t ) * ( this->capacity + 16 ) );
+	uint16_t *newData = (uint16_t *)G_Malloc( sizeof( uint16_t ) * ( this->capacity + 16 ) );
 	memcpy( newData, this->data, sizeof( uint16_t ) * this->size );
 	if( this->data != internalBuffer ) {
-		G_LevelFree( this->data );
+		G_Free( this->data );
 	}
 
 	if( this->capacity > MAX_SPOTS_PER_QUERY ) {
@@ -1112,18 +1122,18 @@ void TacticalSpotsRegistry::SpotsGridBuilder::CopyTo( PrecomputedSpotsGrid *prec
 	// Should not really happen if it is used as intended,
 	// but calling CopyTo() with an initialized grid as an argument is legal
 	if( precomputedGrid->gridListOffsets ) {
-		G_LevelFree( precomputedGrid->gridListOffsets );
+		G_Free( precomputedGrid->gridListOffsets );
 	}
 	if( precomputedGrid->gridSpotsLists ) {
-		G_LevelFree( precomputedGrid->gridSpotsLists );
+		G_Free( precomputedGrid->gridSpotsLists );
 	}
 
 	precomputedGrid->numSpots = this->numSpots;
 	precomputedGrid->spots = this->spots;
 
 	unsigned totalNumCells = NumGridCells();
-	precomputedGrid->gridListOffsets = (uint32_t *)G_LevelMalloc( sizeof( uint32_t ) * totalNumCells );
-	precomputedGrid->gridSpotsLists = (uint16_t *)G_LevelMalloc( sizeof( uint16_t ) * ( totalNumCells + numSpots ) );
+	precomputedGrid->gridListOffsets = (uint32_t *)G_Malloc( sizeof( uint32_t ) * totalNumCells );
+	precomputedGrid->gridSpotsLists = (uint16_t *)G_Malloc( sizeof( uint16_t ) * ( totalNumCells + numSpots ) );
 
 	uint16_t *listPtr = precomputedGrid->gridSpotsLists;
 	// For each cell of all possible cells

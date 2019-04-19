@@ -218,7 +218,7 @@ private:
 
 			~GridSpotsArray() {
 				if( data != internalBuffer ) {
-					G_LevelFree( data );
+					G_Free( data );
 				}
 			}
 
