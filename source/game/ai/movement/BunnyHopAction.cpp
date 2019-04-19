@@ -629,8 +629,8 @@ bool BunnyHopAction::TryHandlingWorseTravelTimeToTarget( Context *context,
 		}
 	}
 
-	Debug( format );
-	return false;
+	EnsurePathPenalty( 3000 );
+	return true;
 }
 
 bool BunnyHopAction::CheckDirectReachWalkingOrFallingShort( int fromAreaNum, int toAreaNum ) {
@@ -862,6 +862,14 @@ void BunnyHopAction::CheckPredictionStepResults( Context *context ) {
 		if( clusterNum == aasWorld->FloorClusterNum( groundedAreaNum ) ) {
 			if( aasWorld->IsAreaWalkableInFloorCluster( groundedAreaNum, mayStopAtAreaNum ) ) {
 				CompleteOrSaveGoodEnoughPath( context );
+				return;
+			}
+			// Floor clusters boundaries are not convex so checking whether
+			// it's walkable in a straight line is a good idea.
+			// However it turned out that we need more permissive checks.
+			// This one allows tiny obstacles (that may be jumped over) be in-between these points.
+			if( TraceArcInSolidWorld( mayStopAtOrigin, newEntityPhysicsState.Origin() ) ) {
+				CompleteOrSaveGoodEnoughPath( context, 1000 );
 				return;
 			}
 		}
