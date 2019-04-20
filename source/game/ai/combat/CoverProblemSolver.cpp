@@ -43,7 +43,7 @@ int CoverProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 
 	// Sort spots before a final selection so best spots are first
 	std::sort( reachCheckedSpots.begin(), reachCheckedSpots.end() );
-	return CleanupAndCopyResults( reachCheckedSpots, spots, maxSpots );
+	return MakeResultsFilteringByProximity( reachCheckedSpots, spots, maxSpots );
 }
 
 SpotsAndScoreVector &CoverProblemSolver::FilterByAreaVisTables( SpotsAndScoreVector &spotsAndScores ) {

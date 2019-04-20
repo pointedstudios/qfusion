@@ -11,7 +11,7 @@ int DodgeHazardProblemSolver::FindMany( vec3_t *spotOrigins, int maxSpots ) {
 	TryModifyingScoreByVelocityConformance( reachCheckedSpots );
 	// Sort spots before a final selection so best spots are first
 	std::sort( reachCheckedSpots.begin(), reachCheckedSpots.end() );
-	return CleanupAndCopyResults( reachCheckedSpots, spotOrigins, maxSpots );
+	return MakeResultsFilteringByProximity( reachCheckedSpots, spotOrigins, maxSpots );
 }
 
 void DodgeHazardProblemSolver::TryModifyingScoreByVelocityConformance( SpotsAndScoreVector &reachCheckedSpots ) {

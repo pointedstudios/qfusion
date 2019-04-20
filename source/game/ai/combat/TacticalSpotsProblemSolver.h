@@ -123,11 +123,7 @@ protected:
 
 	virtual SpotsAndScoreVector &ApplyEnemiesInfluence( SpotsAndScoreVector &candidateSpots );
 
-	int CleanupAndCopyResults( SpotsAndScoreVector &spots, vec3_t *spotOrigins, int maxSpots ) {
-		return CleanupAndCopyResults( ArrayRange<SpotAndScore>( spots.begin(), spots.end()), spotOrigins, maxSpots );
-	}
-
-	virtual int CleanupAndCopyResults( const ArrayRange<SpotAndScore> &spotsRange, vec3_t *spotOrigins, int maxSpots );
+	virtual int MakeResultsFilteringByProximity( SpotsAndScoreVector &spotsAndScores, vec3_t *spotOrigins, int maxSpots );
 
 	SpotsAndScoreVector &SortAndTakeNBestIfOptimizingAggressively( SpotsAndScoreVector &spotsAndScores, int limit ) {
 		assert( limit > 0 && limit <= MAX_SPOTS );

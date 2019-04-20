@@ -325,15 +325,14 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::ApplyEnemiesInfluence( SpotsAnd
 	return candidateSpots;
 }
 
-int TacticalSpotsProblemSolver::CleanupAndCopyResults( const ArrayRange<SpotAndScore> &spotsRange,
-													   vec3_t *spotOrigins, int maxSpots ) {
-	const auto resultsSize = (unsigned)spotsRange.size();
+int TacticalSpotsProblemSolver::MakeResultsFilteringByProximity( SpotsAndScoreVector &spotsAndScores,
+	                                                             vec3_t *spotOrigins, int maxSpots ) {
+	const auto resultsSize = spotsAndScores.size();
 	if( maxSpots == 0 || resultsSize == 0 ) {
 		return 0;
 	}
 
 	const auto *const spots = tacticalSpotsRegistry->spots;
-	const auto *const spotsAndScores = spotsRange.begin();
 
 	// Its a common case so give it an optimized branch
 	if( maxSpots == 1 ) {
