@@ -46,7 +46,7 @@ private:
 
 	SpotsAndScoreVector &CheckOriginVisibility( SpotsAndScoreVector &candidateSpots );
 
-	void SortByVisAndOtherFactors( SpotsAndScoreVector &spots );
+	SpotsAndScoreVector &ApplyVisAndOtherFactors( SpotsAndScoreVector &spots );
 
 	SpotsQueryVector &FilterByVisTables( SpotsQueryVector &spotsFromQuery );
 

@@ -21,12 +21,26 @@ int CoverProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 	StaticVector<int, MAX_EDICTS> entNums;
 	const int topNode = FindTopNodeAndEntNums( filteredByVisTablesSpots, entNums );
 
-	// These calls rely on vis tables to some degree and thus should not be extremely expensive
-	SpotsAndScoreVector &filteredByCoarseRayTests = FilterByCoarseRayTests( filteredByVisTablesSpots, topNode, entNums );
-	SpotsAndScoreVector &enemyCheckedSpots = CheckEnemiesInfluence( filteredByCoarseRayTests );
-	// Even "fine" collision checks are actually faster than pathfinding
+	// These calls rely on vis tables to some degree and thus should not be extremely expensive.
+	// Make sure we select not less than 5 candidates if possible even if maxSpots is lesser.
+	SpotsAndScoreVector &filteredByCoarseRayTests = SortAndTakeNBestIfOptimizingAggressively(
+		FilterByCoarseRayTests( filteredByVisTablesSpots, topNode, entNums ), std::max( 5, maxSpots ) );
+
+	// Make sure we select not less than 5 candidates if possible even if maxSpots is lesser.
+	SpotsAndScoreVector &enemyCheckedSpots = SortAndTakeNBestIfOptimizingAggressively(
+		ApplyEnemiesInfluence( filteredByCoarseRayTests ), std::max( 5, maxSpots ) );
+
+	// Even "fine" collision checks are actually faster than pathfinding.
 	SpotsAndScoreVector &coverSpots = SelectCoverSpots( enemyCheckedSpots, topNode, entNums );
-	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( coverSpots );
+
+	// Always sort before the last selection
+	std::sort( coverSpots.begin(), coverSpots.end() );
+
+	// Make sure we select not less than 3 candidates if possible even if maxSpots is lesser.
+	SpotsAndScoreVector &finalCandidates = TakeNBestIfOptimizingAggressively( coverSpots, std::max( 3, maxSpots ) );
+
+	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( finalCandidates );
+
 	// Sort spots before a final selection so best spots are first
 	std::sort( reachCheckedSpots.begin(), reachCheckedSpots.end() );
 	return CleanupAndCopyResults( reachCheckedSpots, spots, maxSpots );

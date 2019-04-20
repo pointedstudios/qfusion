@@ -32,7 +32,7 @@ public:
 		int maxFeasibleTravelTimeMillis { 5000 };
 		float spotProximityThreshold { 64.0f };
 		bool checkToAndBackReach { false };
-
+		bool optimizeAggressively { false };
 	public:
 		void SetCheckToAndBackReach( bool checkToAndBack ) {
 			this->checkToAndBackReach = checkToAndBack;
@@ -77,6 +77,10 @@ public:
 			this->enemiesInfluence = Clamp( influence_ );
 			this->lastSeenEnemyMillisThreshold = lastSeenMillisThreshold_;
 		}
+
+		void OptimizeAggressively( bool doIt ) {
+			optimizeAggressively = doIt;
+		}
 	};
 
 protected:
@@ -117,13 +121,39 @@ protected:
 		return CheckSpotsReachFromOrigin( candidateSpots );
 	}
 
-	virtual SpotsAndScoreVector &CheckEnemiesInfluence( SpotsAndScoreVector &candidateSpots );
+	virtual SpotsAndScoreVector &ApplyEnemiesInfluence( SpotsAndScoreVector &candidateSpots );
 
 	int CleanupAndCopyResults( SpotsAndScoreVector &spots, vec3_t *spotOrigins, int maxSpots ) {
 		return CleanupAndCopyResults( ArrayRange<SpotAndScore>( spots.begin(), spots.end()), spotOrigins, maxSpots );
 	}
 
 	virtual int CleanupAndCopyResults( const ArrayRange<SpotAndScore> &spotsRange, vec3_t *spotOrigins, int maxSpots );
+
+	SpotsAndScoreVector &SortAndTakeNBestIfOptimizingAggressively( SpotsAndScoreVector &spotsAndScores, int limit ) {
+		assert( limit > 0 && limit <= MAX_SPOTS );
+		if( !problemParams.optimizeAggressively ) {
+			return spotsAndScores;
+		}
+		if( spotsAndScores.size() <= (unsigned)limit ) {
+			return spotsAndScores;
+		}
+		std::sort( spotsAndScores.begin(), spotsAndScores.end() );
+		spotsAndScores.truncate( (unsigned)limit );
+		return spotsAndScores;
+	}
+
+	SpotsAndScoreVector &TakeNBestIfOptimizingAggressively( SpotsAndScoreVector &spotsAndScores, int limit ) {
+		assert( limit > 0 && limit <= MAX_SPOTS );
+		assert( std::is_sorted( spotsAndScores.begin(), spotsAndScores.end() ) );
+		if( !problemParams.optimizeAggressively ) {
+			return spotsAndScores;
+		}
+		if( spotsAndScores.size() <= (unsigned)limit ) {
+			return spotsAndScores;
+		}
+		spotsAndScores.truncate( (unsigned)limit );
+		return spotsAndScores;
+	}
 private:
 	const BaseProblemParams &problemParams;
 public:

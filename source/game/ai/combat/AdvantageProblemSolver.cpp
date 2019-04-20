@@ -13,13 +13,25 @@ int AdvantageProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 	SpotsAndScoreVector &candidateSpots = SelectCandidateSpots( filteredByVisTablesSpots );
 	// Cut off expensive routing calls for spots that a-priori do not have a feasible travel time
 	SpotsAndScoreVector &filteredByReachTablesSpots = FilterByReachTables( candidateSpots );
-	// Now cast rays in a collision world... it's actually cheaper than pathfinding
-	SpotsAndScoreVector &visCheckedSpots = CheckOriginVisibility( filteredByReachTablesSpots );
+
+	// Now cast rays in a collision world... it's actually cheaper than pathfinding.
+	// Make sure we select not less than 5 candidates if possible even if maxSpots is lesser.
+	SpotsAndScoreVector &visCheckedSpots = SortAndTakeNBestIfOptimizingAggressively(
+		CheckOriginVisibility( filteredByReachTablesSpots ), std::max( 5, maxSpots ) );
+
 	// Apply enemy influence... this is not that expensive
-	SpotsAndScoreVector &enemyCheckedSpots = CheckEnemiesInfluence( visCheckedSpots );
-	// Prepare to stop at the first feasible spot
-	SortByVisAndOtherFactors( enemyCheckedSpots );
-	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( enemyCheckedSpots );
+	SpotsAndScoreVector &enemyCheckedSpots = SortAndTakeNBestIfOptimizingAggressively(
+		ApplyEnemiesInfluence( visCheckedSpots ), std::max( 5, maxSpots ) );
+
+	// Make sure we select not less than 3 candidates if possible even if maxSpots is lesser
+	SpotsAndScoreVector &sortedCandidates = ApplyVisAndOtherFactors( enemyCheckedSpots );
+
+	// Should be always sorted before the last selection call
+	std::sort( sortedCandidates.begin(), sortedCandidates.end() );
+
+	SpotsAndScoreVector &finalCandidates = TakeNBestIfOptimizingAggressively( sortedCandidates, std::max( 3, maxSpots ) );
+
+	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( finalCandidates );
 	return CleanupAndCopyResults( reachCheckedSpots, spots, maxSpots );
 }
 
@@ -154,10 +166,10 @@ SpotsAndScoreVector &AdvantageProblemSolver::CheckOriginVisibility( SpotsAndScor
 	return result;
 }
 
-void AdvantageProblemSolver::SortByVisAndOtherFactors( SpotsAndScoreVector &result ) {
+SpotsAndScoreVector &AdvantageProblemSolver::ApplyVisAndOtherFactors( SpotsAndScoreVector &result ) {
 	const unsigned resultSpotsSize = result.size();
 	if( resultSpotsSize <= 1 ) {
-		return;
+		return result;
 	}
 
 	const Vec3 origin( originParams.origin );
@@ -224,6 +236,5 @@ void AdvantageProblemSolver::SortByVisAndOtherFactors( SpotsAndScoreVector &resu
 		result[i].score = score;
 	}
 
-	// Sort results so best score spots are first
-	std::stable_sort( result.begin(), result.end() );
+	return result;
 }

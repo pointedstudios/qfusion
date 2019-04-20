@@ -175,7 +175,7 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOriginAndBac
 	return result;
 }
 
-SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckEnemiesInfluence( SpotsAndScoreVector &candidateSpots ) {
+SpotsAndScoreVector &TacticalSpotsProblemSolver::ApplyEnemiesInfluence( SpotsAndScoreVector &candidateSpots ) {
 	if( candidateSpots.empty() ) {
 		return candidateSpots;
 	}
