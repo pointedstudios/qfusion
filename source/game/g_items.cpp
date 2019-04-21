@@ -56,16 +56,21 @@ void DoRespawn( edict_t *ent ) {
 	G_AddEvent( ent, EV_ITEM_RESPAWN, ent->item ? ent->item->tag : 0, true );
 
 	// powerups announce their presence with a global sound
-	if( ent->item && ( ent->item->type & IT_POWERUP ) ) {
-		if( ent->item->tag == POWERUP_QUAD ) {
-			G_GlobalSound( CHAN_AUTO, trap_SoundIndex( S_ITEM_QUAD_RESPAWN ) );
-		}
-		if( ent->item->tag == POWERUP_SHELL ) {
-			G_GlobalSound( CHAN_AUTO, trap_SoundIndex( S_ITEM_WARSHELL_RESPAWN ) );
-		}
-		if( ent->item->tag == POWERUP_REGEN ) {
-			G_GlobalSound( CHAN_AUTO, trap_SoundIndex( S_ITEM_REGEN_RESPAWN ) );
-		}
+	if( !ent->item || !( ent->item->type & IT_POWERUP ) ) {
+		return;
+	}
+
+	int soundIndex = 0;
+	if( ent->item->tag == POWERUP_QUAD ) {
+		soundIndex = trap_SoundIndex( S_ITEM_QUAD_RESPAWN );
+	} else if( ent->item->tag == POWERUP_SHELL ) {
+		soundIndex = trap_SoundIndex( S_ITEM_WARSHELL_RESPAWN );
+	} else if( ent->item->tag == POWERUP_REGEN ) {
+		soundIndex = trap_SoundIndex( S_ITEM_REGEN_RESPAWN );
+	}
+
+	if( soundIndex ) {
+		G_PositionedSound( ent->s.origin, CHAN_AUTO, soundIndex, ATTN_DISTANT );
 	}
 }
 
