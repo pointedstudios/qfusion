@@ -112,6 +112,8 @@ bool BotTacticalSpotsCache::FindSniperRangeTacticalSpot( const Vec3 &origin, con
 	problemParams.SetHeightOverOriginInfluence( 0.3f );
 	problemParams.SetHeightOverEntityInfluence( 0.1f );
 	problemParams.SetCheckToAndBackReach( false );
+	problemParams.SetMaxFeasibleTravelTimeMillis( 12500 );
+	problemParams.OptimizeAggressively( true );
 	TakeEnemiesIntoAccount( problemParams );
 
 	float searchRadius = 192.0f + 768.0f * Skill();
@@ -137,6 +139,8 @@ bool BotTacticalSpotsCache::FindFarRangeTacticalSpot( const Vec3 &origin, const 
 	problemParams.SetHeightOverOriginInfluence( 0.3f );
 	problemParams.SetHeightOverEntityInfluence( 0.7f );
 	problemParams.SetCheckToAndBackReach( false );
+	problemParams.SetMaxFeasibleTravelTimeMillis( 7500 );
+	problemParams.OptimizeAggressively( true );
 	TakeEnemiesIntoAccount( problemParams );
 
 	float searchRadius = 192.0f + 768.0f * Skill();
@@ -165,6 +169,7 @@ bool BotTacticalSpotsCache::FindMiddleRangeTacticalSpot( const Vec3 &origin, con
 	problemParams.SetHeightOverOriginInfluence( 0.6f );
 	problemParams.SetHeightOverEntityInfluence( 0.8f );
 	problemParams.SetCheckToAndBackReach( false );
+	problemParams.SetMaxFeasibleTravelTimeMillis( 4000 );
 	TakeEnemiesIntoAccount( problemParams );
 
 	float searchRadius = WorldState::MIDDLE_RANGE_MAX;
@@ -195,6 +200,7 @@ bool BotTacticalSpotsCache::FindCloseRangeTacticalSpot( const Vec3 &origin, cons
 	problemParams.SetHeightOverEntityInfluence( 0.9f );
 	// Bot should be able to retreat from close combat
 	problemParams.SetCheckToAndBackReach( true );
+	problemParams.SetMaxFeasibleTravelTimeMillis( 2000 );
 	TakeEnemiesIntoAccount( problemParams );
 
 	float searchRadius = WorldState::CLOSE_RANGE_MAX * 2;
@@ -218,6 +224,7 @@ bool BotTacticalSpotsCache::FindCoverSpot( const Vec3 &origin, const Vec3 &enemy
 	problemParams.SetMinHeightAdvantageOverOrigin( -searchRadius );
 	problemParams.SetHeightOverOriginInfluence( 0.3f );
 	problemParams.SetCheckToAndBackReach( false );
+	problemParams.SetMaxFeasibleTravelTimeMillis( 1250 );
 	TakeEnemiesIntoAccount( problemParams );
 
 	if( BotHasAlmostSameOrigin( origin ) ) {

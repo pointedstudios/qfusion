@@ -591,6 +591,9 @@ int AiObjectiveBasedTeam::DefenceSpot::FindSpots( vec3_t spots[MAX_HELPER_ENTS],
 	problemParams.SetTravelTimeInfluence( 0.125f );
 	problemParams.SetMinSpotDistanceToEntity( 192.0f );
 	problemParams.SetEntityDistanceInfluence( 0.0f );
+	problemParams.SetCheckToAndBackReach( true );
+	problemParams.SetMaxFeasibleTravelTimeMillis( 7500 );
+	problemParams.OptimizeAggressively( true );
 	AdvantageProblemSolver solver( originParams, problemParams );
 	return solver.FindMany( spots, std::min( (int)MAX_HELPER_ENTS, numRequestedSpots ) );
 }
