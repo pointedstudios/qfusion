@@ -39,7 +39,7 @@ int CoverProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 	// Make sure we select not less than 3 candidates if possible even if maxSpots is lesser.
 	SpotsAndScoreVector &finalCandidates = TakeNBestIfOptimizingAggressively( coverSpots, std::max( 3, maxSpots ) );
 
-	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( finalCandidates );
+	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( finalCandidates, maxSpots );
 
 	// Sort spots before a final selection so best spots are first
 	std::sort( reachCheckedSpots.begin(), reachCheckedSpots.end() );

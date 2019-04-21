@@ -64,7 +64,8 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOrigin( 
 	return spotsAndScores;
 }
 
-SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOrigin( SpotsAndScoreVector &candidateSpots ) {
+SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOrigin( SpotsAndScoreVector &candidateSpots,
+																			int maxResultSpots ) {
 	const auto *const routeCache = originParams.routeCache;
 	const float *const origin = originParams.origin;
 	const auto *const spots = tacticalSpotsRegistry->spots;
@@ -82,6 +83,10 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOrigin( Spot
 
 	// The outer index of the table corresponds to an area to aid cache-friendly iteration in these checks
 	for( const SpotAndScore &spotAndScore: candidateSpots ) {
+		if( (int)result.size() >= maxResultSpots ) {
+			return result;
+		}
+
 		const TacticalSpot &spot = spots[spotAndScore.spotNum];
 		const int travelTime = routeCache->TravelTimeToGoalArea( originAreaNum, spot.aasAreaNum, travelFlags );
 		if( !travelTime || travelTime > maxFeasibleTravelTimeCentis ) {
@@ -132,7 +137,8 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOriginAn
 	return spotsAndScores;
 }
 
-SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidateSpots ) {
+SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidateSpots,
+																				   int maxResultSpots ) {
 	const auto *const routeCache = originParams.routeCache;
 	const float *const origin = originParams.origin;
 	const auto *const spots = tacticalSpotsRegistry->spots;
@@ -150,6 +156,10 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOriginAndBac
 
 	// The outer index of the table corresponds to an area to aid cache-friendly iteration in these checks
 	for( const SpotAndScore &spotAndScore : candidateSpots ) {
+		if( (int)result.size() >= maxResultSpots ) {
+			return result;
+		}
+
 		const auto spotNum = spotAndScore.spotNum;
 		const TacticalSpot &spot = spots[spotNum];
 		const int toTravelTime = routeCache->TravelTimeToGoalArea( originAreaNum, spot.aasAreaNum, travelFlags );

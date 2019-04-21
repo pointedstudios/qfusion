@@ -7,10 +7,10 @@ int DodgeHazardProblemSolver::FindMany( vec3_t *spotOrigins, int maxSpots ) {
 	uint16_t insideSpotNum;
 	const SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
 	SpotsAndScoreVector &candidateSpots =  SelectCandidateSpots( spotsFromQuery );
-	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( candidateSpots );
-	TryModifyingScoreByVelocityConformance( reachCheckedSpots );
+	TryModifyingScoreByVelocityConformance( candidateSpots );
 	// Sort spots before a final selection so best spots are first
-	std::sort( reachCheckedSpots.begin(), reachCheckedSpots.end() );
+	std::sort( candidateSpots.begin(), candidateSpots.end() );
+	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( candidateSpots, maxSpots );
 	return MakeResultsFilteringByProximity( reachCheckedSpots, spotOrigins, maxSpots );
 }
 

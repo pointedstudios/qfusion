@@ -101,11 +101,11 @@ protected:
 
 	virtual SpotsAndScoreVector &FilterByReachTablesFromOrigin( SpotsAndScoreVector &spotsAndScores );
 
-	virtual SpotsAndScoreVector &CheckSpotsReachFromOrigin( SpotsAndScoreVector &candidateSpots );
+	virtual SpotsAndScoreVector &CheckSpotsReachFromOrigin( SpotsAndScoreVector &candidateSpots, int maxSpots );
 
 	virtual SpotsAndScoreVector &FilterByReachTablesFromOriginAndBack( SpotsAndScoreVector &spotsAndScores );
 
-	virtual SpotsAndScoreVector &CheckSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidateSpots );
+	virtual SpotsAndScoreVector &CheckSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidateSpots, int maxSpots );
 
 	SpotsAndScoreVector &FilterByReachTables( SpotsAndScoreVector &spots ) {
 		if( problemParams.checkToAndBackReach ) {
@@ -114,11 +114,11 @@ protected:
 		return FilterByReachTablesFromOrigin( spots );
 	}
 
-	SpotsAndScoreVector &CheckSpotsReach( SpotsAndScoreVector &candidateSpots ) {
+	SpotsAndScoreVector &CheckSpotsReach( SpotsAndScoreVector &candidateSpots, int maxResultSpots ) {
 		if( problemParams.checkToAndBackReach ) {
-			return CheckSpotsReachFromOriginAndBack( candidateSpots );
+			return CheckSpotsReachFromOriginAndBack( candidateSpots, maxResultSpots );
 		}
-		return CheckSpotsReachFromOrigin( candidateSpots );
+		return CheckSpotsReachFromOrigin( candidateSpots, maxResultSpots );
 	}
 
 	virtual SpotsAndScoreVector &ApplyEnemiesInfluence( SpotsAndScoreVector &candidateSpots );

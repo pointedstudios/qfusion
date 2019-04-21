@@ -31,7 +31,7 @@ int AdvantageProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
 
 	SpotsAndScoreVector &finalCandidates = TakeNBestIfOptimizingAggressively( sortedCandidates, std::max( 3, maxSpots ) );
 
-	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( finalCandidates );
+	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( finalCandidates, maxSpots );
 	return MakeResultsFilteringByProximity( reachCheckedSpots, spots, maxSpots );
 }
 
