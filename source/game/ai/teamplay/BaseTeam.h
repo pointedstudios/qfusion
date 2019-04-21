@@ -1,13 +1,13 @@
 #ifndef QFUSION_AI_BASE_TEAM_BRAIN_H
 #define QFUSION_AI_BASE_TEAM_BRAIN_H
 
-#include "../ai_frame_aware_updatable.h"
+#include "../AIComponent.h"
 
 #include <typeinfo>
 
 class NavEntity;
 
-class AiBaseTeam : public AiFrameAwareUpdatable {
+class AiBaseTeam : public AiFrameAwareComponent {
 	friend class Bot;  // Bots should be able to notify its team in destructor when they get dropped immediately
 	friend class AiManager;
 
@@ -16,7 +16,7 @@ class AiBaseTeam : public AiFrameAwareUpdatable {
 	mutable int svFps { -1 };
 	mutable int svSkill { -1 };
 
-	// These vars are used instead of AiFrameAwareUpdatable for lazy intiailization
+	// These vars are used instead of AiFrameAwareComponent for lazy intiailization
 	mutable int teamAffinityModulo { -1 };
 	mutable int teamAffinityOffset { -1 };
 	static constexpr int MAX_AFFINITY_OFFSET = 4;

@@ -12,7 +12,7 @@
 class AiSquad;
 class Bot;
 
-class BotAwarenessModule: public AiFrameAwareUpdatable {
+class BotAwarenessModule: public AiFrameAwareComponent {
 	friend class Bot;
 
 	AiEnemiesTracker *activeEnemiesTracker { &ownEnemiesTracker };
@@ -90,7 +90,7 @@ private:
 	void Think() override;
 
 	void SetFrameAffinity( unsigned modulo, unsigned offset ) override {
-		AiFrameAwareUpdatable::SetFrameAffinity( modulo, offset );
+		AiFrameAwareComponent::SetFrameAffinity( modulo, offset );
 		eventsTracker.SetFrameAffinity( modulo, offset );
 		ownEnemiesTracker.SetFrameAffinity( modulo, offset );
 	}
@@ -108,7 +108,7 @@ public:
 	void OnAttachedToSquad( AiSquad *squad_ );
 	void OnDetachedFromSquad( AiSquad *squad_ );
 
-	void OnHurtByNewThreat( const edict_t *newThreat, const AiFrameAwareUpdatable *threatDetector );
+	void OnHurtByNewThreat( const edict_t *newThreat, const AiFrameAwareComponent *threatDetector );
 	void OnEnemyRemoved( const TrackedEnemy *enemy );
 
 	void OnEnemyViewed( const edict_t *enemy );
@@ -163,7 +163,7 @@ public:
 
 	void EnableAutoAlert( const AiAlertSpot &alertSpot,
 						  AlertTracker::AlertCallback callback,
-						  AiFrameAwareUpdatable *receiver ) {
+						  AiFrameAwareComponent *receiver ) {
 		alertTracker.EnableAutoAlert( alertSpot, callback, receiver );
 	}
 

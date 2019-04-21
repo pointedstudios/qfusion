@@ -4,7 +4,7 @@
 #include "../ai_local.h"
 #include "GoalEntities.h"
 #include "Pool.h"
-#include "../ai_frame_aware_updatable.h"
+#include "../AIComponent.h"
 #include "../static_vector.h"
 #include "../navigation/AasRouteCache.h"
 #include "../ai_base_ai.h"
@@ -195,7 +195,7 @@ public:
 	virtual PlannerNode *TryApply( const WorldState &worldState ) = 0;
 };
 
-class AiPlanner : public AiFrameAwareUpdatable {
+class AiPlanner : public AiFrameAwareComponent {
 	friend class Ai;
 	friend class AiManager;
 	friend class AiBaseTeam;

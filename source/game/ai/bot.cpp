@@ -35,7 +35,7 @@ Bot::Bot( edict_t *self_, float skillLevel_ )
 	self->r.client->movestyle = GS_CLASSICBUNNY;
 	// Enable skimming for bots (since it is useful and should not be noticed from a 3rd person POV).
 	self->r.client->ps.pmove.stats[PM_STAT_FEATURES] |= PMFEAT_CORNERSKIMMING;
-	SetTag( self->r.client->netname );
+	SetTag( "%s", self->r.client->netname );
 }
 
 #ifndef _MSC_VER

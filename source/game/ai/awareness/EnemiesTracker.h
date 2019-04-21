@@ -1,7 +1,7 @@
 #ifndef QFUSION_AI_BASE_ENEMY_POOL_H
 #define QFUSION_AI_BASE_ENEMY_POOL_H
 
-#include "../ai_frame_aware_updatable.h"
+#include "../AIComponent.h"
 #include "../static_deque.h"
 #include "../static_vector.h"
 #include "../vec3.h"
@@ -335,7 +335,7 @@ public:
 	int64_t LastActivityAt() const { return std::max( lastDamageAt, lastTouchAt ); }
 };
 
-class AiEnemiesTracker : public AiFrameAwareUpdatable {
+class AiEnemiesTracker : public AiFrameAwareComponent {
 	friend class TrackedEnemy;
 	friend class BotAwarenessModule;
 	friend class AiSquad;

@@ -1,7 +1,7 @@
 #ifndef QFUSION_AI_BASE_AI_H
 #define QFUSION_AI_BASE_AI_H
 
-#include "ai_frame_aware_updatable.h"
+#include "AIComponent.h"
 #include "planning/GoalEntities.h"
 #include "navigation/AasWorld.h"
 #include "navigation/AasRouteCache.h"
@@ -239,8 +239,7 @@ public:
 
 class AiPlanner;
 
-class Ai : public AiFrameAwareUpdatable
-{
+class Ai : public AiFrameAwareComponent {
 	friend class AiManager;
 	friend class AiBaseTeam;
 	friend class AiSquad;

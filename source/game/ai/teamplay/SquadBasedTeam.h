@@ -13,7 +13,7 @@ class Bot;
 
 class AiSquadBasedTeam;
 
-class AiSquad : public AiFrameAwareUpdatable {
+class AiSquad : public AiFrameAwareComponent {
 	friend class AiSquadBasedTeam;
 	friend class SquadsBuilder;
 
@@ -143,7 +143,7 @@ public:
 protected:
 	void SetFrameAffinity( unsigned modulo, unsigned offset ) override {
 		// Call super method first
-		AiFrameAwareUpdatable::SetFrameAffinity( modulo, offset );
+		AiFrameAwareComponent::SetFrameAffinity( modulo, offset );
 		// Allow enemies tracker to think
 		EnemiesTracker()->SetFrameAffinity( modulo, offset );
 	}

@@ -74,7 +74,7 @@ const TrackedEnemy *BotAwarenessModule::ChooseLostOrHiddenEnemy( unsigned timeou
 
 BotAwarenessModule::EnemiesTracker::EnemiesTracker( Bot *bot_, BotAwarenessModule *module_ )
 	: AiEnemiesTracker( bot_->Skill() ), bot( bot_ ), module( module_ ) {
-	SetTag( va( "BotAwarenessModule(%s)::EnemiesTracker", bot->Nick() ) );
+	SetTag( "BotAwarenessModule(%s)::EnemiesTracker", bot->Nick() );
 }
 
 void BotAwarenessModule::EnemiesTracker::OnHurtByNewThreat( const edict_t *newThreat ) {
@@ -98,14 +98,14 @@ void BotAwarenessModule::EnemiesTracker::OnEnemyRemoved( const TrackedEnemy *ene
 }
 
 void BotAwarenessModule::Frame() {
-	AiFrameAwareUpdatable::Frame();
+	AiFrameAwareComponent::Frame();
 
 	ownEnemiesTracker.Update();
 	eventsTracker.Update();
 }
 
 void BotAwarenessModule::Think() {
-	AiFrameAwareUpdatable::Think();
+	AiFrameAwareComponent::Think();
 
 	RegisterVisibleEnemies();
 	CheckForNewHazards();
@@ -194,7 +194,7 @@ void BotAwarenessModule::TryTriggerPlanningForNewHazard() {
 	}
 }
 
-void BotAwarenessModule::OnHurtByNewThreat( const edict_t *newThreat, const AiFrameAwareUpdatable *threatDetector ) {
+void BotAwarenessModule::OnHurtByNewThreat( const edict_t *newThreat, const AiFrameAwareComponent *threatDetector ) {
 	// Reject threats detected by bot brain if there is active squad.
 	// Otherwise there may be two calls for a single or different threats
 	// detected by squad and the bot brain enemy pool itself.

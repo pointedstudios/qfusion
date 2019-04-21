@@ -1,9 +1,9 @@
 #ifndef QFUSION_ENTITIESPVSCACHE_H
 #define QFUSION_ENTITIESPVSCACHE_H
 
-#include "../ai_frame_aware_updatable.h"
+#include "../AIComponent.h"
 
-class EntitiesPvsCache: public AiFrameAwareUpdatable {
+class EntitiesPvsCache: public AiFrameAwareComponent {
 	// 2 bits per each other entity
 	static constexpr unsigned ENTITY_DATA_STRIDE = 2 * (MAX_EDICTS / 32);
 	// MAX_EDICTS strings per each entity

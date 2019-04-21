@@ -178,7 +178,7 @@ bool Ai::MayNotBeFeasibleEnemy( const edict_t *ent ) const {
 
 void Ai::Frame() {
 	// Call super method first
-	AiFrameAwareUpdatable::Frame();
+	AiFrameAwareComponent::Frame();
 
 	if( !G_ISGHOSTING( self ) ) {
 		entityPhysicsState->UpdateFromEntity( self );

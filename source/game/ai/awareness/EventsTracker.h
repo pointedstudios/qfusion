@@ -5,7 +5,7 @@
 #include "../static_deque.h"
 #include "AwarenessLocal.h"
 
-class EventsTracker: public AiFrameAwareUpdatable {
+class EventsTracker: public AiFrameAwareComponent {
 	friend class BotAwarenessModule;
 	friend class HazardsDetector;
 	friend class JumppadUsersTracker;
@@ -101,7 +101,7 @@ class EventsTracker: public AiFrameAwareUpdatable {
 		eventHandlingParams[event] = param;
 	}
 
-	class JumppadUsersTracker: public AiFrameAwareUpdatable {
+	class JumppadUsersTracker: public AiFrameAwareComponent {
 		friend class EventsTracker;
 		EventsTracker *eventsTracker;
 		// An i-th element corresponds to an i-th client
@@ -130,7 +130,7 @@ public:
 	void RegisterEvent( const edict_t *ent, int event, int parm );
 
 	void Frame() override {
-		AiFrameAwareUpdatable::Frame();
+		AiFrameAwareComponent::Frame();
 		// Always calls Frame() and calls Think() if needed
 		jumppadUsersTracker.Update();
 	}
@@ -138,7 +138,7 @@ public:
 	void Think() override;
 
 	void SetFrameAffinity( unsigned modulo, unsigned offset ) override {
-		AiFrameAwareUpdatable::SetFrameAffinity( modulo, offset );
+		AiFrameAwareComponent::SetFrameAffinity( modulo, offset );
 		jumppadUsersTracker.SetFrameAffinity( modulo, offset );
 	}
 };

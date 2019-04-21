@@ -205,7 +205,7 @@ public:
 		awarenessModule.OnEnemyRemoved( enemy );
 	}
 
-	void OnHurtByNewThreat( const edict_t *newThreat, const AiFrameAwareUpdatable *threatDetector ) {
+	void OnHurtByNewThreat( const edict_t *newThreat, const AiFrameAwareComponent *threatDetector ) {
 		awarenessModule.OnHurtByNewThreat( newThreat, threatDetector );
 	}
 
@@ -230,7 +230,7 @@ public:
 
 	void EnableAutoAlert( const AiAlertSpot &alertSpot,
 						  AlertTracker::AlertCallback callback,
-						  AiFrameAwareUpdatable *receiver ) {
+						  AiFrameAwareComponent *receiver ) {
 		awarenessModule.EnableAutoAlert( alertSpot, callback, receiver );
 	}
 
@@ -339,7 +339,7 @@ protected:
 	}
 
 	void SetFrameAffinity( unsigned modulo, unsigned offset ) override {
-		AiFrameAwareUpdatable::SetFrameAffinity( modulo, offset );
+		AiFrameAwareComponent::SetFrameAffinity( modulo, offset );
 		planningModule.SetFrameAffinity( modulo, offset );
 		awarenessModule.SetFrameAffinity( modulo, offset );
 	}

@@ -2,14 +2,13 @@
 #define QFUSION_AI_MANAGER_H
 
 #include "planning/Planner.h"
-#include "ai_frame_aware_updatable.h"
+#include "AIComponent.h"
 #include "planning/GoalEntities.h"
 #include "static_vector.h"
 
 class Bot;
 
-class AiManager : public AiFrameAwareUpdatable
-{
+class AiManager : public AiFrameAwareComponent {
 	static const unsigned MAX_ACTIONS = AiPlanner::MAX_ACTIONS;
 	static const unsigned MAX_GOALS = AiPlanner::MAX_GOALS;
 
