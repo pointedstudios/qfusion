@@ -124,9 +124,14 @@ int TravelTimeWalkingOrFallingShort( const AiAasRouteCache *routeCache, int from
 	const auto *const aasReach = AiAasWorld::Instance()->Reachabilities();
 	constexpr const auto travelFlags = TFL_WALK | TFL_AIR | TFL_WALKOFFLEDGE;
 	int travelTime = 0;
+	// Prevent infinite looping (still happens for some maps)
+	int numHops = 0;
 	for(;; ) {
 		if( fromAreaNum == toAreaNum ) {
 			return std::max( 1, travelTime );
+		}
+		if( numHops++ == 48 ) {
+			return 0;
 		}
 		const int reachNum = routeCache->ReachabilityToGoalArea( fromAreaNum, toAreaNum, travelFlags );
 		if( !reachNum ) {
