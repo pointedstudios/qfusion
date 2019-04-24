@@ -56,7 +56,7 @@ void JumpOverBarrierScript::SetupMovement( Context *context ) {
 			}
 			// Note that the distance threshold is lower than usual for fallbacks,
 			// since we're going to be stopped by a barrier anyway and shouldn't miss it
-			if( !entityPhysicsState.GroundEntity() || squareDistance < SQUARE( 48.0f ) ) {
+			if( !entityPhysicsState.GroundEntity() || squareDistance < SQUARE( 72.0f ) ) {
 				return;
 			}
 
@@ -82,6 +82,13 @@ void JumpOverBarrierScript::SetupMovement( Context *context ) {
 	}
 
 	botInput->SetForwardMovement( 1 );
+	botInput->SetWalkButton( true );
+	// Wait for speed loss. This prevents bouncing back of the barrier (e.g. at emtown mid).
+	if( entityPhysicsState.Speed2D() > 150 ) {
+		return;
+	}
+
+	botInput->SetWalkButton( false );
 	botInput->SetUpMovement( 1 );
 
 	if( !allowWalljumping ) {
@@ -98,7 +105,7 @@ void JumpOverBarrierScript::SetupMovement( Context *context ) {
 		return;
 	}
 
-	if( !entityPhysicsState.GroundEntity() && fabsf( entityPhysicsState.Velocity()[2] ) < 50 ) {
+	if( !entityPhysicsState.GroundEntity() && entityPhysicsState.Velocity()[2] < 0 ) {
 		botInput->SetSpecialButton( true );
 	}
 }
