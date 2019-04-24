@@ -280,7 +280,12 @@ MovementScript *FallbackMovementAction::TryFindAasBasedFallback( Context *contex
 	}
 
 	if( traveltype == TRAVEL_JUMP || traveltype == TRAVEL_STRAFEJUMP ) {
-		return TryFindJumpLikeReachFallback( context, nextReach );
+		// This means we try jumping directly to the reach. target the current position
+		if( auto *script = TryFindJumpLikeReachFallback( context, nextReach ) ) {
+			return script;
+		}
+		// Try walking to the reach start otherwise
+		return TryFindWalkReachFallback( context, nextReach );
 	}
 
 	// The only possible fallback left
