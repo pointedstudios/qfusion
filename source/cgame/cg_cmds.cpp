@@ -744,7 +744,7 @@ static void CG_SC_MenuCustom( void ) {
 /*
 * CG_SC_MenuQuick
 */
-static void CG_SC_MenuQuick( void ) {
+void CG_SC_MenuQuick() {
 	if( cgs.demoPlaying ) {
 		return;
 	}

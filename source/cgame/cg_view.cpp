@@ -127,8 +127,6 @@ static void CG_AddLocalSounds( void ) {
 	// if in postmatch, play postmatch song
 	if( GS_MatchState() >= MATCH_STATE_POSTMATCH ) {
 		if( !postmatchsound_set && !demostream ) {
-			CG_ShowQuickMenu( 1 );
-
 			trap_S_StartBackgroundTrack( S_PLAYLIST_POSTMATCH, NULL, 3 ); // loop random track from the playlist
 			postmatchsound_set = true;
 			background = false;
@@ -140,8 +138,6 @@ static void CG_AddLocalSounds( void ) {
 		}
 
 		if( postmatchsound_set ) {
-			CG_ShowQuickMenu( 0 );
-
 			trap_S_StopBackgroundTrack();
 			postmatchsound_set = false;
 			background = false;
@@ -152,6 +148,31 @@ static void CG_AddLocalSounds( void ) {
 			background = true;
 		}
 	}
+}
+
+void CG_SC_MenuQuick();
+
+static void CG_ShowQuickMenuForMatchState() {
+	const auto matchState = GS_MatchState();
+	if( matchState < MATCH_STATE_COUNTDOWN ) {
+		CG_ShowQuickMenu( 0 );
+		return;
+	}
+	if( matchState > MATCH_STATE_POSTMATCH ) {
+		CG_ShowQuickMenu( 0 );
+		return;
+	}
+	if( matchState == MATCH_STATE_PLAYTIME ) {
+		if( cg.time - GS_MatchStartTime() > 5000 ) {
+			CG_ShowQuickMenu( 0 );
+			return;
+		}
+	}
+	if( !cg.quickmenu[0] ) {
+		CG_SC_MenuQuick();
+		return;
+	}
+	CG_ShowQuickMenu( 1 );
 }
 
 /*
@@ -1106,6 +1127,8 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 		rd->fov_x *= v;
 		rd->fov_y *= v;
 	}
+
+	CG_ShowQuickMenuForMatchState();
 
 	CG_AddLocalSounds();
 	CG_SetSceneTeamColors(); // update the team colors in the renderer
