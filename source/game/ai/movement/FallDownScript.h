@@ -4,6 +4,7 @@
 #include "MovementScript.h"
 
 class FallDownScript: public MovementScript {
+	vec3_t startOrigin { 0, 0, 0 };
 	vec3_t targetOrigin { 0, 0, 0 };
 	unsigned timeout { 0 };
 	float reachRadius { 0.0f };
@@ -14,8 +15,9 @@ public:
 	// Note: It is expected that bot origin Z should be <= target origin Z
 	// after completion of the fallback, so target Z matters a lot!
 	// Timeout is variable and should be set according to estimated sum of traveling to the ledge and falling
-	void Activate( const vec3_t origin, unsigned timeout_, float reachRadius_ = 32.0f ) {
-		VectorCopy( origin, this->targetOrigin );
+	void Activate( const vec3_t startOrigin_, const vec3_t targetOrigin_, unsigned timeout_, float reachRadius_ = 32.0f ) {
+		VectorCopy( startOrigin_, this->startOrigin );
+		VectorCopy( targetOrigin_, this->targetOrigin );
 		this->timeout = timeout_;
 		this->reachRadius = reachRadius_;
 		MovementScript::Activate();

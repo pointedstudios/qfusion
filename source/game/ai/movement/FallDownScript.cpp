@@ -34,7 +34,7 @@ void FallDownScript::SetupMovement( Context *context ) {
 
 	Vec3 toTargetDir( entityPhysicsState.Origin() );
 	toTargetDir.Z() += game.edicts[bot->EntNum()].viewheight;
-	toTargetDir -= targetOrigin;
+	toTargetDir -= entityPhysicsState.GroundEntity() ? startOrigin : targetOrigin;
 	toTargetDir *= -1.0f;
 	toTargetDir.Normalize();
 
@@ -121,6 +121,6 @@ MovementScript *FallbackMovementAction::TryFindWalkOffLedgeReachFallback( Contex
 	float distanceToReach = sqrtf( DistanceSquared( entityPhysicsState.Origin(), nextReach.start ) );
 	unsigned travelTimeToLedgeMillis = (unsigned)( 1000.0f * distanceToReach / context->GetRunSpeed() );
 	unsigned fallingTimeMillis = (unsigned)( 1000.0f * sqrtf( 2.0f * sqrtf( squareFallingHeight ) / level.gravity ) );
-	script->Activate( targetOrigin.Data(), travelTimeToLedgeMillis + fallingTimeMillis + 250, 24.0f );
+	script->Activate( nextReach.start, targetOrigin.Data(), travelTimeToLedgeMillis + fallingTimeMillis + 250, 24.0f );
 	return script;
 }
