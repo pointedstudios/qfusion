@@ -20,6 +20,16 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "cg_local.h"
 
+#ifdef min
+#undef min
+#endif
+
+#ifdef max
+#undef max
+#endif
+
+#include "../qalgo/WswStdTypes.h"
+
 /*
 ==========================================================================
 
@@ -735,23 +745,40 @@ static void CG_SC_MenuCustom( void ) {
 * CG_SC_MenuQuick
 */
 static void CG_SC_MenuQuick( void ) {
-	int i, c;
-
 	if( cgs.demoPlaying ) {
 		return;
 	}
 
 	cg.quickmenu[0] = '\0';
-
-	if( trap_Cmd_Argc() >= 2 ) {
-		for( i = 1, c = 1; i < trap_Cmd_Argc() - 1; i += 2, c++ ) {
-			const char *label = trap_Cmd_Argv( i );
-			const char *cmd = trap_Cmd_Argv( i + 1 );
-
-			Q_strncatz( cg.quickmenu, va( "btn%i \"%s\" ", c, label ), sizeof( cg.quickmenu ) );
-			Q_strncatz( cg.quickmenu, va( "cmd%i \"%s%s\" ", c, *cmd ? "cmd " : "", cmd ), sizeof( cg.quickmenu ) );
-		}
+	if( trap_Cmd_Argc() < 2 ) {
+		CG_RefreshQuickMenu();
+		return;
 	}
+
+	// Grand hack to get things working for a release.
+	// Ignore the command args and put RnS tokens so they get shown.
+	// CGame code can't be worse than it is anyway.
+
+	wsw::stringstream ss;
+
+	auto add = [&]( const char *token, int i ) {
+		ss << va( "btn%i \"`%s` !\" ", i, token );
+		ss << va( "cmd%i \"say %s\" ", i, token );
+	};
+
+	add( "hi", 1 );
+	add( "bb", 2 );
+	add( "glhf", 3 );
+	add( "gg", 4 );
+	add( "plz", 5 );
+	add( "tks", 6 );
+	add( "soz", 7 );
+	add( "n1", 8 );
+	add( "nt", 9 );
+	add( "lol", 0 );
+
+	const wsw::string s( ss.str() );
+	memcpy( cg.quickmenu, s.data(), s.size() + 1 );
 
 	CG_RefreshQuickMenu();
 }

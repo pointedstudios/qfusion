@@ -1298,15 +1298,15 @@ public:
 // Hack: make sure the first alias (that implicitly defines a token) is a valid identifier.
 // Otherwise Statsow rejects reported data as invalid for various reasons.
 
-static const wsw::string_view hiAliases[] = { "hi", "hello", "" };
-static const wsw::string_view byeAliases[] = { "bb", "bye", "" };
+static const wsw::string_view hiAliases[] = { "hi", "" };
+static const wsw::string_view byeAliases[] = { "bb", "" };
 static const wsw::string_view glhfAliases[] = { "glhf", "gl", "hf", "" };
 static const wsw::string_view ggAliases[] = { "ggs", "gg", "bgs", "bg", "" };
-static const wsw::string_view plzAliases[] = { "plz", "please", "" };
-static const wsw::string_view tksAliases[] = { "tks", "thanks", "" };
-static const wsw::string_view sozAliases[] = { "soz", "sorry", "" };
+static const wsw::string_view plzAliases[] = { "plz", "" };
+static const wsw::string_view tksAliases[] = { "tks", "" };
+static const wsw::string_view sozAliases[] = { "soz", "" };
 static const wsw::string_view smiley1Aliases[] = { "n1", ":)", "" };
-static const wsw::string_view smiley2Aliases[] = { "np", ":(", "" };
+static const wsw::string_view smiley2Aliases[] = { "nt", ":(", "" };
 static const wsw::string_view lolAliases[] = { "lol", "" };
 
 const std::array<const wsw::string_view *, 10> RespectTokensRegistry::ALIASES = {{
