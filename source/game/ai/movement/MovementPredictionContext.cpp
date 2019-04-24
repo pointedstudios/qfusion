@@ -1,16 +1,6 @@
 #include "MovementPredictionContext.h"
 #include "MovementLocal.h"
 
-bool MovementPredictionContext::CanSafelyKeepHighSpeed() {
-	if( const bool *cachedValue = canSafelyKeepHighSpeedCachesStack.GetCached() ) {
-		return *cachedValue;
-	}
-
-	bool result = module->TestWhetherCanSafelyKeepHighSpeed( this );
-	canSafelyKeepHighSpeedCachesStack.SetCachedValue( result );
-	return result;
-}
-
 void MovementPredictionContext::NextReachNumAndTravelTimeToNavTarget( int *reachNum, int *travelTimeToNavTarget ) {
 	*reachNum = 0;
 	*travelTimeToNavTarget = 0;
@@ -531,7 +521,6 @@ void MovementPredictionContext::SetupStackForStep() {
 
 		Assert( defaultBotInputsCachesStack.Size() == predictedMovementActions.size() );
 		Assert( mayHitWhileRunningCachesStack.Size() == predictedMovementActions.size() );
-		Assert( canSafelyKeepHighSpeedCachesStack.Size() == predictedMovementActions.size() );
 		Assert( environmentTestResultsStack.size() == predictedMovementActions.size() );
 
 		// topOfStackIndex already points to a needed array element in case of rolling back
@@ -546,7 +535,6 @@ void MovementPredictionContext::SetupStackForStep() {
 
 			defaultBotInputsCachesStack.PopToSize( topOfStackIndex );
 			mayHitWhileRunningCachesStack.PopToSize( topOfStackIndex );
-			canSafelyKeepHighSpeedCachesStack.PopToSize( topOfStackIndex );
 			environmentTestResultsStack.truncate( topOfStackIndex );
 		} else {
 			// For case of growing stack topOfStackIndex must point at the first
@@ -573,7 +561,6 @@ void MovementPredictionContext::SetupStackForStep() {
 
 		defaultBotInputsCachesStack.PopToSize( 0 );
 		mayHitWhileRunningCachesStack.PopToSize( 0 );
-		canSafelyKeepHighSpeedCachesStack.PopToSize( 0 );
 		environmentTestResultsStack.clear();
 
 		const edict_t *self = game.edicts + bot->EntNum();
@@ -607,7 +594,6 @@ void MovementPredictionContext::SetupStackForStep() {
 	defaultBotInputsCachesStack.PushDummyNonCachedValue();
 	// The different method is used (there is no copy/move constructors for the template type)
 	mayHitWhileRunningCachesStack.PushDummyNonCachedValue();
-	canSafelyKeepHighSpeedCachesStack.PushDummyNonCachedValue();
 	new ( environmentTestResultsStack.unsafe_grow_back() )EnvironmentTraceCache;
 
 	this->shouldRollback = false;

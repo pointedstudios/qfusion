@@ -182,7 +182,6 @@ private:
 
 	CachesStack<BotInput, MAX_PREDICTED_STATES> defaultBotInputsCachesStack;
 	CachesStack<HitWhileRunningTestResult, MAX_PREDICTED_STATES> mayHitWhileRunningCachesStack;
-	CachesStack<bool, MAX_PREDICTED_STATES> canSafelyKeepHighSpeedCachesStack;
 	StaticVector<EnvironmentTraceCache, MAX_PREDICTED_STATES> environmentTestResultsStack;
 
 	// We have decided to keep the frametime hardcoded.
@@ -304,8 +303,6 @@ public:
 	inline int CurrGroundedAasAreaNum() const;
 	inline int NavTargetAasAreaNum() const;
 	inline bool IsInNavTargetArea() const;
-
-	bool CanSafelyKeepHighSpeed();
 
 	inline unsigned DefaultFrameTime() const;
 

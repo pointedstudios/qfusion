@@ -191,8 +191,6 @@ class BotMovementModule {
 public:
 	explicit BotMovementModule( Bot *bot_ );
 
-	bool TestWhetherCanSafelyKeepHighSpeed( MovementPredictionContext *context );
-
 	inline void OnInterceptedPredictedEvent( int ev, int parm ) {
 		predictionContext.OnInterceptedPredictedEvent( ev, parm );
 	}

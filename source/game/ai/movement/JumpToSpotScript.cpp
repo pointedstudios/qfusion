@@ -57,7 +57,12 @@ bool JumpToSpotScript::TryDeactivate( Context *context ) {
 		entityPhysicsState = bot->EntityPhysicsState();
 	}
 
-	// Wait until the target is reached
+	// Wait for landing
+	if( !entityPhysicsState->GroundEntity() ) {
+		return false;
+	}
+
+	// Wait until the target is reached (prevent deactivation if we still are at the start point)
 	if( DistanceSquared( entityPhysicsState->Origin(), targetOrigin ) < reachRadius * reachRadius ) {
 		return false;
 	}
@@ -79,16 +84,7 @@ bool JumpToSpotScript::TryDeactivate( Context *context ) {
 	for( int i = 0; i < numCurrAreas; ++i ) {
 		const auto &areaSettings = aasAreaSettings[currAreaNums[i]];
 		if( ( areaSettings.contents & desiredAasContents ) || ( areaSettings.areaflags & desiredAasFlags ) ) {
-			if( entityPhysicsState->GroundEntity() ) {
-				return DeactivateWithStatus( COMPLETED );
-			} else if( context ) {
-				// Try reusing this value that is very likely to be cached
-				if( context->CanSafelyKeepHighSpeed() ) {
-					return DeactivateWithStatus( COMPLETED );
-				}
-			} else if( module->TestWhetherCanSafelyKeepHighSpeed( nullptr ) ) {
-				return DeactivateWithStatus( COMPLETED );
-			}
+			return DeactivateWithStatus( COMPLETED );
 		}
 	}
 
