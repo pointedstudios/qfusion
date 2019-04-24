@@ -49,7 +49,6 @@ class FallbackMovementAction : public BaseMovementAction {
 													   const aas_reachability_t &nextReach );
 
 	MovementScript *TryFindStairsFallback( MovementPredictionContext *context );
-	bool TrySetupInclinedFloorMovement( MovementPredictionContext *context, int rampAreaNum );
 	MovementScript *TryFindRampFallback( MovementPredictionContext *context, int rampAreaNum, int forbiddenAreaNum = 0 );
 	MovementScript *TryFindLostNavTargetFallback( MovementPredictionContext *context );
 	MovementScript *TryFindNearbyRampAreasFallback( MovementPredictionContext *context );

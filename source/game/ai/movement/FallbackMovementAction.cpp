@@ -32,21 +32,11 @@ void FallbackMovementAction::PlanPredictionStep( Context *context ) {
 		return;
 	}
 
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	if( entityPhysicsState.GroundEntity() && entityPhysicsState.GetGroundNormalZ() < 0.999f ) {
-		if( int groundedAreaNum = context->CurrGroundedAasAreaNum() ) {
-			if( AiAasWorld::Instance()->AreaSettings()[groundedAreaNum].areaflags & AREA_INCLINED_FLOOR ) {
-				if( TrySetupInclinedFloorMovement( context, groundedAreaNum ) ) {
-					handledSpecialMovement = true;
-				}
-			}
-		}
-	}
-
 	auto *botInput = &context->record->botInput;
 	if( handledSpecialMovement ) {
 		botInput->SetAllowedRotationMask( BotInputRotation::NONE );
 	} else {
+		const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 		if( !entityPhysicsState.GroundEntity() ) {
 			// Fallback path movement is the last hope action, wait for landing
 			SetupLostNavTargetMovement( context );
@@ -308,34 +298,5 @@ MovementScript *FallbackMovementAction::TryFindAasBasedFallback( Context *contex
 
 	return nullptr;
 }
-
-bool FallbackMovementAction::TrySetupInclinedFloorMovement( Context *context, int rampAreaNum ) {
-	const auto *aasWorld = AiAasWorld::Instance();
-	const auto *aasAreas = aasWorld->Areas();
-	const auto *bestAreaNum = TryFindBestInclinedFloorExitArea( context, rampAreaNum );
-	if( !bestAreaNum ) {
-		return false;
-	}
-
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	Vec3 intendedLookDir( aasAreas[*bestAreaNum].center );
-	intendedLookDir -= entityPhysicsState.Origin();
-	intendedLookDir.NormalizeFast();
-
-	context->record->botInput.SetIntendedLookDir( intendedLookDir, true );
-	float dot = intendedLookDir.Dot( entityPhysicsState.ForwardDir() );
-	if( dot > 0.5f ) {
-		context->record->botInput.SetForwardMovement( 1 );
-		if( dot > 0.9f && entityPhysicsState.Speed2D() < context->GetDashSpeed() - 10 ) {
-			const auto *stats = context->currPlayerState->pmove.stats;
-			if( ( stats[PM_STAT_FEATURES] & PMFEAT_DASH ) && !stats[PM_STAT_DASHTIME] ) {
-				context->record->botInput.SetSpecialButton( true );
-			}
-		}
-	}
-
-	return true;
-}
-
 
 
