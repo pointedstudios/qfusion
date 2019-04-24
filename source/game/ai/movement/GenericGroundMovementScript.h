@@ -6,12 +6,6 @@
 
 class GenericGroundMovementScript: public MovementScript {
 protected:
-	float runDistanceToTargetThreshold { 20.0f };
-	float runDotProductToTargetThreshold { 0.3f };
-	float dashDistanceToTargetThreshold { 72.0f };
-	float dashDotProductToTargetThreshold { 0.9f };
-	float airAccelDistanceToTargetThreshold { 72.0f };
-	float airAccelDotProductToTargetThreshold { 0.9f };
 	bool allowRunning { true };
 	bool allowDashing { true };
 	bool allowAirAccel { true };
@@ -39,13 +33,7 @@ public:
 	static constexpr auto TRAVEL_FLAGS = TFL_WALK | TFL_AIR | TFL_WALKOFFLEDGE;
 
 	GenericGroundMovementScript( const Bot *bot_, BotMovementModule *module_, int debugColor_ )
-		: MovementScript( bot_, module_, debugColor_ )
-		, runDistanceToTargetThreshold( 20.0f )
-		, runDotProductToTargetThreshold( 0.3f )
-		, dashDistanceToTargetThreshold( 72.0f )
-		, dashDotProductToTargetThreshold( 0.9f )
-		, airAccelDistanceToTargetThreshold( 72.0f )
-		, airAccelDotProductToTargetThreshold( 0.9f ) {}
+		: MovementScript( bot_, module_, debugColor_ ) {}
 
 	void SetupMovement( MovementPredictionContext *context ) override;
 

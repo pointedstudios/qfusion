@@ -94,17 +94,17 @@ bool GenericGroundMovementScript::SetupForKeptPointInFov( MovementPredictionCont
 		return true;
 	}
 
-	if( distanceToTarget < dashDistanceToTargetThreshold ) {
+	if( distanceToTarget < 72.0f ) {
 		return true;
 	}
 
 	bool setDash = false;
 	if( keyMoves[0] ) {
-		if( ( keyMoves[0] * entityPhysicsState.ForwardDir() ).Dot( intendedMoveDir ) > dashDotProductToTargetThreshold ) {
+		if( ( keyMoves[0] * entityPhysicsState.ForwardDir() ).Dot( intendedMoveDir ) > 0.9f ) {
 			setDash = true;
 		}
 	} else {
-		if( ( keyMoves[1] * entityPhysicsState.RightDir() ).Dot( intendedMoveDir ) > dashDotProductToTargetThreshold ) {
+		if( ( keyMoves[1] * entityPhysicsState.RightDir() ).Dot( intendedMoveDir ) > 0.9f ) {
 			setDash = true;
 		}
 	}
@@ -157,10 +157,11 @@ void GenericGroundMovementScript::SetupMovement( Context *context ) {
 		}
 	}
 
+	const auto *aasWorld = AiAasWorld::Instance();
 	if( !entityPhysicsState.GroundEntity() ) {
-		if( intendedDotActual > airAccelDotProductToTargetThreshold ) {
-			if( allowAirAccel && squareDistanceToTarget > SQUARE( airAccelDistanceToTargetThreshold ) ) {
-				if( context->CanSafelyKeepHighSpeed() ) {
+		if( intendedDotActual > 0.95f ) {
+			if( allowAirAccel && squareDistanceToTarget > SQUARE( 96.0f ) ) {
+				if( aasWorld->AreaSettings()[context->CurrGroundedAasAreaNum()].areaflags & AREA_NOFALL ) {
 					context->CheatingAccelerate( 0.5f );
 				}
 			}
@@ -186,8 +187,8 @@ void GenericGroundMovementScript::SetupMovement( Context *context ) {
 	botInput->SetForwardMovement( 1 );
 	botInput->SetWalkButton( true );
 	if( allowRunning ) {
-		if( intendedDotActual > runDotProductToTargetThreshold ) {
-			if( squareDistanceToTarget > SQUARE( runDistanceToTargetThreshold ) ) {
+		if( intendedDotActual > 0.7f ) {
+			if( squareDistanceToTarget > SQUARE( 64.0f - 40.0f * intendedDotActual ) ) {
 				botInput->SetWalkButton( false );
 			}
 		}
@@ -205,19 +206,50 @@ void GenericGroundMovementScript::SetupMovement( Context *context ) {
 		return;
 	}
 
-	if( !allowDashing ) {
+	if( !allowDashing || !( pmStats[PM_STAT_FEATURES] & PMFEAT_DASH ) ) {
 		return;
 	}
 
-	if( squareDistanceToTarget < SQUARE( dashDistanceToTargetThreshold ) ) {
+	if( intendedDotActual < 0.95f ) {
 		return;
 	}
 
-	if( !( pmStats[PM_STAT_FEATURES] & PMFEAT_DASH ) ) {
+	if( squareDistanceToTarget < SQUARE( 72.0f ) ) {
 		return;
 	}
 
-	botInput->SetSpecialButton( true );
+	// Use dash where possible
+	if( !pmStats[PM_STAT_DASHTIME] ) {
+		botInput->SetSpecialButton( true );
+		return;
+	}
+
+	// Try keeping a high speed under certain conditions by jumping
+	if( !( pmStats[PM_STAT_FEATURES] & PMFEAT_JUMP ) ) {
+		return;
+	}
+
+	if( bot->Skill() <= 0.33f ) {
+		return;
+	}
+
+	const float speed2D = entityPhysicsState.Speed2D();
+	if( speed2D < 0.5f * ( context->GetRunSpeed() + context->GetDashSpeed() ) ) {
+		return;
+	}
+
+	const auto isInNofallArea = ( aasWorld->AreaSettings()[context->CurrGroundedAasAreaNum()].areaflags & AREA_NOFALL );
+	if( !isInNofallArea && ( squareDistanceToTarget < SQUARE( 128.0f ) || speed2D > 550.0f ) ) {
+		return;
+	}
+
+	Vec3 velocityDir( entityPhysicsState.Velocity() );
+	velocityDir *= Q_Rcp( entityPhysicsState.Speed() );
+	if( velocityDir.Dot( intendedLookDir ) < ( isInNofallArea ? 0.90f : 0.99f ) ) {
+		return;
+	}
+
+	botInput->SetUpMovement( +1 );
 }
 
 bool GenericGroundMovementScript::TestActualWalkability( int targetAreaNum, const vec3_t targetOrigin, Context *context ) {
