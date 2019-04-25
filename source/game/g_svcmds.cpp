@@ -198,8 +198,11 @@ class GIPFilter {
 	enum { NUM_V6_GROUPS = 15 };
 	enum { ILLEGAL_GROUP = ~0u };
 
-	// Initialize lazily
-	Entry *entries;
+	/**
+	 * Entries are initialized lazily.
+	 * @warning this value must be set before the constructor body execution {@code Clear() call}.
+	 */
+	Entry *entries { nullptr };
 
 	// Using a hash map is trivial, unfortunately it does not work for wildcard filters.
 	// (a hash for a given value varies depending of the filter mask).
