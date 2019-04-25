@@ -360,9 +360,9 @@ void DisableMapAreasRequest::AddNonGroundedAreas( const uint16_t *__restrict are
 	const int hitFlagsMask = (int)TrackedEnemy::HitFlags::ALL;
 	const auto *const __restrict aasAreaSettings = aasWorld->AreaSettings();
 	const auto *const __restrict aasAreas = aasWorld->Areas();
-	// Skip the list size
-	for( int i = 0; i < areasList[-1]; ++i ) {
-		const auto areaNum = areasList[i];
+	// The first list element is its size
+	for( int i = 0; i < areasList[0]; ++i ) {
+		const auto areaNum = areasList[i + 1];
 		// We actually test this instead of skipping during list building
 		// as AiAasWorld() getter signatures would have look awkward otherwise...
 		// This is not an expensive operation as the number of such areas is very limited.

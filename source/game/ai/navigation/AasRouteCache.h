@@ -257,9 +257,9 @@ class AiAasRouteCache {
 	}
 
 	// A linked list for bins of relatively large size
-	class AreaAndPortalCacheAllocatorBin *areaAndPortalCacheHead;
+	class AreaAndPortalCacheAllocatorBin *areaAndPortalCacheHead { nullptr };
 	// A table of small size bins addressed by bin size
-	class AreaAndPortalCacheAllocatorBin *areaAndPortalSmallBinsTable[128];
+	class AreaAndPortalCacheAllocatorBin *areaAndPortalSmallBinsTable[128] { nullptr };
 
 	class ResultCache {
 public:

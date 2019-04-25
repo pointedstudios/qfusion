@@ -416,9 +416,11 @@ int ScheduleWeaponJumpAction::FilterRawCandidateAreas( Context *context, int *ar
 			continue;
 		}
 		if( int stairsClusterNum = aasWorld->StairsClusterNum( areaNum ) ) {
-			const auto *stairsClusterAreaNums = aasWorld->StairsClusterData( stairsClusterNum ) + 1;
+			// The first element is a length of numbers list.
+			// Two cluster boundary areas come as next and last ones.
+			const auto *stairsClusterAreaNums = aasWorld->StairsClusterData( stairsClusterNum );
 			// If the area is not a boundary (uppper/lower) cluster area, skip it. Do not jump to stairs areas.
-			if( areaNum != stairsClusterAreaNums[0] && areaNum != stairsClusterAreaNums[stairsClusterAreaNums[-1]] ) {
+			if( areaNum != stairsClusterAreaNums[1] && areaNum != stairsClusterAreaNums[stairsClusterAreaNums[0]] ) {
 				continue;
 			}
 		}

@@ -356,7 +356,7 @@ private:
 
 	// Put these often accessed members first
 
-	AiSquad *squad;
+	AiSquad *squad { nullptr };
 	float skillLevel;
 	float baseOffensiveness { 0.5f };
 

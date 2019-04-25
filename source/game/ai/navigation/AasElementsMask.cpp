@@ -18,11 +18,11 @@ void AasElementsMask::Init( AiAasWorld *parent ) {
 
 	// Every item corresponds to a single bit.
 	// We can allocate only with a byte granularity so add one byte for every item.
-	unsigned numAreasBytes = ( parent->NumAreas() / 8 ) + 1u;
+	unsigned numAreasBytes = ( parent->NumAreas() / 8 ) + 4u;
 	areasMask = new( bitVectorsHolder.unsafe_grow_back() )BitVector(
 		(uint8_t *)G_Malloc( numAreasBytes ), numAreasBytes );
 
-	unsigned numFacesBytes = ( parent->NumFaces() / 8 ) + 1u;
+	unsigned numFacesBytes = ( parent->NumFaces() / 8 ) + 4u;
 	facesMask = new( bitVectorsHolder.unsafe_grow_back() )BitVector(
 		(uint8_t *)G_Malloc( numFacesBytes ), numFacesBytes );
 

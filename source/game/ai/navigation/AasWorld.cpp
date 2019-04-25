@@ -450,6 +450,7 @@ void AiAasWorld::InitLinkHeap() {
 
 void AiAasWorld::InitLinkedEntities() {
 	arealinkedentities = (aas_link_t **) G_Malloc( numareas * sizeof( aas_link_t * ) );
+	memset( arealinkedentities, 0, numareas * sizeof( aas_link_t * ) );
 }
 
 void AiAasWorld::FreeLinkHeap() {
@@ -2521,7 +2522,7 @@ public:
 	void MarkEnd() {
 		// Even if the element that was reserved for a list length is unused
 		// for the last list it still contributes to a checksum.
-		*listsPtr = 0;
+		//*listsPtr = 0;
 	}
 
 	ptrdiff_t Offset() const { return listsPtr - listsData; }
