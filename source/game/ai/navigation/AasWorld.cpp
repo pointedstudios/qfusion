@@ -1925,8 +1925,6 @@ class ReachPassThroughAreasListBuilder {
 	AiAasWorld *aasWorld;
 	BitVector *areasMask;
 
-	// TODO: Even if this does not really depend of the template parameter
-	// it probably gets generated for every different template parameter
 	void AddTracedAreas( const aas_reachability_t &reach, BufferBuilder<uint16_t> &builder );
 public:
 	ReachPassThroughAreasListBuilder( AiAasWorld *aasWorld_, BitVector *areasMask_ )
@@ -1944,18 +1942,10 @@ uint16_t *ReachPassThroughAreasListBuilder<AcceptAreaFunc>::Exec( int travelType
 	// Reserve a space for an actual list size
 	listBuilder.Add( 0 );
 
-	AcceptAreaFunc acceptAreaFunc;
-
 	const auto *const aasReach = aasWorld->Reachabilities();
-	const auto *const aasAreaSettings = aasWorld->AreaSettings();
-
 	for( int i = 1, end = aasWorld->NumReachabilities(); i < end; ++i ) {
 		const auto &reach = aasReach[i];
 		if( ( reach.traveltype & TRAVELTYPE_MASK ) != travelType ) {
-			continue;
-		}
-
-		if( !acceptAreaFunc( aasAreaSettings[i] ) ) {
 			continue;
 		}
 
@@ -1971,12 +1961,18 @@ uint16_t *ReachPassThroughAreasListBuilder<AcceptAreaFunc>::Exec( int travelType
 template <typename AcceptAreaFunc>
 void ReachPassThroughAreasListBuilder<AcceptAreaFunc>::AddTracedAreas( const aas_reachability_t &reach,
 																	   BufferBuilder<uint16_t> &listBuilder ) {
+	const auto *const aasAreaSettings = aasWorld->AreaSettings();
+	AcceptAreaFunc acceptAreaFunc;
+
 	int tmpAreaNums[64];
 	int numReachAreas = aasWorld->TraceAreas( reach.start, reach.end, tmpAreaNums, 64 );
 	for( int j = 0; j < numReachAreas; ++j ) {
 		int areaNum = tmpAreaNums[j];
 		// Skip if already set
 		if( !areasMask->TrySet( areaNum ) ) {
+			continue;
+		}
+		if( !acceptAreaFunc( aasAreaSettings[areaNum] ) ) {
 			continue;
 		}
 		listBuilder.Add( (uint16_t)areaNum );
