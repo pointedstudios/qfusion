@@ -1899,12 +1899,19 @@ void AiAasWorld::ComputeAreasLeafsLists() {
 	leafListsData.Add( 0 );
 	listOffsets.Add( 0 );
 
-	int tmpLeafNums[256];
-	int topNode;
+	int tmpNums[256 + 1], topNode;
 	for( int i = 1, end = this->NumAreas(); i < end; ++i ) {
-		int numLeafs = trap_CM_BoxLeafnums( areas[i].mins, areas[i].maxs, tmpLeafNums, 256, &topNode );
-		listOffsets.Add( (int)listOffsets.Size() );
-		leafListsData.Add( tmpLeafNums, std::min( 256, numLeafs ) );
+		const auto &area = areas[i];
+		// Supply tmpLeafNums + 1 as a buffer so we can prepend the numeber of leaves in-place
+		int numLeaves = trap_CM_BoxLeafnums( area.mins, area.maxs, tmpNums + 1, 256, &topNode );
+		// Not sure whether the call above can return a value greater than a supplied buffer capacity
+		numLeaves = std::min( 256, numLeaves );
+		// Put the number of leaves to the list head
+		tmpNums[0] = numLeaves;
+		// The offset of the newly added data is the current builder size
+		listOffsets.Add( leafListsData.Size() );
+		// Add leaves and the number of leaves in the head
+		leafListsData.Add( tmpNums, numLeaves + 1 );
 	}
 
 	this->areaMapLeafListOffsets = listOffsets.FlattenResult();
@@ -2319,12 +2326,12 @@ bool AiAasWorld::AreAreasInPvs( int areaNum1, int areaNum2 ) const {
 		return true;
 	}
 
-	const auto *const __restrict data = areaMapLeafsData;
-	const auto *const __restrict offsets = areaMapLeafListOffsets;
-	const auto *const __restrict leafsList1 = data + offsets[areaNum1];
-	const auto *const __restrict leafsList2 = data + offsets[areaNum2];
-	for( int i = 0; i < leafsList1[-1]; ++i ) {
-		for( int j = 0; j < leafsList2[-1]; ++j ) {
+	const auto *const data = areaMapLeafsData;
+	const auto *const offsets = areaMapLeafListOffsets;
+	const auto *const leafsList1 = data + offsets[areaNum1] + 1;
+	const auto *const leafsList2 = data + offsets[areaNum2] + 1;
+	for( int i = 0, iMax = leafsList1[-1]; i < iMax; ++i ) {
+		for( int j = 0, jMax = leafsList2[-1]; j < jMax; ++j ) {
 			if( trap_CM_LeafsInPVS( leafsList1[i], leafsList2[j] ) ) {
 				return true;
 			}
