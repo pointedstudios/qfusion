@@ -473,12 +473,12 @@ bool AiWeightConfig::Load( const char *filename ) {
 	}
 
 	// Ensure that the buffer is zero-terminated
-	char *buffer = (char *)G_LevelMalloc( (unsigned)fileSize + 1 );
+	char *buffer = (char *)G_Malloc( (unsigned)fileSize + 1 );
 	buffer[fileSize] = 0;
 
 	int bytesRead = trap_FS_Read( buffer, (unsigned)fileSize, fileHandle );
 	if( bytesRead != fileSize ) {
-		G_LevelFree( buffer );
+		G_Free( buffer );
 		trap_FS_FCloseFile( fileHandle );
 		const char *format = S_COLOR_RED "AIWeightConfig()::Load(): only %d/%d bytes of file %s can be read\n";
 		G_Printf( format, bytesRead, fileSize, filename );
@@ -486,7 +486,7 @@ bool AiWeightConfig::Load( const char *filename ) {
 	}
 
 	bool result = LoadFromData( buffer );
-	G_LevelFree( buffer );
+	G_Free( buffer );
 	trap_FS_FCloseFile( fileHandle );
 	return result;
 }

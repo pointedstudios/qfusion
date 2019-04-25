@@ -6,7 +6,7 @@ BotRoamingManager::BotRoamingManager( Bot *bot_ )
 	: bot( bot_ )
 	, tacticalSpotsRegistry( TacticalSpotsRegistry::Instance() )
 	, aasWorld( AiAasWorld::Instance() ) {
-	visitedAt = (int64_t *)G_LevelMalloc( sizeof( int64_t ) * tacticalSpotsRegistry->numSpots );
+	visitedAt = (int64_t *)G_Malloc( sizeof( int64_t ) * tacticalSpotsRegistry->numSpots );
 	ClearVisitedSpots();
 }
 

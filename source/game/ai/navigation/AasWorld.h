@@ -199,7 +199,7 @@ class AiAasWorld
 	friend class AasFileReader;
 
 	bool loaded = false;
-	// Should be released by G_LevelFree();
+	// Should be released by G_Free();
 	char *checksum = nullptr;
 
 	//bounding boxes

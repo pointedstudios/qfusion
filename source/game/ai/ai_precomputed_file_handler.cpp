@@ -7,7 +7,7 @@ AiPrecomputedFileHandler::~AiPrecomputedFileHandler() {
 		if( freeFn ) {
 			freeFn( data );
 		} else {
-			G_LevelFree( data );
+			G_Free( data );
 		}
 	}
 	if( fp >= 0 ) {
@@ -46,7 +46,7 @@ bool AiPrecomputedFileReader::ReadLengthAndData( uint8_t **data, uint32_t *dataL
 	if( allocFn ) {
 		mem = (uint8_t *)allocFn( length );
 	} else {
-		mem = (uint8_t *)G_LevelMalloc( length );
+		mem = (uint8_t *)G_Malloc( length );
 	}
 
 	if( !mem ) {
@@ -59,7 +59,7 @@ bool AiPrecomputedFileReader::ReadLengthAndData( uint8_t **data, uint32_t *dataL
 		if( freeFn ) {
 			freeFn( mem );
 		} else {
-			G_LevelFree( mem );
+			G_Free( mem );
 		}
 		return false;
 	}
@@ -93,7 +93,7 @@ AiPrecomputedFileReader::LoadingStatus AiPrecomputedFileReader::ExpectFileString
 	if( freeFn ) {
 		freeFn( data );
 	} else {
-		G_LevelFree( data );
+		G_Free( data );
 	}
 
 	return result;
@@ -154,7 +154,7 @@ AiPrecomputedFileWriter::~AiPrecomputedFileWriter() {
 		if( freeFn ) {
 			freeFn( filePath );
 		} else {
-			G_LevelFree( filePath );
+			G_Free( filePath );
 		}
 	}
 
@@ -173,7 +173,7 @@ bool AiPrecomputedFileWriter::BeginWriting( const char *filePath_ ) {
 	if( allocFn ) {
 		this->filePath = (char *)allocFn( pathLen + 1 );
 	} else {
-		this->filePath = (char *)G_LevelMalloc( pathLen + 1 );
+		this->filePath = (char *)G_Malloc( pathLen + 1 );
 	}
 	if( !this->filePath ) {
 		G_Printf( S_COLOR_RED "%s: Can't allocate a buffer for storing a file path copy\n", tag );

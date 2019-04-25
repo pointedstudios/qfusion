@@ -20,19 +20,19 @@ void AasElementsMask::Init( AiAasWorld *parent ) {
 	// We can allocate only with a byte granularity so add one byte for every item.
 	unsigned numAreasBytes = ( parent->NumAreas() / 8 ) + 1u;
 	areasMask = new( bitVectorsHolder.unsafe_grow_back() )BitVector(
-		(uint8_t *)G_LevelMalloc( numAreasBytes ), numAreasBytes );
+		(uint8_t *)G_Malloc( numAreasBytes ), numAreasBytes );
 
 	unsigned numFacesBytes = ( parent->NumFaces() / 8 ) + 1u;
 	facesMask = new( bitVectorsHolder.unsafe_grow_back() )BitVector(
-		(uint8_t *)G_LevelMalloc( numFacesBytes ), numFacesBytes );
+		(uint8_t *)G_Malloc( numFacesBytes ), numFacesBytes );
 
 	numAreas = parent->NumAreas();
 
-	tmpAreasVisRow = (bool *)G_LevelMalloc( sizeof( bool ) * numAreas * TMP_ROW_REDUNDANCY_SCALE );
+	tmpAreasVisRow = (bool *)G_Malloc( sizeof( bool ) * numAreas * TMP_ROW_REDUNDANCY_SCALE );
 	// Don't share these buffers even it looks doable.
 	// It could lead to nasty reentrancy bugs especially considering that
 	// both buffers are very likely to be used in blocked areas status determination.
-	blockedAreasTable = (bool *)G_LevelMalloc( sizeof( bool ) * numAreas );
+	blockedAreasTable = (bool *)G_Malloc( sizeof( bool ) * numAreas );
 }
 
 void AasElementsMask::Shutdown() {
@@ -42,12 +42,12 @@ void AasElementsMask::Shutdown() {
 	facesMask = nullptr;
 
 	if( tmpAreasVisRow ) {
-		G_LevelFree( tmpAreasVisRow );
+		G_Free( tmpAreasVisRow );
 		tmpAreasVisRow = nullptr;
 	}
 
 	if( blockedAreasTable ) {
-		G_LevelFree( blockedAreasTable );
+		G_Free( blockedAreasTable );
 		blockedAreasTable = nullptr;
 	}
 }
