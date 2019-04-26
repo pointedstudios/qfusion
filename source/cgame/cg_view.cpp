@@ -158,20 +158,32 @@ static void CG_ShowQuickMenuForMatchState() {
 		CG_ShowQuickMenu( 0 );
 		return;
 	}
+
 	if( matchState > MATCH_STATE_POSTMATCH ) {
 		CG_ShowQuickMenu( 0 );
 		return;
 	}
+
+	if( matchState <= MATCH_STATE_PLAYTIME ) {
+		// Do not show RnS menu to spectators unless during a post-match
+		if( cg.predictedPlayerState.stats[STAT_REALTEAM] == TEAM_SPECTATOR ) {
+			CG_ShowQuickMenu( 0 );
+			return;
+		}
+	}
+
 	if( matchState == MATCH_STATE_PLAYTIME ) {
 		if( cg.time - GS_MatchStartTime() > 5000 ) {
 			CG_ShowQuickMenu( 0 );
 			return;
 		}
 	}
+
 	if( !cg.quickmenu[0] ) {
 		CG_SC_MenuQuick();
 		return;
 	}
+
 	CG_ShowQuickMenu( 1 );
 }
 
