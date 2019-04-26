@@ -204,9 +204,9 @@ float DefaultBotEvolutionManager::DefaultEvolutionScore( const edict_t *ent ) co
 
 	// We need some common action utility measurement unit. Give each action a weight in health/damage units.
 
-	float damageScore = stats.GetEntry( "total_damage_given" );
-	if( auto damageReceived = stats.GetEntry( "total_damage_received" ) ) {
-		damageScore *= damageScore / (float)damageReceived;
+	float damageScore = stats.GetEntry( "damage_given" );
+	if( auto damageTaken = stats.GetEntry( "damage_taken" ) ) {
+		damageScore *= damageScore / (float)damageTaken;
 	}
 
 	// Add 100 "damage" points for frags
@@ -215,12 +215,12 @@ float DefaultBotEvolutionManager::DefaultEvolutionScore( const edict_t *ent ) co
 		killsScore *= ( killsScore / 100 ) / (float)deaths;
 	}
 
-	float healthScore = stats.GetEntry( "health_taken" ) + ( 1 / 0.66f ) * stats.GetEntry( "armor_taken " );
+	float healthScore = stats.GetEntry( "health_taken" ) + ( 1 / 0.66f ) * stats.GetEntry( "armor_taken" );
 	// Add extra reward for MH/armors pickup
 	healthScore += 2 * 100 * ( stats.GetEntry( "mh_taken" ) + stats.GetEntry( "uh_taken" ) );
 	float armorScore = 100 * stats.GetEntry( "ra_taken" );
 	armorScore += 75 * stats.GetEntry( "ya_taken" );
-	armorScore += 50 * stats.GetEntry( "ga_taken " );
+	armorScore += 50 * stats.GetEntry( "ga_taken" );
 	healthScore += 2 * ( 1 / 0.66f ) * armorScore;
 
 	float powerupsScore = stats.GetEntry( "quads_taken" );
@@ -228,7 +228,7 @@ float DefaultBotEvolutionManager::DefaultEvolutionScore( const edict_t *ent ) co
 	powerupsScore += stats.GetEntry( "regens_taken" );
 	powerupsScore *= 500;
 
-	float flagsScore = 500 * stats.GetEntry( "flags_capped " );
+	float flagsScore = 500 * stats.GetEntry( "flags_capped" );
 	float bombsScore = 200 * stats.GetEntry( "bombs_planted" ) + 300 * stats.GetEntry( "bombs_defused" );
 
 	return damageScore + killsScore + healthScore + powerupsScore + flagsScore + bombsScore;
