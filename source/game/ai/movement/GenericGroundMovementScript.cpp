@@ -157,13 +157,12 @@ void GenericGroundMovementScript::SetupMovement( Context *context ) {
 		}
 	}
 
-	const auto *aasWorld = AiAasWorld::Instance();
+	const auto isInNofallArea = AiAasWorld::Instance()->AreaSettings()[context->CurrAasAreaNum()].areaflags & AREA_NOFALL;
+
 	if( !entityPhysicsState.GroundEntity() ) {
 		if( intendedDotActual > 0.95f ) {
-			if( allowAirAccel && squareDistanceToTarget > SQUARE( 96.0f ) ) {
-				if( aasWorld->AreaSettings()[context->CurrGroundedAasAreaNum()].areaflags & AREA_NOFALL ) {
-					context->CheatingAccelerate( 0.5f );
-				}
+			if( allowAirAccel && isInNofallArea && squareDistanceToTarget > SQUARE( 96.0f ) ) {
+				context->CheatingAccelerate( 0.5f );
 			}
 			return;
 		} else if( intendedDotActual < 0 ) {
@@ -178,7 +177,7 @@ void GenericGroundMovementScript::SetupMovement( Context *context ) {
 		return;
 	}
 
-	if( intendedDotActual < 0 ) {
+	if( intendedDotActual < 0.7f ) {
 		botInput->SetForwardMovement( 0 );
 		botInput->SetTurnSpeedMultiplier( 5.0f );
 		return;
@@ -187,10 +186,14 @@ void GenericGroundMovementScript::SetupMovement( Context *context ) {
 	botInput->SetForwardMovement( 1 );
 	botInput->SetWalkButton( true );
 	if( allowRunning ) {
-		if( intendedDotActual > 0.7f ) {
-			if( squareDistanceToTarget > SQUARE( 64.0f - 40.0f * intendedDotActual ) ) {
-				botInput->SetWalkButton( false );
-			}
+		assert( intendedDotActual >= 0.7f );
+		// Map [0.7, 1.0] to [0.0, 1.0]
+		float frac = ( intendedDotActual - 0.7f ) / ( 1.0f - 0.7f );
+		assert( frac >= 0.0f && frac <= 1.001f );
+		// Raise threshold for a low `frac`
+		float threshold = 16.0f + ( isInNofallArea ? 16.0f : 32.0f ) * ( 1.0f - frac );
+		if( squareDistanceToTarget > SQUARE( threshold ) ) {
+			botInput->SetWalkButton( false );
 		}
 	}
 
@@ -238,7 +241,6 @@ void GenericGroundMovementScript::SetupMovement( Context *context ) {
 		return;
 	}
 
-	const auto isInNofallArea = ( aasWorld->AreaSettings()[context->CurrGroundedAasAreaNum()].areaflags & AREA_NOFALL );
 	if( !isInNofallArea && ( squareDistanceToTarget < SQUARE( 128.0f ) || speed2D > 550.0f ) ) {
 		return;
 	}
