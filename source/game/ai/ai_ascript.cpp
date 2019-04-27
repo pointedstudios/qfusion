@@ -1137,8 +1137,8 @@ static inline AiObjectiveBasedTeam *GetObjectiveBasedTeam(const char *caller, in
         API_ERRORV("%s: illegal team %d\n", caller, team);
 
     // We are not allowed to fail anymore, force switching to objective-based AI team if needed
-    AiBaseTeam *baseTeam = AiBaseTeam::GetTeamForNum(team, typeid(AiObjectiveBasedTeam));
-    return dynamic_cast<AiObjectiveBasedTeam*>(baseTeam);
+    AiBaseTeam *baseTeam = AiBaseTeam::GetTeamForNumAndType<AiObjectiveBasedTeam>( team );
+    return static_cast<AiObjectiveBasedTeam*>( baseTeam );
 }
 
 void asFunc_AddDefenceSpot( int team, const AiDefenceSpot *spot )

@@ -43,25 +43,13 @@ AiBaseTeam *AiBaseTeam::GetTeamForNum( int teamNum ) {
 	return *teamRef;
 }
 
-AiBaseTeam *AiBaseTeam::GetTeamForNum( int teamNum, const std::type_info &desiredType ) {
-	CheckTeamNum( teamNum );
+AiBaseTeam *AiBaseTeam::ReplaceTeam( int teamNum, const std::type_info &desiredType ) {
+	// Make sure this method is applied only for instantiation of descendants
+	assert( typeid( AiBaseTeam ) != desiredType );
+
 	AiBaseTeam **teamRef = TeamRefForNum( teamNum );
 	if( !*teamRef ) {
-		AI_FailWith( "AiBaseTeam::GetTeamForNum(,)", "A team for num %d has not been instantiated yet\n", teamNum );
-	}
-
-	// Check whether the desired type is related to AiBaseTeam at all.
-	// If types A and B are involved in (transitive) inheritance relation, this statement holds: A <: B or B <: A
-	if( typeid( AiBaseTeam ) != desiredType ) {
-		if( !typeid( AiBaseTeam ).before( desiredType ) && !desiredType.before( typeid( AiBaseTeam ) ) ) {
-			AI_FailWith( "AiBaseTeam::GetTeamForNum(,)", "Desired type %s is unrelated to AiBaseTeam\n", desiredType.name() );
-		}
-	}
-
-	// If the existing type is not an ancestor (a parent) of the desired type
-	// (matches it exactly or is a descendant of it)
-	if( !typeid( **teamRef ).before( desiredType ) ) {
-		return *teamRef;
+		AI_FailWith( "AiBaseTeam::ReplaceTeam()", "A team for num %d has not been instantiated yet\n", teamNum );
 	}
 
 	// Destroy the existing AI team for the team slot

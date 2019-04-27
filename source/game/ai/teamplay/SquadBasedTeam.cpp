@@ -1601,12 +1601,6 @@ AiSquadBasedTeam *AiSquadBasedTeam::InstantiateTeam( int teamNum ) {
 }
 
 AiSquadBasedTeam *AiSquadBasedTeam::InstantiateTeam( int teamNum, const std::type_info &desiredType ) {
-	if( !typeid( AiBaseTeam ).before( desiredType ) ) {
-		const char *tag = "AiSquadBasedTeam";
-		const char *format = "InstantiateTeam(): Desired type %s is not a descendant of AiBaseTeam";
-		AI_FailWith( tag, format, desiredType.name() );
-	}
-
 	if( typeid( AiSquadBasedTeam ) == desiredType ) {
 		return InstantiateTeam( teamNum );
 	}

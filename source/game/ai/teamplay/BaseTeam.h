@@ -39,6 +39,8 @@ class AiBaseTeam : public AiFrameAwareComponent {
 	// Instantiates appropriate kind of team for a current gametype.
 	static AiBaseTeam *InstantiateTeam( int teamNum );
 
+	static AiBaseTeam *ReplaceTeam( int reamNum, const std::type_info &desiredType );
+
 	static AiBaseTeam *teamsForNums[GS_MAX_TEAMS - 1];
 protected:
 	explicit AiBaseTeam( int teamNum_ );
@@ -106,8 +108,23 @@ public:
 	 * and thus switch an AI team dynamically if advanced AI features are requested.
 	 * The purpose of this method is to simplify gametype scripting.
 	 * (if some script syscalls that assume a feature-reach AI team are executed).
+	 * @tparam TeamType a desired team type.
 	 */
-	static AiBaseTeam *GetTeamForNum( int teamNum, const std::type_info &desiredType );
+	template <typename TeamType>
+	static AiBaseTeam *GetTeamForNumAndType( int teamNum ) {
+		CheckTeamNum( teamNum );
+		AiBaseTeam **teamRef = TeamRefForNum( teamNum );
+		if( !*teamRef ) {
+			const char *format = "A team for num %d has not been instantiated yet\n";
+			AI_FailWith( "AiBaseTeam::GetTeamForNumAndType()", format, teamNum );
+		}
+
+		if( dynamic_cast<const TeamType *>( *teamRef ) ) {
+			return *teamRef;
+		}
+
+		return ReplaceTeam( teamNum, typeid( TeamType ) );
+	}
 
 	/**
 	 * Allows to override entity weights for bot items selection.
