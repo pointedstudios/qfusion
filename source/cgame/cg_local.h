@@ -937,6 +937,8 @@ extern cvar_t *cg_playListShuffle;
 
 extern cvar_t *cg_flashWindowCount;
 
+extern cvar_t *cg_autoRespectMenu;
+
 #define CG_Malloc( size ) trap_MemAlloc( size, __FILE__, __LINE__ )
 #define CG_Free( data ) trap_MemFree( data, __FILE__, __LINE__ )
 

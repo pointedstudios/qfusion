@@ -153,6 +153,10 @@ static void CG_AddLocalSounds( void ) {
 void CG_SC_MenuQuick();
 
 static void CG_ShowQuickMenuForMatchState() {
+	if( GS_RaceGametype() ) {
+		return;
+	}
+
 	const auto matchState = GS_MatchState();
 	if( matchState < MATCH_STATE_COUNTDOWN ) {
 		CG_ShowQuickMenu( 0 );
@@ -184,7 +188,10 @@ static void CG_ShowQuickMenuForMatchState() {
 		return;
 	}
 
-	CG_ShowQuickMenu( 1 );
+	// Avoid an early rejection by this var as it may be toggled from a console during a menu lifecycle
+	if( cg_autoRespectMenu->integer ) {
+		CG_ShowQuickMenu( 1 );
+	}
 }
 
 /*
