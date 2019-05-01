@@ -155,10 +155,6 @@ class AiAasRouteCache {
 		 */
 		int contentsTravelFlags;
 		/**
-		 * A copy of area flags from {@code areasettings_t} for an area
-		 */
-		int settingsAreaFlags;
-		/**
 		 * A computed result of ClusterAreaNum() call
 		 */
 		uint16_t clusterAreaNum;
@@ -180,7 +176,7 @@ class AiAasRouteCache {
 	};
 
 	// Note: Using Int32Align2 won't give a substantial win (only 2 bytes that are wasted for alignment)
-	static_assert( sizeof( AreaPathFindingData ) == 16, "The struct size assumptions are broken" );
+	static_assert( sizeof( AreaPathFindingData ) == 12, "The struct size assumptions are broken" );
 
 	/**
 	 * As the areas exclusion status is individual for a bot and it must be preserved between frames,
@@ -484,11 +480,6 @@ public:
 	}
 
 	inline bool AreaDisabled( int areaNum ) const {
-		const auto &areaData = areaPathFindingData[areaNum];
-		return areaData.disabledStatus.CurrStatus() || ( areaData.settingsAreaFlags & AREA_DISABLED );
-	}
-
-	inline bool AreaTemporarilyDisabled( int areaNum ) const {
 		return areaPathFindingData[areaNum].disabledStatus.CurrStatus();
 	}
 

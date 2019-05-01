@@ -214,6 +214,7 @@ void AiAasRouteCache::FreeRoutingCache( AreaOrPortalCacheTable *cache ) {
 void AiAasRouteCache::SetDisabledZones( DisableZoneRequest **requests, int numRequests ) {
 	// Copy the reference to a local var for faster access
 	AreaPathFindingData *const __restrict areaPathFindingData = this->areaPathFindingData;
+	const auto *const __restrict aasAreaSettings = aasWorld.AreaSettings();
 
 	const auto numAreas = aasWorld.NumAreas();
 
@@ -229,9 +230,10 @@ void AiAasRouteCache::SetDisabledZones( DisableZoneRequest **requests, int numRe
 		requests[i]->FillBlockedAreasTable( blockedAreasTable );
 	}
 
-	// For each selected area mark area as disabled
+	// For each selected area mark area as disabled.
+	// Put a global (static) disabled status of an area too.
 	for( int i = 0; i < numAreas; ++i ) {
-		if( blockedAreasTable[i] ) {
+		if( blockedAreasTable[i] || ( aasAreaSettings[i].areaflags & AREA_DISABLED ) ) {
 			areaPathFindingData[i].disabledStatus.SetCurrStatus( true );
 		}
 	}
@@ -304,7 +306,6 @@ void AiAasRouteCache::InitCompactReachDataAreaDataAndHelpers() {
 
 		auto *const areaData = &areaPathFindingData[i];
 		areaData->contentsTravelFlags = tfl;
-		areaData->settingsAreaFlags = areaSettings.areaflags;
 		areaData->firstReachNum = ToUint16CheckingRange( areaSettings.firstreachablearea );
 		int clusterOrPortalNum = areaSettings.cluster;
 		assert( clusterOrPortalNum >= std::numeric_limits<int8_t>::min() );
@@ -313,6 +314,10 @@ void AiAasRouteCache::InitCompactReachDataAreaDataAndHelpers() {
 		int clusterAreaNum = ClusterAreaNum( aasAreaSettings, aasPortals, clusterOrPortalNum, i );
 		areaData->clusterAreaNum = ToUint16CheckingRange( clusterAreaNum );
 		areaData->disabledStatus = AreaDisabledStatus();
+		// Set an initial disabled status in this case
+		if( aasAreaSettings[i].areaflags & AREA_DISABLED ) {
+			areaData->disabledStatus.SetCurrStatus( true );
+		}
 	}
 
 	const auto *const aasReach = aasWorld.Reachabilities();
@@ -350,14 +355,15 @@ void AiAasRouteCache::InitCompactReachDataAreaDataAndHelpers() {
 }
 
 AiAasRouteCache::AreaPathFindingData *AiAasRouteCache::CloneAreaPathFindingData() {
+	const auto *const aasAreaSettings = aasWorld.AreaSettings();
 	const int numAreas = aasWorld.NumAreas();
 	size_t dataSize = numAreas * sizeof( AreaPathFindingData );
 	auto *const newData = (AreaPathFindingData *)GetClearedMemory( dataSize );
 	assert( this->areaPathFindingData );
 	memcpy( newData, this->areaPathFindingData, dataSize );
-	// Reset area routing status
+	// Reset area routing status to a static one (that corresponds to the flags)
 	for( int i = 0; i < numAreas; ++i ) {
-		newData[i].disabledStatus.SetCurrStatus( false );
+		newData[i].disabledStatus.SetCurrStatus( ( aasAreaSettings[i].areaflags & AREA_DISABLED ) ? true : false );
 	}
 	return newData;
 }
@@ -1170,10 +1176,6 @@ void AiAasRouteCache::UpdateAreaRoutingCache( const aas_areasettings_t *aasAreaS
 			const auto &nextAreaData = areaPathFindingData[nextAreaNum];
 			// If it is not allowed to enter the next area
 			if( nextAreaData.disabledStatus.CurrStatus() ) {
-				continue;
-			}
-			// Respect global flags too
-			if( nextAreaData.settingsAreaFlags & AREA_DISABLED ) {
 				continue;
 			}
 			// If the next area has a not allowed travel flag
