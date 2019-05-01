@@ -318,9 +318,34 @@ void AiAasRouteCache::InitCompactReachDataAreaDataAndHelpers() {
 	const auto *const aasReach = aasWorld.Reachabilities();
 	for( int i = 0; i < numReach; ++i ) {
 		const auto &reach = aasReach[i];
+		uint16_t travelTime = reach.traveltime;
+		// Try to avoid ledge areas to prevent unintended falling
+		// by increasing the travel time by some penalty value (3 seconds).
+		// That's an idea from Doom 3 source code.
+		// Apply penalty on areas that do not look like useful as well
+		const auto nextAreaFlags = aasAreaSettings[reach.areanum].areaflags;
+		if( nextAreaFlags & ( AREA_LEDGE | AREA_JUNK ) ) {
+			if( nextAreaFlags & AREA_WALL ) {
+				if( nextAreaFlags & AREA_LEDGE ) {
+					// If this area has a wall, it usually cannot be avoided, so apply lesser penalty
+					travelTime = ToUint16CheckingRange( travelTime + 50 );
+				}
+				if( nextAreaFlags & AREA_JUNK ) {
+					travelTime = ToUint16CheckingRange( travelTime + 100 );
+				}
+			} else {
+				if( nextAreaFlags & AREA_LEDGE ) {
+					travelTime = ToUint16CheckingRange( travelTime + 100 );
+				}
+				if( nextAreaFlags & AREA_JUNK ) {
+					travelTime = ToUint16CheckingRange( travelTime + 50 );
+				}
+			}
+		}
+
 		auto *const &reachData = &reachPathFindingData[i];
 		reachData->travelFlags = ::travelFlagForType[reach.traveltype & TRAVELTYPE_MASK];
-		reachData->travelTime = reach.traveltime;
+		reachData->travelTime = travelTime;
 	}
 }
 
@@ -1181,29 +1206,6 @@ void AiAasRouteCache::UpdateAreaRoutingCache( const aas_areasettings_t *aasAreaS
 			relaxedTime += reachData.travelTime;
 			// We must check overflow, should never happen in production
 			uint16_t t = ToUint16CheckingRange( relaxedTime );
-			// Try to avoid ledge areas to prevent unintended falling
-			// by increasing the travel time by some penalty value (3 seconds).
-			// That's an idea from Doom 3 source code.
-			// Apply penalty on areas that do not look like useful as well
-			const auto nextAreaFlags = nextAreaData.settingsAreaFlags;
-			if( nextAreaFlags & ( AREA_LEDGE | AREA_JUNK ) ) {
-				if( nextAreaFlags & AREA_WALL ) {
-					if( nextAreaFlags & AREA_LEDGE ) {
-						// If this area has a wall, it usually cannot be avoided, so apply lesser penalty
-						t = ToUint16CheckingRange( t + 50 );
-					}
-					if( nextAreaFlags & AREA_JUNK ) {
-						t = ToUint16CheckingRange( t + 100 );
-					}
-				} else {
-					if( nextAreaFlags & AREA_LEDGE ) {
-						t = ToUint16CheckingRange( t + 100 );
-					}
-					if( nextAreaFlags & AREA_JUNK ) {
-						t = ToUint16CheckingRange( t + 50 );
-					}
-				}
-			}
 
 			// Check whether we can "relax" the edge (in Dijkstra terms)
 			auto *const timeToRelax = &areaCache->travelTimes[clusterAreaNum];
