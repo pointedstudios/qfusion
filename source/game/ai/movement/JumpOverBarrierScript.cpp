@@ -56,7 +56,7 @@ void JumpOverBarrierScript::SetupMovement( Context *context ) {
 			}
 			// Note that the distance threshold is lower than usual for fallbacks,
 			// since we're going to be stopped by a barrier anyway and shouldn't miss it
-			if( !entityPhysicsState.GroundEntity() || squareDistance < SQUARE( 72.0f ) ) {
+			if( !entityPhysicsState.GroundEntity() || squareDistance < SQUARE( 128.0f ) ) {
 				return;
 			}
 
@@ -90,6 +90,11 @@ void JumpOverBarrierScript::SetupMovement( Context *context ) {
 
 	botInput->SetWalkButton( false );
 	botInput->SetUpMovement( 1 );
+
+	// Do not make walljumping attempts for short obstacles
+	if( this->top[2] - this->start[2] < 24.0f ) {
+		return;
+	}
 
 	if( !allowWalljumping ) {
 		return;
