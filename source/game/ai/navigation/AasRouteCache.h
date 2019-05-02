@@ -151,10 +151,6 @@ class AiAasRouteCache {
 	 */
 	struct alignas( 4 )AreaPathFindingData {
 		/**
-		 * An old "areacontentstravelflags" value for an area
-		 */
-		int contentsTravelFlags;
-		/**
 		 * A computed result of ClusterAreaNum() call
 		 */
 		uint16_t clusterAreaNum;
@@ -176,7 +172,7 @@ class AiAasRouteCache {
 	};
 
 	// Note: Using Int32Align2 won't give a substantial win (only 2 bytes that are wasted for alignment)
-	static_assert( sizeof( AreaPathFindingData ) == 12, "The struct size assumptions are broken" );
+	static_assert( sizeof( AreaPathFindingData ) == 8, "The struct size assumptions are broken" );
 
 	/**
 	 * As the areas exclusion status is individual for a bot and it must be preserved between frames,

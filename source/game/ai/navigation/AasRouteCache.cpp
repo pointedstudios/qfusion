@@ -262,6 +262,37 @@ void AiAasRouteCache::SetDisabledZones( DisableZoneRequest **requests, int numRe
 	resultCache.Clear();
 }
 
+static int AreaContentsTravelFlags( const aas_areasettings_t &areaSettings ) {
+	const int contents = areaSettings.contents;
+
+	int result = 0;
+	if( contents & AREACONTENTS_WATER ) {
+		result |= TFL_WATER;
+	} else if( contents & AREACONTENTS_SLIME ) {
+		result |= TFL_SLIME;
+	} else if( contents & AREACONTENTS_LAVA ) {
+		result |= TFL_LAVA;
+	} else {
+		result |= TFL_AIR;
+	}
+
+	if( contents & AREACONTENTS_DONOTENTER ) {
+		result |= TFL_DONOTENTER;
+	}
+	if( contents & AREACONTENTS_NOTTEAM1 ) {
+		result |= TFL_NOTTEAM1;
+	}
+	if( contents & AREACONTENTS_NOTTEAM2 ) {
+		result |= TFL_NOTTEAM2;
+	}
+
+	if( areaSettings.areaflags & AREA_BRIDGE ) {
+		result |= TFL_BRIDGE;
+	}
+
+	return result;
+}
+
 void AiAasRouteCache::InitCompactReachDataAreaDataAndHelpers() {
 	const int numAreas = aasWorld.NumAreas();
 	const int numReach = aasWorld.NumReach();
@@ -280,32 +311,7 @@ void AiAasRouteCache::InitCompactReachDataAreaDataAndHelpers() {
 	const auto *const aasPortals = aasWorld.Portals();
 	for( int i = 0; i < numAreas; ++i ) {
 		const auto &areaSettings = aasAreaSettings[i];
-		int contents = areaSettings.contents;
-		int tfl = 0;
-		if( contents & AREACONTENTS_WATER ) {
-			tfl |= TFL_WATER;
-		} else if( contents & AREACONTENTS_SLIME ) {
-			tfl |= TFL_SLIME;
-		} else if( contents & AREACONTENTS_LAVA ) {
-			tfl |= TFL_LAVA;
-		} else {
-			tfl |= TFL_AIR;
-		}
-		if( contents & AREACONTENTS_DONOTENTER ) {
-			tfl |= TFL_DONOTENTER;
-		}
-		if( contents & AREACONTENTS_NOTTEAM1 ) {
-			tfl |= TFL_NOTTEAM1;
-		}
-		if( contents & AREACONTENTS_NOTTEAM2 ) {
-			tfl |= TFL_NOTTEAM2;
-		}
-		if( areaSettings.areaflags & AREA_BRIDGE ) {
-			tfl |= TFL_BRIDGE;
-		}
-
 		auto *const areaData = &areaPathFindingData[i];
-		areaData->contentsTravelFlags = tfl;
 		areaData->firstReachNum = ToUint16CheckingRange( areaSettings.firstreachablearea );
 		int clusterOrPortalNum = areaSettings.cluster;
 		assert( clusterOrPortalNum >= std::numeric_limits<int8_t>::min() );
@@ -348,8 +354,12 @@ void AiAasRouteCache::InitCompactReachDataAreaDataAndHelpers() {
 			}
 		}
 
+		// Combine intrinsic reach travel flags and old "area contents travel flags" for the target area
+		int travelFlags = ::travelFlagForType[reach.traveltype & TRAVELTYPE_MASK];
+		travelFlags |= AreaContentsTravelFlags( aasAreaSettings[reach.areanum] );
+
 		auto *const &reachData = &reachPathFindingData[i];
-		reachData->travelFlags = ::travelFlagForType[reach.traveltype & TRAVELTYPE_MASK];
+		reachData->travelFlags = travelFlags;
 		reachData->travelTime = travelTime;
 	}
 }
@@ -1176,10 +1186,6 @@ void AiAasRouteCache::UpdateAreaRoutingCache( const aas_areasettings_t *aasAreaS
 			const auto &nextAreaData = areaPathFindingData[nextAreaNum];
 			// If it is not allowed to enter the next area
 			if( nextAreaData.disabledStatus.CurrStatus() ) {
-				continue;
-			}
-			// If the next area has a not allowed travel flag
-			if( nextAreaData.contentsTravelFlags & badTravelFlags ) {
 				continue;
 			}
 
