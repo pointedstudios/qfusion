@@ -1447,8 +1447,6 @@ public:
 	}
 
 	void OnClientHadPlaytime( const gclient_t *client );
-
-	int ForEachRaceRun( const std::function<void( const raceRun_t & )> &applyThis ) const;
 };
 
 /**

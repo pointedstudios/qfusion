@@ -330,14 +330,6 @@ void StatsowFacade::SetRaceTime( edict_t *owner, int sector, int64_t time ) {
 	}
 }
 
-int StatsowFacade::ForEachRaceRun( const std::function<void( const raceRun_t & )> &applyThis ) const {
-	for( const auto &run: raceRuns ) {
-		applyThis( run );
-	}
-
-	return (int)raceRuns.size();
-}
-
 static SingletonHolder<StatsowFacade> statsInstanceHolder;
 
 void StatsowFacade::Init() {
