@@ -1365,8 +1365,6 @@ class StatsowFacade {
 	ClientEntry *clientEntriesHead { nullptr };
 	clientRating_t *ratingsHead { nullptr };
 
-	StatsSequence<raceRun_t> raceRuns;
-
 	bool isDiscarded { false };
 
 	void AddPlayerReport( edict_t *ent, bool final );
@@ -1388,22 +1386,23 @@ class StatsowFacade {
 	}
 
 	void SendGenericMatchStateEvent( const char *event );
+
+	void ValidateRaceRun( const char *tag, const edict_t *owner );
 public:
 	static void Init();
 	static void Shutdown();
 
 	static StatsowFacade *Instance();
 
-	~StatsowFacade();
-
 	bool IsValid() const;
 
-	void Frame();
+	void Frame() {};
 
 	void ClearEntries();
 
-	raceRun_t *NewRaceRun( const edict_t *owner, int numSectors );
-	void SetRaceTime( edict_t *owner, int sector, int64_t time );
+	RaceRun *NewRaceRun( const edict_t *owner, int numSectors );
+	void SetSectorTime( edict_t *owner, int sector, int64_t time );
+	void CompleteRun( edict_t *owner, int64_t finalTime );
 
 	void WriteHeaderFields( class JsonWriter &writer, int teamGame );
 
@@ -1411,7 +1410,7 @@ public:
 	 * Triggers sending of a race report if necessarily.
 	 * Race reports are sent in a non-blocking fashion.
 	 */
-	void SendRaceRunReport();
+	void SendRaceRunReport( RaceRun *raceRun );
 
 	/**
 	 * Triggers sending of a match report if necessarily.

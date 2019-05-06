@@ -239,95 +239,103 @@ void StatsowFacade::RemoveRating( edict_t *ent ) {
 	UpdateAverageRating();
 }
 
-// from AS
-raceRun_t *StatsowFacade::NewRaceRun( const edict_t *ent, int numSectors ) {
-	gclient_t *cl;
-	raceRun_t *rr;
+RaceRun::RaceRun( const struct gclient_s *client_, int numSectors_, int64_t *times_ )
+	: clientSessionId( client_->mm_session ), numSectors( numSectors_ ), times( times_ ) {
+	assert( numSectors_ > 0 );
+	// Check alignment of the provided times array
+	assert( ( (uintptr_t)( times_ ) % 8 ) == 0 );
 
-	cl = ent->r.client;
+	SaveNickname( client_ );
+}
 
-	if( !ent->r.inuse || !cl  ) {
+void RaceRun::SaveNickname( const struct gclient_s *client ) {
+	if( client->mm_session.IsValidSessionId() ) {
+		nickname[0] = '\0';
+		return;
+	}
+
+	Q_strncpyz( nickname, client->netname, MAX_NAME_BYTES );
+}
+
+RaceRun *StatsowFacade::NewRaceRun( const edict_t *ent, int numSectors ) {
+	auto *const client = ent->r.client;
+
+	// TODO: Raise an exception
+	if( !ent->r.inuse || !client  ) {
 		return nullptr;
 	}
 
-	rr = &cl->level.stats.currentRun;
-	if( rr->times ) {
-		G_LevelFree( rr->times );
+	auto *run = client->level.stats.currentRun;
+	uint8_t *mem = nullptr;
+	if( run ) {
+		// Check whether we can actually reuse the underlying memory chunk
+		if( run->numSectors == numSectors ) {
+			mem = (uint8_t *)run;
+		}
+		run->~RaceRun();
+		if( !mem ) {
+			G_Free( run );
+		}
 	}
 
-	rr->times = ( int64_t * )G_LevelMalloc( ( numSectors + 1 ) * sizeof( *rr->times ) );
-	rr->numSectors = numSectors;
-	rr->owner = cl->mm_session;
-	if( cl->mm_session.IsValidSessionId() ) {
-		rr->nickname[0] = '\0';
-	} else {
-		Q_strncpyz( rr->nickname, cl->netname, MAX_NAME_BYTES );
+	if( !mem ) {
+		mem = (uint8_t *) G_Malloc( sizeof( RaceRun ) + (numSectors + 1) * sizeof( int64_t ));
 	}
 
-	return rr;
+	static_assert( alignof( RaceRun ) == 8, "Make sure we do not need to align the times array separately" );
+	auto *times = ( int64_t * )( mem + sizeof( RaceRun ) );
+	auto *newRun = new( mem )RaceRun( client, numSectors, times );
+	// Set the constructed run as a current one for the client
+	return ( client->level.stats.currentRun = newRun );
 }
 
-// from AS
-void StatsowFacade::SetRaceTime( edict_t *owner, int sector, int64_t time ) {
-	auto *const cl = owner->r.client;
-
-	if( !owner->r.inuse || !cl ) {
-		return;
+void StatsowFacade::ValidateRaceRun( const char *tag, const edict_t *owner ) {
+	// TODO: Validate this at script wrapper layer and throw an exception
+	// or throw a specific subclass of exceptions here and catch at script wrappers layers
+	if( !owner ) {
+		G_Error( "%s: The owner entity is not specified\n", tag );
 	}
 
-	raceRun_t *const rr = &cl->level.stats.currentRun;
-	if( sector < -1 || sector >= rr->numSectors ) {
-		return;
+	const auto *client = owner->r.client;
+	if( !client ) {
+		G_Error( "%s: The owner entity is not a client\n", tag );
 	}
 
-	// normal sector
-	if( sector >= 0 ) {
-		rr->times[sector] = time;
-	} else if( rr->numSectors > 0 ) {
-		raceRun_t *nrr; // new global racerun
+	const auto *run = client->level.stats.currentRun;
+	if( !run ) {
+		G_Error( "%s: The client does not have a current race run\n", tag );
+	}
+}
 
-		rr->times[rr->numSectors] = time;
-		rr->utcTimestamp = game.utcTimeMillis;
+void StatsowFacade::SetSectorTime( edict_t *owner, int sector, int64_t time ) {
+	const char *tag = "StatsowFacade::SetSectorTime()";
+	ValidateRaceRun( tag, owner );
 
-		// validate the client
-		// no bots for race, at all
-		if( owner->r.svflags & SVF_FAKECLIENT /* && mm_debug_reportbots->value == 0 */ ) {
-			G_Printf( "G_SetRaceTime: not reporting fakeclients\n" );
-			return;
-		}
+	auto *const client = owner->r.client;
+	auto *const run = client->level.stats.currentRun;
 
-		// Note: the test whether client session id has been removed,
-		// race runs are reported for non-authenticated players too
-
-		// push new run
-		nrr = raceRuns.New();
-		memcpy( nrr, rr, sizeof( raceRun_t ) );
-
-		// reuse this one in nrr
-		rr->times = nullptr;
-
-		// Once the reliable match reports pipe has been implemented
-		// we can avoid batching sent race runs in game module.
-		// Still keep in mind that all race records are valid only locally.
-		// Announcement of new game-global records is tied to introduction
-		// of a full-duplex channel between Statsow server and every game server
-		// that is planned for future development.
-		if( !raceRuns.empty() ) {
-			// Update an actual nickname that is going to be used to identify a run for a non-authenticated player
-			if( !cl->mm_session.IsValidSessionId() ) {
-				Q_strncpyz( rr->nickname, cl->netname, MAX_NAME_BYTES );
-			}
-			SendFinalReport();
-
-			// double-check this for memory-leaks
-			raceRuns.Clear();
-		}
+	if( sector < 0 || sector >= run->numSectors ) {
+		G_Error( "%s: the sector %d is out of valid bounds [0, %d)", tag, sector, run->numSectors );
 	}
 
-	// Update an actual nickname that is going to be used to identify a run for a non-authenticated player
-	if( !cl->mm_session.IsValidSessionId() ) {
-		Q_strncpyz( rr->nickname, cl->netname, MAX_NAME_BYTES );
-	}
+	run->times[sector] = time;
+	// The nickname might have been changed, save it
+	run->SaveNickname( client );
+}
+
+void StatsowFacade::CompleteRun( edict_t *owner, int64_t finalTime ) {
+	ValidateRaceRun( "StatsowFacade::CompleteRun()", owner );
+
+	auto *const client = owner->r.client;
+	auto *const run = client->level.stats.currentRun;
+
+	run->times[run->numSectors] = finalTime;
+	run->utcTimestamp = game.utcTimeMillis;
+	run->SaveNickname( client );
+
+	// Transfer the ownership over the run
+	client->level.stats.currentRun = nullptr;
+	SendRaceRunReport( run );
 }
 
 static SingletonHolder<StatsowFacade> statsInstanceHolder;
@@ -342,15 +350,6 @@ void StatsowFacade::Shutdown() {
 
 StatsowFacade *StatsowFacade::Instance() {
 	return statsInstanceHolder.Instance();
-}
-
-StatsowFacade::~StatsowFacade() {
-	if( IsValid() && !raceRuns.empty() ) {
-		SendRaceRunReport();
-	}
-}
-
-void StatsowFacade::Frame() {
 }
 
 void StatsowFacade::ClearEntries() {
@@ -407,8 +406,6 @@ void StatsowFacade::OnClientHadPlaytime( const gclient_t *client ) {
 
 void StatsowFacade::OnClientDisconnected( edict_t *ent ) {
 	if( GS_RaceGametype() ) {
-		// Force sending race reports if somebody disconnects
-		SendRaceRunReport();
 		return;
 	}
 
@@ -448,13 +445,6 @@ void StatsowFacade::OnClientJoinedTeam( edict_t *ent, int newTeam ) {
 }
 
 void StatsowFacade::OnMatchStateLaunched( int oldState, int newState ) {
-	// Send race reports (if needed) having entered post-match state
-	if( oldState != MATCH_STATE_POSTMATCH && newState == MATCH_STATE_POSTMATCH ) {
-		if( GS_RaceGametype() ) {
-			SendRaceRunReport();
-		}
-	}
-
 	if( isDiscarded ) {
 		return;
 	}
@@ -1014,7 +1004,7 @@ void StatsowFacade::SendFinalReport() {
 	}
 
 	if( GS_RaceGametype() ) {
-		SendRaceRunReport();
+		ClearEntries();
 		return;
 	}
 
@@ -1037,13 +1027,8 @@ void StatsowFacade::SendFinalReport() {
 	ClearEntries();
 }
 
-void StatsowFacade::SendRaceRunReport() {
-	if( !GS_RaceGametype() ) {
-		G_Printf( S_COLOR_YELLOW "G_Match_RaceReport.. not race gametype\n" );
-		return;
-	}
-
-	if( raceRuns.empty() ) {
+void StatsowFacade::SendRaceRunReport( RaceRun *raceRun ) {
+	if( !raceRun || !IsValid() ) {
 		return;
 	}
 
@@ -1054,30 +1039,34 @@ void StatsowFacade::SendRaceRunReport() {
 
 	writer << "race_runs" << '[';
 	{
-		for( const auto &rr: raceRuns ) {
-			writer << '{';
-			{
-				// Setting session id and nickname is mutually exclusive
-				if( rr.owner.IsValidSessionId() ) {
-					writer << "session_id" << rr.owner;
-				} else {
-					writer << "nickname" << rr.nickname;
-				}
-
-				writer << "timestamp" << rr.utcTimestamp;
-
-				writer << "times" << '[';
-				{
-					// Accessing the "+1" element is legal (its the final time). Supply it along with other times.
-					for( int j = 0; j < rr.numSectors + 1; j++ )
-						writer << rr.times[j];
-				}
-				writer << ']';
+		writer << '{';
+		{
+			// Setting session id and nickname is mutually exclusive
+			if( raceRun->clientSessionId.IsValidSessionId() ) {
+				writer << "session_id" << raceRun->clientSessionId;
+			} else {
+				writer << "nickname" << raceRun->nickname;
 			}
-			writer << '}';
+
+			writer << "timestamp" << raceRun->utcTimestamp;
+
+			writer << "times" << '[';
+			{
+				// Accessing the "+1" element is legal (its the final time). Supply it along with other times.
+				for( int j = 0; j < raceRun->numSectors + 1; j++ )
+					writer << raceRun->times[j];
+			}
+			writer << ']';
 		}
+		writer << '}';
 	}
-	writer << ']';
+
+	// We do not longer need this object.
+	// We have acquired an ownership over it in this call.
+	// TODO: We can recycle the memory chunk by putting in a free list here
+
+	raceRun->~RaceRun();
+	G_Free( raceRun );
 
 	trap_MM_EnqueueReport( query );
 }

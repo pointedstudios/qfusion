@@ -1733,15 +1733,25 @@ static void objectGameClient_NewRaceRun( int numSectors, gclient_t *self ) {
 	StatsowFacade::Instance()->NewRaceRun( PLAYERENT( playerNum ), numSectors );
 }
 
-static void objectGameClient_SetRaceTime( int sector, int64_t time, gclient_t *self ) {
-	int playerNum;
-
-	playerNum = objectGameClient_PlayerNum( self );
+static void objectGameClient_SetSectorTime( int sector, int64_t time, gclient_t *self ) {
+	// TODO: Validate `self`
+	int playerNum = objectGameClient_PlayerNum( self );
+	// TODO: Throw a script exception at this!
 	if( playerNum < 0 || playerNum >= gs.maxclients ) {
 		return;
 	}
 
-	StatsowFacade::Instance()->SetRaceTime( PLAYERENT( playerNum ), sector, time );
+	StatsowFacade::Instance()->SetSectorTime( PLAYERENT( playerNum ), sector, time );
+}
+
+static void objectGameClient_CompleteRaceRun( int64_t finalTime, gclient_t *self ) {
+	int playerNum = objectGameClient_PlayerNum( self );
+	// TODO: Throw a script exception at this!
+	if( playerNum < 0 || playerNum >= gs.maxclients ) {
+		return;
+	}
+
+	StatsowFacade::Instance()->CompleteRun( PLAYERENT( playerNum ), finalTime );
 }
 
 static void objectGameClient_SetHelpMessage( unsigned int index, gclient_t *self ) {
@@ -1825,7 +1835,8 @@ static const asMethod_t gameclient_Methods[] =
 	{ ASLIB_FUNCTION_DECL( void, set_chaseActive, ( const bool active ) ), asFUNCTION( objectGameClient_SetChaseActive ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( bool, get_chaseActive, ( ) const ), asFUNCTION( objectGameClient_GetChaseActive ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, newRaceRun, ( int numSectors ) ), asFUNCTION( objectGameClient_NewRaceRun ), asCALL_CDECL_OBJLAST },
-	{ ASLIB_FUNCTION_DECL( void, setRaceTime, ( int sector, int64 time ) ), asFUNCTION( objectGameClient_SetRaceTime ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( void, setSectorTime, ( int sector, int64 time ) ), asFUNCTION( objectGameClient_SetSectorTime ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( void, completeRaceRun, ( int64 finalTime ) ), asFUNCTION( objectGameClient_CompleteRaceRun ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, setHelpMessage, ( uint msg ) ), asFUNCTION( objectGameClient_SetHelpMessage ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, setQuickMenuItems, ( const String &in ) ), asFUNCTION( objectGameClient_SetQuickMenuItems ), asCALL_CDECL_OBJLAST },
 

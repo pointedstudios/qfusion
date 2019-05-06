@@ -58,13 +58,44 @@ typedef struct {
 	int64_t time;		// server timestamp
 } loggedFrag_t;
 
-typedef struct {
-	char nickname[32];    // not set if session id is valid
-	mm_uuid_t owner;	  // session id of the player, it is allowed to play without logging in in race
-	int64_t utcTimestamp; // real-world timestamp corresponding to the run completion
-	int numSectors;
-	int64_t *times;		  // unsigned int * numSectors+1, where last is final time
-} raceRun_t;
+struct alignas( 8 )RaceRun {
+	/**
+	 * A nickname is a fallback identifier for race runs.
+	 * (Playing race at ranked servers being anonymous is allowed and stats are collected as well for these players).
+	 * A nickname is empty if there' s a valid session id.
+	 */
+	char nickname[32] { '\0' };
+	/**
+	 * A session id of a player (that prefers using the login system).
+	 */
+	mm_uuid_t clientSessionId;
+	/**
+	 * A real-world timestamp that corresponds to the run completion moment.
+	 */
+	int64_t utcTimestamp { 0 };
+	/**
+	 * A number of sectors to complete in the run.
+	 * The range [0, numSectors) defines valid sector values for {@code StatsowFacade::SetSectorTime()}
+	 */
+	const int numSectors;
+	/**
+	 * An array of sector times that is allocated within this object
+	 * and is capable to store {@code numSectors + 1} elements (the last one is for the final time).
+	 */
+	int64_t *const times;
+
+	/**
+	 * Creates a new run object given an external storage for sector times.
+	 * @param client_ a client the run should belong to
+	 * @param numSectors_ a fixed number of sectors to complete
+	 * @param times_ a storage for sector times capable of storing {@code numSectors + 1} elements
+	 * @note it is assumed that the times array is allocated within
+	 * this run object and thus does not need its own memory management.
+	 */
+	RaceRun( const struct gclient_s *client_, int numSectors_, int64_t *times_ );
+
+	void SaveNickname( const struct gclient_s *client );
+};
 
 class GVariousStats {
 	struct Node {
@@ -362,8 +393,8 @@ typedef struct score_stats_s: public GVariousStats {
 		memset( accuracy_frags, 0, sizeof( accuracy_frags ) );
 
 		had_playtime = false;
-		memset( &currentRun, 0, sizeof( currentRun ) );
-		memset( &raceRecords, 0, sizeof( raceRecords ) );
+
+		if( currentRun )
 
 		fragsSequence.Clear();
 		awardsSequence.Clear();
@@ -403,8 +434,7 @@ typedef struct score_stats_s: public GVariousStats {
 	StatsSequence<loggedFrag_t> fragsSequence;
 	StatsSequence<gameaward_t> awardsSequence;
 
-	raceRun_t currentRun;
-	raceRun_t raceRecords;
+	RaceRun *currentRun;
 
 	score_stats_s( const score_stats_s &that ) = delete;
 	score_stats_s &operator=( const score_stats_s &that ) = delete;
@@ -436,9 +466,7 @@ private:
 		this->had_playtime = that.had_playtime, that.had_playtime = false;
 
 		this->currentRun = that.currentRun;
-		memset( &that.currentRun, 0, sizeof( that.currentRun ) );
-		this->raceRecords = that.raceRecords;
-		memset( &that.raceRecords, 0, sizeof( that.raceRecords ) );
+		that.currentRun = nullptr;
 
 		this->fragsSequence = std::move( that.fragsSequence );
 		this->awardsSequence = std::move( that.awardsSequence );
