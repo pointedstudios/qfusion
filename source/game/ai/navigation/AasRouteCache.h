@@ -53,24 +53,89 @@ class AiAasRouteCache {
 	 */
 	mutable int dummyIntPtr[1];
 
+	template<typename T> friend T *Link( T *, T ** );
+	template<typename T> friend T *Unlink( T *, T ** );
+
+	/**
+	 * Links for maintaining a list of all instances of the class.
+	 */
+	AiAasRouteCache *prev { nullptr }, *next { nullptr };
+
+	/**
+	 * An md5 digest of a boolean array of blocked areas status.
+	 * If two instances have matching digest it's very likely
+	 * that blocked areas vector is the same
+	 * (so we can read from a routing cache of other instance).
+	 * We don't care about collisions since they're harmless in this case.
+	 */
+	uint64_t blockedAreasDigest[2];
+
+	/**
+	 * A default digest for statically blocked areas in the AAS world
+	 * (some areas may have AREA_DISABLED intrinsic flag from the beginning).
+	 */
+	static uint64_t defaultBlockedAreasDigest[2];
+
 	static constexpr unsigned short CACHETYPE_PORTAL = 0;
 	static constexpr unsigned short CACHETYPE_AREA = 1;
 
 	struct AreaOrPortalCacheTable {
-		struct AreaOrPortalCacheTable *prev, *next;
-		struct AreaOrPortalCacheTable *time_prev, *time_next;
-		uint8_t *reachabilities;                    // reachabilities used for routing
-		int size;                                   // size of the routing cache
-		int startTravelTime;                        // travel time to start with
-		int travelFlags;                            // combinations of the travel flags
-		uint16_t cluster;                           // cluster the cache is for
-		uint16_t areaNum;                           // area the cache is created for
-		uint16_t type;                              // portal or area cache
-		uint16_t travelTimes[1];                    // travel time for every area (variable sized)
+		// TODO:
+		AreaOrPortalCacheTable *prev, *next;
+		// TODO:
+		AreaOrPortalCacheTable *time_prev, *time_next;
+
+		/**
+		 * Travel times to every area in cluster
+		 */
+		uint16_t *travelTimes;
+		/**
+		 * Offsets of reach. to every area in cluster
+		 */
+		uint8_t *reachOffsets;
+		/**
+		 * A total size of allocated data this struct serves as a header
+		 */
+		uint32_t size;
+		/**
+		 * AAS travel flags
+		 */
+		int travelFlags;
+		/**
+		 * Travel time to start with
+		 */
+		int startTravelTime;
+		/**
+		 * A number of cluster the cache is for
+		 */
+		uint16_t cluster;
+		/**
+		 * A global number of area the cache is for (not the number of area within cluster)
+		 */
+		uint16_t areaNum;
+		/**
+		 * A usage of this area
+		 * @todo link area and cluster caches to different lists
+		*/
+		uint16_t type;
+
+		/**
+		 * A helper low-level method for setting {@code travelTimes}, {@code reachOffsets} refs relative to {@code this}.
+		 * @param numTravelTimes a length of {@code travelTimes} (and {@code reachOffsets}) arrays that refs point to.
+		 */
+		inline void FixVarLenDataRefs( int numTravelTimes );
+		/**
+		 * A helper low-level method for setting fields of a partially constructed or copied object.
+		 * @param cluster_ a value to set for {@code cluster} field.
+		 * @param areaNum_ a value to set for {@code areaNum} field.
+		 * @param travelFlags_ a value to set for {@code travelFlags} field.
+		 * @note resets {@code startTravelTime} to {@code 1} as well.
+		 */
+		inline void SetPathFindingProps( int cluster_, int areaNum_, int travelFlags_ );
 	};
 
 	struct PathFinderNode {
-		uint16_t *areaTravelTimes;                   // travel times within the area
+		const uint16_t *areaTravelTimes;             // travel times within the area
 		uint16_t cluster;
 		uint16_t areaNum;                            // area number of the node
 		uint16_t tmpTravelTime;                      // temporary travel time
@@ -207,8 +272,8 @@ class AiAasRouteCache {
 	 */
 	ReachPathFindingData *reachPathFindingData;
 
-	PathFinderNode *areaPathFindingNodes;
-	PathFinderNode *portalPathFindingNodes;
+	mutable PathFinderNode *areaPathFindingNodes;
+	mutable PathFinderNode *portalPathFindingNodes;
 
 	RevReach *aasRevReach;
 	// Allocated within aasRevReach, no need to free this
@@ -345,19 +410,19 @@ public:
 
 	bool FreeOldestCache();
 
-	AreaOrPortalCacheTable *AllocRoutingCache( int numTravelTimes );
+	AreaOrPortalCacheTable *AllocRoutingCache( int numTravelTimes, bool zeroMemory = true );
 
 	void UpdateAreaRoutingCache( const aas_areasettings_t *aasAreaSettings,
 								 const aas_portal_t *aasPortals,
-								 AreaOrPortalCacheTable *areaCache );
+								 AreaOrPortalCacheTable *areaCache ) const;
 
 	AreaOrPortalCacheTable *GetAreaRoutingCache( const aas_areasettings_t *aasAreaSettings,
 												 const aas_portal_t *aasPortals,
 												 int clusterNum, int areaNum, int travelFlags );
 
-	void UpdatePortalRoutingCache( const aas_areasettings_t *aasAreaSettings,
-								   const aas_portal_t *aasPortals,
-								   AreaOrPortalCacheTable *portalCache );
+	const AreaOrPortalCacheTable *FindSiblingCache( int clusterNum, int clusterAreaNum, int travelFlags ) const;
+
+	void UpdatePortalRoutingCache( AreaOrPortalCacheTable *portalCache );
 
 	AreaOrPortalCacheTable *GetPortalRoutingCache( const aas_areasettings_t *aasAreaSettings,
 												   const aas_portal_t *aasPortals,
@@ -404,8 +469,10 @@ public:
 	AiAasRouteCache( AiAasRouteCache *parent, const int *newTravelFlags );
 
 	static AiAasRouteCache *shared;
+	static AiAasRouteCache *instancesHead;
 
 	static void InitTravelFlagFromType();
+	static void InitDefaultBlockedAreasDigest( const AiAasWorld &aasWorld );
 public:
 	// AiRoutingCache should be init and shutdown explicitly
 	// (a game library is not unloaded when a map changes)

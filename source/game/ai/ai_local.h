@@ -372,6 +372,7 @@ public:
 };
 
 extern const cvar_t *ai_evolution;
-extern const cvar_t *ai_debug_output;
+extern const cvar_t *ai_debugOutput;
+extern const cvar_t *ai_shareRoutingCache;
 
 #endif
