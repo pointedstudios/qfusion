@@ -4,6 +4,24 @@
 
 #ifdef CM_USE_SSE
 
+/**
+ * Create this object in scopes that match boundaries
+ * of transition between regular SSE2 and VEX-encoded binary code.
+ * Compiling this file using MSVC requires AVX support and the code
+ * is VEX-encoded contrary to the rest of the codebase.
+ * This fence inserts instructions that help to avoid transition penalties.
+ */
+struct VexEncodingFence {
+#ifdef _MSC_VER
+	VexEncodingFence() {
+		_mm256_zeroupper();
+	}
+	~VexEncodingFence() {
+		_mm256_zeroupper();
+	}
+#endif
+};
+
 static inline bool CM_BoundsIntersect_SSE42( __m128 traceAbsmins, __m128 traceAbsmaxs,
 											 const vec4_t shapeMins, const vec4_t shapeMaxs ) {
 	// This version relies on fast unaligned loads, that's why it requires SSE4.
@@ -47,6 +65,9 @@ static inline bool CM_MightCollideInLeaf_SSE42( const vec_bounds_t shapeMins,
 
 void CMSse42TraceComputer::ClipBoxToLeaf( CMTraceContext *tlc, cbrush_t *brushes,
 										  int numbrushes, cface_t *markfaces, int nummarkfaces ) {
+	volatile VexEncodingFence fence;
+	(void)fence;
+
 	int i, j;
 	cbrush_t *b;
 	cface_t *patch;
@@ -198,6 +219,9 @@ void CMSse42TraceComputer::ClipBoxToBrush( CMTraceContext *tlc, cbrush_t *brush 
 }
 
 void CMSse42TraceComputer::SetupClipContext( CMTraceContext *tlc ) {
+	volatile VexEncodingFence fence;
+	(void)fence;
+
 	// Note: Using setR is important here, otherwise components order is ... surprising
 	// (We're going to compute dot products with vectors loaded via _mm_loadu_ps that preserve array elements order)
 
@@ -230,6 +254,9 @@ void CMSse42TraceComputer::SetupCollideContext( CMTraceContext *tlc, trace_t *tr
 												const vec_t *start, const vec3_t end,
 												const vec3_t mins, const vec3_t maxs, int brushmask ) {
 	CMTraceComputer::SetupCollideContext( tlc, tr, start, end, mins, maxs, brushmask );
+	// Put the fence after the super method call (that does not use VEX encoding)
+	volatile VexEncodingFence fence;
+	(void)fence;
 
 	// Always set xmm trace bounds since it is used by all code paths, leaf-optimized and generic
 	tlc->xmmAbsmins = _mm_setr_ps( tlc->absmins[0], tlc->absmins[1], tlc->absmins[2], 0 );
