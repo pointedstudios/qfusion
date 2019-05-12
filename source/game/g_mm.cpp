@@ -324,7 +324,7 @@ void StatsowFacade::SetSectorTime( edict_t *owner, int sector, uint32_t time ) {
 	run->SaveNickname( client );
 }
 
-RunStatusQuery *StatsowFacade::CompleteRun( edict_t *owner, uint32_t finalTime ) {
+RunStatusQuery *StatsowFacade::CompleteRun( edict_t *owner, uint32_t finalTime, const char *runTag ) {
 	ValidateRaceRun( "StatsowFacade::CompleteRun()", owner );
 
 	auto *const client = owner->r.client;
@@ -336,7 +336,8 @@ RunStatusQuery *StatsowFacade::CompleteRun( edict_t *owner, uint32_t finalTime )
 
 	// Transfer the ownership over the run
 	client->level.stats.currentRun = nullptr;
-	return SendRaceRunReport( run );
+	// We pass the tag as an argument since it's memory is not intended to be in the run ownership
+	return SendRaceRunReport( run, runTag );
 }
 
 RunStatusQuery::RunStatusQuery( StatsowFacade *parent_, QueryObject *query_, const mm_uuid_t &runId_ )
@@ -1168,7 +1169,7 @@ void StatsowFacade::SendFinalReport() {
 	ClearEntries();
 }
 
-RunStatusQuery *StatsowFacade::SendRaceRunReport( RaceRun *raceRun ) {
+RunStatusQuery *StatsowFacade::SendRaceRunReport( RaceRun *raceRun, const char *runTag ) {
 	if( !raceRun ) {
 		return nullptr;
 	}
@@ -1197,6 +1198,10 @@ RunStatusQuery *StatsowFacade::SendRaceRunReport( RaceRun *raceRun ) {
 		writer << '{';
 		{
 			writer << "id" << runId;
+
+			if( runTag ) {
+				writer << "tag" << runTag;
+			}
 
 			// Setting session id and nickname is mutually exclusive
 			if( raceRun->clientSessionId.IsValidSessionId() ) {

@@ -1409,11 +1409,11 @@ public:
 
 	RaceRun *NewRaceRun( const edict_t *owner, int numSectors );
 	void SetSectorTime( edict_t *owner, int sector, uint32_t time );
-	RunStatusQuery *CompleteRun( edict_t *owner, uint32_t finalTime );
+	RunStatusQuery *CompleteRun( edict_t *owner, uint32_t finalTime, const char *runTag = nullptr );
 
 	void WriteHeaderFields( class JsonWriter &writer, int teamGame );
 
-	RunStatusQuery *SendRaceRunReport( RaceRun *raceRun );
+	RunStatusQuery *SendRaceRunReport( RaceRun *raceRun, const char *runTag = nullptr );
 
 	void SendMatchFinishedReport();
 

@@ -1802,6 +1802,21 @@ static RunStatusQuery *objectGameClient_CompleteRaceRun( uint32_t finalTime, gcl
 	return StatsowFacade::Instance()->CompleteRun( PLAYERENT( playerNum ), finalTime );
 }
 
+static RunStatusQuery *objectGameClient_CompleteRaceRun2( uint32_t finalTime, const asstring_t *tag, gclient_t *self ) {
+	int playerNum = objectGameClient_PlayerNum( self );
+	// TODO: Throw a script exception at this!
+	if( playerNum < 0 || playerNum >= gs.maxclients ) {
+		return nullptr;
+	}
+
+	edict_t *playerEnt = PLAYERENT( playerNum );
+	if( !tag || !tag->size ) {
+		return StatsowFacade::Instance()->CompleteRun( playerEnt, finalTime );
+	}
+
+	return StatsowFacade::Instance()->CompleteRun( playerEnt, finalTime, tag->buffer );
+}
+
 static void objectGameClient_SetHelpMessage( unsigned int index, gclient_t *self ) {
 	int playerNum;
 
@@ -1885,6 +1900,7 @@ static const asMethod_t gameclient_Methods[] =
 	{ ASLIB_FUNCTION_DECL( void, newRaceRun, ( int numSectors ) ), asFUNCTION( objectGameClient_NewRaceRun ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, setSectorTime, ( int sector, uint time ) ), asFUNCTION( objectGameClient_SetSectorTime ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( RunStatusQuery @, completeRaceRun, ( uint finalTime ) ), asFUNCTION( objectGameClient_CompleteRaceRun ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( RunStatusQuery @, completeRaceRun, ( uint finalTime, const String @tag ) ), asFUNCTION( objectGameClient_CompleteRaceRun2 ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, setHelpMessage, ( uint msg ) ), asFUNCTION( objectGameClient_SetHelpMessage ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, setQuickMenuItems, ( const String &in ) ), asFUNCTION( objectGameClient_SetQuickMenuItems ), asCALL_CDECL_OBJLAST },
 
