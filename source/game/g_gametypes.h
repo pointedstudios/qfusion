@@ -82,7 +82,7 @@ struct alignas( 8 )RaceRun {
 	 * An array of sector times that is allocated within this object
 	 * and is capable to store {@code numSectors + 1} elements (the last one is for the final time).
 	 */
-	int64_t *const times;
+	uint32_t *const times;
 
 	/**
 	 * Creates a new run object given an external storage for sector times.
@@ -92,7 +92,7 @@ struct alignas( 8 )RaceRun {
 	 * @note it is assumed that the times array is allocated within
 	 * this run object and thus does not need its own memory management.
 	 */
-	RaceRun( const struct gclient_s *client_, int numSectors_, int64_t *times_ );
+	RaceRun( const struct gclient_s *client_, int numSectors_, uint32_t *times_ );
 
 	void SaveNickname( const struct gclient_s *client );
 };

@@ -1408,8 +1408,8 @@ public:
 	void ClearEntries();
 
 	RaceRun *NewRaceRun( const edict_t *owner, int numSectors );
-	void SetSectorTime( edict_t *owner, int sector, int64_t time );
-	RunStatusQuery *CompleteRun( edict_t *owner, int64_t finalTime );
+	void SetSectorTime( edict_t *owner, int sector, uint32_t time );
+	RunStatusQuery *CompleteRun( edict_t *owner, uint32_t finalTime );
 
 	void WriteHeaderFields( class JsonWriter &writer, int teamGame );
 

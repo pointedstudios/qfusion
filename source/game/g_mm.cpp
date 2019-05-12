@@ -240,7 +240,7 @@ void StatsowFacade::RemoveRating( edict_t *ent ) {
 	UpdateAverageRating();
 }
 
-RaceRun::RaceRun( const struct gclient_s *client_, int numSectors_, int64_t *times_ )
+RaceRun::RaceRun( const struct gclient_s *client_, int numSectors_, uint32_t *times_ )
 	: clientSessionId( client_->mm_session ), numSectors( numSectors_ ), times( times_ ) {
 	assert( numSectors_ > 0 );
 	// Check alignment of the provided times array
@@ -280,11 +280,11 @@ RaceRun *StatsowFacade::NewRaceRun( const edict_t *ent, int numSectors ) {
 	}
 
 	if( !mem ) {
-		mem = (uint8_t *) G_Malloc( sizeof( RaceRun ) + (numSectors + 1) * sizeof( int64_t ));
+		mem = (uint8_t *)G_Malloc( sizeof( RaceRun ) + ( numSectors + 1 ) * sizeof( uint32_t ) );
 	}
 
 	static_assert( alignof( RaceRun ) == 8, "Make sure we do not need to align the times array separately" );
-	auto *times = ( int64_t * )( mem + sizeof( RaceRun ) );
+	auto *times = ( uint32_t * )( mem + sizeof( RaceRun ) );
 	auto *newRun = new( mem )RaceRun( client, numSectors, times );
 	// Set the constructed run as a current one for the client
 	return ( client->level.stats.currentRun = newRun );
@@ -308,7 +308,7 @@ void StatsowFacade::ValidateRaceRun( const char *tag, const edict_t *owner ) {
 	}
 }
 
-void StatsowFacade::SetSectorTime( edict_t *owner, int sector, int64_t time ) {
+void StatsowFacade::SetSectorTime( edict_t *owner, int sector, uint32_t time ) {
 	const char *tag = "StatsowFacade::SetSectorTime()";
 	ValidateRaceRun( tag, owner );
 
@@ -324,7 +324,7 @@ void StatsowFacade::SetSectorTime( edict_t *owner, int sector, int64_t time ) {
 	run->SaveNickname( client );
 }
 
-RunStatusQuery *StatsowFacade::CompleteRun( edict_t *owner, int64_t finalTime ) {
+RunStatusQuery *StatsowFacade::CompleteRun( edict_t *owner, uint32_t finalTime ) {
 	ValidateRaceRun( "StatsowFacade::CompleteRun()", owner );
 
 	auto *const client = owner->r.client;

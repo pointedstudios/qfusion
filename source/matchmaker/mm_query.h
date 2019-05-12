@@ -944,6 +944,7 @@ class alignas( 8 )JsonWriter {
 
 		virtual void operator<<( const char *nameOrValue ) = 0;
 		virtual void operator<<( int value ) = 0;
+		virtual void operator<<( unsigned value ) = 0;
 		virtual void operator<<( int64_t value ) = 0;
 		virtual void operator<<( double value ) = 0;
 		virtual void operator<<( const mm_uuid_t &value ) = 0;
@@ -981,6 +982,11 @@ class alignas( 8 )JsonWriter {
 
 		void operator<<( int value ) override {
 			cJSON_AddNumberToObject( section, CheckFieldName( "int" ), value );
+			fieldName = nullptr;
+		}
+
+		void operator<<( unsigned value ) override {
+			cJSON_AddNumberToObject( section, CheckFieldName( "unsigned" ), value );
 			fieldName = nullptr;
 		}
 
@@ -1036,6 +1042,10 @@ class alignas( 8 )JsonWriter {
 		}
 
 		void operator<<( int value ) override {
+			cJSON_AddItemToArray( section, cJSON_CreateNumber( value ) );
+		}
+
+		void operator<<( unsigned value ) override {
 			cJSON_AddItemToArray( section, cJSON_CreateNumber( value ) );
 		}
 
@@ -1146,6 +1156,11 @@ public:
 	}
 
 	JsonWriter &operator<<( int value ) {
+		TopOfStack() << value;
+		return *this;
+	}
+
+	JsonWriter &operator<<( unsigned value ) {
 		TopOfStack() << value;
 		return *this;
 	}
