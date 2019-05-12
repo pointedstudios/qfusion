@@ -47,11 +47,25 @@ struct CMTraceComputer *CM_GetTraceComputer( cmodel_state_t *cms ) {
 		return selectedTraceComputer;
 	}
 
-	if( Sys_GetProcessorFeatures() & Q_CPU_FEATURE_SSE42 ) {
-		Com_Printf( "SSE4.2 instructions are supported. An optimized collision code will be used\n" );
+	// While SSE4.1 support is all that is really used we require SSE4.2 support.
+	// we rely on fast unaligned loads that seem to be supported by SSE4.2+ hardware.
+	// Moreover we have to require AVX support for MSVC builds.
+	// Specifying /arch:AVX is the only option to get SSE3+ instructions compiled.
+	// All these instructions use VEX encoding consequently and thus require AVX support.
+
+#ifndef _MSC_VER
+	constexpr auto desiredFeatureFlags = Q_CPU_FEATURE_SSE42;
+	constexpr const char *featureDesc = "SSE4.2";
+#else
+	constexpr auto desiredFeatureFlags = Q_CPU_FEATURE_AVX;
+	constexpr const char *featureDesc = "AVX";
+#endif
+
+	if( Sys_GetProcessorFeatures() & desiredFeatureFlags ) {
+		Com_Printf( "%s instructions are supported. An optimized collision code will be used\n", featureDesc );
 		selectedTraceComputer = &sse42TraceComputer;
 	} else {
-		Com_Printf( "SSE4.2 instructions support has not been found. A generic collision code will be used\n" );
+		Com_Printf( "%s instructions support has not been found. A generic collision code will be used\n", featureDesc );
 		selectedTraceComputer = &genericTraceComputer;
 	}
 
