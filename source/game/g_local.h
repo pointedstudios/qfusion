@@ -1333,6 +1333,7 @@ namespace std {
 class StatsowFacade {
 	friend class ChatHandlersChain;
 	friend class RespectHandler;
+	friend class RunStatusQuery;
 
 	struct RespectStats : public GVariousStats {
 		RespectStats(): GVariousStats( 31 ) {}
@@ -1365,6 +1366,8 @@ class StatsowFacade {
 	ClientEntry *clientEntriesHead { nullptr };
 	clientRating_t *ratingsHead { nullptr };
 
+	RunStatusQuery *runQueriesHead { nullptr };
+
 	bool isDiscarded { false };
 
 	void AddPlayerReport( edict_t *ent, bool final );
@@ -1388,6 +1391,10 @@ class StatsowFacade {
 	void SendGenericMatchStateEvent( const char *event );
 
 	void ValidateRaceRun( const char *tag, const edict_t *owner );
+
+	void DeleteRunStatusQuery( RunStatusQuery *query );
+
+	RunStatusQuery *AddRunStatusQuery( const mm_uuid_t &runId );
 public:
 	static void Init();
 	static void Shutdown();
@@ -1396,27 +1403,18 @@ public:
 
 	bool IsValid() const;
 
-	void Frame() {};
+	void Frame();
 
 	void ClearEntries();
 
 	RaceRun *NewRaceRun( const edict_t *owner, int numSectors );
 	void SetSectorTime( edict_t *owner, int sector, int64_t time );
-	void CompleteRun( edict_t *owner, int64_t finalTime );
+	RunStatusQuery *CompleteRun( edict_t *owner, int64_t finalTime );
 
 	void WriteHeaderFields( class JsonWriter &writer, int teamGame );
 
-	/**
-	 * Triggers sending of a race report if necessarily.
-	 * Race reports are sent in a non-blocking fashion.
-	 */
-	void SendRaceRunReport( RaceRun *raceRun );
+	RunStatusQuery *SendRaceRunReport( RaceRun *raceRun );
 
-	/**
-	 * Triggers sending of a match report if necessarily.
-	 * Currently blocks for a few seconds trying to get a confirmation.
-	 * @todo implement a local storage for stats so we do not have to wait for this.
-	 */
 	void SendMatchFinishedReport();
 
 	void SendFinalReport();

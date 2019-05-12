@@ -601,6 +601,13 @@ public:
 	}
 
 	/**
+	 * Sets a well known predefined "race run id" form parameter
+	 */
+	QueryObject &SetRaceRunId( const mm_uuid_t &value ) {
+		return SetField( "race_run_id", value );
+	}
+
+	/**
 	 * Sets a well-known predefined "gametype" form parameter.
 	 */
 	QueryObject &SetGametype( const char *value ) {

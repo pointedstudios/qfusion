@@ -1345,7 +1345,55 @@ static const asClassDescriptor_t asScoreStatsClassDescriptor =
 	NULL, NULL                  /* string factory hack */
 };
 
+static bool objectRunStatusQuery_isReady( RunStatusQuery *self ) {
+	return self->IsReady();
+}
 
+static bool objectRunStatusQuery_hasFailed( RunStatusQuery *self ) {
+	return self->HasFailed();
+}
+
+static int objectRunStatusQuery_personalRank( RunStatusQuery *self ) {
+	return self->PersonalRank();
+}
+
+static int objectRunStatusQuery_worldRank( RunStatusQuery *self ) {
+	return self->WorldRank();
+}
+
+static void objectRunStatusQuery_deleteSelf( RunStatusQuery *self ) {
+	return self->DeleteSelf();
+}
+
+// Why is it even needed to declare empty trait arrays for every declared type...
+// Thinking about porting sane bindings from a private AI branch
+static const asFuncdef_t runStatusQuery_Funcdefs[] = { ASLIB_FUNCDEF_NULL };
+static const asBehavior_t runStatusQuery_Behaviors[] = { ASLIB_BEHAVIOR_NULL };
+static const asProperty_t runStatusQuery_Properties[] = { ASLIB_PROPERTY_NULL };
+
+static const asMethod_t runStatusQuery_Methods[] =
+{
+	{ ASLIB_FUNCTION_DECL( bool, get_isReady, () const ), asFUNCTION( objectRunStatusQuery_isReady ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( bool, get_hasFailed, () const ), asFUNCTION( objectRunStatusQuery_hasFailed ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( int, get_personalRank, () const ), asFUNCTION( objectRunStatusQuery_personalRank ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( int, get_worldRank, () const ), asFUNCTION( objectRunStatusQuery_worldRank ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( void, deleteSelf, () ), asFUNCTION( objectRunStatusQuery_deleteSelf ), asCALL_CDECL_OBJLAST },
+
+	ASLIB_METHOD_NULL
+};
+
+static const asClassDescriptor_t asRunStatusQueryClassDescriptor =
+{
+	"RunStatusQuery",           /* name */
+	asOBJ_REF | asOBJ_NOCOUNT,  /* object type flags */
+	sizeof( RunStatusQuery ),   /* size */
+	runStatusQuery_Funcdefs,    /* funcdefs */
+	runStatusQuery_Behaviors,   /* object behaviors */
+	runStatusQuery_Methods,     /* methods */
+	runStatusQuery_Properties,  /* properties */
+
+	NULL, NULL                  /* string factory hack */
+};
 
 //=======================================================================
 
@@ -1744,14 +1792,14 @@ static void objectGameClient_SetSectorTime( int sector, int64_t time, gclient_t 
 	StatsowFacade::Instance()->SetSectorTime( PLAYERENT( playerNum ), sector, time );
 }
 
-static void objectGameClient_CompleteRaceRun( int64_t finalTime, gclient_t *self ) {
+static RunStatusQuery *objectGameClient_CompleteRaceRun( int64_t finalTime, gclient_t *self ) {
 	int playerNum = objectGameClient_PlayerNum( self );
 	// TODO: Throw a script exception at this!
 	if( playerNum < 0 || playerNum >= gs.maxclients ) {
-		return;
+		return nullptr;
 	}
 
-	StatsowFacade::Instance()->CompleteRun( PLAYERENT( playerNum ), finalTime );
+	return StatsowFacade::Instance()->CompleteRun( PLAYERENT( playerNum ), finalTime );
 }
 
 static void objectGameClient_SetHelpMessage( unsigned int index, gclient_t *self ) {
@@ -1836,7 +1884,7 @@ static const asMethod_t gameclient_Methods[] =
 	{ ASLIB_FUNCTION_DECL( bool, get_chaseActive, ( ) const ), asFUNCTION( objectGameClient_GetChaseActive ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, newRaceRun, ( int numSectors ) ), asFUNCTION( objectGameClient_NewRaceRun ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, setSectorTime, ( int sector, int64 time ) ), asFUNCTION( objectGameClient_SetSectorTime ), asCALL_CDECL_OBJLAST },
-	{ ASLIB_FUNCTION_DECL( void, completeRaceRun, ( int64 finalTime ) ), asFUNCTION( objectGameClient_CompleteRaceRun ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( RunStatusQuery @, completeRaceRun, ( int64 finalTime ) ), asFUNCTION( objectGameClient_CompleteRaceRun ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, setHelpMessage, ( uint msg ) ), asFUNCTION( objectGameClient_SetHelpMessage ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, setQuickMenuItems, ( const String &in ) ), asFUNCTION( objectGameClient_SetQuickMenuItems ), asCALL_CDECL_OBJLAST },
 
@@ -2381,6 +2429,7 @@ static const asClassDescriptor_t * const asGameClassesDescriptors[] =
 	&asGametypeClassDescriptor,
 	&asTeamListClassDescriptor,
 	&asScoreStatsClassDescriptor,
+	&asRunStatusQueryClassDescriptor,
 	&asGameClientDescriptor,
 	&asGameEntityClassDescriptor,
 

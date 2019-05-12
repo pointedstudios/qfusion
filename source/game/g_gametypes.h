@@ -97,6 +97,62 @@ struct alignas( 8 )RaceRun {
 	void SaveNickname( const struct gclient_s *client );
 };
 
+class QueryObject;
+class StatsowFacade;
+
+class RunStatusQuery {
+	friend class StatsowFacade;
+
+	template <typename T> friend T *Link( T*, T** );
+	template <typename T> friend T *Unlink( T*, T** );
+
+	const int64_t createdAt;
+	int64_t nextRetryAt { 0 };
+	RunStatusQuery *prev { nullptr };
+	RunStatusQuery *next { nullptr };
+	StatsowFacade *const parent;
+	QueryObject *const query;
+	// For debugging purposes
+	const mm_uuid_t runId;
+	int outcome { 0 };
+	int worldRank { -1 };
+	int personalRank { -1 };
+
+	RunStatusQuery( StatsowFacade *parent_, QueryObject *query_, const mm_uuid_t &runId_ );
+
+	~RunStatusQuery();
+
+	void CheckReadyForAccess( const char *tag ) const;
+	void CheckValidForAccess( const char *tag ) const;
+
+	void Update( int64_t millisNow );
+
+	void ScheduleRetry( int64_t millisNow );
+
+	int GetQueryField( const char *fieldName );
+public:
+	void DeleteSelf();
+
+	bool IsReady() const {
+		return outcome != 0;
+	}
+
+	bool HasFailed() const {
+		CheckReadyForAccess( "RunStatusQuery::HasFailed()" );
+		return outcome < 0;
+	}
+
+	int WorldRank() const {
+		CheckValidForAccess( "RunStatusQuery::WorldRank()" );
+		return worldRank;
+	}
+
+	int PersonalRank() const {
+		CheckValidForAccess( "RunStatusQuery::PersonalRank()" );
+		return personalRank;
+	}
+};
+
 class GVariousStats {
 	struct Node {
 		Node *nextInList;

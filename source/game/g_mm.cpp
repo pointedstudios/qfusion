@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #undef max
 #endif
 
+#include "../qalgo/Links.h"
 #include "../qalgo/SingletonHolder.h"
 #include "../qalgo/WswStdTypes.h"
 
@@ -323,7 +324,7 @@ void StatsowFacade::SetSectorTime( edict_t *owner, int sector, int64_t time ) {
 	run->SaveNickname( client );
 }
 
-void StatsowFacade::CompleteRun( edict_t *owner, int64_t finalTime ) {
+RunStatusQuery *StatsowFacade::CompleteRun( edict_t *owner, int64_t finalTime ) {
 	ValidateRaceRun( "StatsowFacade::CompleteRun()", owner );
 
 	auto *const client = owner->r.client;
@@ -335,7 +336,140 @@ void StatsowFacade::CompleteRun( edict_t *owner, int64_t finalTime ) {
 
 	// Transfer the ownership over the run
 	client->level.stats.currentRun = nullptr;
-	SendRaceRunReport( run );
+	return SendRaceRunReport( run );
+}
+
+RunStatusQuery::RunStatusQuery( StatsowFacade *parent_, QueryObject *query_, const mm_uuid_t &runId_ )
+	: createdAt( trap_Milliseconds() ), parent( parent_ ), query( query_ ), runId( runId_ ) {
+	query->SetRaceRunId( runId_ );
+}
+
+RunStatusQuery::~RunStatusQuery() {
+	trap_MM_DeleteQuery( query );
+}
+
+void RunStatusQuery::CheckReadyForAccess( const char *tag ) const {
+	// TODO: Throw an exception that is intercepted at script bindings layer
+	if( outcome == 0 ) {
+		G_Error( "%s: The object is not in a ready state\n", tag );
+	}
+	if( !query->IsReady() ) {
+		G_Error( "%s: The underlying query is not in a ready state\n", tag );
+	}
+}
+
+void RunStatusQuery::CheckValidForAccess( const char *tag ) const {
+	CheckReadyForAccess( tag );
+	// TODO: Throw an exception that is intercepted at script bindings layer
+	if( outcome < 0 ) {
+		G_Error( "%s: The object is not in a valid state to access a property\n", tag );
+	}
+	if( !query->HasSucceeded() ) {
+		G_Error( "%s: The underlying query was unsuccessful\n", tag );
+	}
+}
+
+void RunStatusQuery::ScheduleRetry( int64_t millisNow ) {
+	query->ResetForRetry();
+	nextRetryAt = millisNow + 1000;
+	outcome = 0;
+}
+
+void RunStatusQuery::Update( int64_t millisNow ) {
+	constexpr const char *tag = "RunStatusQuery::Update()";
+
+	// Set it to a negative value by default as this is prevalent for all conditions in this method
+	outcome = -1;
+
+	// Launch the query for status polling in this case
+	if( !query->HasStarted() ) {
+		if( millisNow >= nextRetryAt ) {
+			trap_MM_SendQuery( query );
+		}
+		outcome = 0;
+		return;
+	}
+
+	char buffer[UUID_BUFFER_SIZE];
+	if( millisNow - createdAt > 30 * 1000 ) {
+		G_Printf( S_COLOR_YELLOW "%s: The query for %s has timed out\n", tag, runId.ToString( buffer ) );
+		return;
+	}
+
+	if( !query->IsReady() ) {
+		outcome = 0;
+		return;
+	}
+
+	if( !query->HasSucceeded() ) {
+		if( query->ShouldRetry() ) {
+			ScheduleRetry( millisNow );
+			return;
+		}
+		const char *format = S_COLOR_YELLOW "%s: The underlying query for %s has unrecoverable errors\n";
+		G_Printf( format, tag, runId.ToString( buffer ) );
+		return;
+	}
+
+	const double status = query->GetRootDouble( "status", 0.0f );
+	if( status == 0.0f ) {
+		G_Printf( S_COLOR_YELLOW "%s: The query response has missing or zero `status` field\n", tag );
+	}
+
+	// Wait for a run arrival at the stats server in this case
+	if( status < 0 ) {
+		ScheduleRetry( millisNow );
+		return;
+	}
+
+	if( ( personalRank = GetQueryField( "personal_rank" ) ) < 0 ) {
+		return;
+	}
+
+	if( ( worldRank = GetQueryField( "world_rank" ) ) < 0 ) {
+		return;
+	}
+
+	outcome = +1;
+}
+
+int RunStatusQuery::GetQueryField( const char *fieldName ) {
+	double value = query->GetRootDouble( fieldName, std::numeric_limits<double>::infinity() );
+	if( !std::isfinite( value ) ) {
+		return -1;
+	}
+	const char *tag = "RunStatusQuery::GetQueryField()";
+	if( value < 0 ) {
+		const char *fmt = "%s%s: The value %ld for field %s was negative. Don't use this method if the value is valid\n";
+		G_Printf( fmt, S_COLOR_YELLOW, tag, value, fieldName );
+		return -1;
+	}
+	if( (double)( (volatile int)value ) != value ) {
+		const char *fmt = "%s%s: The value %ld for field %s cannot be exactly represented as int\n";
+		G_Printf( fmt, S_COLOR_YELLOW, tag, value, fieldName );
+	}
+	return (int)value;
+}
+
+void RunStatusQuery::DeleteSelf() {
+	parent->DeleteRunStatusQuery( this );
+}
+
+RunStatusQuery *StatsowFacade::AddRunStatusQuery( const mm_uuid_t &runId ) {
+	QueryObject *underlyingQuery = trap_MM_NewPostQuery( "server/race/runStatus" );
+	if( !underlyingQuery ) {
+		return nullptr;
+	}
+
+	void *mem = G_Malloc( sizeof( RunStatusQuery ) );
+	auto *statusQuery = new( mem )RunStatusQuery( this, underlyingQuery, runId );
+	return ::Link( statusQuery, &runQueriesHead );
+}
+
+void StatsowFacade::DeleteRunStatusQuery( RunStatusQuery *query ) {
+	::Unlink( query, &runQueriesHead );
+	query->~RunStatusQuery();
+	G_Free( query );
 }
 
 static SingletonHolder<StatsowFacade> statsInstanceHolder;
@@ -984,6 +1118,13 @@ void StatsowFacade::ClientEntry::AddWeapons( JsonWriter &writer, const char **we
 	writer << ']';
 }
 
+void StatsowFacade::Frame() {
+	const auto millisNow = game.realtime;
+	for( RunStatusQuery *query = runQueriesHead; query; query = query->next ) {
+		query->Update( millisNow );
+	}
+}
+
 bool StatsowFacade::IsValid() const {
 	// This has to be computed on demand as the server starts logging in
 	// at the first ran frame and not at the SVStatsowFacade instance creation
@@ -1027,20 +1168,36 @@ void StatsowFacade::SendFinalReport() {
 	ClearEntries();
 }
 
-void StatsowFacade::SendRaceRunReport( RaceRun *raceRun ) {
-	if( !raceRun || !IsValid() ) {
-		return;
+RunStatusQuery *StatsowFacade::SendRaceRunReport( RaceRun *raceRun ) {
+	if( !raceRun ) {
+		return nullptr;
 	}
 
-	QueryObject *query = trap_MM_NewPostQuery( "server/match/raceReport" );
-	JsonWriter writer( query->RequestJsonRoot() );
+	if( !IsValid() ) {
+		raceRun->~RaceRun();
+		G_Free( raceRun );
+		return nullptr;
+	}
 
+	QueryObject *query = trap_MM_NewPostQuery( "server/race/runReport" );
+	if( !query ) {
+		raceRun->~RaceRun();
+		G_Free( raceRun );
+		return nullptr;
+	}
+
+	JsonWriter writer( query->RequestJsonRoot() );
 	WriteHeaderFields( writer, false );
+
+	// Create a unique id for the run for tracking of its status/remote rank
+	const mm_uuid_t runId( mm_uuid_t::Random() );
 
 	writer << "race_runs" << '[';
 	{
 		writer << '{';
 		{
+			writer << "id" << runId;
+
 			// Setting session id and nickname is mutually exclusive
 			if( raceRun->clientSessionId.IsValidSessionId() ) {
 				writer << "session_id" << raceRun->clientSessionId;
@@ -1069,6 +1226,8 @@ void StatsowFacade::SendRaceRunReport( RaceRun *raceRun ) {
 	G_Free( raceRun );
 
 	trap_MM_EnqueueReport( query );
+
+	return AddRunStatusQuery( runId );
 }
 
 #ifndef GAME_HARD_LINKED
