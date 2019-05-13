@@ -629,7 +629,7 @@ bool LocalReliableStorage::MarkAsSent( DBConnection connection, const QueryObjec
 	assert( adapter.IsInTransaction() );
 
 	const char *queryId = GetQueryId( query );
-	Com_Printf( "LocalReliableStorage::MarkAsFailed(): query id is %s\n", queryId );
+	Com_Printf( "LocalReliableStorage::MarkAsSent(): query id is %s\n", queryId );
 
 	// No foreign constraints are defined for various reasons
 	// (namely query id can refer to 2 different tables)

@@ -1368,6 +1368,16 @@ class StatsowFacade {
 
 	RunStatusQuery *runQueriesHead { nullptr };
 
+	struct PlayTimeEntry {
+		mm_uuid_t clientSessionId;
+		int64_t timeToAdd { 0 };
+
+		explicit PlayTimeEntry( const mm_uuid_t &id_ ) : clientSessionId( id_ ) {}
+	};
+
+	StatsSequence<PlayTimeEntry> bufferedPlayTimes;
+	int64_t lastPlayTimesFlushAt { 0 };
+
 	bool isDiscarded { false };
 
 	void AddPlayerReport( edict_t *ent, bool final );
@@ -1395,6 +1405,10 @@ class StatsowFacade {
 	void DeleteRunStatusQuery( RunStatusQuery *query );
 
 	RunStatusQuery *AddRunStatusQuery( const mm_uuid_t &runId );
+
+	PlayTimeEntry *FindPlayTimeEntry( const mm_uuid_t &clientSessionId );
+
+	void FlushRacePlayTimes();
 public:
 	static void Init();
 	static void Shutdown();
@@ -1405,6 +1419,8 @@ public:
 
 	void Frame();
 
+	~StatsowFacade();
+
 	void ClearEntries();
 
 	RaceRun *NewRaceRun( const edict_t *owner, int numSectors );
@@ -1414,6 +1430,8 @@ public:
 	void WriteHeaderFields( class JsonWriter &writer, int teamGame );
 
 	RunStatusQuery *SendRaceRunReport( RaceRun *raceRun, const char *runTag = nullptr );
+
+	void AddToRacePlayTime( const gclient_t *client, int64_t timeToAdd );
 
 	void SendMatchFinishedReport();
 

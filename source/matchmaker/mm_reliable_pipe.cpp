@@ -207,12 +207,12 @@ bool ReliablePipe::BackgroundSender::CheckQueryResponse() {
 
 	const double status = activeQuery->GetRootDouble( "status", std::numeric_limits<double>::infinity() );
 	if( !std::isfinite( status ) ) {
-		Com_Printf( S_COLOR_RED "%s: The query field `status` is missing or has an invalid format", tag );
+		Com_Printf( S_COLOR_RED "%s: The query field `status` is missing or has an invalid format\n", tag );
 		return false;
 	}
 
 	if( status != 0 ) {
-		Com_Printf( "%s: A query remote execution has succeeded", tag );
+		Com_Printf( "%s: A query remote execution has succeeded\n", tag );
 		return true;
 	}
 

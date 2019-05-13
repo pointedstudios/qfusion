@@ -376,32 +376,62 @@ public:
 		that.headChunk = that.tailChunk = nullptr;
 	}
 
-	struct const_iterator {
+	template <typename Impl>
+	class BaseIterator {
+	protected:
 		Chunk *currChunk;
 		unsigned currElem;
 
-		bool operator==( const const_iterator &that ) const {
+		BaseIterator( Chunk *currChunk_, unsigned currElem_ )
+			: currChunk( currChunk_ ), currElem( currElem_ ) {}
+	public:
+		bool operator==( const Impl &that ) const {
 			return currChunk == that.currChunk && currElem == that.currElem;
 		}
 
-		bool operator!=( const const_iterator &that ) const {
+		bool operator!=( const Impl &that ) const {
 			return !( *this == that );
 		}
 
-		const_iterator &operator++() {
+		Impl &operator++() {
 			assert( currChunk );
 			if( currElem + 1 < currChunk->numItems ) {
 				currElem++;
-				return *this;
+				return static_cast<Impl &>( *this );
 			}
 			currChunk = currChunk->next;
 			currElem = 0;
-			return *this;
+			return static_cast<Impl &>( *this );
+		}
+	};
+
+	class iterator : public BaseIterator<iterator> {
+		template <typename> friend class StatsSequence;
+
+		iterator( Chunk *currChunk_, unsigned currElem_ )
+			: BaseIterator<iterator>( currChunk_, currElem_ ) {}
+	public:
+		const T &operator *() const {
+			assert( this->currChunk );
+			return *( (T *)this->currChunk->data + this->currElem );
 		}
 
+		T &operator *() {
+			assert( this->currChunk );
+			return *( (T *)this->currChunk->data + this->currElem );
+		}
+	};
+
+	class const_iterator : public BaseIterator<const_iterator> {
+		template <typename> friend class StatsSequence;
+
+		const_iterator( Chunk *currChunk_, unsigned currElem_ )
+			: BaseIterator<const_iterator>( currChunk_, currElem_ ) {}
+
+	public:
 		const T &operator *() const {
-			assert( currChunk );
-			return *( (T *)currChunk->data + currElem );
+			assert( this->currChunk );
+			return *( (T *)this->currChunk->data + this->currElem );
 		}
 	};
 
@@ -425,6 +455,14 @@ public:
 	 * Provided for STL structural compatibility.
 	 */
 	const_iterator end() const { return cend(); }
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	iterator begin() { return { headChunk, 0 }; }
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	iterator end() { return { nullptr, 0 }; }
 };
 
 typedef struct score_stats_s: public GVariousStats {

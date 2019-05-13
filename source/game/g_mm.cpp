@@ -473,6 +473,73 @@ void StatsowFacade::DeleteRunStatusQuery( RunStatusQuery *query ) {
 	G_Free( query );
 }
 
+void StatsowFacade::AddToRacePlayTime( const gclient_t *client, int64_t timeToAdd ) {
+	// Put this check first so we get warnings on misuse of the API even if there's no Statsow connection
+	if( timeToAdd <= 0 ) {
+		const char *tag = "StatsowFacade::AddToRacePlayTime()";
+		G_Printf( S_COLOR_YELLOW "%s: The time to add %" PRIi64 " <= 0\n", tag, timeToAdd );
+		return;
+	}
+
+	if( !IsValid() ) {
+		return;
+	}
+
+	// While playing anonymous and making records is allowed in race don't report playtimes of these players
+	if( !client->mm_session.IsValidSessionId() ) {
+		return;
+	}
+
+	PlayTimeEntry *entry = FindPlayTimeEntry( client->mm_session );
+	if( !entry ) {
+		entry = bufferedPlayTimes.New( client->mm_session );
+	}
+
+	entry->timeToAdd += timeToAdd;
+}
+
+StatsowFacade::PlayTimeEntry *StatsowFacade::FindPlayTimeEntry( const mm_uuid_t &clientSessionId ) {
+	StatsSequence<PlayTimeEntry>::iterator it( bufferedPlayTimes.begin() );
+	StatsSequence<PlayTimeEntry>::iterator end( bufferedPlayTimes.end() );
+	for (; it != end; ++it ) {
+		PlayTimeEntry *entry = &( *it );
+		if( entry->clientSessionId == clientSessionId ) {
+			return entry;
+		}
+	}
+
+	return nullptr;
+}
+
+void StatsowFacade::FlushRacePlayTimes() {
+	if( !IsValid() ) {
+		return;
+	}
+
+	if( bufferedPlayTimes.empty() ) {
+		return;
+	}
+
+	QueryObject *query = trap_MM_NewPostQuery( "server/race/timeReport" );
+	if( !query ) {
+		return;
+	}
+
+	JsonWriter writer( query->RequestJsonRoot() );
+	writer << "gametype" << g_gametype->string;
+	writer << "map_name" << level.mapname;
+
+	writer << "entries" << '[';
+	{
+		for( const PlayTimeEntry &entry: bufferedPlayTimes ) {
+			writer << '{' << "session_id" << entry.clientSessionId << "time_to_add" << entry.timeToAdd << '}';
+		}
+	}
+	writer << ']';
+
+	trap_MM_EnqueueReport( query );
+}
+
 static SingletonHolder<StatsowFacade> statsInstanceHolder;
 
 void StatsowFacade::Init() {
@@ -748,11 +815,11 @@ void StatsowFacade::AddToExistingEntry( edict_t *ent, bool final, ClientEntry *e
 void StatsowFacade::MergeAwards( StatsSequence<gameaward_t> &to, StatsSequence<gameaward_t> &&from ) {
 	for( const gameaward_t &mergable: from ) {
 		// search for matching one
-		auto it = to.begin();
-		const auto end = to.end();
+		StatsSequence<gameaward_t>::iterator it( to.begin() );
+		StatsSequence<gameaward_t>::iterator end( to.end() );
 		for(; it != end; ++it ) {
 			if( !strcmp( ( *it ).name, mergable.name ) ) {
-				const_cast<gameaward_t &>( *it ).count += mergable.count;
+				( *it ).count += mergable.count;
 				break;
 			}
 		}
@@ -827,11 +894,11 @@ void StatsowFacade::AddAward( const edict_t *ent, const char *awardMsg ) {
 	// first check if we already have this one on the clients list
 	gameaward_t *ga = nullptr;
 
-	auto it = stats->awardsSequence.cbegin();
-	const auto end = stats->awardsSequence.end();
+	StatsSequence<gameaward_t>::iterator it( stats->awardsSequence.begin() );
+	StatsSequence<gameaward_t>::iterator end( stats->awardsSequence.end() );
 	for(; it != end; ++it ) {
 		if( !strcmp( ( *it ).name, awardMsg ) ) {
-			ga = const_cast<gameaward_t *>( &( *it ) );
+			ga = &( *it );
 			break;
 		}
 	}
@@ -1124,6 +1191,22 @@ void StatsowFacade::Frame() {
 	for( RunStatusQuery *query = runQueriesHead; query; query = query->next ) {
 		query->Update( millisNow );
 	}
+
+	if( millisNow - lastPlayTimesFlushAt > 30000 ) {
+		FlushRacePlayTimes();
+		lastPlayTimesFlushAt = millisNow;
+	}
+}
+
+StatsowFacade::~StatsowFacade() {
+	RunStatusQuery *nextQuery;
+	for( RunStatusQuery *query = runQueriesHead; query; query = nextQuery ) {
+		nextQuery = query;
+		query->~RunStatusQuery();
+		G_Free( query );
+	}
+
+	FlushRacePlayTimes();
 }
 
 bool StatsowFacade::IsValid() const {
