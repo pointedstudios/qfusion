@@ -92,6 +92,8 @@ bool RunToNavEntityActionRecord::ShouldUseSneakyBehaviour( const WorldState &cur
 	}
 
 	// Check whether the leader is in PVS for the bot.
+	// Note: either retrieval of this value is cheap as it's cached
+	// or the newly computed result is going to be useful.
 	if( !EntitiesPvsCache::Instance()->AreInPvs( botEnt, targetEnt ) ) {
 		return false;
 	}
@@ -99,6 +101,11 @@ bool RunToNavEntityActionRecord::ShouldUseSneakyBehaviour( const WorldState &cur
 	// Skip further tests if the bot is fairly close to the target client and follow the sneaky behaviour of the client.
 	if( squareDistanceToTarget < 128 * 128 ) {
 		return true;
+	}
+
+	// Feel free to run/jump/dash in this case
+	if( !IsInPhsForEnemyTeam() ) {
+		return false;
 	}
 
 	// Skip further tests if the client seems to be walking (having a walk key held).
@@ -139,6 +146,38 @@ bool RunToNavEntityActionRecord::ShouldUseSneakyBehaviour( const WorldState &cur
 	}
 
 	// Don't be sneaky. Hurry up to follow the leader.
+	return false;
+}
+
+bool RunToNavEntityActionRecord::IsInPhsForEnemyTeam() const {
+	const edict_t *botEnt = game.edicts + Self()->EntNum();
+	// This method is only allowed to be called in team-based gametypes
+	assert( botEnt->s.team == TEAM_ALPHA || botEnt->s.team == TEAM_BETA );
+
+	const auto &enemyTeamList = ::teamlist[( botEnt->s.team == TEAM_ALPHA ) ? TEAM_BETA : TEAM_ALPHA];
+	// These values are entity numbers and not client ones (contrary to one might guess by the name)
+	const auto *enemyEntIndices = enemyTeamList.playerIndices;
+	const auto *gameEdicts = game.edicts;
+
+	// There is actually no potentially-hearable set.
+	// Sounds are transmitted just being in a sufficient range.
+	// Try finding an enemy client in-game that is fairly close to hear the bot.
+	// This is coarse and does not match real attenuation formulae but is fine for driving a bot behaviour.
+	// This is some kind of cheating as this can reveal nearby enemies for a human player in a bot team.
+	// However playing with bots is not a competitive environment
+	// and the distance threshold is fairly high to spot an exact nearby enemy position.
+	for( int i = 0, end = enemyTeamList.numplayers; i < end; ++i ) {
+		const auto *enemyEnt = gameEdicts + enemyEntIndices[i];
+		// Sane team-based gametypes should disallow free-fly spectating
+		if( G_ISGHOSTING( enemyEnt ) ) {
+			continue;
+		}
+		// Assume player sounds can be heard at this range
+		if( DistanceSquared( botEnt->s.origin, enemyEnt->s.origin ) < 1500 * 1500 ) {
+			return true;
+		}
+	}
+
 	return false;
 }
 

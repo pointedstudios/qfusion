@@ -36,6 +36,7 @@ class RunToNavEntityActionRecord : public BotActionRecord {
 	const NavEntity *const navEntity;
 
 	bool ShouldUseSneakyBehaviour( const WorldState &currWorldState ) const;
+	bool IsInPhsForEnemyTeam() const;
 public:
 	RunToNavEntityActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
 		: BotActionRecord( pool_, self_, "RunToNavEntityActionRecord" ), navEntity( navEntity_ ) {}
