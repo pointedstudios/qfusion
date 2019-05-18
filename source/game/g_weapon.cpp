@@ -594,19 +594,15 @@ void W_Fire_Riotgun( edict_t *self, vec3_t start, vec3_t angles, int seed, int r
 /*
 * W_Grenade_ExplodeDir
 */
-static void W_Grenade_ExplodeDir( edict_t *ent, vec3_t normal ) {
+static void W_Grenade_ExplodeDir( edict_t *ent, vec3_t normal, edict_t *ignore ) {
 	vec3_t origin;
 	int radius;
 	edict_t *event;
 	vec3_t up = { 0, 0, 1 };
 	vec_t *dir = normal ? normal : up;
 
-	G_RadiusDamage( ent,
-					ent->r.owner,
-					NULL,
-					ent->enemy,
-					( ent->s.effects & EF_STRONG_WEAPON ) ? MOD_GRENADE_SPLASH_S : MOD_GRENADE_SPLASH_W
-					);
+	const int mod = ( ent->s.effects & EF_STRONG_WEAPON ) ? MOD_GRENADE_SPLASH_S : MOD_GRENADE_SPLASH_W;
+	G_RadiusDamage( ent, ent->r.owner, NULL, ignore, mod );
 
 	radius = ( ( ent->projectileInfo.radius * 1 / 8 ) > 127 ) ? 127 : ( ent->projectileInfo.radius * 1 / 8 );
 	VectorMA( ent->s.origin, -0.02, ent->velocity, origin );
@@ -621,7 +617,11 @@ static void W_Grenade_ExplodeDir( edict_t *ent, vec3_t normal ) {
 * W_Grenade_Explode
 */
 static void W_Grenade_Explode( edict_t *ent ) {
-	W_Grenade_ExplodeDir( ent, NULL );
+	W_Grenade_ExplodeDir( ent, NULL, NULL );
+}
+
+void W_Detonate_Grenade( edict_t *ent, edict_t *ignore ) {
+	W_Grenade_ExplodeDir( ent, NULL, ignore );
 }
 
 /*
@@ -689,7 +689,7 @@ static void W_Touch_Grenade( edict_t *ent, edict_t *other, cplane_t *plane, int 
 	}
 
 	ent->enemy = other;
-	W_Grenade_ExplodeDir( ent, plane ? plane->normal : NULL );
+	W_Grenade_ExplodeDir( ent, plane ? plane->normal : NULL, nullptr );
 }
 
 /*
@@ -746,7 +746,6 @@ edict_t *W_Fire_Grenade( edict_t *self, vec3_t start, vec3_t angles, int speed, 
 * W_Touch_Rocket
 */
 static void W_Touch_Rocket( edict_t *ent, edict_t *other, cplane_t *plane, int surfFlags ) {
-	int mod_splash;
 	vec3_t dir;
 	int hitType;
 
@@ -781,13 +780,12 @@ static void W_Touch_Rocket( edict_t *ent, edict_t *other, cplane_t *plane, int s
 		G_Damage( other, ent, ent->r.owner, dir, ent->velocity, ent->s.origin, directHitDamage, ent->projectileInfo.maxKnockback, ent->projectileInfo.stun, 0, ent->style );
 	}
 
-	if( ent->s.effects & EF_STRONG_WEAPON ) {
-		mod_splash = MOD_ROCKET_SPLASH_S;
-	} else {
-		mod_splash = MOD_ROCKET_SPLASH_W;
-	}
+	W_Detonate_Rocket( ent, other, plane, surfFlags );
+}
 
-	G_RadiusDamage( ent, ent->r.owner, plane, other, mod_splash );
+void W_Detonate_Rocket( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags ) {
+	int mod = ( ent->s.effects & EF_STRONG_WEAPON ) ? MOD_ROCKET_SPLASH_S : MOD_ROCKET_SPLASH_W;
+	G_RadiusDamage( ent, ent->r.owner, plane, ignore, mod );
 
 	// spawn the explosion
 	if( !( surfFlags & SURF_NOIMPACT ) ) {
@@ -819,7 +817,7 @@ edict_t *W_Fire_Rocket( edict_t *self, vec3_t start, vec3_t angles, int speed, f
 		damage = 9999;
 	}
 
-	rocket = W_Fire_LinearProjectile( self, start, angles, speed, damage, minKnockback, maxKnockback, stun, minDamage, radius, timeout, timeDelta );
+	rocket = W_Fire_LinearProjectile( self, start, angles, 300, damage, minKnockback, maxKnockback, stun, minDamage, radius, timeout, timeDelta );
 
 	rocket->s.type = ET_ROCKET; //rocket trail sfx
 	if( mod == MOD_ROCKET_S ) {
@@ -1407,8 +1405,12 @@ static void W_Touch_Wave( edict_t *ent, edict_t *other, cplane_t *plane, int sur
 
 		G_Damage( other, ent, ent->r.owner, dir, ent->velocity, ent->s.origin, ent->projectileInfo.maxDamage, ent->projectileInfo.maxKnockback, ent->projectileInfo.stun, 0, ent->style );
 	}
+}
 
-	G_RadiusDamage( ent, ent->r.owner, plane, other, ( ent->style == MOD_SHOCKWAVE_S ) ? MOD_SHOCKWAVE_SPLASH_S : MOD_SHOCKWAVE_SPLASH_W );
+void W_Detonate_Wave( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags ) {
+	int mod_splash = ( ent->style == MOD_SHOCKWAVE_S ) ? MOD_SHOCKWAVE_SPLASH_S : MOD_SHOCKWAVE_SPLASH_W;
+
+	G_RadiusDamage( ent, ent->r.owner, plane, ignore, mod_splash );
 
 	if( !( surfFlags & SURF_NOIMPACT ) ) {
 		edict_t *event;

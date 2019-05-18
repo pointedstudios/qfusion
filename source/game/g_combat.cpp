@@ -761,82 +761,94 @@ void RS_SplashFrac( const vec3_t origin, const vec3_t mins, const vec3_t maxs, c
 	VectorNormalize( pushdir );
 }
 
+static gs_weapon_definition_t *WeaponDefForSelfDamage( const edict_t *inflictor ) {
+	if( inflictor->s.type == ET_ROCKET ) {
+		return GS_GetWeaponDef( WEAP_ROCKETLAUNCHER );
+	}
+	if( inflictor->s.type == ET_GRENADE ) {
+		return GS_GetWeaponDef( WEAP_GRENADELAUNCHER );
+	}
+	if( inflictor->s.type == ET_PLASMA ) {
+		return GS_GetWeaponDef( WEAP_PLASMAGUN );
+	}
+	if( inflictor->s.type == ET_BLASTER ) {
+		return GS_GetWeaponDef( WEAP_GUNBLADE );
+	}
+
+	return nullptr;
+}
+
 /*
 * G_RadiusDamage
 */
 void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, cplane_t *plane, edict_t *ignore, int mod ) {
-	int i, numtouch;
-	int touch[MAX_EDICTS];
-	edict_t *ent = NULL;
-	float dmgFrac, kickFrac, damage, knockback, stun;
-	vec3_t pushDir;
-	int timeDelta;
-
-	float maxdamage, mindamage, maxknockback, minknockback, maxstun, minstun, radius;
-
-	assert( inflictor );
-
-	maxdamage = inflictor->projectileInfo.maxDamage;
-	mindamage = inflictor->projectileInfo.minDamage;
-	maxknockback = inflictor->projectileInfo.maxKnockback;
-	minknockback = inflictor->projectileInfo.minKnockback;
-	maxstun = inflictor->projectileInfo.stun;
-	minstun = 1;
-	radius = inflictor->projectileInfo.radius;
-
-	if( radius <= 1.0f || ( maxdamage <= 0.0f && maxknockback <= 0.0f ) ) {
+	const float radius = inflictor->projectileInfo.radius;
+	if( radius <= 1.0f ) {
 		return;
 	}
 
-	clamp_high( mindamage, maxdamage );
-	clamp_high( minknockback, maxknockback );
-	clamp_high( minstun, maxstun );
+	const float maxdamage = inflictor->projectileInfo.maxDamage;
+	float maxknockback = inflictor->projectileInfo.maxKnockback;
+	if( maxdamage <= 0.0f && maxknockback <= 0.0f ) {
+		return;
+	}
 
-	numtouch = GClip_FindInRadius4D( inflictor->s.origin, radius, touch, MAX_EDICTS, inflictor->timeDelta );
-	for( i = 0; i < numtouch; i++ ) {
-		ent = game.edicts + touch[i];
-		if( ent == ignore || !ent->takedamage ) {
+	float mindamage = std::min( inflictor->projectileInfo.minDamage, maxdamage );
+	float minknockback = std::min( inflictor->projectileInfo.minKnockback, maxknockback );
+	float maxstun = inflictor->projectileInfo.stun;
+	float minstun = std::min( 1.0f, maxstun );
+
+	const bool isRaceGametype = GS_RaceGametype();
+	const int attackerNum = attacker ? ENTNUM( attacker ) : -1;
+
+	int touch[MAX_EDICTS];
+	const int numTouch = GClip_FindInRadius4D( inflictor->s.origin, radius, touch, MAX_EDICTS, inflictor->timeDelta );
+	for( int i = 0; i < numTouch; i++ ) {
+		const int entNum = touch[i];
+		edict_t *ent = game.edicts + entNum;
+		if( ent == ignore ) {
 			continue;
 		}
-
-		if( ent == attacker && ent->r.client ) {
-			timeDelta = 0;
-		} else {
-			timeDelta = inflictor->timeDelta;
+		if( !ent->takedamage ) {
+			if( !isRaceGametype ) {
+				continue;
+			}
+			if( ent->s.ownerNum != attackerNum ) {
+				continue;
+			}
+			if( ent->floodnum ) {
+				continue;
+			}
+			int entType = ent->s.type;
+			if( entType != ET_ROCKET && entType != ET_GRENADE && entType != ET_WAVE ) {
+				continue;
+			}
 		}
 
-		G_SplashFrac4D( ENTNUM( ent ), inflictor->s.origin, radius, pushDir, &kickFrac, &dmgFrac, timeDelta );
+		const bool isSelfDamage = ent == attacker && ent->r.client;
+		const int timeDelta = isSelfDamage ? 0 : inflictor->timeDelta;
 
-		damage = std::max( 0.0f, mindamage + ( ( maxdamage - mindamage ) * dmgFrac ) );
-		stun = std::max( 0.0f, minstun + ( ( maxstun - minstun ) * dmgFrac ) );
-		knockback = std::max( 0.0f, minknockback + ( ( maxknockback - minknockback ) * kickFrac ) );
+		float pushDir[3], kickFrac, dmgFrac;
+		G_SplashFrac4D( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, &dmgFrac, timeDelta );
 
-		// weapon jumps hack : when knockback on self, use strong weapon definition
-		if( ent == attacker && ent->r.client ) {
-			gs_weapon_definition_t *weapondef = NULL;
-			if( inflictor->s.type == ET_ROCKET ) {
-				weapondef = GS_GetWeaponDef( WEAP_ROCKETLAUNCHER );
-			} else if( inflictor->s.type == ET_GRENADE ) {
-				weapondef = GS_GetWeaponDef( WEAP_GRENADELAUNCHER );
-			} else if( inflictor->s.type == ET_PLASMA ) {
-				weapondef = GS_GetWeaponDef( WEAP_PLASMAGUN );
-			} else if( inflictor->s.type == ET_BLASTER ) {
-				weapondef = GS_GetWeaponDef( WEAP_GUNBLADE );
+		float damage = std::max( 0.0f, mindamage + ( ( maxdamage - mindamage ) * dmgFrac ) );
+		float stun = std::max( 0.0f, minstun + ( ( maxstun - minstun ) * dmgFrac ) );
+		float knockback = std::max( 0.0f, minknockback + ( ( maxknockback - minknockback ) * kickFrac ) );
+
+		// Weapon jumps hack : when knockback on self, use strong weapon definition
+		const auto *weapondef = isSelfDamage ? WeaponDefForSelfDamage( inflictor ) : nullptr;
+		if( weapondef ) {
+			if( isRaceGametype ) {
+				const float splashFrac = weapondef->firedef.splashfrac;
+				RS_SplashFrac4D( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, nullptr, 0, splashFrac );
+			} else {
+				G_SplashFrac4D( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, nullptr, 0 );
+				minknockback = weapondef->firedef.minknockback;
+				maxknockback = weapondef->firedef.knockback;
+				minknockback = std::min( minknockback, maxknockback );
 			}
-
-			if( weapondef ) {
-				if( GS_RaceGametype() ) {
-					RS_SplashFrac4D( ENTNUM( ent ), inflictor->s.origin, radius, pushDir, &kickFrac, NULL, 0, weapondef->firedef.splashfrac );
-				} else {
-					G_SplashFrac4D( ENTNUM( ent ), inflictor->s.origin, radius, pushDir, &kickFrac, NULL, 0 );
-
-					minknockback = weapondef->firedef.minknockback;
-					maxknockback = weapondef->firedef.knockback;
-					clamp_high( minknockback, maxknockback );
-				}
-				knockback = ( minknockback + ( (float)( maxknockback - minknockback ) * kickFrac ) ) * g_self_knockback->value;
-				damage *= weapondef->firedef.selfdamage;
-			}
+			knockback = ( minknockback + ( ( maxknockback - minknockback ) * kickFrac ) ) * g_self_knockback->value;
+			damage *= weapondef->firedef.selfdamage;
 		}
 
 		if( knockback < 1.0f ) {
@@ -851,8 +863,27 @@ void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, cplane_t *plane, edi
 			continue;
 		}
 
-		if( G_CanSplashDamage( ent, inflictor, plane ) ) {
-			G_Damage( ent, inflictor, attacker, pushDir, inflictor->velocity, inflictor->s.origin, damage, knockback, stun, DAMAGE_RADIUS, mod );
+		if( !G_CanSplashDamage( ent, inflictor, plane ) ) {
+			continue;
 		}
+
+		if( !ent->takedamage ) {
+			// Make sure it it going to be skipped during recursive calls
+			ent->floodnum = 1;
+			assert( isRaceGametype );
+			if( ent->s.type == ET_ROCKET ) {
+				W_Detonate_Rocket( ent, inflictor, nullptr, 0 );
+			} else if( ent->s.type == ET_GRENADE ) {
+				W_Detonate_Grenade( ent, inflictor );
+			} else {
+				assert( ent->s.type == ET_WAVE );
+				W_Detonate_Wave( ent, inflictor, nullptr, 0 );
+			}
+			continue;
+		}
+
+		const float *vel = inflictor->velocity;
+		const float *org = inflictor->s.origin;
+		G_Damage( ent, inflictor, attacker, pushDir, vel, org, damage, knockback, stun, DAMAGE_RADIUS, mod );
 	}
 }

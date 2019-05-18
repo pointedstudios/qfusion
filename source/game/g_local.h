@@ -849,6 +849,10 @@ edict_t *W_Fire_Lasergun( edict_t *self, vec3_t start, vec3_t angles, float dama
 edict_t *W_Fire_Lasergun_Weak( edict_t *self, vec3_t start, vec3_t end, float damage, int knockback, int stun, int timeout, int mod, int timeDelta );
 void W_Fire_Instagun( edict_t *self, vec3_t start, vec3_t angles, float damage, int knockback, int stun, int radius, int range, int mod, int timeDelta );
 
+void W_Detonate_Rocket( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags );
+void W_Detonate_Grenade( edict_t *self, edict_t *ignore );
+void W_Detonate_Wave( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags );
+
 bool Pickup_Weapon( edict_t *other, const gsitem_t *item, int flags, int ammo_count );
 edict_t *Drop_Weapon( edict_t *ent, const gsitem_t *item );
 void Use_Weapon( edict_t *ent, const gsitem_t *item );
@@ -1835,6 +1839,7 @@ struct edict_s {
 
 	int viewheight;				// height above origin where eyesight is determined
 	int takedamage;
+	int floodnum;
 	
 	const char *sounds;         // make this a spawntemp var?
 	int count;
