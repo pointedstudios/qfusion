@@ -346,7 +346,9 @@ RunStatusQuery::RunStatusQuery( StatsowFacade *parent_, QueryObject *query_, con
 }
 
 RunStatusQuery::~RunStatusQuery() {
-	trap_MM_DeleteQuery( query );
+	if( query ) {
+		trap_MM_DeleteQuery( query );
+	}
 }
 
 void RunStatusQuery::CheckReadyForAccess( const char *tag ) const {
@@ -354,19 +356,13 @@ void RunStatusQuery::CheckReadyForAccess( const char *tag ) const {
 	if( outcome == 0 ) {
 		G_Error( "%s: The object is not in a ready state\n", tag );
 	}
-	if( !query->IsReady() ) {
-		G_Error( "%s: The underlying query is not in a ready state\n", tag );
-	}
 }
 
 void RunStatusQuery::CheckValidForAccess( const char *tag ) const {
 	CheckReadyForAccess( tag );
 	// TODO: Throw an exception that is intercepted at script bindings layer
-	if( outcome < 0 ) {
+	if( outcome <= 0 ) {
 		G_Error( "%s: The object is not in a valid state to access a property\n", tag );
-	}
-	if( !query->HasSucceeded() ) {
-		G_Error( "%s: The underlying query was unsuccessful\n", tag );
 	}
 }
 
@@ -381,6 +377,29 @@ void RunStatusQuery::Update( int64_t millisNow ) {
 
 	// Set it to a negative value by default as this is prevalent for all conditions in this method
 	outcome = -1;
+
+	// If the query has already been disposed
+	if( !query ) {
+		return;
+	}
+
+	/**
+	 * Deletes the query and nullifies it's reference in the captured instance on scope exit.
+	 * Immediate disposal of the underlying query object is important as keeping it is relatively expensive.
+	 */
+	struct QueryDeleter {
+		RunStatusQuery *captured;
+
+		explicit QueryDeleter( RunStatusQuery *captured_ ): captured( captured_ ) {}
+
+		~QueryDeleter() {
+			// Delete on success and on failure but keep if the outcome is not known yet
+			if( captured->outcome != 0 ) {
+				trap_MM_DeleteQuery( captured->query );
+				captured->query = nullptr;
+			}
+		}
+	} deleter( this );
 
 	// Launch the query for status polling in this case
 	if( !query->HasStarted() ) {

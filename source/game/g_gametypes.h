@@ -111,7 +111,7 @@ class RunStatusQuery {
 	RunStatusQuery *prev { nullptr };
 	RunStatusQuery *next { nullptr };
 	StatsowFacade *const parent;
-	QueryObject *const query;
+	QueryObject *query;
 	// For debugging purposes
 	const mm_uuid_t runId;
 	int outcome { 0 };
