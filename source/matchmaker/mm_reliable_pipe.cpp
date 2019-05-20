@@ -6,7 +6,7 @@
 #include "../qcommon/qcommon.h"
 
 const char *ReliablePipe::MakeLocalStoragePath() {
-	return va( "%s/mm_db_for_port_%d", FS_CacheDirectory(), (unsigned)Cvar_Value( "sv_port" ) );
+	return va( "%s/sv_port_%d.sqlite3", FS_CacheDirectory(), (unsigned)Cvar_Value( "sv_port" ) );
 }
 
 void *ReliablePipe::BackgroundRunner::ThreadFunc( void *param ) {
