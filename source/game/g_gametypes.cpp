@@ -1260,9 +1260,6 @@ static bool G_EachNewSecond( void ) {
 * G_CheckNumBots
 */
 static void G_CheckNumBots( void ) {
-	edict_t *ent;
-	int desiredNumBots;
-
 	if( level.spawnedTimeStamp + 5000 > game.realtime ) {
 		return;
 	}
@@ -1272,19 +1269,21 @@ static void G_CheckNumBots( void ) {
 		trap_Cvar_Set( "g_numbots", "0" );
 	}
 
-	if( g_numbots->integer > gs.maxclients ) {
-		trap_Cvar_Set( "g_numbots", va( "%i", gs.maxclients ) );
+	const int maxNumBots = developer->integer ? gs.maxclients : std::min( 9, gs.maxclients );
+	if( g_numbots->integer > maxNumBots ) {
+		trap_Cvar_Set( "g_numbots", va( "%i", maxNumBots ) );
 	}
 
-	if( level.gametype.numBots > gs.maxclients ) {
-		level.gametype.numBots = gs.maxclients;
+	if( level.gametype.numBots > maxNumBots ) {
+		level.gametype.numBots = maxNumBots;
 	}
 
-	desiredNumBots = level.gametype.numBots ? level.gametype.numBots : g_numbots->integer;
+	const int desiredNumBots = level.gametype.numBots ? level.gametype.numBots : g_numbots->integer;
+	assert( desiredNumBots <= maxNumBots );
 
 	if( desiredNumBots < game.numBots ) {
 		// kick one bot
-		for( ent = game.edicts + gs.maxclients; PLAYERNUM( ent ) >= 0; ent-- ) {
+		for( edict_t *ent = game.edicts + gs.maxclients; PLAYERNUM( ent ) >= 0; ent-- ) {
 			if( !ent->r.inuse || !( ent->r.svflags & SVF_FAKECLIENT ) ) {
 				continue;
 			}
@@ -1296,8 +1295,8 @@ static void G_CheckNumBots( void ) {
 		return;
 	}
 
-	if( desiredNumBots > game.numBots ) { // add a bot if there is room
-		for( ent = game.edicts + 1; PLAYERNUM( ent ) < gs.maxclients && game.numBots < desiredNumBots; ent++ ) {
+	if( desiredNumBots > game.numBots && AI_CanSpawnBots() ) { // add a bot if there is room
+		for( edict_t *ent = game.edicts + 1; PLAYERNUM( ent ) < gs.maxclients && game.numBots < desiredNumBots; ent++ ) {
 			if( !ent->r.inuse && trap_GetClientState( PLAYERNUM( ent ) ) == CS_FREE ) {
 				AI_SpawnBot( NULL );
 			}

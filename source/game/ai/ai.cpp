@@ -437,6 +437,10 @@ void AI_RegisterEvent( edict_t *ent, int event, int parm ) {
 	AiManager::Instance()->RegisterEvent( ent, event, parm );
 }
 
+bool AI_CanSpawnBots() {
+	return AiAasWorld::Instance()->IsLoaded();
+}
+
 void AI_SpawnBot( const char *team ) {
 	AiManager::Instance()->SpawnBot( team );
 }

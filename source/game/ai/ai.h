@@ -105,6 +105,7 @@ void        AI_Knockback( edict_t *self, edict_t *attacker, const vec3_t basedir
 
 void        AI_RegisterEvent( edict_t *ent, int event, int parm );
 
+bool        AI_CanSpawnBots();
 void        AI_SpawnBot( const char *team );
 void        AI_RemoveBot( const char *name );
 void        AI_RemoveBots();
