@@ -92,12 +92,6 @@ class SVStatsowFacade {
 	}
 
 	/**
-	 * Makes a dummy client session UUID for an anonymous player.
-	 * @return a zero UUID if anonymous players are disallowed, an "FFFs" UUID otherwise.
-	 */
-	inline mm_uuid_t AnonymousSessionId() const;
-
-	/**
 	 * Should be called on any logout task outcome.
 	 * Efficiently stops logout status polling.
 	 */
@@ -108,6 +102,19 @@ class SVStatsowFacade {
 
 	void OnLoginFailure();
 	void OnLoginSuccess();
+
+	/**
+	 * Creates a session id for an anonymous connection.
+	 * A behaviour of this depends of {@code sv_mm_loginonly} value.
+	 * This is a helper method for implementation of {@code OnClientConnected()}.
+	 * @param userInfo client user info string. Gets modified if needed.
+	 * @param message a rejection message transmitted to a client.
+	 * @param dropType a numeric drop type transmitted to a client.
+	 * @return {@code Uuid_FFFsUuid()} if anonymous connections are allowed,
+	 * 		   {@code Uuid_ZeroUuid()} otherwise.
+	 * @note {@code rej*} user info strings are set if a connection is disallowed.
+	 */
+	mm_uuid_t TryHandlingAnonymousConnection( char *userInfo, const char *message );
 public:
 	static void Init();
 	static void Shutdown();
@@ -125,7 +132,7 @@ public:
 	 * Tries to launch a network task for checking credentials at Statsow side if needed.
 	 * @param client a server-side object for a connecting client
 	 * @param address an ingoing connection address
-	 * @param userInfo a user info string of a connecting client
+	 * @param userInfo a user info string of a connecting client. Gets modified if needed.
 	 * @param ticket a ticket supplied within connection command args
 	 * @param session a client session supplied within connection command args
 	 * @return a preliminary validated session, zero on failure, "FFFs" for anonymous players (if they're allowed).
@@ -136,7 +143,7 @@ public:
 	 */
 	mm_uuid_t OnClientConnected( client_s *client,
 		                         const netadr_s *address,
-		                         const char *userInfo,
+		                         char *userInfo,
 		                         const mm_uuid_t &ticket,
 		                         const mm_uuid_t &session );
 

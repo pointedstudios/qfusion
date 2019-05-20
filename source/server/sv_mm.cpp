@@ -404,18 +404,19 @@ void SVClientConnectTask::OnAnyOutcome() {
 }
 
 void SVClientConnectTask::OnAnyFailure() {
+	const char *tag = "SVClientConnectTask::OnAnyFailure()";
 	// Make sure we have changed game module decision
 	assert( client->edict );
 
 	// unable to validate client, either kick him out or force local session
 	if( parent->sv_mm_loginonly->integer ) {
-		SV_DropClient( client, DROP_TYPE_GENERAL, "%s", "Error: This server requires login. Create account at " APP_URL );
+		SV_DropClient( client, DROP_TYPE_GENERAL, "%s", "Failed to validate connection ticket" );
 		return;
 	}
 
 	char buffer[UUID_BUFFER_SIZE];
 	mm_uuid_t session = Uuid_FFFsUuid();
-	Com_Printf( "SV_MM_ClientConnect: Forcing local_session %s on client %s\n", session.ToString( buffer ), client->name );
+	Com_Printf( "%s: Using session %s for client %s\n", tag, session.ToString( buffer ), client->name );
 	client->mm_session = session;
 	userInfoChanged = true;
 }
@@ -471,18 +472,30 @@ void SVClientConnectTask::ReadRatings() {
 	StatsowFacadeTask::ParseRatingsSection( section, consumer );
 }
 
-inline mm_uuid_t SVStatsowFacade::AnonymousSessionId() const {
-	return sv_mm_loginonly->integer ? Uuid_ZeroUuid() : Uuid_FFFsUuid();
+mm_uuid_t SVStatsowFacade::TryHandlingAnonymousConnection( char *userInfo, const char *message ) {
+	if( !sv_mm_loginonly->integer ) {
+		char buffer[UUID_BUFFER_SIZE];
+		Info_SetValueForKey( userInfo, "cl_mm_session", Uuid_FFFsUuid().ToString( buffer ) );
+		return Uuid_FFFsUuid();
+	}
+
+	Info_SetValueForKey( userInfo, "rejflag", "0" );
+	Info_SetValueForKey( userInfo, "rejtype", va( "%d", DROP_TYPE_GENERAL ) );
+	Info_SetValueForKey( userInfo, "rejmsg", message );
+	return Uuid_ZeroUuid();
 }
 
 mm_uuid_t SVStatsowFacade::OnClientConnected( client_t *client,
 	                                          const netadr_t *address,
-	                                          const char *userInfo,
+	                                          char *userInfo,
 	                                          const mm_uuid_t &ticket,
 	                                          const mm_uuid_t &session ) {
+	char buffer[UUID_BUFFER_SIZE];
+
 	if( !IsValid() ) {
 		// Return a local session id that is not valid but is not a zero.
 		// That's what the game module expects in this case.
+		Info_SetValueForKey( userInfo, "cl_mm_session", Uuid_FFFsUuid().ToString( buffer ) );
 		return Uuid_FFFsUuid();
 	}
 
@@ -491,6 +504,7 @@ mm_uuid_t SVStatsowFacade::OnClientConnected( client_t *client,
 	// This also allows the supplied user info parameter to serve some utility.
 	if( const char *keyValue = Info_ValueForKey( userInfo, "socket" ) ) {
 		if( !Q_stricmp( keyValue, "loopback" ) ) {
+			Info_SetValueForKey( userInfo, "cl_mm_session", Uuid_FFFsUuid().ToString( buffer ) );
 			return Uuid_FFFsUuid();
 		}
 	}
@@ -500,13 +514,13 @@ mm_uuid_t SVStatsowFacade::OnClientConnected( client_t *client,
 
 	if( !session.IsValidSessionId() ) {
 		Com_Printf( S_COLOR_YELLOW "%s: The client session id `%s` is not valid\n", tag, session.ToString( buffer1 ) );
-		return AnonymousSessionId();
+		return TryHandlingAnonymousConnection( userInfo, "This server requires logging in" );
 	}
 
 	if( !ticket.IsValidSessionId() ) {
 		const char *format = S_COLOR_YELLOW "%s: The ticket `%s` of client `%s` is not valid\n";
 		Com_Printf( format, tag, ticket.ToString( buffer1 ), session.ToString( buffer2 ) );
-		return AnonymousSessionId();
+		return TryHandlingAnonymousConnection( userInfo, "Illegal connection ticket" );
 	}
 
 	if( TryStartingTask( NewClientConnectTask( client, session, ticket, NET_AddressToString( address ) ) ) ) {
@@ -514,7 +528,7 @@ mm_uuid_t SVStatsowFacade::OnClientConnected( client_t *client,
 	}
 
 	Com_Printf( S_COLOR_RED "%s: Can't launch a ClientConnect task\n", tag );
-	return Uuid_ZeroUuid();
+	return TryHandlingAnonymousConnection( userInfo, "Can't validate the connection ticket" );
 }
 
 void SVStatsowFacade::Frame() {

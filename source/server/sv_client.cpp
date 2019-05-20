@@ -58,6 +58,29 @@ void SV_ClientCloseDownload( client_t *client ) {
 	memset( &client->download, 0, sizeof( client->download ) );
 }
 
+static void SV_GenerateWebSession( client_t *client ) {
+	const char *chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+	// A session has log(64) x 16 = 6 x 16 = 96 bits of information.
+	// A UUID has 128 bits of information so using a single UUID is fine.
+	static_assert( sizeof( svs.clients[0].session ) == 16, "" );
+	const mm_uuid_t uuid = mm_uuid_t::Random();
+	char *p = client->session;
+
+	uint64_t bits = uuid.hiPart;
+	for( int i = 0; i < 8; ++i ) {
+		*p++ = chars[bits & 63];
+		bits >>= 6;
+	}
+	bits = uuid.loPart;
+	for( int i = 0; i < 8; ++i ) {
+		*p++ = chars[bits & 63];
+		bits >>= 6;
+	}
+
+	assert( p - client->session == 16 );
+	p[-1] = '\0';
+}
+
 /*
 * SV_ClientConnect
 * accept the new client
@@ -67,31 +90,21 @@ bool SV_ClientConnect( const socket_t *socket, const netadr_t *address,
 					   client_t *client, char *userinfo,
 					   int game_port, int challenge, bool fakeClient,
 					   mm_uuid_t ticket_id, mm_uuid_t session_id ) {
-	int i;
-	edict_t *ent;
-	int edictnum;
-	char uuid_buffer[UUID_BUFFER_SIZE];
-
-	edictnum = ( client - svs.clients ) + 1;
-	ent = EDICT_NUM( edictnum );
+	const int edictnum = ( client - svs.clients ) + 1;
+	edict_t *ent = EDICT_NUM( edictnum );
 
 	// make sure the client state is reset before an mm connection callback gets called
 	memset( client, 0, sizeof( *client ) );
 
-	// give mm a chance to reject if the server is locked ready for mm
-	// must be called before ge->ClientConnect
-	// ch : rly ignore fakeClient and tvClient here?
-
+	// Try starting validation of a client session and ticket
 	session_id = SVStatsowFacade::Instance()->OnClientConnected( client, address, userinfo, ticket_id, session_id );
+	// rej* user info strings would be set properly in this case
 	if( session_id.IsZero() ) {
 		return false;
 	}
 
-	// we need to set local sessions to userinfo ourselves
-	// TODO: Do this in SVStatsow scope
-	if( session_id.IsFFFs() ) {
-		Info_SetValueForKey( userinfo, "cl_mm_session", Uuid_ToString( uuid_buffer, session_id ) );
-	}
+	// Make sure the session id has been set
+	assert( ::strlen( Info_ValueForKey( userinfo, "cl_mm_session" ) ) == UUID_DATA_LENGTH );
 
 	// get the game a chance to reject this connection or modify the userinfo
 	if( !ge->ClientConnect( ent, userinfo, fakeClient ) ) {
@@ -143,7 +156,6 @@ bool SV_ClientConnect( const socket_t *socket, const netadr_t *address,
 
 	if( fakeClient ) {
 		client->netchan.remoteAddress.type = NA_NOTRANSMIT; // fake-clients can't transmit
-		Info_SetValueForKey( userinfo, "cl_mm_session", Uuid_ToString( uuid_buffer, Uuid_FFFsUuid() ) );
 	} else {
 		if( client->individual_socket ) {
 			Netchan_Setup( &client->netchan, &client->socket, address, game_port );
@@ -161,14 +173,7 @@ bool SV_ClientConnect( const socket_t *socket, const netadr_t *address,
 	Q_strncpyz( client->userinfo, userinfo, sizeof( client->userinfo ) );
 	SV_UserinfoChanged( client );
 
-	// generate session id
-	for( i = 0; i < (int)sizeof( svs.clients[0].session ) - 1; i++ ) {
-		const unsigned char symbols[65] =
-			"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-		client->session[i] = symbols[rand() % ( sizeof( symbols ) - 1 )];
-	}
-	client->session[i] = '\0';
-
+	SV_GenerateWebSession( client );
 	SV_Web_AddGameClient( client->session, client - svs.clients, &client->netchan.remoteAddress );
 
 	return true;
