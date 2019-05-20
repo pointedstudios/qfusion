@@ -10,14 +10,14 @@ const char *ReliablePipe::MakeLocalStoragePath() {
 }
 
 void *ReliablePipe::BackgroundRunner::ThreadFunc( void *param ) {
-	// Wait for launching runner loops more for a listen server.
-	// We do not want losing messages below in video/other console spam.
-	Sys_Sleep( ( Cvar_Value( "dedicated" ) != 0.0f ) ? 3 * 1000 : 15 * 1000 );
+	assert( Cvar_Value( "dedicated" ) );
+
+	Sys_Sleep( 333 );
 
 	auto *const runner = (BackgroundRunner *)param;
-	Com_Printf( "Launching matchmaker/stats ReliablePipe::%s...\n", runner->logTag );
+	Com_Printf( "Launching MM/stats ReliablePipe::%s...\n", runner->logTag );
 	runner->RunMessageLoop();
-	Com_Printf( "Stopping matchmaker/stats ReliablePipe::%s...\n", runner->logTag );
+	Com_Printf( "Stopping MM/stats ReliablePipe::%s...\n", runner->logTag );
 	return nullptr;
 }
 
