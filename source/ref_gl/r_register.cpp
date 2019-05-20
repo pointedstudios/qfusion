@@ -1078,7 +1078,7 @@ static void R_Register( const char *screenshotsPrefix ) {
 	r_polyblend = ri.Cvar_Get( "r_polyblend", "1", 0 );
 
 	r_brightness = ri.Cvar_Get( "r_brightness", "0", CVAR_ARCHIVE );
-	r_sRGB = ri.Cvar_Get( "r_sRGB", "1", CVAR_ARCHIVE | CVAR_LATCH_VIDEO );
+	r_sRGB = ri.Cvar_Get( "r_sRGB", "0", CVAR_ARCHIVE | CVAR_LATCH_VIDEO );
 
 	r_detailtextures = ri.Cvar_Get( "r_detailtextures", "1", CVAR_ARCHIVE );
 
@@ -1173,7 +1173,7 @@ static void R_Register( const char *screenshotsPrefix ) {
 
 	r_maxglslbones = ri.Cvar_Get( "r_maxglslbones", STR_TOSTR( MAX_GLSL_UNIFORM_BONES ), CVAR_LATCH_VIDEO );
 
-	r_multithreading = ri.Cvar_Get( "r_multithreading", "1", CVAR_ARCHIVE | CVAR_LATCH_VIDEO );
+	r_multithreading = ri.Cvar_Get( "r_multithreading", "0", CVAR_ARCHIVE | CVAR_LATCH_VIDEO );
 
 	r_showShaderCache = ri.Cvar_Get( "r_showShaderCache", "1", CVAR_ARCHIVE );
 

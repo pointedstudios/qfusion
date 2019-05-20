@@ -277,7 +277,7 @@ void G_Init( unsigned int seed, unsigned int framemsec, int protocol, const char
 	g_deadbody_autogib_delay = trap_Cvar_Get( "g_deadbody_autogib_delay", "2000", CVAR_DEVELOPER );
 	g_maxtimeouts = trap_Cvar_Get( "g_maxtimeouts", "2", CVAR_ARCHIVE );
 	g_antilag = trap_Cvar_Get( "g_antilag", "1", CVAR_SERVERINFO | CVAR_ARCHIVE | CVAR_LATCH );
-	g_antilag_maxtimedelta = trap_Cvar_Get( "g_antilag_maxtimedelta", "200", CVAR_ARCHIVE );
+	g_antilag_maxtimedelta = trap_Cvar_Get( "g_antilag_maxtimedelta", "225", CVAR_ARCHIVE );
 	g_antilag_maxtimedelta->modified = true;
 	g_antilag_timenudge = trap_Cvar_Get( "g_antilag_timenudge", "0", CVAR_ARCHIVE );
 	g_antilag_timenudge->modified = true;

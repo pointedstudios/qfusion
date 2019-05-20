@@ -251,7 +251,7 @@ void CL_SoundModule_Init( bool verbose ) {
 	sound_import_t import;
 
 	if( !s_module ) {
-		s_module = Cvar_Get( "s_module", "3", CVAR_ARCHIVE | CVAR_LATCH_SOUND );
+		s_module = Cvar_Get( "s_module", "1", CVAR_ARCHIVE | CVAR_LATCH_SOUND );
 	}
 
 	// unload anything we have now
