@@ -255,217 +255,93 @@ int AiAasWorld::TraceAreas( const vec3_t start, const vec3_t end, int *areas_, v
 	}
 }
 
-int AiAasWorld::BBoxAreasNonConst( const vec3_t absmins, const vec3_t absmaxs, int *areas_, int maxareas ) {
+int AiAasWorld::BBoxAreas( const vec3_t absMins, const vec3_t absMaxs, int *areaNums, int maxAreas ) const {
 	if( !loaded ) {
 		return 0;
 	}
 
-	aas_link_t *linkedareas = LinkEntity( absmins, absmaxs, -1 );
-	int num = 0;
+	// A lookup table for inlined BoxOnPlaneSide() body
+	vec3_t lookupTable[16];
 
-	for( aas_link_t *link = linkedareas; link; link = link->next_area ) {
-		areas_[num] = link->areanum;
-		num++;
-		if( num >= maxareas ) {
+	constexpr const auto nodesStackSize = 1024;
+	// Make sure we can access two additional elements to use a single branch for testing stack overflow
+	int nodesStack[nodesStackSize + 2];
+	int *stackPtr = &nodesStack[0];
+	int *writePtr = &areaNums[0];
+
+	// sign bits 0
+	VectorSet( lookupTable[0], absMaxs[0], absMaxs[1], absMaxs[2] );
+	VectorSet( lookupTable[1], absMins[0], absMins[1], absMins[2] );
+	// sign bits 1
+	VectorSet( lookupTable[2], absMins[0], absMaxs[1], absMaxs[2] );
+	VectorSet( lookupTable[3], absMaxs[0], absMins[1], absMins[2] );
+	// sign bits 2
+	VectorSet( lookupTable[4], absMaxs[0], absMins[1], absMaxs[2] );
+	VectorSet( lookupTable[5], absMins[0], absMaxs[1], absMins[2] );
+	// sign bits 3
+	VectorSet( lookupTable[6], absMins[0], absMins[1], absMaxs[2] );
+	VectorSet( lookupTable[7], absMaxs[0], absMaxs[1], absMins[2] );
+	// sign bits 4:
+	VectorSet( lookupTable[8], absMaxs[0], absMaxs[1], absMins[2] );
+	VectorSet( lookupTable[9], absMins[0], absMins[1], absMaxs[2] );
+	// sign bits 5
+	VectorSet( lookupTable[10], absMins[0], absMaxs[1], absMins[2] );
+	VectorSet( lookupTable[11], absMaxs[0], absMins[1], absMaxs[2] );
+	// sign bits 6
+	VectorSet( lookupTable[12], absMaxs[0], absMins[1], absMins[2] );
+	VectorSet( lookupTable[13], absMins[0], absMaxs[1], absMaxs[2] );
+	// sign bits 7
+	VectorSet( lookupTable[14], absMins[0], absMins[1], absMins[2] );
+	VectorSet( lookupTable[15], absMaxs[0], absMaxs[1], absMaxs[2] );
+
+	*stackPtr++ = 1;
+	for(;; ) {
+		// Pop the node
+		stackPtr--;
+		if( stackPtr < nodesStack ) {
 			break;
 		}
-	}
-	UnlinkFromAreas( linkedareas );
-	return num;
-}
 
-typedef struct {
-	int nodenum;        //node found after splitting
-} aas_linkstack_t;
+		const int nodeNum = *stackPtr;
+		// If it is an area
+		if( nodeNum < 0 ) {
+			const int areaNum = -nodeNum;
 
-AiAasWorld::aas_link_t *AiAasWorld::LinkEntity( const vec3_t absmins, const vec3_t absmaxs, int entnum ) {
-	aas_linkstack_t linkstack[256];
-	aas_linkstack_t *lstack_p;
-
-	aas_link_t *linkedAreas = nullptr;
-
-	//
-	lstack_p = linkstack;
-	//we start with the whole line on the stack
-	//start with node 1 because node zero is a dummy used for solid leafs
-	lstack_p->nodenum = 1;      //starting at the root of the tree
-	lstack_p++;
-
-	while( 1 ) {
-		//pop up the stack
-		lstack_p--;
-		//if the trace stack is empty (ended up with a piece of the
-		//line to be traced in an area)
-		if( lstack_p < linkstack ) {
-			break;
-		}
-
-		//number of the current node to test the line against
-		int nodenum = lstack_p->nodenum;
-		//if it is an area
-		if( nodenum < 0 ) {
-			//NOTE: the entity might have already been linked into this area
-			// because several node children can point to the same area
-			aas_link_t *link = arealinkedentities[-nodenum];
-
-			for(; link; link = link->next_ent ) {
-				if( link->entnum == entnum ) {
-					break;
-				}
-			}
-			if( link ) {
+			*writePtr++ = areaNum;
+			// Put likely case first
+			if( writePtr - areaNums < maxAreas ) {
 				continue;
 			}
 
-			link = AllocLink();
-			if( !link ) {
-				return linkedAreas;
-			}
+			return (int)( writePtr - areaNums );
+		}
 
-			link->entnum = entnum;
-			link->areanum = -nodenum;
-			//put the link into the double linked area list of the entity
-			link->prev_area = nullptr;
-			link->next_area = linkedAreas;
-			if( linkedAreas ) {
-				linkedAreas->prev_area = link;
-			}
-			linkedAreas = link;
-			//put the link into the double linked entity list of the area
-			link->prev_ent = nullptr;
-			link->next_ent = arealinkedentities[-nodenum];
-			if( arealinkedentities[-nodenum] ) {
-				arealinkedentities[-nodenum]->prev_ent = link;
-			}
-			arealinkedentities[-nodenum] = link;
+		// Skip solid leaves
+		if( !nodeNum ) {
 			continue;
 		}
 
-		//if solid leaf
-		if( !nodenum ) {
-			continue;
+		const auto *const node = &nodes[nodeNum];
+		const auto *const plane = &planes[node->planenum];
+		const auto *__restrict normal = plane->normal;
+		const int lookupTableIndex = plane->signBits * 2;
+		const auto *__restrict lookup0 = lookupTable[lookupTableIndex + 0];
+		const auto *__restrict lookup1 = lookupTable[lookupTableIndex + 1];
+		const float planeDist = plane->dist;
+		// If on the front side of the node
+		if( DotProduct( normal, lookup0 ) >= planeDist ) {
+			*stackPtr++ = node->children[0];
+		}
+		// If on the back side of the node
+		if( DotProduct( normal, lookup1 ) < planeDist ) {
+			*stackPtr++ = node->children[1];
 		}
 
-		//the node to test against
-		aas_node_t *aasnode = &nodes[nodenum];
-		//the current node plane
-		aas_plane_t *plane = &planes[aasnode->planenum];
-		//get the side(s) the box is situated relative to the plane
-		int side = BoxOnPlaneSide2( absmins, absmaxs, plane );
-		//if on the front side of the node
-		if( side & 1 ) {
-			lstack_p->nodenum = aasnode->children[0];
-			lstack_p++;
-		}
-		if( lstack_p >= &linkstack[255] ) {
-			G_Printf( S_COLOR_RED "AiAasWorld::LinkEntity(): stack overflow\n" );
-			break;
-		}
-		//if on the back side of the node
-		if( side & 2 ) {
-			lstack_p->nodenum = aasnode->children[1];
-			lstack_p++;
-		}
-		if( lstack_p >= &linkstack[255] ) {
-			G_Printf( S_COLOR_RED "AiAasWorld::LinkEntity(): stack overflow\n" );
-			break;
-		}
+		// Should not happen at all?
+		assert( stackPtr - nodesStack < nodesStackSize );
 	}
-	return linkedAreas;
-}
 
-void AiAasWorld::UnlinkFromAreas( aas_link_t *linkedAreas ) {
-	aas_link_t *link, *nextlink;
-
-	for( link = linkedAreas; link; link = nextlink ) {
-		//next area the entity is linked in
-		nextlink = link->next_area;
-		//remove the entity from the linked list of this area
-		if( link->prev_ent ) {
-			link->prev_ent->next_ent = link->next_ent;
-		} else {
-			arealinkedentities[link->areanum] = link->next_ent;
-		}
-		if( link->next_ent ) {
-			link->next_ent->prev_ent = link->prev_ent;
-		}
-		//deallocate the link structure
-		DeAllocLink( link );
-	}
-}
-
-AiAasWorld::aas_link_t *AiAasWorld::AllocLink() {
-	aas_link_t *link = freelinks;
-
-	if( !link ) {
-		G_Printf( S_COLOR_RED "empty aas link heap\n" );
-		return nullptr;
-	}
-	if( freelinks ) {
-		freelinks = freelinks->next_ent;
-	}
-	if( freelinks ) {
-		freelinks->prev_ent = nullptr;
-	}
-	numaaslinks--;
-	return link;
-}
-
-void AiAasWorld::DeAllocLink( aas_link_t *link ) {
-	if( freelinks ) {
-		freelinks->prev_ent = link;
-	}
-	link->prev_ent = nullptr;
-	link->next_ent = freelinks;
-	link->prev_area = nullptr;
-	link->next_area = nullptr;
-	freelinks = link;
-	numaaslinks++;
-}
-
-void AiAasWorld::InitLinkHeap() {
-	int max_aaslinks = linkheapsize;
-
-	//if there's no link heap present
-	if( !linkheap ) {
-		max_aaslinks = 6144;
-		linkheapsize = max_aaslinks;
-		linkheap = (aas_link_t *) G_Malloc( max_aaslinks * sizeof( aas_link_t ) );
-	}
-	//link the links on the heap
-	linkheap[0].prev_ent = nullptr;
-	linkheap[0].next_ent = &linkheap[1];
-
-	for( int i = 1; i < max_aaslinks - 1; i++ ) {
-		linkheap[i].prev_ent = &linkheap[i - 1];
-		linkheap[i].next_ent = &linkheap[i + 1];
-	}
-	linkheap[max_aaslinks - 1].prev_ent = &linkheap[max_aaslinks - 2];
-	linkheap[max_aaslinks - 1].next_ent = nullptr;
-	//pointer to the first free link
-	freelinks = &linkheap[0];
-	//
-	numaaslinks = max_aaslinks;
-}
-
-void AiAasWorld::InitLinkedEntities() {
-	arealinkedentities = (aas_link_t **) G_Malloc( numareas * sizeof( aas_link_t * ) );
-	memset( arealinkedentities, 0, numareas * sizeof( aas_link_t * ) );
-}
-
-void AiAasWorld::FreeLinkHeap() {
-	if( linkheap ) {
-		G_Free( linkheap );
-	}
-	linkheap = nullptr;
-	linkheapsize = 0;
-}
-
-void AiAasWorld::FreeLinkedEntities() {
-	if( arealinkedentities ) {
-		G_Free( arealinkedentities );
-	}
-	arealinkedentities = nullptr;
+	return (int)( writePtr - areaNums );
 }
 
 void AiAasWorld::ComputeExtraAreaData() {
@@ -845,31 +721,6 @@ nextArea:;
 	}
 }
 
-int AiAasWorld::BoxOnPlaneSide2( const vec3_t absmins, const vec3_t absmaxs, const aas_plane_t *p ) {
-	vec3_t corners[2];
-
-	for( int i = 0; i < 3; i++ ) {
-		if( p->normal[i] < 0 ) {
-			corners[0][i] = absmins[i];
-			corners[1][i] = absmaxs[i];
-		} else   {
-			corners[1][i] = absmins[i];
-			corners[0][i] = absmaxs[i];
-		} //end else
-	}
-	float dist1 = DotProduct( p->normal, corners[0] ) - p->dist;
-	float dist2 = DotProduct( p->normal, corners[1] ) - p->dist;
-	int sides = 0;
-	if( dist1 >= 0 ) {
-		sides = 1;
-	}
-	if( dist2 < 0 ) {
-		sides |= 2;
-	}
-
-	return sides;
-}
-
 static void AAS_DData( unsigned char *data, int size ) {
 	for( int i = 0; i < size; i++ ) {
 		data[i] ^= (unsigned char) i * 119;
@@ -1133,8 +984,7 @@ void AiAasWorld::PostLoad() {
 	// This is important for further PostLoad() computations
 	AasElementsMask::Init( this );
 
-	InitLinkHeap();
-	InitLinkedEntities();
+	CategorizePlanes();
 	ComputeExtraAreaData();
 }
 
@@ -1150,9 +1000,6 @@ AiAasWorld::~AiAasWorld() {
 	if( checksum ) {
 		G_Free( checksum );
 	}
-
-	FreeLinkedEntities();
-	FreeLinkHeap();
 
 	// These items may be absent for some stripped AAS files, so check each one.
 	if( bboxes ) {
@@ -1253,6 +1100,19 @@ AiAasWorld::~AiAasWorld() {
 	}
 	if( walkOffLedgePassThroughAirAreas ) {
 		G_Free( walkOffLedgePassThroughAirAreas );
+	}
+}
+
+void AiAasWorld::CategorizePlanes() {
+	// We do not trust the AAS compiler and classify planes on our own
+	for( int i = 0; i < numplanes; ++i ) {
+		auto *aasPlane = &planes[i];
+		cplane_t cmPlane;
+		VectorCopy( aasPlane->normal, cmPlane.normal );
+		cmPlane.dist = aasPlane->dist;
+		CategorizePlane( &cmPlane );
+		aasPlane->type = cmPlane.type;
+		aasPlane->signBits = cmPlane.signbits;
 	}
 }
 

@@ -150,7 +150,8 @@ typedef vec3_t aas_vertex_t;
 typedef struct aas_plane_s {
 	vec3_t normal;                      //normal vector of the plane
 	float dist;                         //distance of the plane (normal vector * distance = point in plane)
-	int type;
+	uint16_t type;
+	uint16_t signBits;
 } aas_plane_t;
 
 //edge
@@ -245,21 +246,6 @@ class AiAasWorld
 	int numclusters;
 	aas_cluster_t *clusters;
 
-	//structure to link entities to areas and areas to entities
-	typedef struct aas_link_s {
-		int entnum;
-		int areanum;
-		struct aas_link_s *next_ent, *prev_ent;
-		struct aas_link_s *next_area, *prev_area;
-	} aas_link_t;
-
-	//enities linked in the areas
-	aas_link_t *linkheap;                       //heap with link structures
-	int linkheapsize;                           //size of the link heap
-	aas_link_t *freelinks;                      //first free link
-	aas_link_t **arealinkedentities;            //entities linked into areas
-	int numaaslinks;
-
 	uint16_t *areaFloorClusterNums;            // A number of a floor cluster for an area, 0 = not in a floor cluster
 	uint16_t *areaStairsClusterNums;           // A number of a stairs cluster for an area, 0 = not in a stairs cluster
 
@@ -299,9 +285,8 @@ class AiAasWorld
 	void PostLoad();
 
 	void SwapData();
+	void CategorizePlanes();
 
-	void InitLinkHeap();
-	void InitLinkedEntities();
 	// Computes extra Qfusion area flags based on loaded world data
 	void ComputeExtraAreaData();
 	// Computes extra Qfusion area floor and stairs clusters
@@ -335,19 +320,8 @@ class AiAasWorld
 	// Should be called after all other flags are computed
 	void TrySetAreaSkipCollisionFlags();
 
-	void FreeLinkHeap();
-	void FreeLinkedEntities();
-
-	aas_link_t *LinkEntity( const vec3_t absmins, const vec3_t absmaxs, int entnum );
-	void UnlinkFromAreas( aas_link_t *linkedAreas );
-	aas_link_t *AllocLink();
-	void DeAllocLink( aas_link_t *link );
-
-	int BoxOnPlaneSide2( const vec3_t absmins, const vec3_t absmaxs, const aas_plane_t *p );
-
 	int FindAreaNum( const vec3_t mins, const vec3_t maxs ) const;
 	int BBoxAreasNonConst( const vec3_t absmins, const vec3_t absmaxs, int *areas_, int maxareas );
-
 public:
 	AiAasWorld( AiAasWorld &&that );
 	~AiAasWorld();
@@ -373,14 +347,12 @@ public:
 	//stores the areas the trace went through and returns the number of passed areas
 	int TraceAreas( const vec3_t start, const vec3_t end, int *areas_, vec3_t *points, int maxareas ) const;
 
-	inline int BBoxAreas( const Vec3 &absmins, const Vec3 &absmaxs, int *areas_, int maxareas ) const {
-		return BBoxAreas( absmins.Data(), absmaxs.Data(), areas_, maxareas );
+	int BBoxAreas( const Vec3 &absMins, const Vec3 &absMaxs, int *areaNums, int maxAreas ) const {
+		return BBoxAreas( absMins.Data(), absMaxs.Data(), areaNums, maxAreas );
 	}
 
 	//returns the areas the bounding box is in
-	int BBoxAreas( const vec3_t absmins, const vec3_t absmaxs, int *areas_, int maxareas ) const {
-		return ( const_cast<AiAasWorld*>( this ) )->BBoxAreasNonConst( absmins, absmaxs, areas_, maxareas );
-	}
+	int BBoxAreas( const vec3_t absMins, const vec3_t absMaxs, int *areaNums, int maxAreas ) const;
 
 	//returns the area the point is in
 	int PointAreaNum( const vec3_t point ) const;
