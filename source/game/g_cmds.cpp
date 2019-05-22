@@ -464,7 +464,7 @@ static void Cmd_Position_f( edict_t *ent ) {
 
 		const int topNode = trap_CM_FindTopNodeForBox( ent->r.absmin, ent->r.absmax );
 		int tmp, nums[32];
-		const int numLeaves = trap_CM_BoxLeafnums( ent->r.mins, ent->r.maxs, nums, 32, &tmp, topNode );
+		const int numLeaves = trap_CM_BoxLeafnums( ent->r.absmin, ent->r.absmax, nums, 32, &tmp, topNode );
 		ss << "CM top node for box: " << topNode << ", leaves: [";
 		for( int i = 0; i < numLeaves; ++i ) {
 			ss << nums[i] << ( ( i + 1 != numLeaves ) ? "," : "" );
@@ -477,7 +477,7 @@ static void Cmd_Position_f( edict_t *ent ) {
 			return;
 		}
 
-		const int numAreas = aasWorld->BBoxAreas( ent->r.mins, ent->r.maxs, nums, 32 );
+		const int numAreas = aasWorld->BBoxAreas( ent->r.absmin, ent->r.absmax, nums, 32 );
 		ss << ", AAS areas for box: [";
 		for( int i = 0; i < numAreas; ++i ) {
 			ss << nums[i] << ( ( i + 1 != numAreas ) ? "," : "" );
