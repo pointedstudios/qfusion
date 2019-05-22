@@ -817,7 +817,7 @@ edict_t *W_Fire_Rocket( edict_t *self, vec3_t start, vec3_t angles, int speed, f
 		damage = 9999;
 	}
 
-	rocket = W_Fire_LinearProjectile( self, start, angles, 300, damage, minKnockback, maxKnockback, stun, minDamage, radius, timeout, timeDelta );
+	rocket = W_Fire_LinearProjectile( self, start, angles, speed, damage, minKnockback, maxKnockback, stun, minDamage, radius, timeout, timeDelta );
 
 	rocket->s.type = ET_ROCKET; //rocket trail sfx
 	if( mod == MOD_ROCKET_S ) {
@@ -1405,6 +1405,8 @@ static void W_Touch_Wave( edict_t *ent, edict_t *other, cplane_t *plane, int sur
 
 		G_Damage( other, ent, ent->r.owner, dir, ent->velocity, ent->s.origin, ent->projectileInfo.maxDamage, ent->projectileInfo.maxKnockback, ent->projectileInfo.stun, 0, ent->style );
 	}
+
+	W_Detonate_Wave( ent, other, plane, surfFlags );
 }
 
 void W_Detonate_Wave( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags ) {
