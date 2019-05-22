@@ -294,6 +294,14 @@ int AiAasWorld::BBoxAreas( const vec3_t absMins, const vec3_t absMaxs, int *area
 	VectorSet( lookupTable[14], absMins[0], absMins[1], absMins[2] );
 	VectorSet( lookupTable[15], absMaxs[0], absMaxs[1], absMaxs[2] );
 
+	// A mask to exclude duplicates in the output (wtf?).
+	// We do not want to add AasElementsMask() for it as this is really a hack.
+	// (we need a separate table as non-reentrancy could break some caller algorithms)
+	// Every word is capable of storing 32 = 2^5 bits so we need 2^16/2^5 words for the maximum number of areas allowed
+	uint32_t areasMask[(1 << 16) >> 5];
+	const int actualNumWords = numareas % 32 ? ( numareas + 1 ) / 32 : numareas / 32;
+	::memset( areasMask, 0, actualNumWords * sizeof( uint32_t ) );
+
 	*stackPtr++ = 1;
 	for(;; ) {
 		// Pop the node
@@ -306,6 +314,13 @@ int AiAasWorld::BBoxAreas( const vec3_t absMins, const vec3_t absMaxs, int *area
 		// If it is an area
 		if( nodeNum < 0 ) {
 			const int areaNum = -nodeNum;
+			const int wordNum = areaNum / 32;
+			const uint32_t bit = 1u << ( areaNum % 32 );
+			if( areasMask[wordNum] & bit ) {
+				continue;
+			}
+
+			areasMask[wordNum] |= bit;
 
 			*writePtr++ = areaNum;
 			// Put likely case first
