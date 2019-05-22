@@ -556,9 +556,20 @@ bool SelectedEnemies::TestAboutToHitEBorIG( int64_t levelTime ) const {
 			continue;
 		}
 
+		const Vec3 enemyOrigin( enemy->LastSeenOrigin() );
+		const float distance = Q_Sqrt( enemyOrigin.SquareDistanceTo( bot->Origin() ) );
+
+		float dotThreshold = 0.95f;
+		// Check whether the enemy is really holding the weapon
+		if( enemy->IsShootableCurrWeapon( WEAP_ELECTROBOLT ) || enemy->IsShootableCurrWeapon( WEAP_INSTAGUN ) ) {
+			// Apply a lower dot threshold if the enemy is really holding the weapon
+			dotThreshold = 0.90f;
+		}
+
 		// Is not going to put crosshair right now
 		// TODO: Check past view dots and derive direction?
-		if( viewDots[i] < 0.85f ) {
+		// Note: raise the dot threshold for distant enemies
+		if( viewDots[i] < dotThreshold + 0.03f * BoundedFraction( distance, 2500.0f ) ) {
 			continue;
 		}
 
@@ -566,7 +577,6 @@ bool SelectedEnemies::TestAboutToHitEBorIG( int64_t levelTime ) const {
 			continue;
 		}
 
-		const Vec3 enemyOrigin( enemy->LastSeenOrigin() );
 		Vec3 traceStart( enemyOrigin );
 		traceStart.Z() += playerbox_stand_viewheight;
 		SolidWorldTrace( &trace, traceStart.Data(), botOrigin );
@@ -593,9 +603,8 @@ bool SelectedEnemies::TestAboutToHitEBorIG( int64_t levelTime ) const {
 
 		// If not zooming
 		if( !client->ps.stats[PM_STAT_ZOOMTIME] ) {
-			const float squareDistance = enemyOrigin.SquareDistanceTo( bot->Origin() );
 			// It's unlikely to hit at this distance
-			if( squareDistance > 1250 * 1250 ) {
+			if( distance > 1250.0f ) {
 				continue;
 			}
 		} else {
@@ -720,8 +729,14 @@ bool SelectedEnemies::TestAboutToHitLGorPG( int64_t levelTime ) const {
 			continue;
 		}
 
-		// Is not going to put crosshair right now
-		if( viewDots[i] < 0.85f ) {
+		float viewDotThreshold = 0.97f;
+		// Check whether the enemy is really holding the weapon
+		if( enemy->IsShootableCurrWeapon( WEAP_LASERGUN ) || enemy->IsShootableCurrWeapon( WEAP_PLASMAGUN ) ) {
+			// Apply a lower dot threshold if the enemy is really holding the weapon
+			viewDotThreshold = 0.90f;
+		}
+
+		if( viewDots[i] < viewDotThreshold ) {
 			continue;
 		}
 
@@ -800,7 +815,7 @@ bool SelectedEnemies::TestAboutToHitRLorSW( int64_t levelTime ) const {
 		}
 
 		const float distance = Q_Sqrt( squareDistance );
-		const float distanceFraction = std::min( distance, distanceThreshold ) * Q_Rcp( distanceThreshold );
+		const float distanceFraction = BoundedFraction( distance, distanceThreshold );
 		// Do not wait for an actual shot on a short distance.
 		// Its impossible to dodge on a short distance due to damage splash.
 		// If the distance is close to zero 750 millis of reloading left must be used for making a dodge.
@@ -808,8 +823,15 @@ bool SelectedEnemies::TestAboutToHitRLorSW( int64_t levelTime ) const {
 			continue;
 		}
 
+		float dotThreshold = 0.5f;
+		// Check whether an enemy is really holding the weapon
+		if( enemy->IsShootableCurrWeapon( WEAP_ROCKETLAUNCHER ) || enemy->IsShootableCurrWeapon( WEAP_SHOCKWAVE ) ) {
+			// Apply a lower dot threshold if the enemy is really holding the weapon
+			dotThreshold = 0.25f;
+		}
+
 		// Is not going to put crosshair right now
-		if( viewDots[i] < 0.3f + 0.4f * distanceFraction ) {
+		if( viewDots[i] < dotThreshold + 0.4f * distanceFraction ) {
 			continue;
 		}
 

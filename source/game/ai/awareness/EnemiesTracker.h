@@ -220,6 +220,7 @@ public:
 	inline int WavesReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_SHOCKWAVE>(); }
 	inline int InstasReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_INSTAGUN>(); }
 
+	bool IsShootableCurrWeapon( int weapon ) const;
 	bool IsShootableCurrOrPendingWeapon( int weapon ) const;
 
 	bool TriesToKeepUnderXhair( const float *origin ) const;

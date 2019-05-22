@@ -91,6 +91,28 @@ Vec3 TrackedEnemy::LookDir() const {
 	return Vec3( lookDir );
 }
 
+static inline bool HasAmmoForWeapon( const gclient_t *client, int weapon ) {
+	assert( weapon >= WEAP_NONE && weapon < WEAP_TOTAL );
+	const auto *inventory = client->ps.inventory;
+	constexpr int shifts[2] = { ( AMMO_GUNBLADE - WEAP_GUNBLADE ), ( AMMO_WEAK_GUNBLADE - WEAP_GUNBLADE ) };
+	static_assert( shifts[0] > 0 && shifts[1] > 0, "" );
+	return ( inventory[weapon + shifts[0]] | inventory[weapon + shifts[1]] ) != 0;
+}
+
+bool TrackedEnemy::IsShootableCurrWeapon( int weapon ) const {
+	const auto *client = ent->r.client;
+	if( !client ) {
+		return false;
+	}
+
+	const auto *playerStats = client->ps.stats;
+	if( playerStats[STAT_WEAPON] != weapon ) {
+		return false;
+	}
+
+	return HasAmmoForWeapon( client, weapon );
+}
+
 bool TrackedEnemy::IsShootableCurrOrPendingWeapon( int weapon ) const {
 	const auto *client = ent->r.client;
 	if( !client ) {
@@ -98,17 +120,13 @@ bool TrackedEnemy::IsShootableCurrOrPendingWeapon( int weapon ) const {
 	}
 
 	const auto *playerStats = client->ps.stats;
-	if( playerStats[STAT_WEAPON] != weapon && playerStats[STAT_PENDING_WEAPON] != weapon ) {
+	const bool isCurrentWeapon = playerStats[STAT_WEAPON] == weapon;
+	const bool isPendingWeapon = playerStats[STAT_PENDING_WEAPON] == weapon;
+	if( !( isCurrentWeapon | isPendingWeapon ) ) {
 		return false;
 	}
 
-	const auto *inventory = client->ps.inventory;
-	if( inventory[weapon] ) {
-		constexpr int shifts[2] = { ( AMMO_GUNBLADE - WEAP_GUNBLADE ), ( AMMO_WEAK_GUNBLADE - WEAP_GUNBLADE ) };
-		return inventory[weapon + shifts[0]] || inventory[weapon + shifts[1]];
-	}
-
-	return false;
+	return HasAmmoForWeapon( client, weapon );
 }
 
 bool TrackedEnemy::TriesToKeepUnderXhair( const float *origin ) const {
