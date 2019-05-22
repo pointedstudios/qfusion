@@ -80,12 +80,7 @@ bool GenericGroundMovementScript::SetupForKeptPointInFov( MovementPredictionCont
 		return true;
 	}
 
-	const auto *pmStats = context->currPlayerState->pmove.stats;
-	if( !( ( pmStats[PM_STAT_FEATURES] & PMFEAT_DASH ) && !pmStats[PM_STAT_DASHTIME] ) ) {
-		return true;
-	}
-
-	// Check whether it's safe to dash
+	// Check whether it's safe to dash (or jump)
 	// 1) there should be only a single direction defined
 	// 2) the target should be relatively far from the bot
 	// 3) the target should conform to the direction key well
@@ -94,22 +89,58 @@ bool GenericGroundMovementScript::SetupForKeptPointInFov( MovementPredictionCont
 		return true;
 	}
 
-	if( distanceToTarget < 72.0f ) {
+	bool canUseDash = true;
+	const auto *pmStats = context->currPlayerState->pmove.stats;
+	// Try jumping in case whether the bot has a relatively high speed and it conforms to the intended direction well
+	if( !( ( pmStats[PM_STAT_FEATURES] & PMFEAT_DASH ) && !pmStats[PM_STAT_DASHTIME] ) ) {
+		// Check whether jumping is allowed
+		if ( !allowRunning || !( ( pmStats[PM_STAT_FEATURES] & PMFEAT_JUMP ) ) ) {
+			return true;
+		}
+		// There's no point in trying to keep speed if it's this low
+		if( entityPhysicsState.Speed2D() <= context->GetRunSpeed() ) {
+			return true;
+		}
+		// Check whether the bot becomes volatile for an aiming enemy having jumped
+		if( bot->ShouldSkinBunnyInFavorOfCombatMovement() ) {
+			return true;
+		}
+		const auto *aasWorld = AiAasWorld::Instance();
+		// Try keeping speed only in NOFALL areas that belong to some floor cluster
+		const int currGroundedAreaNum = context->CurrGroundedAasAreaNum();
+		if( !aasWorld->AreaFloorClusterNums()[currGroundedAreaNum] ) {
+			return true;
+		}
+		if( !( aasWorld->AreaSettings()[currGroundedAreaNum].areaflags & AREA_NOFALL ) ) {
+			return true;
+		}
+		canUseDash = false;
+	}
+
+	// Use a larger distance threshold if we're going to jump
+	if( distanceToTarget < ( canUseDash ? 72.0f : 96.0f ) ) {
 		return true;
 	}
 
-	bool setDash = false;
+	vec3_t keyDir;
 	if( keyMoves[0] ) {
-		if( ( keyMoves[0] * entityPhysicsState.ForwardDir() ).Dot( intendedMoveDir ) > 0.9f ) {
-			setDash = true;
-		}
+		entityPhysicsState.ForwardDir().CopyTo( keyDir );
+		VectorScale( keyDir, keyMoves[0], keyDir );
 	} else {
-		if( ( keyMoves[1] * entityPhysicsState.RightDir() ).Dot( intendedMoveDir ) > 0.9f ) {
-			setDash = true;
-		}
+		entityPhysicsState.RightDir().CopyTo( keyDir );
+		VectorScale( keyDir, keyMoves[1], keyDir );
 	}
 
-	botInput->SetSpecialButton( setDash );
+	if( canUseDash ) {
+		botInput->SetSpecialButton( true );
+		return true;
+	}
+
+	const float *velocity = entityPhysicsState.Velocity();
+	if ( intendedMoveDir.Dot( keyDir ) > 0.9f && DotProduct( velocity, keyDir ) > 0.9f ) {
+		botInput->SetUpMovement( 1 );
+	}
+
 	return true;
 }
 
