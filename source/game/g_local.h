@@ -1622,10 +1622,11 @@ class RespectHandler final : public ChatHandler {
 		void CheckBehaviour( const int64_t matchStartTime );
 
 #ifndef _MSC_VER
-		void PrintToClientScreen( const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
+		void PrintToClientScreen( unsigned timeout, const char *format, ... ) __attribute__( ( format( printf, 3, 4 ) ) );
 #else
-		void PrintToClientScreen( _Printf_format_string_ const char *format, ... );
+		void PrintToClientScreen( unsigned timeout, _Printf_format_string_ const char *format, ... );
 #endif
+		void ShowRespectMenuAtClient( unsigned timeout );
 
 		void AnnounceMisconductBehaviour( const char *action );
 

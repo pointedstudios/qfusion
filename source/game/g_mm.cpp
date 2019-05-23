@@ -1443,14 +1443,14 @@ bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
 	const char *warning = S_COLOR_YELLOW "Less talk, let's play!";
 	if( matchState < MATCH_STATE_PLAYTIME ) {
 		// Print a warning only to the player
-		PrintToClientScreen( "%s", warning );
+		PrintToClientScreen( 1750, "%s", warning );
 		return false;
 	}
 
 	// Never warned (at start of the level)
 	if( !warnedAt ) {
 		warnedAt = level.time;
-		PrintToClientScreen( "%s", warning );
+		PrintToClientScreen( 1750, "%s", warning );
 		// Let the message be printed by default facilities
 		return false;
 	}
@@ -1465,7 +1465,7 @@ bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
 	// Allow speaking occasionally once per 5 minutes
 	if( millisSinceLastWarn > 5 * 60 * 1000 ) {
 		warnedAt = level.time;
-		PrintToClientScreen( "%s", warning );
+		PrintToClientScreen( 1750, "%s", warning );
 		return false;
 	}
 
@@ -1497,10 +1497,10 @@ void RespectHandler::ClientEntry::AnnounceMisconductBehaviour( const char *actio
 	constexpr const char *format = S_COLOR_WHITE "%s" S_COLOR_RED " has %s %s! %s!\n";
 	G_PrintMsg( nullptr, format, ent->r.client->netname, action, subject, outcome );
 
-	PrintToClientScreen( S_COLOR_RED "You have %s R&S Codex...", action );
+	PrintToClientScreen( 3000, S_COLOR_RED "You have %s R&S Codex...", action );
 }
 
-void RespectHandler::ClientEntry::PrintToClientScreen( const char *format, ... ) {
+void RespectHandler::ClientEntry::PrintToClientScreen( unsigned timeout, const char *format, ... ) {
 	char formatBuffer[MAX_STRING_CHARS];
 	char commandBuffer[MAX_STRING_CHARS];
 
@@ -1509,9 +1509,13 @@ void RespectHandler::ClientEntry::PrintToClientScreen( const char *format, ... )
 	Q_vsnprintfz( formatBuffer, sizeof( formatBuffer ), format, va );
 	va_end( va );
 
-	// Make this message appear as an award at client-side
-	Q_snprintfz( commandBuffer, sizeof( commandBuffer ), "aw \"%s\"", formatBuffer );
+	// Make this message appear as an award that has a custom timeout at client-side
+	Q_snprintfz( commandBuffer, sizeof( commandBuffer ), "rns print %d \"%s\"", timeout, formatBuffer );
 	trap_GameCmd( ent, commandBuffer );
+}
+
+void RespectHandler::ClientEntry::ShowRespectMenuAtClient( unsigned timeout ) {
+	trap_GameCmd( ent, va( "rns menu %d", timeout ) );
 }
 
 class RespectTokensRegistry {
@@ -1633,7 +1637,8 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 			saidBefore = true;
 		}
 		if( !hasTakenCountdownHint ) {
-			PrintToClientScreen( S_COLOR_CYAN "Say `%s` please!", RespectTokensRegistry::TokenForNum( tokenNum ) );
+			PrintToClientScreen( 1500, S_COLOR_CYAN "Say `%s` please!", RespectTokensRegistry::TokenForNum( tokenNum ) );
+			ShowRespectMenuAtClient( 3000 );
 			hasTakenCountdownHint = true;
 		}
 		return;
@@ -1665,7 +1670,8 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 		}
 
 		if( !hasTakenStartHint && !hasViolatedCodex ) {
-			PrintToClientScreen( S_COLOR_CYAN "Say `%s` please!", RespectTokensRegistry::TokenForNum( tokenNum ) );
+			PrintToClientScreen( 2000, S_COLOR_CYAN "Say `%s` please!", RespectTokensRegistry::TokenForNum( tokenNum ) );
+			ShowRespectMenuAtClient( 3000 );
 			hasTakenStartHint = true;
 			return;
 		}
@@ -1701,7 +1707,8 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 		return;
 	}
 
-	PrintToClientScreen( S_COLOR_CYAN "Say `gg` please!" );
+	PrintToClientScreen( 3000, S_COLOR_CYAN "Say `gg` please!" );
+	ShowRespectMenuAtClient( 5000 );
 	hasTakenFinalHint = true;
 }
 

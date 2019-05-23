@@ -606,10 +606,12 @@ typedef struct {
 	int64_t motd_time;
 	char quickmenu[MAX_STRING_CHARS];
 	bool quickmenu_left;
+	int64_t quickmenu_timeout_at;
 
 	// awards
 	char award_lines[MAX_AWARD_LINES][MAX_CONFIGSTRING_CHARS];
-	int64_t award_times[MAX_AWARD_LINES];
+	int64_t award_timestamps[MAX_AWARD_LINES];
+	int64_t award_timeouts[MAX_AWARD_LINES];
 	int award_head;
 
 	// statusbar program
@@ -969,7 +971,7 @@ void CG_UseItem( const char *name );
 void CG_RegisterCGameCommands( void );
 void CG_UnregisterCGameCommands( void );
 void CG_UpdateTVServerString( void );
-void CG_AddAward( const char *str );
+void CG_AddAward( const char *str, unsigned timeoutMillis );
 void CG_OverrideWeapondef( int index, const char *cstring );
 
 void CG_StartBackgroundTrack( void );

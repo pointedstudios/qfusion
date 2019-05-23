@@ -150,50 +150,6 @@ static void CG_AddLocalSounds( void ) {
 	}
 }
 
-void CG_SC_MenuQuick();
-
-static void CG_ShowQuickMenuForMatchState() {
-	if( GS_RaceGametype() ) {
-		return;
-	}
-
-	const auto matchState = GS_MatchState();
-	if( matchState < MATCH_STATE_COUNTDOWN ) {
-		CG_ShowQuickMenu( 0 );
-		return;
-	}
-
-	if( matchState > MATCH_STATE_POSTMATCH ) {
-		CG_ShowQuickMenu( 0 );
-		return;
-	}
-
-	if( matchState <= MATCH_STATE_PLAYTIME ) {
-		// Do not show RnS menu to spectators unless during a post-match
-		if( cg.predictedPlayerState.stats[STAT_REALTEAM] == TEAM_SPECTATOR ) {
-			CG_ShowQuickMenu( 0 );
-			return;
-		}
-	}
-
-	if( matchState == MATCH_STATE_PLAYTIME ) {
-		if( cg.time - GS_MatchStartTime() > 5000 ) {
-			CG_ShowQuickMenu( 0 );
-			return;
-		}
-	}
-
-	if( !cg.quickmenu[0] ) {
-		CG_SC_MenuQuick();
-		return;
-	}
-
-	// Avoid an early rejection by this var as it may be toggled from a console during a menu lifecycle
-	if( cg_autoRespectMenu->integer ) {
-		CG_ShowQuickMenu( 1 );
-	}
-}
-
 /*
 * CG_FlashGameWindow
 *
@@ -1147,7 +1103,10 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 		rd->fov_y *= v;
 	}
 
-	CG_ShowQuickMenuForMatchState();
+	if( cg.quickmenu_timeout_at && cg.quickmenu_timeout_at < cg.time ) {
+		cg.quickmenu_timeout_at = 0;
+		CG_ShowQuickMenu( 0 );
+	}
 
 	CG_AddLocalSounds();
 	CG_SetSceneTeamColors(); // update the team colors in the renderer

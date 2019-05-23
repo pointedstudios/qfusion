@@ -43,7 +43,7 @@ typedef void ( *cg_fdrawchar_t )( int x, int y, int w, int h, float s1, float t1
 
 // cg_public.h -- client game dll information visible to engine
 
-#define CGAME_API_VERSION   102
+#define CGAME_API_VERSION   103
 
 //
 // structs and variables shared with the main engine

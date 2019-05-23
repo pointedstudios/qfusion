@@ -1072,7 +1072,8 @@ static void CG_DrawObituaries( int x, int y, int align, struct qfontface_s *font
 void CG_ClearAwards( void ) {
 	// reset awards
 	cg.award_head = 0;
-	memset( cg.award_times, 0, sizeof( cg.award_times ) );
+	memset( cg.award_timestamps, 0, sizeof( cg.award_timeouts ) );
+	memset( cg.award_timeouts, 0, sizeof( cg.award_timeouts ) );
 }
 
 static void CG_DrawAwards( int x, int y, int align, struct qfontface_s *font, vec4_t color ) {
@@ -1094,7 +1095,7 @@ static void CG_DrawAwards( int x, int y, int align, struct qfontface_s *font, ve
 			break;
 		}
 
-		if( cg.award_times[current % MAX_AWARD_LINES] + MAX_AWARD_DISPLAYTIME < cg.time ) {
+		if( cg.award_timeouts[current % MAX_AWARD_LINES] < cg.time ) {
 			break;
 		}
 
@@ -1113,15 +1114,11 @@ static void CG_DrawAwards( int x, int y, int align, struct qfontface_s *font, ve
 	e_x = x;
 
 	for( i = count; i > 0; i-- ) {
-		float moveTime;
-		const char *str;
-
 		current = ( cg.award_head - i ) % MAX_AWARD_LINES;
-		str = cg.award_lines[ current ];
+		const char *str = cg.award_lines[ current ];
 
 		yoffset = trap_SCR_FontHeight( font ) * ( MAX_AWARD_LINES - i );
-		moveTime = ( cg.time - cg.award_times[ current ] ) / 1000.0f;
-
+		const float moveTime = 2.0f * ( cg.time - cg.award_timestamps[ current ] ) / 1000.0f;
 		m_x = LinearMovementWithOvershoot( s_x, e_x,
 										   AWARDS_OVERSHOOT_DURATION, AWARDS_OVERSHOOT_FREQUENCY, AWARDS_OVERSHOOT_DECAY,
 										   moveTime );

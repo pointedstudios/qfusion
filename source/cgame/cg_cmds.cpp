@@ -74,24 +74,6 @@ static void CG_SC_ChatPrint( void ) {
 }
 
 /*
-* CG_SC_TVChatPrint
-*/
-static void CG_SC_TVChatPrint( void ) {
-	const char *name = trap_Cmd_Argv( 1 );
-	const char *text = trap_Cmd_Argv( 2 );
-	const cvar_t *filter = cg_chatFilter;
-
-	if( filter->integer & 4 ) {
-		return;
-	}
-
-	CG_LocalPrint( S_COLOR_RED "[TV]" S_COLOR_WHITE "%s" S_COLOR_GREEN ": %s", name, text );
-	if( cg_chatBeep->integer ) {
-		trap_S_StartLocalSound( CG_MediaSfx( cgs.media.sfxChat ), 1.0f );
-	}
-}
-
-/*
 * CG_SC_CenterPrint
 */
 static void CG_SC_CenterPrint( void ) {
@@ -741,24 +723,33 @@ static void CG_SC_MenuCustom( void ) {
 	trap_Cmd_ExecuteText( EXEC_APPEND, va( "%s\n", request ) );
 }
 
-/*
-* CG_SC_MenuQuick
-*/
-void CG_SC_MenuQuick() {
+static void CG_SC_MenuQuick() {
 	if( cgs.demoPlaying ) {
 		return;
 	}
 
 	cg.quickmenu[0] = '\0';
-	if( trap_Cmd_Argc() < 2 ) {
+	const int numArgs = trap_Cmd_Argc();
+	if( numArgs < 2 ) {
 		CG_RefreshQuickMenu();
 		return;
 	}
 
-	// Grand hack to get things working for a release.
-	// Ignore the command args and put RnS tokens so they get shown.
-	// CGame code can't be worse than it is anyway.
+	wsw::stringstream ss;
+	for( int i = 1, c = 1; i < numArgs; i += 2, c++ ) {
+		const char *label = trap_Cmd_Argv( i );
+		const char *cmd = trap_Cmd_Argv( i + 1 );
+		ss << va( "btn%i \"%s\" ", c, label );
+		ss << va( "cmd%i \"%s%s\" ", c, *cmd ? "cmd " : "", cmd );
+	}
 
+	const wsw::string s( ss.str() );
+	memcpy( cg.quickmenu, s.data(), s.size() + 1 );
+
+	CG_RefreshQuickMenu();
+}
+
+static void PutRespectMenuItems() {
 	wsw::stringstream ss;
 
 	auto add = [&]( const char *token, int i ) {
@@ -822,13 +813,15 @@ static void CG_SC_MenuModal( void ) {
 /*
 * CG_AddAward
 */
-void CG_AddAward( const char *str ) {
+void CG_AddAward( const char *str, unsigned timeoutMillis ) {
 	if( !str || !str[0] ) {
 		return;
 	}
 
-	Q_strncpyz( cg.award_lines[cg.award_head % MAX_AWARD_LINES], CG_TranslateString( str ), MAX_CONFIGSTRING_CHARS );
-	cg.award_times[cg.award_head % MAX_AWARD_LINES] = cg.time;
+	int index = cg.award_head % MAX_AWARD_LINES;
+	Q_strncpyz( cg.award_lines[index], CG_TranslateString( str ), MAX_CONFIGSTRING_CHARS );
+	cg.award_timestamps[index] = cg.time;
+	cg.award_timeouts[index] = cg.time + timeoutMillis;
 	cg.award_head++;
 }
 
@@ -836,7 +829,29 @@ void CG_AddAward( const char *str ) {
 * CG_SC_AddAward
 */
 static void CG_SC_AddAward( void ) {
-	CG_AddAward( trap_Cmd_Argv( 1 ) );
+	CG_AddAward( trap_Cmd_Argv( 1 ), 2500 );
+}
+
+static void CG_SC_RespectEvent() {
+	const char *arg = trap_Cmd_Argv( 1 );
+	if( trap_Cmd_Argc() < 3 ) {
+		return;
+	}
+
+	auto timeout = (unsigned)atoi( trap_Cmd_Argv( 2 ) );
+	clamp( timeout, 1000, 5000 );
+
+	if ( !Q_stricmp( arg, "print" ) ) {
+		// Hack! Use award facilities for displaying this
+		CG_AddAward( trap_Cmd_Argv( 3 ), timeout );
+		return;
+	}
+
+	if( !Q_stricmp( arg, "menu" ) ) {
+		PutRespectMenuItems();
+		CG_ShowQuickMenu( 1 );
+		cg.quickmenu_timeout_at = cg.time + timeout;
+	}
 }
 
 typedef struct
@@ -850,7 +865,6 @@ static const svcmd_t cg_svcmds[] =
 	{ "pr", CG_SC_Print },
 	{ "ch", CG_SC_ChatPrint },
 	{ "tch", CG_SC_ChatPrint },
-	{ "tvch", CG_SC_TVChatPrint },
 	{ "cp", CG_SC_CenterPrint },
 	{ "cpf", CG_SC_CenterPrintFormat },
 	{ "obry", CG_SC_Obituary },
@@ -868,6 +882,7 @@ static const svcmd_t cg_svcmds[] =
 	{ "motd", CG_SC_MOTD },
 	{ "aw", CG_SC_AddAward },
 	{ "qm", CG_SC_MenuQuick },
+	{ "rns", CG_SC_RespectEvent },
 
 	{ NULL }
 };
