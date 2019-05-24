@@ -1410,9 +1410,9 @@ bool RespectHandler::HandleMessage( const edict_t *ent, const char *message ) {
 void RespectHandler::ClientEntry::Reset() {
 	warnedAt = 0;
 	firstJoinedGameAt = 0;
-	std::fill_n( firstSaidAt, 0, NUM_TOKENS );
-	std::fill_n( lastSaidAt, 0, NUM_TOKENS );
-	std::fill_n( numSaidTokens, 0, NUM_TOKENS );
+	std::fill( std::begin( firstSaidAt ), std::end( firstSaidAt ), 0 );
+	std::fill( std::begin( lastSaidAt ), std::end( lastSaidAt ), 0 );
+	std::fill( std::begin( numSaidTokens ), std::end( numSaidTokens ), 0 );
 	saidBefore = false;
 	saidAfter = false;
 	hasTakenCountdownHint = false;
@@ -1594,7 +1594,7 @@ bool RespectHandler::ClientEntry::CheckForTokens( const char *message ) {
 	// Do not modify tokens count immediately
 	// Either this routine fails completely or stats for all tokens get updated
 	int numFoundTokens[NUM_TOKENS];
-	std::fill_n( numFoundTokens, 0, NUM_TOKENS );
+	std::fill( std::begin( numFoundTokens ), std::end( numFoundTokens ), 0 );
 
 	const int64_t levelTime = level.time;
 
