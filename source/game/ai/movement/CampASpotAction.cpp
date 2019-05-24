@@ -20,10 +20,16 @@ bool CampASpotMovementAction::TryUpdateKeyMoveDirs( Context *context ) {
 }
 
 Vec3 CampASpotMovementAction::GetUpdatedPendingLookDir( Context *context ) {
-	auto *lookAtPointState = &context->movementState->pendingLookAtPointState;
+	auto *const lookAtPointState = &context->movementState->pendingLookAtPointState;
+	const float *keptInFovPoint = bot->GetKeptInFovPoint();
 	const auto &campingSpotState = context->movementState->campingSpotState;
 
-	if( !lookAtPointState->IsActive() ) {
+	// The "kept in fov point" is stronger than any intrinsic camping spot state direction
+	if( keptInFovPoint ) {
+		// Create an intrinsic "pending look at point" that has a default suggested turn speed multiplier
+		AiPendingLookAtPoint lookAtPoint( AiPendingLookAtPoint( keptInFovPoint, 1.0f ) );
+		lookAtPointState->Activate( lookAtPoint, 100 );
+	} else if( !lookAtPointState->IsActive() ) {
 		AiPendingLookAtPoint lookAtPoint( campingSpotState.GetOrUpdateRandomLookAtPoint() );
 		lookAtPointState->Activate( lookAtPoint, 750 );
 	}
