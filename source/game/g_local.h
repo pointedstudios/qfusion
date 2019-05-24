@@ -1587,7 +1587,7 @@ class RespectHandler final : public ChatHandler {
 
 	struct ClientEntry {
 		int64_t warnedAt;
-		int64_t firstJoinedTeamAt;
+		int64_t firstJoinedGameAt;
 		int64_t firstSaidAt[NUM_TOKENS];
 		int64_t lastSaidAt[NUM_TOKENS];
 		const edict_t *ent { nullptr };

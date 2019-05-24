@@ -1409,7 +1409,7 @@ bool RespectHandler::HandleMessage( const edict_t *ent, const char *message ) {
 
 void RespectHandler::ClientEntry::Reset() {
 	warnedAt = 0;
-	firstJoinedTeamAt = 0;
+	firstJoinedGameAt = 0;
 	std::fill_n( firstSaidAt, 0, NUM_TOKENS );
 	std::fill_n( lastSaidAt, 0, NUM_TOKENS );
 	std::fill_n( numSaidTokens, 0, NUM_TOKENS );
@@ -1428,19 +1428,33 @@ bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
 		return false;
 	}
 
+	const auto matchState = GS_MatchState();
+	// Skip everything in warmup
+	if( matchState < MATCH_STATE_COUNTDOWN ) {
+		return false;
+	}
+
 	// Now check for RnS tokens...
 	if( CheckForTokens( message ) ) {
 		return false;
 	}
 
-	const auto matchState = GS_MatchState();
+	constexpr const char *warning = S_COLOR_YELLOW "Less talk, let's play!";
+	if( G_ISGHOSTING( ent ) ) {
+		// This is primarily for round-based gametypes. Just print a warning.
+		// Fragged players waiting for a next round start
+		// are not considered spectators while really they are.
+		// Other gametypes should follow this behaviour to avoid misunderstanding rules.
+		PrintToClientScreen( 1750, "%s", warning );
+		return false;
+	}
+
 	// We do not intercept this condition in RespectHandler::HandleMessage()
 	// as we still need to collect last said tokens for clients using CheckForTokens()
 	if( matchState > MATCH_STATE_PLAYTIME ) {
 		return false;
 	}
 
-	const char *warning = S_COLOR_YELLOW "Less talk, let's play!";
 	if( matchState < MATCH_STATE_PLAYTIME ) {
 		// Print a warning only to the player
 		PrintToClientScreen( 1750, "%s", warning );
@@ -1526,9 +1540,6 @@ public:
 	// For players staying in game during the match
 	static constexpr auto SAY_AT_START_TOKEN_NUM = 2;
 	static constexpr auto SAY_AT_END_TOKEN_NUM = 3;
-	// For players joining or quitting mid-game
-	static constexpr auto SAY_AT_JOINING_TOKEN_NUM = 0;
-	static constexpr auto SAY_AT_QUITTING_TOKEN_NUM = 1;
 
 	/**
 	 * Finds a number of a token (a number of a token aliases group) the supplied string matches.
@@ -1649,16 +1660,26 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 			return;
 		}
 
-		int tokenNum;
-		int64_t countdownStartTime;
-		// Say "glhf" being in-game from the beginning or "hi" when joining
-		if( firstJoinedTeamAt <= matchStartTime ) {
-			countdownStartTime = matchStartTime;
-			tokenNum = RespectTokensRegistry::SAY_AT_START_TOKEN_NUM;
-		} else {
-			countdownStartTime = firstJoinedTeamAt;
-			tokenNum = RespectTokensRegistry::SAY_AT_JOINING_TOKEN_NUM;
+		if( firstJoinedGameAt > matchStartTime ) {
+			saidBefore = true;
+			return;
 		}
+
+		// If a client has joined a spectators team
+		if( ent->s.team == TEAM_SPECTATOR ) {
+			saidBefore = true;
+			return;
+		}
+
+		const auto lastActivityAt = ent->r.client->level.last_activity;
+		// Skip inactive clients considering their behaviour respectful
+		if( !lastActivityAt || levelTime - lastActivityAt > 10000 ) {
+			saidBefore = true;
+			return;
+		}
+
+		constexpr auto tokenNum = RespectTokensRegistry::SAY_AT_START_TOKEN_NUM;
+		const int64_t countdownStartTime = matchStartTime;
 
 		if( levelTime - lastSaidAt[tokenNum] < 64 ) {
 			saidBefore = true;
@@ -1695,6 +1716,16 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 		return;
 	}
 
+	// A note: we do not distinguish players that became spectators mid-game
+	// and players that have played till the match end.
+	// They still have to say the mandatory token at the end with the single exception of becoming inactive.
+
+	const auto lastActivityAt = ent->r.client->level.last_activity;
+	if( !lastActivityAt || levelTime - lastActivityAt > 10000 ) {
+		saidAfter = true;
+		return;
+	}
+
 	if( levelTime - lastSaidAt[RespectTokensRegistry::SAY_AT_END_TOKEN_NUM] < 64 ) {
 		if( !saidAfter ) {
 			saidAfter = true;
@@ -1726,57 +1757,27 @@ void RespectHandler::ClientEntry::OnClientDisconnected() {
 		return;
 	}
 
-	if( !saidBefore || hasViolatedCodex ) {
+	if( hasIgnoredCodex || hasViolatedCodex ) {
 		return;
 	}
 
-	constexpr int sayAtQuitting = RespectTokensRegistry::SAY_AT_QUITTING_TOKEN_NUM;
-	constexpr int sayAtEnd = RespectTokensRegistry::SAY_AT_END_TOKEN_NUM;
-
-	int64_t lastByeTokenTime = -1;
-	if( lastSaidAt[sayAtQuitting] > lastByeTokenTime ) {
-		lastByeTokenTime = lastSaidAt[sayAtQuitting];
-	} else if( lastSaidAt[sayAtQuitting] > lastByeTokenTime ) {
-		lastByeTokenTime = lastSaidAt[sayAtQuitting];
-	}
-
-	// Check whether its substantially overridden by other tokens
-	for( int i = 0; i < NUM_TOKENS; ++i ) {
-		if( i == sayAtEnd || i == sayAtQuitting ) {
-			continue;
-		}
-		if( lastSaidAt[i] > lastByeTokenTime + 3000 ) {
-			lastByeTokenTime = -1;
-			break;
-		}
-	}
-
-	if( warnedAt < lastByeTokenTime ) {
-		saidAfter = true;
-		return;
-	}
-
-	assert( !saidAfter );
-	const char *outcome = "";
-	if( !StatsowFacade::Instance()->IsMatchReportDiscarded() ) {
-		outcome = " No rating progress, no awards saved!";
-	}
-
-	const char *format = "%s" S_COLOR_YELLOW " chickened and left the game.%s\n";
-	G_Printf( format, ent->r.client->netname, outcome );
+	// We have decided to consider the behaviour respectful in this case
+	saidAfter = true;
 }
 
 void RespectHandler::ClientEntry::OnClientJoinedTeam( int newTeam ) {
-	if( newTeam == TEAM_SPECTATOR ) {
-		return;
-	}
-
 	if( GS_MatchState() > MATCH_STATE_PLAYTIME ) {
 		return;
 	}
 
-	if( !firstJoinedTeamAt ) {
-		firstJoinedTeamAt = level.time;
+	// Invalidate the "saidAfter" flag possible set on a disconnection during a match
+	if( newTeam == TEAM_SPECTATOR ) {
+		saidAfter = false;
+		return;
+	}
+
+	if( !firstJoinedGameAt && ( GS_MatchState() == MATCH_STATE_PLAYTIME ) ) {
+		firstJoinedGameAt = level.time;
 	}
 
 	// Check whether there is already Codex violation recorded for the player during this match
