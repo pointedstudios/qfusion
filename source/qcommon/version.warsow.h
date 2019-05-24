@@ -51,9 +51,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #endif
 
 #ifdef PUBLIC_BUILD
-#define APP_DEMO_PROTOCOL_VERSION       21
+#define APP_DEMO_PROTOCOL_VERSION       22
 #else
-#define APP_DEMO_PROTOCOL_VERSION       21
+#define APP_DEMO_PROTOCOL_VERSION       22
 #endif
 
 #ifndef APP_URL
@@ -97,11 +97,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #endif
 
 #ifdef PUBLIC_BUILD
-#define APP_MATCHMAKER_URL              "https://mm.warsow.net:1338"
-#define APP_MATCHMAKER_WEB_URL          "https://www.warsow.net/wmm/"
+#define APP_MATCHMAKER_URL              "https://warsow.net:9000"
+#define APP_MATCHMAKER_WEB_URL          "https://warsow.net/wmm/"
 #else
-#define APP_MATCHMAKER_URL              "http://mm-dev.warsow.net:1337"
-#define APP_MATCHMAKER_WEB_URL          "http://www-dev.warsow.net/wmm/"
+#define APP_MATCHMAKER_URL              "http://warsow.net:9000"
+#define APP_MATCHMAKER_WEB_URL          "http://warsow.net/wmm/"
 #endif
 
 #ifndef APP_UI_BASEPATH
