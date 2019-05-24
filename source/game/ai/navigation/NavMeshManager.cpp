@@ -644,10 +644,11 @@ bool AasNavMeshInputTrisSource::BuildTris( NavMeshInputTris *tris ) {
 			edgeIndexNum += 2;
 			// Stop before the last edge that encloses edges chain in a ring,
 			// otherwise the last triangle will be degenerate.
-			const int edgeIndexNumBound = edgeIndexNum + face.numedges - 1;
+			const int edgeIndexNumBound = edgeIndexNum + face.numedges - 2;
 			for(; edgeIndexNum < edgeIndexNumBound; ++edgeIndexNum ) {
 				// Concat the current edge to the previous one in the hull, adding 2 vertices
-				const auto *currEdge = aasEdges + abs( aasEdgeIndex[ edgeIndexNum ] );
+				int edgeNum = abs( aasEdgeIndex[edgeIndexNum] );
+				const auto *currEdge = aasEdges + edgeNum;
 				if( VectorCompare( aasVertices[lastInChainVertexNum], aasVertices[currEdge->v[0]] ) ) {
 					trisIndicesBuilder.Add( currEdge->v[0] );
 					trisIndicesBuilder.Add( currEdge->v[1] );
