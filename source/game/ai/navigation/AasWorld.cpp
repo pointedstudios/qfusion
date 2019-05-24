@@ -2364,7 +2364,7 @@ public:
 		// Let the list for the dummy area follow common list alignment contract.
 		// (a short element after the a length should start from 16-byte boundaries).
 		// The length of the first real list should start just before 16-byte boundaries as well.
-		std::fill_n( listsPtr, 0, 15 );
+		std::fill_n( listsPtr, 15, 0 );
 		listsPtr += 15;
 		*offsetsPtr++ = 7;
 	}

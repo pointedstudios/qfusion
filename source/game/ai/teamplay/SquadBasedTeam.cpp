@@ -1612,8 +1612,8 @@ AiSquadBasedTeam *AiSquadBasedTeam::InstantiateTeam( int teamNum, const std::typ
 AiSquadBasedTeam::PlayerAssistanceTracker::PlayerAssistanceTracker( const AiSquadBasedTeam *parent_ )
 	: parent( parent_ ) {
 	influenceScores = (int8_t *)G_Malloc( MAX_CLIENTS * MAX_CLIENTS * sizeof( int8_t ) );
-	std::fill_n( assistanceMillisLeft, 0, MAX_CLIENTS );
-	std::fill_n( assistedClientNum, -1, MAX_CLIENTS );
+	std::fill( std::begin( assistanceMillisLeft ), std::end( assistanceMillisLeft ), 0 );
+	std::fill( std::begin( assistedClientNum ), std::end( assistedClientNum ), -1 );
 }
 
 bool AiSquadBasedTeam::OverridesEntityWeights( const Bot *bot ) const {
