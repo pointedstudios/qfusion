@@ -36,6 +36,15 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define ALC_NO_PROTOTYPES
 #endif
 
+// Remove DLLIMPORT linkage specifiers in this case
+#ifdef OPENAL_SOFT_STATIC
+#ifdef AL_API
+#error AL_API macro should be undefined to this moment
+#else
+#define AL_API
+#endif
+#endif
+
 #if defined ( __MACOSX__ )
 #include <OpenAL/al.h>
 #include <OpenAL/alc.h>
