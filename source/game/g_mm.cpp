@@ -1421,6 +1421,7 @@ void RespectHandler::ClientEntry::Reset() {
 	saidAfter = false;
 	hasTakenCountdownHint = false;
 	hasTakenStartHint = false;
+	hasTakenLastStartHint = false;
 	hasTakenFinalHint = false;
 	hasIgnoredCodex = false;
 	hasViolatedCodex = false;
@@ -1449,7 +1450,7 @@ bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
 		// Fragged players waiting for a next round start
 		// are not considered spectators while really they are.
 		// Other gametypes should follow this behaviour to avoid misunderstanding rules.
-		PrintToClientScreen( 1750, "%s", warning );
+		PrintToClientScreen( 2000, "%s", warning );
 		return false;
 	}
 
@@ -1461,14 +1462,14 @@ bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
 
 	if( matchState < MATCH_STATE_PLAYTIME ) {
 		// Print a warning only to the player
-		PrintToClientScreen( 1750, "%s", warning );
+		PrintToClientScreen( 2000, "%s", warning );
 		return false;
 	}
 
 	// Never warned (at start of the level)
 	if( !warnedAt ) {
 		warnedAt = level.time;
-		PrintToClientScreen( 1750, "%s", warning );
+		PrintToClientScreen( 2000, "%s", warning );
 		// Let the message be printed by default facilities
 		return false;
 	}
@@ -1483,7 +1484,7 @@ bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
 	// Allow speaking occasionally once per 5 minutes
 	if( millisSinceLastWarn > 5 * 60 * 1000 ) {
 		warnedAt = level.time;
-		PrintToClientScreen( 1750, "%s", warning );
+		PrintToClientScreen( 2000, "%s", warning );
 		return false;
 	}
 
@@ -1532,8 +1533,8 @@ void RespectHandler::ClientEntry::PrintToClientScreen( unsigned timeout, const c
 	trap_GameCmd( ent, commandBuffer );
 }
 
-void RespectHandler::ClientEntry::ShowRespectMenuAtClient( unsigned timeout ) {
-	trap_GameCmd( ent, va( "rns menu %d", timeout ) );
+void RespectHandler::ClientEntry::ShowRespectMenuAtClient( unsigned timeout, int tokenNum ) {
+	trap_GameCmd( ent, va( "rns menu %d %d", timeout, tokenNum ) );
 }
 
 class RespectTokensRegistry {
@@ -1594,6 +1595,14 @@ int RespectTokensRegistry::MatchByToken( const char **p ) {
 	return -1;
 }
 
+char RespectHandler::ClientEntry::hintBuffer[64];
+
+const char *RespectHandler::ClientEntry::MakeHintString( int tokenNum ) {
+	const char *token = RespectTokensRegistry::TokenForNum( tokenNum );
+	Q_snprintfz( hintBuffer, sizeof( hintBuffer ), S_COLOR_CYAN "Say `%s` please!", token );
+	return hintBuffer;
+}
+
 bool RespectHandler::ClientEntry::CheckForTokens( const char *message ) {
 	// Do not modify tokens count immediately
 	// Either this routine fails completely or stats for all tokens get updated
@@ -1644,16 +1653,16 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 
 	const auto levelTime = level.time;
 	const auto matchState = GS_MatchState();
+	constexpr int startTokenNum = RespectTokensRegistry::SAY_AT_START_TOKEN_NUM;
 
 	if( matchState == MATCH_STATE_COUNTDOWN ) {
 		// If has just said "glhf"
-		const int tokenNum = RespectTokensRegistry::SAY_AT_START_TOKEN_NUM;
-		if( levelTime - lastSaidAt[tokenNum] < 64 ) {
+		if( levelTime - lastSaidAt[startTokenNum] < 64 ) {
 			saidBefore = true;
 		}
 		if( !hasTakenCountdownHint ) {
-			PrintToClientScreen( 1500, S_COLOR_CYAN "Say `%s` please!", RespectTokensRegistry::TokenForNum( tokenNum ) );
-			ShowRespectMenuAtClient( 3000 );
+			PrintToClientScreen( 3000, "%s", MakeHintString( startTokenNum ) );
+			ShowRespectMenuAtClient( 4500, startTokenNum );
 			hasTakenCountdownHint = true;
 		}
 		return;
@@ -1682,29 +1691,39 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 			return;
 		}
 
-		constexpr auto tokenNum = RespectTokensRegistry::SAY_AT_START_TOKEN_NUM;
-		const int64_t countdownStartTime = matchStartTime;
-
-		if( levelTime - lastSaidAt[tokenNum] < 64 ) {
+		if( levelTime - lastSaidAt[startTokenNum] < 64 ) {
 			saidBefore = true;
 			return;
 		}
 
+		const int64_t countdownStartTime = matchStartTime;
 		if( levelTime - countdownStartTime < 1500 ) {
 			return;
 		}
 
 		if( !hasTakenStartHint && !hasViolatedCodex ) {
-			PrintToClientScreen( 2000, S_COLOR_CYAN "Say `%s` please!", RespectTokensRegistry::TokenForNum( tokenNum ) );
-			ShowRespectMenuAtClient( 3000 );
+			PrintToClientScreen( 3000, "%s", MakeHintString( startTokenNum ) );
+			ShowRespectMenuAtClient( 3500, startTokenNum );
 			hasTakenStartHint = true;
+			return;
+		}
+
+		// Wait for making a second hint
+		if( levelTime - countdownStartTime < 6500 ) {
+			return;
+		}
+
+		if( !hasTakenLastStartHint && !hasViolatedCodex ) {
+			PrintToClientScreen( 3000, "%s", MakeHintString( startTokenNum ) );
+			ShowRespectMenuAtClient( 3500, startTokenNum );
+			hasTakenLastStartHint = true;
 			return;
 		}
 
 		if( !hasIgnoredCodex && levelTime - countdownStartTime > 10000 ) {
 			// The misconduct behaviour is going to be detected inevitably.
 			// This is just to prevent massive console spam at the same time.
-			if( random() > 0.95f ) {
+			if( random() > 0.97f ) {
 				hasIgnoredCodex = true;
 				AnnounceMisconductBehaviour( "ignored" );
 			}
@@ -1730,7 +1749,8 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 		return;
 	}
 
-	if( levelTime - lastSaidAt[RespectTokensRegistry::SAY_AT_END_TOKEN_NUM] < 64 ) {
+	constexpr int endTokenNum = RespectTokensRegistry::SAY_AT_END_TOKEN_NUM;
+	if( levelTime - lastSaidAt[endTokenNum] < 64 ) {
 		if( !saidAfter ) {
 			saidAfter = true;
 			G_PlayerAward( ent, S_COLOR_CYAN "Fair play!" );
@@ -1742,8 +1762,8 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 		return;
 	}
 
-	PrintToClientScreen( 3000, S_COLOR_CYAN "Say `gg` please!" );
-	ShowRespectMenuAtClient( 5000 );
+	PrintToClientScreen( 3000, "%s", MakeHintString( endTokenNum ) );
+	ShowRespectMenuAtClient( 5000, endTokenNum );
 	hasTakenFinalHint = true;
 }
 

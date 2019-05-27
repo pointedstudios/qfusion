@@ -749,7 +749,7 @@ static void CG_SC_MenuQuick() {
 	CG_RefreshQuickMenu();
 }
 
-static void PutRespectMenuItems() {
+static void PutRespectMenuItems( int highlightEntryNum ) {
 	wsw::stringstream ss;
 
 	auto add = [&]( const char *token, int i ) {
@@ -767,6 +767,8 @@ static void PutRespectMenuItems() {
 	add( "n1", 8 );
 	add( "nt", 9 );
 	add( "lol", 0 );
+
+	ss << "highlight" << " \"" << highlightEntryNum << "\" ";
 
 	const wsw::string s( ss.str() );
 	memcpy( cg.quickmenu, s.data(), s.size() + 1 );
@@ -834,7 +836,8 @@ static void CG_SC_AddAward( void ) {
 
 static void CG_SC_RespectEvent() {
 	const char *arg = trap_Cmd_Argv( 1 );
-	if( trap_Cmd_Argc() < 3 ) {
+	const int numArgs = trap_Cmd_Argc();
+	if( numArgs < 3 ) {
 		return;
 	}
 
@@ -848,7 +851,11 @@ static void CG_SC_RespectEvent() {
 	}
 
 	if( !Q_stricmp( arg, "menu" ) ) {
-		PutRespectMenuItems();
+		int highlightEntryNum = -1;
+		if( numArgs > 3 ) {
+			highlightEntryNum = atoi( trap_Cmd_Argv( 3 ) );
+		}
+		PutRespectMenuItems( highlightEntryNum );
 		CG_ShowQuickMenu( 1 );
 		cg.quickmenu_timeout_at = cg.time + timeout;
 	}

@@ -1596,9 +1596,12 @@ class RespectHandler final : public ChatHandler {
 		bool saidAfter;
 		bool hasTakenCountdownHint;
 		bool hasTakenStartHint;
+		bool hasTakenLastStartHint;
 		bool hasTakenFinalHint;
 		bool hasIgnoredCodex;
 		bool hasViolatedCodex;
+
+		static char hintBuffer[64];
 
 		ClientEntry() {
 			Reset();
@@ -1626,7 +1629,9 @@ class RespectHandler final : public ChatHandler {
 #else
 		void PrintToClientScreen( unsigned timeout, _Printf_format_string_ const char *format, ... );
 #endif
-		void ShowRespectMenuAtClient( unsigned timeout );
+		void ShowRespectMenuAtClient( unsigned timeout, int tokenNum );
+
+		static const char *MakeHintString( int tokenNum );
 
 		void AnnounceMisconductBehaviour( const char *action );
 
