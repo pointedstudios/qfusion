@@ -686,6 +686,10 @@ void StatsowFacade::SendGenericMatchStateEvent( const char *event ) {
 		return;
 	}
 
+	if( !IsValid() ) {
+		return;
+	}
+
 	constexpr const char *tag = "StatsowFacade::SendGenericMatchStateEvent()";
 	G_Printf( "%s: Sending `%s` event\n", tag, event );
 
