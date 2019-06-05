@@ -86,7 +86,7 @@ AiPrecomputedFileReader::LoadingStatus AiPrecomputedFileReader::ExpectFileString
 
 	LoadingStatus result = SUCCESS;
 	if( Q_stricmp( expected, ( const char *)data ) ) {
-		G_Printf( "%s: actual string is `%s`, expected string is `%s`", message, data, expected );
+		G_Printf( "%s: actual string is `%s`, expected string is `%s`\n", message, data, expected );
 		result = VERSION_MISMATCH;
 	}
 
