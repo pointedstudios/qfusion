@@ -70,8 +70,11 @@ void CG_RegisterMediaSounds( void ) {
 		cgs.media.sfxRic[i] = CG_RegisterMediaSfx( va( "sounds/weapons/ric%i", i + 1 ), true );
 
 	// weapon
-	for( i = 0; i < 4; i++ )
+	for( i = 0; i < 4; i++ ) {
 		cgs.media.sfxWeaponHit[i] = CG_RegisterMediaSfx( va( S_WEAPON_HITS, i ), true );
+		cgs.media.sfxWeaponHit2[i] = CG_RegisterMediaSfx( va( "sounds/misc/hit_plus_%d", i ), true );
+	}
+
 	cgs.media.sfxWeaponKill = CG_RegisterMediaSfx( S_WEAPON_KILL, true );
 	cgs.media.sfxWeaponHitTeam = CG_RegisterMediaSfx( S_WEAPON_HIT_TEAM, true );
 	cgs.media.sfxWeaponUp = CG_RegisterMediaSfx( S_WEAPON_SWITCH, true );

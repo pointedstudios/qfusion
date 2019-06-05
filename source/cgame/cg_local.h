@@ -159,6 +159,8 @@ typedef struct {
 	//--------------------------------------
 
 	cgs_media_handle_t *sfxWeaponHit[4];
+	// We try to avoid combining new sounds with old assets offline due to licensing reasons
+	cgs_media_handle_t *sfxWeaponHit2[4];
 	cgs_media_handle_t *sfxWeaponKill;
 	cgs_media_handle_t *sfxWeaponHitTeam;
 

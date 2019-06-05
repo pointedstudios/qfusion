@@ -1561,6 +1561,7 @@ static void CG_FirePlayerStateEvents( void ) {
 				}
 				if( parm < 4 ) { // hit of some caliber
 					trap_S_StartLocalSound( CG_MediaSfx( cgs.media.sfxWeaponHit[parm] ), cg_volume_hitsound->value );
+					trap_S_StartLocalSound( CG_MediaSfx( cgs.media.sfxWeaponHit2[parm] ), cg_volume_hitsound->value );
 					CG_ScreenCrosshairDamageUpdate();
 				} else if( parm == 4 ) {  // killed an enemy
 					trap_S_StartLocalSound( CG_MediaSfx( cgs.media.sfxWeaponKill ), cg_volume_hitsound->value );
