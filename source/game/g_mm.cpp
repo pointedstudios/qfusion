@@ -1439,8 +1439,18 @@ bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
 		return false;
 	}
 
+	// Skip messages from spectators unless being post-match.
+	if( matchState < MATCH_STATE_POSTMATCH && ( ent->s.team == TEAM_SPECTATOR ) ) {
+		return false;
+	}
+
 	// Now check for RnS tokens...
 	if( CheckForTokens( message ) ) {
+		return false;
+	}
+
+	// Skip further tests for spectators (we might have saved post-match tokens that could be important)
+	if( ent->s.team == TEAM_SPECTATOR ) {
 		return false;
 	}
 
