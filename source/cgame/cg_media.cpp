@@ -131,6 +131,7 @@ void CG_RegisterMediaSounds( void ) {
 
 	cgs.media.sfxElectroboltHit = CG_RegisterMediaSfx( S_WEAPON_ELECTROBOLT_HIT, true );
 
+	cgs.media.sfxExplosionLfe = CG_RegisterMediaSfx( S_EXPLOSION_LFE, true );
 	cgs.media.sfxQuadFireSound = CG_RegisterMediaSfx( S_QUAD_FIRE, true );
 }
 

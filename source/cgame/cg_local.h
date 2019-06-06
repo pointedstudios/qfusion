@@ -210,6 +210,7 @@ typedef struct {
 	cgs_media_handle_t *sfxWaveWeakHit;
 	cgs_media_handle_t *sfxWaveStrongHit;
 
+	cgs_media_handle_t *sfxExplosionLfe;
 	cgs_media_handle_t *sfxQuadFireSound;
 
 	// models
@@ -887,6 +888,9 @@ extern cvar_t *cg_bloodTrailAlpha;
 
 extern cvar_t *cg_cartoonEffects;
 extern cvar_t *cg_cartoonHitEffect;
+
+extern cvar_t *cg_heavyRocketExplosions;
+extern cvar_t *cg_heavyGrenadeExplosions;
 
 extern cvar_t *cg_explosionsRing;
 extern cvar_t *cg_explosionsDust;

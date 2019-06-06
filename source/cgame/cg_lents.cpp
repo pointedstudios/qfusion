@@ -653,6 +653,10 @@ void CG_RocketExplosionMode( const vec3_t pos, const vec3_t dir, int fire_mode, 
 		trap_S_StartFixedSound( CG_MediaSfx( cgs.media.sfxRocketLauncherWeakHit ), pos, CHAN_AUTO, cg_volume_effects->value, ATTN_DISTANT );
 	}
 
+	if( cg_heavyRocketExplosions->integer ) {
+		trap_S_StartFixedSound( CG_MediaSfx( cgs.media.sfxExplosionLfe ), pos, CHAN_AUTO, cg_volume_effects->value, ATTN_NORM );
+	}
+
 	//jalfixme: add sound at water?
 }
 
@@ -1234,6 +1238,10 @@ void CG_GrenadeExplosionMode( const vec3_t pos, const vec3_t dir, int fire_mode,
 	} else {
 		trap_S_StartFixedSound( CG_MediaSfx( cgs.media.sfxGrenadeWeakExplosion ), pos, CHAN_AUTO, cg_volume_effects->value, ATTN_DISTANT );
 	}
+
+	if( cg_heavyGrenadeExplosions->integer ) {
+		trap_S_StartFixedSound( CG_MediaSfx( cgs.media.sfxExplosionLfe ), pos, CHAN_AUTO, cg_volume_effects->value, ATTN_NORM );
+	}
 }
 
 /*
@@ -1276,6 +1284,8 @@ void CG_GenericExplosion( const vec3_t pos, const vec3_t dir, int fire_mode, flo
 	} else {
 		trap_S_StartFixedSound( CG_MediaSfx( cgs.media.sfxRocketLauncherWeakHit ), pos, CHAN_AUTO, cg_volume_effects->value, ATTN_DISTANT );
 	}
+
+	trap_S_StartFixedSound( CG_MediaSfx( cgs.media.sfxExplosionLfe ), pos, CHAN_AUTO, cg_volume_effects->value, ATTN_DISTANT );
 }
 
 /*

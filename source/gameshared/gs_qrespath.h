@@ -311,6 +311,8 @@ extern "C" {
 
 #define S_BUTTON_START      "sounds/movers/button"
 
+#define S_EXPLOSION_LFE  "sounds/misc/explosion_lfe"
+
 //#define S_QUAD_USE				"sounds/items/quad_use"
 #define S_QUAD_FIRE     "sounds/items/quad_fire"
 
