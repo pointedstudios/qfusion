@@ -693,7 +693,7 @@ void        R_BatchCoronaSurf(  const entity_t *e, const shader_t *shader, const
 //
 // r_main.c
 //
-#define R_FASTSKY() ( r_fastsky->integer || rf.viewcluster == -1 )
+#define R_FASTSKY() ( r_fastsky->integer || rf.viewcluster == -1 || mapConfig.skipSky )
 
 extern mempool_t *r_mempool;
 
@@ -1006,6 +1006,8 @@ typedef struct {
 	bool deluxeMappingEnabled;              // true if deluxeMaps is true and r_lighting_deluxemaps->integer != 0
 
 	bool forceClear;
+
+	bool skipSky;
 
 	bool forceWorldOutlines;
 } mapconfig_t;
