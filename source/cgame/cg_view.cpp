@@ -88,7 +88,7 @@ bool CG_ChaseStep( int step ) {
 * CG_AddLocalSounds
 */
 static void CG_AddLocalSounds( void ) {
-	static bool postmatchsound_set = false, demostream = false, background = false;
+	static bool postmatchsilence_set = false, demostream = false, background = false;
 	static unsigned lastSecond = 0;
 
 	// add local announces
@@ -124,11 +124,11 @@ static void CG_AddLocalSounds( void ) {
 	// add sounds from announcer
 	CG_ReleaseAnnouncerEvents();
 
-	// if in postmatch, play postmatch song
+	// Stop background music in postmatch state
 	if( GS_MatchState() >= MATCH_STATE_POSTMATCH ) {
-		if( !postmatchsound_set && !demostream ) {
-			trap_S_StartBackgroundTrack( S_PLAYLIST_POSTMATCH, NULL, 3 ); // loop random track from the playlist
-			postmatchsound_set = true;
+		if( !postmatchsilence_set && !demostream ) {
+			trap_S_StopBackgroundTrack();
+			postmatchsilence_set = true;
 			background = false;
 		}
 	} else {
@@ -137,13 +137,12 @@ static void CG_AddLocalSounds( void ) {
 			demostream = true;
 		}
 
-		if( postmatchsound_set ) {
-			trap_S_StopBackgroundTrack();
-			postmatchsound_set = false;
+		if( postmatchsilence_set ) {
+			postmatchsilence_set = false;
 			background = false;
 		}
 
-		if( ( !postmatchsound_set && !demostream ) && !background ) {
+		if( ( !postmatchsilence_set && !demostream ) && !background ) {
 			CG_StartBackgroundTrack();
 			background = true;
 		}
