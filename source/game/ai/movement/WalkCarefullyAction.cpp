@@ -86,6 +86,7 @@ void WalkCarefullyAction::PlanPredictionStep( Context *context ) {
 		if( entityPhysicsState.waterType & hazardContentsMask ) {
 			Debug( "Cannot apply action: the bot is already in hazard contents\n" );
 			SwitchOrRollback( context, suggestedAction );
+			return;
 		}
 	} else {
 		// Prevent touching a water if not bot is not already walking in it
@@ -207,9 +208,16 @@ void WalkCarefullyAction::CheckPredictionStepResults( Context *context ) {
 		return;
 	}
 
-	if( context->cannotApplyAction && context->shouldRollback ) {
-		Debug( "A prediction step has lead to rolling back, the action will be disabled for planning\n" );
+	if( context->shouldRollback ) {
 		this->isDisabledForPlanning = true;
+		return;
+	}
+
+	if( context->cannotApplyAction ) {
+		// Reset this flag to avoid triggering an assertion.
+		// SwitchOrStop() is primarily called in PlanPredictionStep() that's why the assertion itself should be kept
+		context->cannotApplyAction = false;
+		SwitchOrStop( context, &DefaultBunnyAction() );
 		return;
 	}
 
