@@ -479,9 +479,10 @@ void S_UpdateSources( void ) {
 
 		qalGetSourcei( src->source, AL_SOURCE_STATE, &state );
 		if( state == AL_STOPPED ) {
-			// If there is no effect attached, kill the source immediately.
-			// Do not even bother adding this source to a list of zombie sources.
-			if( !src->envUpdateState.effect ) {
+			// Do not even bother adding the source to the list of zombie sources in these cases:
+			// 1) There's no effect attached
+			// 2) There's no sfx attached
+			if( !src->envUpdateState.effect || !src->sfx ) {
 				source_kill( src );
 			} else {
 				zombieSources[numZombieSources++] = src;
