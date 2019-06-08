@@ -136,7 +136,7 @@ gs_weapon_definition_t gs_weaponDefs[] =
 			false,                          // smooth refire
 
 			//damages
-			35,                             // damage
+			30,                             // damage
 			1.0,                            // selfdamage ratio
 			90,                             // knockback
 			0,                              // stun
@@ -236,9 +236,9 @@ gs_weapon_definition_t gs_weaponDefs[] =
 			0,                              // prestep
 
 			//ammo
-			50,                             // weapon pickup amount
-			50,                             // pickup amount
-			100,                            // max amount
+			75,                             // weapon pickup amount
+			100,                            // pickup amount
+			150,                            // max amount
 			20                              // low ammo threshold
 		},
 
@@ -318,7 +318,7 @@ gs_weapon_definition_t gs_weaponDefs[] =
 			0,                              // prestep
 
 			//ammo
-			10,                             // weapon pickup amount
+			7,                              // weapon pickup amount
 			10,                             // pickup amount
 			20,                             // max amount
 			3                               // low ammo threshold
@@ -400,7 +400,7 @@ gs_weapon_definition_t gs_weaponDefs[] =
 			0,                              // prestep
 
 			//ammo
-			10,                             // weapon pickup amount
+			7,                              // weapon pickup amount
 			10,                             // pickup amount
 			20,                             // max amount
 			3                               // low ammo threshold
@@ -474,7 +474,7 @@ gs_weapon_definition_t gs_weaponDefs[] =
 			35,                             // splash minimum knockback
 
 			//projectile def
-			1150,                           // speed
+			1200,                           // speed
 			0,                              // spread
 			0,                              // v_spread
 			0,                              // friction
@@ -482,7 +482,7 @@ gs_weapon_definition_t gs_weaponDefs[] =
 			0,                              // prestep
 
 			//ammo
-			5,                              // weapon pickup amount
+			7,                              // weapon pickup amount
 			10,                             // pickup amount
 			20,                             // max amount
 			3                               // low ammo threshold
@@ -646,7 +646,7 @@ gs_weapon_definition_t gs_weaponDefs[] =
 			0,                              // prestep
 
 			//ammo
-			50,                             // weapon pickup amount
+			75,                             // weapon pickup amount
 			100,                            // pickup amount
 			150,                            // max amount
 			20                              // low ammo threshold
