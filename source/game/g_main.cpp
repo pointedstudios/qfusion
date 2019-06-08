@@ -653,9 +653,11 @@ void G_ExitLevel( void ) {
 
 	G_SnapClients();
 
+	auto *const chatHandlersChain = ChatHandlersChain::Instance();
 	// clear some things before going to next level
 	for( i = 0; i < gs.maxclients; i++ ) {
 		ent = game.edicts + 1 + i;
+		chatHandlersChain->ResetForClient( i );
 		if( !ent->r.inuse ) {
 			continue;
 		}
@@ -672,6 +674,9 @@ void G_ExitLevel( void ) {
 			ent->s.team = TEAM_SPECTATOR;
 		}
 	}
+
+	// Doing that won't harm
+	StatsowFacade::Instance()->ClearEntries();
 }
 
 void G_RestartLevel( void ) {

@@ -614,13 +614,6 @@ void StatsowFacade::OnClientHadPlaytime( const gclient_t *client ) {
 
 	// Print to everybody
 	G_PrintMsg( nullptr, S_COLOR_YELLOW "%s. Discarding match report...\n", reason );
-
-	// Do not hold no longer useful data
-	ClearEntries();
-	// TODO:!!!!!!!!
-	// TODO:!!!!!!!!
-	// TODO:!!!!!!!! clear other data as well
-
 	isDiscarded = true;
 	SendMatchAbortedReport();
 }
