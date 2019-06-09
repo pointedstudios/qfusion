@@ -536,14 +536,14 @@ void CL_SoundModule_StartGlobalSound( struct sfx_s *sfx, int channel, float fvol
 /*
 * CL_SoundModule_StartLocalSound
 */
-void CL_SoundModule_StartLocalSoundByName( const char *name ) {
+void CL_SoundModule_StartLocalSoundByName( const char *name, float fvol ) {
 	assert( name );
 
 	if( se ) {
 		char *finalname;
 
 		finalname = CL_SetSoundExtension( name );
-		se->StartLocalSoundByName( finalname );
+		se->StartLocalSoundByName( finalname, fvol );
 		Mem_TempFree( finalname );
 	}
 }

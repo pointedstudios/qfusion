@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "../qalgo/WswStdTypes.h"
 
-#define UI_API_VERSION      68
+#define UI_API_VERSION      69
 
 typedef size_t ( *ui_async_stream_read_cb_t )( const void *buf, size_t numb, float percentage,
 											 int status, const char *contentType, void *privatep );
@@ -106,7 +106,7 @@ typedef struct {
 	struct cinematics_s *( *R_GetShaderCinematic )( struct shader_s *shader );
 
 	struct sfx_s *( *S_RegisterSound )( const char *name );
-	void ( *S_StartLocalSound )( const char *s );
+	void ( *S_StartLocalSound )( const char *s, float fvol );
 	void ( *S_StartBackgroundTrack )( const char *intro, const char *loop, int mode );
 	void ( *S_StopBackgroundTrack )( void );
 

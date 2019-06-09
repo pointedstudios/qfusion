@@ -460,6 +460,8 @@ extern "C" {
 #define S_PLAYLIST_MATCH                        "sounds/music/match.m3u"
 #define S_PLAYLIST_POSTMATCH                    "sounds/music/postmatch.m3u"
 
+#define S_RESPECT_REWARD                        "sounds/misc/reward"
+
 //===============================
 // UI
 //===============================

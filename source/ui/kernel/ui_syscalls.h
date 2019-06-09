@@ -186,7 +186,7 @@ inline struct sfx_s *S_RegisterSound( const char *name ) {
 }
 
 inline void S_StartLocalSound( const char *s ) {
-	UI_IMPORT.S_StartLocalSound( s );
+	UI_IMPORT.S_StartLocalSound( s, 1.0f );
 }
 
 inline void S_StartBackgroundTrack( const char *intro, const char *loop, int mode ) {

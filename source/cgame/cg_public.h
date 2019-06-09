@@ -43,7 +43,7 @@ typedef void ( *cg_fdrawchar_t )( int x, int y, int w, int h, float s1, float t1
 
 // cg_public.h -- client game dll information visible to engine
 
-#define CGAME_API_VERSION   103
+#define CGAME_API_VERSION   104
 
 //
 // structs and variables shared with the main engine
@@ -211,6 +211,7 @@ typedef struct {
 	void ( *S_StartRelativeSound )( struct sfx_s *sfx, int entnum, int entchannel, float fvol, float attenuation );
 	void ( *S_StartGlobalSound )( struct sfx_s *sfx, int entchannel, float fvol );
 	void ( *S_StartLocalSound )( struct sfx_s *sfx, float fvol );
+	void ( *S_StartLocalSoundByName )( const char *name, float fvol );
 	void ( *S_Update )( const vec3_t origin, const vec3_t velocity, const mat3_t axis, const char *identity );
 	void ( *S_AddLoopSound )( struct sfx_s *sfx, int entnum, float fvol, float attenuation );
 	void ( *S_StartBackgroundTrack )( const char *intro, const char *loop, int mode );

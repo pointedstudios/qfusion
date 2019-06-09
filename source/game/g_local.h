@@ -1635,6 +1635,8 @@ class RespectHandler final : public ChatHandler {
 
 		void AnnounceMisconductBehaviour( const char *action );
 
+		void AnnounceFairPlay();
+
 		/**
 		 * Adds accumulated data to reported stats.
 		 * Handles respect violation states appropriately.

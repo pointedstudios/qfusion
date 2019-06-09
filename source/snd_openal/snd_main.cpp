@@ -418,7 +418,7 @@ void SF_StartGlobalSound( sfx_t *sfx, int channel, float fvol ) {
 /*
 * SF_StartLocalSoundByName
 */
-void SF_StartLocalSoundByName( const char *sound ) {
+void SF_StartLocalSoundByName( const char *sound, float fvol ) {
 	sfx_t *sfx;
 
 	sfx = SF_RegisterSound( sound );
@@ -427,7 +427,7 @@ void SF_StartLocalSoundByName( const char *sound ) {
 		return;
 	}
 
-	S_IssueStartLocalSoundCmd( s_cmdPipe, sfx->id, 1.0f );
+	S_IssueStartLocalSoundCmd( s_cmdPipe, sfx->id, fvol );
 }
 
 /*

@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // snd_public.h -- sound dll information visible to engine
 
-#define SOUND_API_VERSION   46
+#define SOUND_API_VERSION   47
 
 #define ATTN_NONE 0
 
@@ -154,7 +154,7 @@ typedef struct {
 	void ( *StartFixedSound )( struct sfx_s *sfx, const vec3_t origin, int channel, float fvol, float attenuation );
 	void ( *StartRelativeSound )( struct sfx_s *sfx, int entnum, int channel, float fvol, float attenuation );
 	void ( *StartGlobalSound )( struct sfx_s *sfx, int channel, float fvol );
-	void ( *StartLocalSoundByName )( const char *s );
+	void ( *StartLocalSoundByName )( const char *s, float fvol );
 	void ( *StartLocalSound )( struct sfx_s *sfx, float fvol );
 	void ( *AddLoopSound )( struct sfx_s *sfx, int entnum, float fvol, float attenuation );
 

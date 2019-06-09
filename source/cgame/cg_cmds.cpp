@@ -861,6 +861,14 @@ static void CG_SC_RespectEvent() {
 	}
 }
 
+static void CG_SC_PlaySound() {
+	if( trap_Cmd_Argc() < 2 ) {
+		return;
+	}
+
+	trap_S_StartLocalSoundByName( trap_Cmd_Argv( 1 ), 1.0f );
+}
+
 typedef struct
 {
 	const char *name;
@@ -890,6 +898,7 @@ static const svcmd_t cg_svcmds[] =
 	{ "aw", CG_SC_AddAward },
 	{ "qm", CG_SC_MenuQuick },
 	{ "rns", CG_SC_RespectEvent },
+	{ "ply", CG_SC_PlaySound },
 
 	{ NULL }
 };

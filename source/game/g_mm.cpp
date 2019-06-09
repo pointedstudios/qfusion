@@ -1522,6 +1522,15 @@ void RespectHandler::ClientEntry::AnnounceMisconductBehaviour( const char *actio
 	PrintToClientScreen( 3000, S_COLOR_RED "You have %s R&S Codex...", action );
 }
 
+void RespectHandler::ClientEntry::AnnounceFairPlay() {
+	G_PlayerAward( ent, S_COLOR_CYAN "Fair play!" );
+	G_PrintMsg( ent, "Your stats and awards have been confirmed!\n" );
+
+	char cmd[MAX_STRING_CHARS];
+	Q_snprintfz( cmd, sizeof( cmd ), "ply \"%s\"", S_RESPECT_REWARD );
+	trap_GameCmd( ent, cmd );
+}
+
 void RespectHandler::ClientEntry::PrintToClientScreen( unsigned timeout, const char *format, ... ) {
 	char formatBuffer[MAX_STRING_CHARS];
 	char commandBuffer[MAX_STRING_CHARS];
@@ -1755,9 +1764,8 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 	constexpr int endTokenNum = RespectTokensRegistry::SAY_AT_END_TOKEN_NUM;
 	if( levelTime - lastSaidAt[endTokenNum] < 64 ) {
 		if( !saidAfter ) {
+			AnnounceFairPlay();
 			saidAfter = true;
-			G_PlayerAward( ent, S_COLOR_CYAN "Fair play!" );
-			G_PrintMsg( ent, "Your stats and awards have been confirmed!\n" );
 		}
 	}
 
