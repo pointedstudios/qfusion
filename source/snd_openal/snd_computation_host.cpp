@@ -4,7 +4,16 @@
 #include "../qalgo/Links.h"
 #include "../qalgo/SingletonHolder.h"
 
+#ifdef min
+#undef min
+#endif
+
+#ifdef max
+#undef max
+#endif
+
 #include <thread>
+#include <algorithm>
 
 static SingletonHolder<ParallelComputationHost> instanceHolder;
 
@@ -22,15 +31,20 @@ void ParallelComputationHost::Shutdown() {
 
 int ParallelComputationHost::SuggestNumberOfTasks() {
 	unsigned numPhysicalProcessors, numLogicalProcessors;
-	if( trap_GetNumberOfProcessors( &numPhysicalProcessors, &numLogicalProcessors ) ) {
-		// It's unlikely that the number of threads per physical core > 2 but let's use an inequality
-		assert( numLogicalProcessors >= numPhysicalProcessors * 2 );
-		// We think adding more tasks than number of physical processors is the right move
-		// as the propagation graph computations (unfortunately) are not cache-friendly
-		// and using hyper-threading can fill pipeline stalls time to some degree.
-		return numPhysicalProcessors + ( numLogicalProcessors - 1 );
+	if( !trap_GetNumberOfProcessors( &numPhysicalProcessors, &numLogicalProcessors ) ) {
+		return 2;
 	}
-	return 2;
+	if( numLogicalProcessors > numPhysicalProcessors * 2 ) {
+		// We're running it at some weird machine, let's try
+		return numLogicalProcessors;
+	}
+	if( numLogicalProcessors == numPhysicalProcessors * 2 ) {
+		// A widely available implementation of HT.
+		// Let's use all logical cores except a single one.
+		// There's going to be lots of cache misses so utilizing HT can be beneficial.
+		return std::max( 2u, numLogicalProcessors - 1 );
+	}
+	return numPhysicalProcessors;
 }
 
 void *TaskThreadFunc( void *param ) {

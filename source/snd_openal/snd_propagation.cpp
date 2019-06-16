@@ -163,7 +163,7 @@ template <typename DistanceType>
 class PropagationGraphBuilder: public GraphBuilder<int, DistanceType> {
 protected:
 	using TargetType = GraphLike<int, DistanceType>;
-
+public:
 	uint8_t *dirsTable { nullptr };
 	const bool fastAndCoarse;
 
@@ -314,7 +314,7 @@ class LeafToLeafDirBuilder {
 	bool PrepareTestedPointForLeaf( int leafNum, int storageIndex, int topNodeHint );
 public:
 	explicit LeafToLeafDirBuilder( bool fastAndCoarse_, int numLeafs_ )
-		: maxAdditionalAttempts( fastAndCoarse_ ? ( numLeafs_ > 1000 ? 0 : 5 ) : 24 ) {
+		: maxAdditionalAttempts( fastAndCoarse_ ? ( numLeafs_ > 2000 ? 16 : 32 ) : 256 ) {
 		// Note: we actually are cutting off additional attempts for complex maps.
 		// This is a hack to prevent computational explosion until more efficient algorithms are introduced
 		// (switching from Dijkstra to bidirectional Dijkstra was good but not sufficient)
@@ -798,22 +798,28 @@ public:
 };
 
 template <typename DistanceType>
-struct VertexUpdateStatus {
+struct VertexBidirectionalUpdateStatus {
 	DistanceType distance[2];
 	int32_t parentLeaf[2];
 	bool isVisited[2];
 };
 
-template <typename> class PathFinder;
+template <typename DistanceType>
+struct VertexFloodFillUpdateStatus {
+	DistanceType distance;
+	int32_t parentLeaf;
+};
+
+template <typename> class BidirectionalPathFinder;
 
 template <typename DistanceType>
 class PathReverseIterator {
-	template <typename> friend class PathFinder;
-	PathFinder<DistanceType> *const parent;
+	template <typename> friend class BidirectionalPathFinder;
+	BidirectionalPathFinder<DistanceType> *const parent;
 	int leafNum { std::numeric_limits<int>::min() };
 	const int listIndex;
 
-	PathReverseIterator( PathFinder<DistanceType> *parent_, int listIndex_ )
+	PathReverseIterator( BidirectionalPathFinder<DistanceType> *parent_, int listIndex_ )
 		: parent( parent_ ), listIndex( listIndex_ ) {}
 
 	void ResetWithLeaf( int leafNum_ ) {
@@ -834,40 +840,73 @@ public:
 };
 
 template <typename DistanceType>
-class PathFinder {
+class FloodFillPathFinder {
+	template <typename> friend class CoarsePropagationTask;
+	template <typename> friend class CoarsePropagationBuilder;
+
+	using VertexUpdateStatus = VertexFloodFillUpdateStatus<DistanceType>;
+
+	UpdatesHeap<DistanceType> heap;
+	PropagationGraphBuilder<DistanceType> *graph;
+	VertexUpdateStatus *updateStatus;
+	int lastFillLeafNum { -1 };
+
+	void FloodFillForLeaf( int leafNum );
+
+	int UnwindPath( int from, int to, int *directLeafNumsEnd, int *reverseLeafNumsBegin );
+
+	float GetCertainPathDistance( int from, int to ) {
+		assert( from == lastFillLeafNum );
+		assert( std::isfinite( updateStatus[to].distance ) );
+		return updateStatus[to].distance;
+	}
+public:
+	explicit FloodFillPathFinder( PropagationGraphBuilder<DistanceType> *graph_ ) : graph( graph_ ) {
+		size_t memSize = graph_->NumLeafs() * sizeof( VertexUpdateStatus );
+		updateStatus = (VertexUpdateStatus *)::S_Malloc( memSize );
+	}
+
+	~FloodFillPathFinder() {
+		if( updateStatus ) {
+			S_Free( updateStatus );
+		}
+	}
+};
+
+template <typename DistanceType>
+class BidirectionalPathFinder {
 	template <typename> friend class PathReverseIterator;
 	template <typename> friend class PropagationTableBuilder;
+
+	using IteratorType = PathReverseIterator<DistanceType>;
+	using VertexUpdateStatus = VertexBidirectionalUpdateStatus<DistanceType>;
 
 	/**
 	 * An euclidean leaf-to-leaf distance table supplied by a parent
 	 */
 	const float *const euclideanDistanceTable;
 
-	PropagationGraphBuilder<DistanceType> &graphBuilder;
+	PropagationGraphBuilder<DistanceType> *graph;
 
-	VertexUpdateStatus<DistanceType> *updateStatus { nullptr };
+	VertexUpdateStatus *updateStatus { nullptr };
 
 	UpdatesHeap<DistanceType> heaps[2];
 
-	using IteratorType = PathReverseIterator<DistanceType>;
-
-	IteratorType tmpDirectIterator;
-	IteratorType tmpReverseIterator;
+	IteratorType tmpDirectIterator { this, 0 };
+	IteratorType tmpReverseIterator { this, 1 };
 
 	float GetEuclideanDistance( int leaf1, int leaf2 ) const {
-		return euclideanDistanceTable[leaf1 * graphBuilder.NumLeafs() + leaf2];
+		return euclideanDistanceTable[leaf1 * graph->NumLeafs() + leaf2];
 	}
 public:
-	explicit PathFinder( const float *euclideanDistanceTable_, PropagationGraphBuilder<DistanceType> &graph_ )
+	explicit BidirectionalPathFinder( const float *euclideanDistanceTable_, PropagationGraphBuilder<DistanceType> *graph_ )
 		: euclideanDistanceTable( euclideanDistanceTable_ )
-		, graphBuilder( graph_ )
-		, tmpDirectIterator( this, 0 )
-		, tmpReverseIterator( this, 1 ) {
-		size_t memSize = graph_.NumLeafs() * sizeof( VertexUpdateStatus<DistanceType> );
-		updateStatus = (VertexUpdateStatus<DistanceType> *)::S_Malloc( memSize );
+		, graph( graph_ ) {
+		size_t memSize = graph_->NumLeafs() * sizeof( VertexUpdateStatus );
+		updateStatus = (VertexUpdateStatus *)::S_Malloc( memSize );
 	}
 
-	~PathFinder() {
+	~BidirectionalPathFinder() {
 		if( updateStatus ) {
 			S_Free( updateStatus );
 		}
@@ -893,14 +932,14 @@ public:
 };
 
 template <typename DistanceType>
-DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
-												 int toLeaf,
-												 IteratorType **direct,
-												 IteratorType **reverse ) {
+DistanceType BidirectionalPathFinder<DistanceType>::FindPath( int fromLeaf,
+															  int toLeaf,
+															  IteratorType **direct,
+															  IteratorType **reverse ) {
 	// A-star hinting targets for each turn
 	const int turnTargetLeaf[2] = { toLeaf, fromLeaf };
 
-	for( int i = 0, end = graphBuilder.NumLeafs(); i < end; ++i ) {
+	for( int i = 0, end = graph->NumLeafs(); i < end; ++i ) {
 		auto *status = updateStatus + i;
 		for( int turn = 0; turn < 2; ++turn ) {
 			status->distance[turn] = std::numeric_limits<DistanceType>::infinity();
@@ -943,7 +982,7 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 			updateStatus[entryLeafNum].isVisited[turn] = true;
 
 			// Now scan all adjacent vertices
-			const auto *const adjacencyList = graphBuilder.AdjacencyList( entryLeafNum ) + 1;
+			const auto *const adjacencyList = graph->AdjacencyList( entryLeafNum ) + 1;
 			const auto listSize = adjacencyList[-1];
 			activeHeap->ReserveForAddition( listSize );
 			for( int i = 0; i < listSize; ++i ) {
@@ -953,7 +992,7 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 				if( status->isVisited[turn] ) {
 					continue;
 				}
-				DistanceType edgeDistance = graphBuilder.EdgeDistance( entryLeafNum, leafNum );
+				DistanceType edgeDistance = graph->EdgeDistance( entryLeafNum, leafNum );
 				DistanceType relaxedDistance = edgeDistance + entryDistance;
 				if( status->distance[turn] <= relaxedDistance ) {
 					continue;
@@ -977,39 +1016,116 @@ DistanceType PathFinder<DistanceType>::FindPath( int fromLeaf,
 	return std::numeric_limits<DistanceType>::infinity();
 }
 
+template <typename DistanceType>
+void FloodFillPathFinder<DistanceType>::FloodFillForLeaf( int leafNum ) {
+	// A-star hinting targets for each turn
+
+	for( int i = 0, end = graph->NumLeafs(); i < end; ++i ) {
+		auto *status = updateStatus + i;
+		status->distance = std::numeric_limits<DistanceType>::infinity();
+		status->parentLeaf = -1;
+	}
+
+	heap.Clear();
+
+	updateStatus[leafNum].distance = DistanceType( 0 );
+	heap.Push( leafNum, DistanceType( 0 ), DistanceType( 0 ) );
+
+	while( !heap.IsEmpty() ) {
+		const HeapEntry<DistanceType> &entry = heap.PopInPlace();
+		// Save these values immediately as ReserveForAddition() call might make accessing the entry illegal.
+		const int entryLeafNum = entry.leafNum;
+		const double entryDistance = updateStatus[entryLeafNum].distance;
+
+		// Now scan all adjacent vertices
+		const auto *const adjacencyList = graph->AdjacencyList( entryLeafNum ) + 1;
+		const auto listSize = adjacencyList[-1];
+		heap.ReserveForAddition( listSize );
+		for( int i = 0; i < listSize; ++i ) {
+			const auto leafNum = adjacencyList[i];
+			auto *const status = &updateStatus[leafNum];
+			DistanceType edgeDistance = graph->EdgeDistance( entryLeafNum, leafNum );
+			DistanceType relaxedDistance = edgeDistance + entryDistance;
+			if( status->distance <= relaxedDistance ) {
+				continue;
+			}
+
+			status->distance = relaxedDistance;
+			status->parentLeaf = entryLeafNum;
+
+			heap.Push( leafNum, relaxedDistance, relaxedDistance );
+		}
+	}
+
+	lastFillLeafNum = leafNum;
+}
+
+template <typename DistanceType>
+int FloodFillPathFinder<DistanceType>::UnwindPath( int from, int to, int *directLeafNumsEnd, int *reverseLeafNumsBegin ) {
+	assert( from == lastFillLeafNum );
+
+	int *directWritePtr = directLeafNumsEnd - 1;
+	int *reverseWritePtr = reverseLeafNumsBegin;
+
+	int vertexNum = to;
+	for(;; ) {
+		*directWritePtr-- = vertexNum;
+		*reverseWritePtr++ = vertexNum;
+		int parent = updateStatus[vertexNum].parentLeaf;
+		if( parent < 0 ) {
+			break;
+		}
+		vertexNum = parent;
+	}
+
+	if( vertexNum != from ) {
+		return -1;
+	}
+
+	ptrdiff_t diff = reverseWritePtr - reverseLeafNumsBegin;
+	assert( diff > 0 );
+	return (int)diff;
+}
+
 template <typename> class PropagationTableBuilder;
 
 template <typename DistanceType>
-class PropagationBuilderTask: public ParallelComputationHost::PartialTask {
+class PropagationBuilderTask : public ParallelComputationHost::PartialTask {
 	template <typename> friend class PropagationTableBuilder;
-public:
+	template <typename> friend class FinePropagationBuilder;
+	template <typename> friend class CoarsePropagationBuilder;
+protected:
 	using PropagationProps = PropagationTable::PropagationProps;
-	using IteratorType = PathReverseIterator<DistanceType>;
 	using ParentBuilderType = PropagationTableBuilder<DistanceType>;
 	using GraphType = CloneableGraphBuilder<DistanceType>;
-	using PathFinderType = PathFinder<DistanceType>;
-private:
 
 	ParentBuilderType *const parent;
 	PropagationProps *const table;
-
 	GraphType *graphInstance { nullptr };
-	PathFinderType *pathFinderInstance { nullptr };
 	int *tmpLeafNums { nullptr };
 	const int numLeafs;
+
 	int leafsRangeBegin { -1 };
 	int leafsRangeEnd { -1 };
 	int total { -1 };
 	int executed { 0 };
 	int lastReportedProgress { 0 };
 	int executedAtLastReport { 0 };
-	const bool fastAndCoarse;
 
-	PropagationBuilderTask( ParentBuilderType *parent_, int numLeafs_ );
+	explicit PropagationBuilderTask( ParentBuilderType *parent_, int numLeafs_ )
+		: parent( parent_ ), table( parent_->table ), numLeafs( numLeafs_ ) {
+		assert( table && "The table of parent has not been set" );
+	}
 
-	~PropagationBuilderTask() override;
-
-	void Exec() override;
+	~PropagationBuilderTask() override {
+		if( graphInstance ) {
+			graphInstance->~GraphType();
+			S_Free( graphInstance );
+		}
+		if( tmpLeafNums ) {
+			S_Free( tmpLeafNums );
+		}
+	}
 
 	void ComputePropsForPair( int leaf1, int leaf2 );
 
@@ -1021,25 +1137,6 @@ private:
 		assert( leafsChainEnd - leafsChainBegin < ( 1 << 20 ) );
 		BuildInfluxDirForLeaf( allocatedDir, leafsChainBegin, (int)( leafsChainEnd - leafsChainBegin ) );
 	}
-
-	/**
-	 * Unwinds a {@code PathReverseIterator} writing leaf numbers to a linear buffer.
-	 * The buffer is assumed to be capable to store a leaves chain of maximum possible length for the current graph.
-	 * Scales graph edges defined by these leaf numbers at the same time.
-	 * @param iterator an iterator that represents intermediate results of path-finding.
-	 * @param arrayEnd an end of the buffer range. Leaf numbers will be written before this address.
-	 * @param scale a weight scale for path edges
-	 * @return a new range begin for the buffer (that is less than the {@code arrayEnd}
-	 */
-	int *UnwindScalingWeights( IteratorType *iterator, int *arrayEnd, DistanceType scale );
-	/**
-	 * Unwinds a {PathReverseIterator} writing leaf numbers to a linear buffer.
-	 * The buffer is assumed to be capable to store a leaves chain of maximum possible length for the current graph.
-	 * @param iterator an iterator that represents intermediate results of path-finding.
-	 * @param arrayEnd an end of the buffer range. Leaf numbers will be written before this address.
-	 * @return a new range begin for the buffer (that is less than the {@code arrayEnd}
-	 */
-	int *Unwind( IteratorType *iterator, int *arrayEnd );
 
 	/**
 	 * Builds a propagation path between given leaves.
@@ -1056,7 +1153,50 @@ private:
 	 * @param distance a distance of the best met temporary path returned as an out parameter.
 	 * @return true if a path has been managed to be built successfully.
 	 */
-	bool BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, DistanceType *distance );
+	virtual bool BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, DistanceType *distance ) = 0;
+};
+
+template <typename DistanceType>
+class FinePropagationTask : public PropagationBuilderTask<DistanceType> {
+	template <typename> friend class PropagationTableBuilder;
+	template <typename> friend class FinePropagationBuilder;
+public:
+	using PropagationProps = PropagationTable::PropagationProps;
+	using IteratorType = PathReverseIterator<DistanceType>;
+	using ParentBuilderType = PropagationTableBuilder<DistanceType>;
+	using PathFinderType = BidirectionalPathFinder<DistanceType>;
+	using GraphType = PropagationGraphBuilder<DistanceType>;
+private:
+	PathFinderType *pathFinderInstance { nullptr };
+
+	void Exec() override;
+
+	/**
+	 * Unwinds a {PathReverseIterator} writing leaf numbers to a linear buffer.
+	 * The buffer is assumed to be capable to store a leaves chain of maximum possible length for the current graph.
+	 * @param iterator an iterator that represents intermediate results of path-finding.
+	 * @param arrayEnd an end of the buffer range. Leaf numbers will be written before this address.
+	 * @return a new range begin for the buffer (that is less than the {@code arrayEnd}
+	 */
+	int *Unwind( IteratorType *iterator, int *arrayEnd );
+
+	/**
+	 * Unwinds a {@code PathReverseIterator} writing leaf numbers to a linear buffer.
+	 * The buffer is assumed to be capable to store a leaves chain of maximum possible length for the current graph.
+	 * Scales graph edges defined by these leaf numbers at the same time.
+	 * @param iterator an iterator that represents intermediate results of path-finding.
+	 * @param arrayEnd an end of the buffer range. Leaf numbers will be written before this address.
+	 * @param scale a weight scale for path edges
+	 * @return a new range begin for the buffer (that is less than the {@code arrayEnd}
+	 */
+	int *UnwindScalingWeights( IteratorType *iterator, int *arrayEnd, DistanceType scale );
+
+	bool BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, DistanceType *distance ) override;
+public:
+	FinePropagationTask( ParentBuilderType *parent_, int numLeafs_ )
+		: PropagationBuilderTask<DistanceType>( parent_, numLeafs_ ) {}
+
+	~FinePropagationTask() override;
 };
 
 static inline void ComputeLeafCenter( int leaf, vec3_t result ) {
@@ -1083,21 +1223,34 @@ static void BuildLeafEuclideanDistanceTable( float *table, int numLeafs ) {
 }
 
 template <typename DistanceType>
+class CoarsePropagationTask : public PropagationBuilderTask<DistanceType> {
+	template <typename> friend class CoarsePropagationBuilder;
+
+	using ParentBuilderType = PropagationTableBuilder<DistanceType>;
+	using IteratorType = PathReverseIterator<DistanceType>;
+	using GraphType = CloneableGraphBuilder<DistanceType>;
+	using PathFinderType = FloodFillPathFinder<DistanceType>;
+
+	PathFinderType *pathFinderInstance { nullptr };
+
+	bool BuildPropagationPath( int leaf1, int leaf2, vec3_t _1to2, vec3_t _2to1, DistanceType *distance ) override;
+public:
+	explicit CoarsePropagationTask( ParentBuilderType *parent_, int numLeafs_ )
+		: PropagationBuilderTask<DistanceType>( parent_, numLeafs_ ) {}
+
+	void Exec() override;
+};
+
+template <typename DistanceType>
 class PropagationTableBuilder {
 	template <typename> friend class PropagationBuilderTask;
-
-	/**
-	 * An euclidean distance table for leaves
-	 * @todo using short values is sufficient for the majority of maps
-	 */
-	float *const euclideanDistanceTable { nullptr };
-
+	template <typename> friend class FinePropagationTask;
+	template <typename> friend class CoarsePropagationTask;
+protected:
 	using PropagationProps = PropagationTable::PropagationProps;
-	using PathFinderType = PathFinder<DistanceType>;
 	using TaskType = PropagationBuilderTask<DistanceType>;
 
 	CloneableGraphBuilder<DistanceType> graphBuilder;
-	PathFinderType pathFinder;
 
 	PropagationProps *table { nullptr };
 	struct qmutex_s *progressLock { nullptr };
@@ -1124,17 +1277,21 @@ class PropagationTableBuilder {
 #else
 	__declspec( noreturn ) void ValidationError( _Printf_format_string_ const char *format, ... );
 #endif
+
+	virtual PropagationBuilderTask<DistanceType> *NewTask() = 0;
+
+	/**
+	 * Up to 32 parallel tasks are supported. We are probably going to exceed available memory trying to create more tasks.
+	 */
+	enum { MAX_TASKS = 32 };
+
+	virtual int InstantiateTasks( TaskType *tasks[MAX_TASKS], ParallelComputationHost *host );
+	virtual void DistributeWorkload( TaskType *tasks[MAX_TASKS], int actualNumTasks );
 public:
-	PropagationTableBuilder( int actualNumLeafs, bool fastAndCoarse_ )
-		: euclideanDistanceTable( (float *)S_Malloc( actualNumLeafs * actualNumLeafs * sizeof( float ) ) )
-		, graphBuilder( actualNumLeafs, fastAndCoarse_ )
-		, pathFinder( euclideanDistanceTable, graphBuilder )
+	explicit PropagationTableBuilder( int actualNumLeafs, bool fastAndCoarse_ )
+		: graphBuilder( actualNumLeafs, fastAndCoarse_ )
 		, fastAndCoarse( fastAndCoarse_ ) {
 		assert( executedWorkload.is_lock_free() );
-
-		if( euclideanDistanceTable ) {
-			BuildLeafEuclideanDistanceTable( euclideanDistanceTable, actualNumLeafs );
-		}
 	}
 
 	~PropagationTableBuilder();
@@ -1143,6 +1300,123 @@ public:
 
 	inline PropagationProps *ReleaseOwnership();
 };
+
+template <typename DistanceType>
+class FinePropagationBuilder : public PropagationTableBuilder<DistanceType> {
+	using PathFinderType = BidirectionalPathFinder<DistanceType>;
+	using TaskType = FinePropagationTask<DistanceType>;
+
+	/**
+	 * An euclidean distance table for leaves
+	 * @todo using short values is sufficient for the majority of maps
+	 */
+	float *euclideanDistanceTable { nullptr };
+
+	FinePropagationTask<DistanceType> *NewTask() override;
+public:
+	explicit FinePropagationBuilder( int actualNumLeafs_ )
+		: PropagationTableBuilder<DistanceType>( actualNumLeafs_, false ) {
+		euclideanDistanceTable = (float *)S_Malloc( actualNumLeafs_ * actualNumLeafs_ * sizeof( float ) );
+		if( euclideanDistanceTable ) {
+			BuildLeafEuclideanDistanceTable( euclideanDistanceTable, actualNumLeafs_ );
+		}
+	}
+
+	~FinePropagationBuilder() {
+		if( euclideanDistanceTable ) {
+			S_Free( euclideanDistanceTable );
+		}
+	}
+};
+
+template <typename DistanceType>
+class CoarsePropagationBuilder : public PropagationTableBuilder<DistanceType> {
+	using PathFinderType = FloodFillPathFinder<DistanceType>;
+	using TaskType = CoarsePropagationTask<DistanceType>;
+
+	CoarsePropagationTask<DistanceType> *NewTask() override;
+public:
+	explicit CoarsePropagationBuilder( int actualNumLeafs_ )
+		: PropagationTableBuilder<DistanceType>( actualNumLeafs_, true ) {}
+};
+
+template <typename T>
+struct Holder {
+	T *value { nullptr };
+	template <typename... Args>
+	explicit Holder( Args... args ) {
+		if( void *mem = S_Malloc( sizeof( T ) ) ) {
+			value = new( mem )T( args... );
+		}
+	}
+	operator T*() { return value; }
+	operator const T*() const { return value; }
+	~Holder() {
+		if( value ) {
+			value->~T();
+			S_Free( value );
+		}
+	}
+	T *ReleaseOwnership() {
+		T *result = value;
+		value = nullptr;
+		return result;
+	}
+};
+
+template <typename DistanceType>
+FinePropagationTask<DistanceType> *FinePropagationBuilder<DistanceType>::NewTask() {
+	Holder<TaskType> taskHolder( this, this->graphBuilder.NumLeafs() );
+	if( !taskHolder ) {
+		return nullptr;
+	}
+
+	// A task gets an ownership over the clone
+	auto *graphClone = taskHolder.value->graphInstance = this->graphBuilder.Clone();
+	if( !graphClone ) {
+		return nullptr;
+	}
+
+	// The "+1" part is not mandatory but we want a range "end"
+	// to always have a valid address in address space.
+	// The task gets an ownership over this chunk of memory
+	taskHolder.value->tmpLeafNums = (int *)S_Malloc( 2 * ( this->graphBuilder.NumLeafs() + 1 ) * sizeof( int ) );
+
+	Holder<PathFinderType> pathFinderHolder( this->euclideanDistanceTable, graphClone );
+	if( !pathFinderHolder ) {
+		return nullptr;
+	}
+
+	taskHolder.value->pathFinderInstance = pathFinderHolder.ReleaseOwnership();
+	return taskHolder.ReleaseOwnership();
+}
+
+template <typename DistanceType>
+CoarsePropagationTask<DistanceType> *CoarsePropagationBuilder<DistanceType>::NewTask() {
+	Holder<TaskType> taskHolder( this, this->graphBuilder.NumLeafs() );
+	if( !taskHolder ) {
+		return nullptr;
+	}
+
+	// A task gets an ownership over the clone
+	auto *graphClone = taskHolder.value->graphInstance = this->graphBuilder.Clone();
+	if( !graphClone ) {
+		return nullptr;
+	}
+
+	// The "+1" part is not mandatory but we want a range "end"
+	// to always have a valid address in address space.
+	// The task gets an ownership over this chunk of memory
+	taskHolder.value->tmpLeafNums = (int *)S_Malloc( 2 * ( this->graphBuilder.NumLeafs() + 1 ) * sizeof( int ) );
+
+	Holder<PathFinderType> pathFinderHolder( graphClone );
+	if( !pathFinderHolder ) {
+		return nullptr;
+	}
+
+	taskHolder.value->pathFinderInstance = pathFinderHolder.ReleaseOwnership();
+	return taskHolder.ReleaseOwnership();
+}
 
 template <typename DistanceType>
 typename PropagationTableBuilder<DistanceType>::PropagationProps *PropagationTableBuilder<DistanceType>::ReleaseOwnership() {
@@ -1159,9 +1433,6 @@ PropagationTableBuilder<DistanceType>::~PropagationTableBuilder() {
 	}
 	if( progressLock ) {
 		trap_Mutex_Destroy( &progressLock );
-	}
-	if( euclideanDistanceTable ) {
-		S_Free( euclideanDistanceTable );
 	}
 }
 
@@ -1196,11 +1467,6 @@ void PropagationTableBuilder<DistanceType>::AddTaskProgress( int taskWorkloadDel
 
 template <typename DistanceType>
 bool PropagationTableBuilder<DistanceType>::Build() {
-	// If the euclidean distance table allocation has failed
-	if( !euclideanDistanceTable ) {
-		return false;
-	}
-
 	progressLock = trap_Mutex_Create();
 	if( !progressLock ) {
 		return false;
@@ -1222,42 +1488,37 @@ bool PropagationTableBuilder<DistanceType>::Build() {
 
 	// Right now the computation host lifecycle should be limited only to scope where actual computations occur.
 	ComputationHostLifecycleHolder computationHostLifecycleHolder;
-
 	auto *const computationHost = computationHostLifecycleHolder.Instance();
-	const int numTasks = computationHost->SuggestNumberOfTasks();
+
+	TaskType *submittedTasks[MAX_TASKS];
+	const int actualNumTasks = InstantiateTasks( submittedTasks, computationHost );
+	if( !actualNumTasks ) {
+		Com_Printf( S_COLOR_RED "Unable to create/enqueue at least a single PropagationBuilderTask\n" );
+		return false;
+	}
+
+	DistributeWorkload( submittedTasks, actualNumTasks );
+	computationHost->Exec();
+
+#ifndef PUBLIC_BUILD
+	ValidateJointResults();
+#endif
+
+	return true;
+}
+
+template <typename DistanceType>
+int PropagationTableBuilder<DistanceType>::InstantiateTasks( TaskType *tasks[MAX_TASKS],
+															 ParallelComputationHost *computationHost ) {
+	const int suggestedNumTasks = std::min( (int)MAX_TASKS, computationHost->SuggestNumberOfTasks() );
 
 	// First try creating tasks
 	int actualNumTasks = 0;
-	// Up to 32 parallel tasks are supported...
-	// We are probably going to exceed memory capacity trying to create more tasks...
-	PropagationBuilderTask<DistanceType> *submittedTasks[32];
-	for( int i = 0; i < std::min( 32, numTasks ); ++i ) {
-		// TODO: Use just malloc()
-		void *const objectMem = S_Malloc( sizeof( TaskType ) );
-		if( !objectMem ) {
+	for( int i = 0; i < suggestedNumTasks; ++i ) {
+		TaskType *task = NewTask();
+		if( !task ) {
 			break;
 		}
-
-		auto *const task = new( objectMem )TaskType( this, numLeafs );
-		// A task gets an ownership over the clone
-		task->graphInstance = graphBuilder.Clone();
-		if( !task->graphInstance ) {
-			break;
-		}
-
-		// TODO: Use just malloc()
-		void *const pathFinderMem = S_Malloc( sizeof( PathFinderType ) );
-		if( !pathFinderMem ) {
-			break;
-		}
-
-		// A task gets an ownership over the instance
-		task->pathFinderInstance = new( pathFinderMem )PathFinderType( euclideanDistanceTable, *task->graphInstance );
-
-		// The "+1" part is not mandatory but we want a range "end"
-		// to always have a valid address in address space.
-		// The task gets an ownership over this chunk of memory
-		task->tmpLeafNums = (int *)S_Malloc( 2 * ( numLeafs + 1 ) * sizeof( int ) );
 
 		// Transfer ownership over the task to the host.
 		// It will be released, sooner or later, regardless of TryAddTask() return value.
@@ -1265,19 +1526,18 @@ bool PropagationTableBuilder<DistanceType>::Build() {
 			break;
 		}
 
-		submittedTasks[actualNumTasks++] = task;
+		tasks[actualNumTasks++] = task;
 	}
 
-	if( !actualNumTasks ) {
-		Com_Printf( S_COLOR_RED "Unable to create/enqueue at least a single PropagationBuilderTask\n" );
-		return false;
-	}
+	return actualNumTasks;
+}
 
+template <typename DistanceType>
+void PropagationTableBuilder<DistanceType>::DistributeWorkload( TaskType *tasks[MAX_TASKS], int actualNumTasks ) {
+	const int numLeafs = graphBuilder.NumLeafs();
 	// Set the total number of workload units
 	// (a computation of props for a pair of leafs is a workload unit)
 	this->totalWorkload = ( numLeafs - 1 ) * ( numLeafs - 2 ) / 2;
-
-	// We cannot assign workload ranges until we know the actual number of tasks we have created
 
 	// This is a workload for every task that is assumed to be same.
 	// We use a variable assigned range (that affects the processed matrix "field" area)
@@ -1287,7 +1547,7 @@ bool PropagationTableBuilder<DistanceType>::Build() {
 	const int taskWorkload = this->totalWorkload / actualNumTasks;
 	int leafsRangeBegin = 1;
 	for( int i = 0; i < actualNumTasks; ++i ) {
-		auto *const task = submittedTasks[i];
+		auto *const task = tasks[i];
 		task->leafsRangeBegin = leafsRangeBegin;
 		// We have to solve this equation for rangeLength considering leafsRangeBegin and taskWorkload to be known
 		// taskWorkload = ( leafsRangeBegin - 1 ) * rangeLength + ( rangeLength * ( rangeLength - 1 ) ) / 2;
@@ -1317,13 +1577,12 @@ bool PropagationTableBuilder<DistanceType>::Build() {
 		task->leafsRangeEnd = numLeafs;
 	}
 
-	computationHost->Exec();
-
-#ifndef PUBLIC_BUILD
-	ValidateJointResults();
-#endif
-
-	return true;
+	// TODO: Caution: This workload distribution is exact for fine builder and OK for the coarse builder
+	// that uses "flood-filling" as the Dijkstra algorithm builds shortest paths from a leaf to every other leaf
+	// since a substantial part of work is spent during unwinding build paths
+	// but it comes at cost of some redundant path-finding work performed by different tasks simultaneously.
+	// It's better to compute flood-fill results for every leaf in a fork-join fashion
+	// and unwind these tables only then but the storage requirements for intermediate flood-fill tables are enormous.
 }
 
 template <typename DistanceType>
@@ -1411,33 +1670,19 @@ void PropagationTableBuilder<DistanceType>::ValidationError( const char *format,
 }
 
 template <typename DistanceType>
-PropagationBuilderTask<DistanceType>::PropagationBuilderTask( ParentBuilderType *parent_, int numLeafs_ )
-	: parent( parent_ ), table( parent->table ), numLeafs( numLeafs_ ), fastAndCoarse( parent->fastAndCoarse ) {
-	assert( table && "The table in the parent has not been set" );
-}
-
-template <typename DistanceType>
-PropagationBuilderTask<DistanceType>::~PropagationBuilderTask() {
-	if( graphInstance ) {
-		graphInstance->~CloneableGraphBuilder<DistanceType>();
-		S_Free( graphInstance );
-	}
+FinePropagationTask<DistanceType>::~FinePropagationTask() {
 	if( pathFinderInstance ) {
-		pathFinderInstance->~PathFinder<DistanceType>();
+		pathFinderInstance->~BidirectionalPathFinder<DistanceType>();
 		S_Free( pathFinderInstance );
 	}
-	if( tmpLeafNums ) {
-		S_Free( tmpLeafNums );
-	}
 }
 
-
 template <typename DistanceType>
-void PropagationBuilderTask<DistanceType>::Exec() {
+void FinePropagationTask<DistanceType>::Exec() {
 	// Check whether the range has been set and is valid
-	assert( leafsRangeBegin > 0 );
-	assert( leafsRangeEnd > leafsRangeBegin );
-	assert( leafsRangeEnd <= numLeafs );
+	assert( this->leafsRangeBegin > 0 );
+	assert( this->leafsRangeEnd > this->leafsRangeBegin );
+	assert( this->leafsRangeEnd <= this->numLeafs );
 
 	// The workload consists of a "rectangle" and a "triangle"
 	// The rectangle width (along J - axis) is the range length
@@ -1459,38 +1704,72 @@ void PropagationBuilderTask<DistanceType>::Exec() {
 	this->lastReportedProgress = 0;
 	this->executedAtLastReport = 0;
 
+	// This is a workaround for resolution of inherited template members
+	const int leafsRangeBegin = this->leafsRangeBegin;
+	const int leafsRangeEnd = this->leafsRangeEnd;
+
 	// Process "rectangular" part of the workload
 	for( int i = 1; i < leafsRangeBegin; ++i ) {
 		for ( int j = leafsRangeBegin; j < leafsRangeEnd; ++j ) {
-			ComputePropsForPair( i, j );
+			this->ComputePropsForPair( i, j );
 		}
 	}
 
 	// Process "triangular" part of the workload
 	for( int i = leafsRangeBegin; i < leafsRangeEnd; ++i ) {
 		for( int j = i + 1; j < leafsRangeEnd; ++j ) {
-			ComputePropsForPair( i, j );
+			this->ComputePropsForPair( i, j );
+		}
+	}
+}
+
+template <typename DistanceType>
+void CoarsePropagationTask<DistanceType>::Exec() {
+	// Check whether the range has been set and is valid
+	assert( this->leafsRangeBegin > 0 );
+	assert( this->leafsRangeEnd > this->leafsRangeBegin );
+	assert( this->leafsRangeEnd <= this->numLeafs );
+
+	assert( this->total > 0 );
+	this->executed = 0;
+	this->lastReportedProgress = 0;
+	this->executedAtLastReport = 0;
+
+	// This is a workaround for resolution of inherited template members
+	const int leafsRangeBegin = this->leafsRangeBegin;
+	const int leafsRangeEnd = this->leafsRangeEnd;
+
+	// There should be leafsRangeEnd - leafsRangeBegin number of pathfinder calls
+	for( int leafNum = leafsRangeBegin; leafNum < leafsRangeEnd; ++leafNum ) {
+		// Use the Dijkstra algorithm to find path from leafNum to every other leaf
+		pathFinderInstance->FloodFillForLeaf( leafNum );
+		// For every other leaf,
+		// actually for the part of [leafsRangeBegin, leafsRangeEnd) x [0, leafsRangeEnd)
+		// that belongs to the upper table triangle compute props
+		// for a pair of cells below and above the table diagonal
+		for( int thatLeaf = 1; thatLeaf < leafNum; ++thatLeaf ) {
+			this->ComputePropsForPair( leafNum, thatLeaf );
 		}
 	}
 }
 
 template <typename DistanceType>
 void PropagationBuilderTask<DistanceType>::ComputePropsForPair( int leaf1, int leaf2 ) {
-	executed++;
-	const auto progress = (int)( 100 * ( executed / (float)total ) );
+	this->executed++;
+	const auto progress = (int)( 100 * ( this->executed / (float)this->total ) );
 	// We keep computing progress in percents to avoid confusion
 	// but report only even values to reduce threads contention on AddTaskProgress()
-	if( progress != lastReportedProgress && !( progress % 2 ) ) {
-		int taskWorkloadDelta = executed - executedAtLastReport;
+	if( progress != this->lastReportedProgress && !( progress % 2 ) ) {
+		int taskWorkloadDelta = this->executed - this->executedAtLastReport;
 		assert( taskWorkloadDelta > 0 );
-		parent->AddTaskProgress( taskWorkloadDelta );
-		lastReportedProgress = progress;
-		executedAtLastReport = executed;
+		this->parent->AddTaskProgress( taskWorkloadDelta );
+		this->lastReportedProgress = progress;
+		this->executedAtLastReport = this->executed;
 	}
 
-	PropagationProps *const firstProps = &table[leaf1 * numLeafs + leaf2];
-	PropagationProps *const secondProps = &table[leaf2 * numLeafs + leaf1];
-	if( graphInstance->EdgeDistance( leaf1, leaf2 ) != std::numeric_limits<double>::infinity() ) {
+	PropagationProps *const firstProps = &this->table[leaf1 * this->numLeafs + leaf2];
+	PropagationProps *const secondProps = &this->table[leaf2 * this->numLeafs + leaf1];
+	if( this->graphInstance->EdgeDistance( leaf1, leaf2 ) != std::numeric_limits<double>::infinity() ) {
 		firstProps->SetHasDirectPath();
 		secondProps->SetHasDirectPath();
 		return;
@@ -1551,9 +1830,9 @@ public:
 };
 
 template <typename DistanceType>
-bool PropagationBuilderTask<DistanceType>::BuildPropagationPath( int leaf1, int leaf2,
-																 vec3_t _1to2, vec3_t _2to1,
-																 DistanceType *distance ) {
+bool FinePropagationTask<DistanceType>::BuildPropagationPath( int leaf1, int leaf2,
+															  vec3_t _1to2, vec3_t _2to1,
+															  DistanceType *distance ) {
 	assert( leaf1 != leaf2 );
 
 	WeightedDirBuilder _1to2Builder;
@@ -1561,6 +1840,8 @@ bool PropagationBuilderTask<DistanceType>::BuildPropagationPath( int leaf1, int 
 
 	IteratorType *directIterator;
 	IteratorType *reverseIterator;
+
+	auto *const graphInstance = this->graphInstance;
 
 	// Save a copy of edge weights on demand.
 	// Doing that is expensive.
@@ -1575,7 +1856,7 @@ bool PropagationBuilderTask<DistanceType>::BuildPropagationPath( int leaf1, int 
 	// and could hang up a client computer for a hour (!).
 	// Doing a single attempt also helps to avoid saving/restoring weights at all that is not cheap too.
 	static_assert( WeightedDirBuilder::MAX_DIRS > 1, "Assumptions that doing only 1 attempt is faster are broken" );
-	const int maxAttempts = fastAndCoarse ? 1 : WeightedDirBuilder::MAX_DIRS;
+	const int maxAttempts = WeightedDirBuilder::MAX_DIRS;
 	// Do at most maxAttempts to find an alternative path
 	for( ; numAttempts != maxAttempts; ++numAttempts ) {
 		DistanceType newPathDistance = pathFinderInstance->FindPath( leaf1, leaf2, &directIterator, &reverseIterator );
@@ -1616,19 +1897,19 @@ bool PropagationBuilderTask<DistanceType>::BuildPropagationPath( int leaf1, int 
 			reverseLeafNumsBegin = UnwindScalingWeights( reverseIterator, reverseLeafNumsEnd, 3.0f );
 			graphInstance->ScaleEdgeDistance( lastDirectLeaf, firstReverseLeaf, 3.0f );
 		} else {
-			directLeafNumsBegin = Unwind( directIterator, directLeafNumsEnd );
-			reverseLeafNumsBegin = Unwind( reverseIterator, reverseLeafNumsEnd );
+			directLeafNumsBegin = this->Unwind( directIterator, directLeafNumsEnd );
+			reverseLeafNumsBegin = this->Unwind( reverseIterator, reverseLeafNumsEnd );
 		}
 
 		const double attemptWeight = 1.0f / ( 1.0 + numAttempts );
 
 		assert( *directLeafNumsBegin == leaf1 );
 		// Direct leaf nums correspond to the head of the 1->2 path and yield 2->1 "propagation window"
-		BuildInfluxDirForLeaf( _2to1Builder.AllocDir( attemptWeight ), directLeafNumsBegin, directLeafNumsEnd );
+		this->BuildInfluxDirForLeaf( _2to1Builder.AllocDir( attemptWeight ), directLeafNumsBegin, directLeafNumsEnd );
 
 		assert( *reverseLeafNumsBegin == leaf2 );
 		// Reverse leaf nums correspond to the tail of the 1->2 path and yield 1->2 "propagation window"
-		BuildInfluxDirForLeaf( _1to2Builder.AllocDir( attemptWeight ), reverseLeafNumsBegin, reverseLeafNumsEnd );
+		this->BuildInfluxDirForLeaf( _1to2Builder.AllocDir( attemptWeight ), reverseLeafNumsBegin, reverseLeafNumsEnd );
 	}
 
 	if( hasModifiedDistanceTable ) {
@@ -1647,7 +1928,43 @@ bool PropagationBuilderTask<DistanceType>::BuildPropagationPath( int leaf1, int 
 }
 
 template <typename DistanceType>
-int *PropagationBuilderTask<DistanceType>::Unwind( IteratorType *iterator, int *arrayEnd ) {
+bool CoarsePropagationTask<DistanceType>::BuildPropagationPath( int leaf1, int leaf2,
+	                                                            vec3_t _1to2, vec3_t _2to1,
+	                                                            DistanceType *distance ) {
+	// There's surely a sufficient room for the unwind buffer
+	// tmpLeafNums are capacious enough to store slightly more than NumLeafs() * 2 elements
+	int *const directLeafNumsEnd = this->tmpLeafNums + this->graphInstance->NumLeafs() + 1;
+	int *const reverseLeafNumsBegin = directLeafNumsEnd + 1;
+
+	int numLeafsInChain = pathFinderInstance->UnwindPath( leaf1, leaf2, directLeafNumsEnd, reverseLeafNumsBegin );
+	// Looking forward to being able to use std::optional
+	if( numLeafsInChain <= 0 ) {
+		return false;
+	}
+
+	const int *directLeafNumsBegin = directLeafNumsEnd - numLeafsInChain;
+	const int *reverseLeafNumsEnd = reverseLeafNumsBegin + numLeafsInChain;
+
+	assert( directLeafNumsBegin[0] == reverseLeafNumsEnd[-1] );
+	assert( directLeafNumsEnd[-1] == reverseLeafNumsBegin[0] );
+
+	VectorClear( _1to2 );
+	VectorClear( _2to1 );
+
+	assert( *directLeafNumsBegin == leaf1 );
+	// Direct leaf nums correspond to the head of the 1->2 path and yield 2->1 "propagation window"
+	this->BuildInfluxDirForLeaf( _2to1, directLeafNumsBegin, directLeafNumsEnd );
+
+	assert( *reverseLeafNumsBegin == leaf2 );
+	// Reverse leaf nums correspond to the tail of the 1->2 path and yield 1->2 "propagation window"
+	this->BuildInfluxDirForLeaf( _1to2, reverseLeafNumsBegin, reverseLeafNumsEnd );
+
+	*distance = pathFinderInstance->GetCertainPathDistance( leaf1, leaf2 );
+	return true;
+}
+
+template <typename DistanceType>
+int *FinePropagationTask<DistanceType>::Unwind( IteratorType *iterator, int *arrayEnd ) {
 	int *arrayBegin = arrayEnd;
 	// Traverse the direct iterator backwards
 	int prevLeafNum = iterator->LeafNum();
@@ -1665,9 +1982,7 @@ int *PropagationBuilderTask<DistanceType>::Unwind( IteratorType *iterator, int *
 }
 
 template <typename DistanceType>
-int *PropagationBuilderTask<DistanceType>::UnwindScalingWeights( IteratorType *iterator,
-																 int *arrayEnd,
-																 DistanceType scale ) {
+int *FinePropagationTask<DistanceType>::UnwindScalingWeights( IteratorType *iterator, int *arrayEnd, DistanceType scale ) {
 	int *arrayBegin = arrayEnd;
 	// Traverse the direct iterator backwards
 	int prevLeafNum = iterator->LeafNum();
@@ -1676,7 +1991,7 @@ int *PropagationBuilderTask<DistanceType>::UnwindScalingWeights( IteratorType *i
 		iterator->Next();
 		int nextLeafNum = iterator->LeafNum();
 
-		graphInstance->ScaleEdgeDistance( prevLeafNum, nextLeafNum, scale );
+		this->graphInstance->ScaleEdgeDistance( prevLeafNum, nextLeafNum, scale );
 
 		prevLeafNum = nextLeafNum;
 		if( !iterator->HasNext() ) {
@@ -1689,8 +2004,8 @@ int *PropagationBuilderTask<DistanceType>::UnwindScalingWeights( IteratorType *i
 
 template <typename DistanceType>
 void PropagationBuilderTask<DistanceType>::BuildInfluxDirForLeaf( float *allocatedDir,
-																  const int *leafsChain,
-																  int numLeafsInChain ) {
+															   const int *leafsChain,
+															   int numLeafsInChain ) {
 	assert( numLeafsInChain > 1 );
 	const int maxTestedLeafs = std::min( numLeafsInChain, (int)WeightedDirBuilder::MAX_DIRS );
 
@@ -1805,16 +2120,16 @@ bool PropagationTable::TryReadFromFile( int fsFlags ) {
 
 bool PropagationTable::ComputeNewState( bool fastAndCoarse ) {
 	if( fastAndCoarse ) {
-		PropagationTableBuilder<float> builder( NumLeafs(), fastAndCoarse );
-		if( builder.Build()) {
+		CoarsePropagationBuilder<float> builder( NumLeafs() );
+		if( builder.Build() ) {
 			table = builder.ReleaseOwnership();
 			return true;
 		}
 		return false;
 	}
 
-	PropagationTableBuilder<double> builder( NumLeafs(), fastAndCoarse );
-	if( builder.Build()) {
+	FinePropagationBuilder<double> builder( NumLeafs() );
+	if( builder.Build() ) {
 		table = builder.ReleaseOwnership();
 		return true;
 	}
