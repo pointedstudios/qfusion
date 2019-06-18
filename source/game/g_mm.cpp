@@ -1549,14 +1549,66 @@ void RespectHandler::ClientEntry::ShowRespectMenuAtClient( unsigned timeout, int
 	trap_GameCmd( ent, va( "rns menu %d %d", timeout, tokenNum ) );
 }
 
+class RespectToken {
+	const char *name { nullptr };
+	wsw::string_view *aliases { nullptr };
+	int tokenNum { -1 };
+	int numAliases { -1 };
+
+	// TODO: Can all this stuff be implemented using variadic templates?
+	void InitFrom( const char *name_, int tokenNum_, int numAliases_, ... ) {
+		aliases = (wsw::string_view *)::malloc( numAliases_ * sizeof( wsw::string_view ) );
+		numAliases = numAliases_;
+		name = name_;
+		tokenNum = tokenNum_;
+
+		va_list va;
+		va_start( va, numAliases_ );
+		for( int i = 0; i < numAliases_; ++i ) {
+			const char *alias = va_arg( va, const char * );
+			new( aliases + i )wsw::string_view( alias );
+		}
+		va_end( va );
+	}
+public:
+	RespectToken( const char *name_, int tokenNum_, const char *alias1 ) {
+		InitFrom( name_, tokenNum_, 1, alias1 );
+	}
+
+	RespectToken( const char *name_, int tokenNum_, const char *a1, const char *a2, const char *a3 ) {
+		InitFrom( name_, tokenNum_, 3, a1, a2, a3 );
+	}
+
+	RespectToken( const char *name_, int tokenNum_, const char *a1, const char *a2, const char *a3, const char *a4 ) {
+		InitFrom( name_, tokenNum_, 4, a1, a2, a3, a4 );
+	}
+
+	~RespectToken() {
+		::free( aliases );
+	}
+
+	const char *Name() const { return name; }
+	int TokenNum() const { return tokenNum; }
+
+	int GetMatchedLength( const char *p ) const {
+		for( int i = 0; i < numAliases; ++i ) {
+			const wsw::string_view &alias = aliases[i];
+			if( !Q_strnicmp( alias.data(), p, alias.size() ) ) {
+				return alias.size();
+			}
+		}
+		return -1;
+	}
+};
+
 class RespectTokensRegistry {
-	static const std::array<const wsw::string_view *, 10> ALIASES;
+	static const std::array<RespectToken, 10> TOKENS;
 
 	static_assert( RespectHandler::NUM_TOKENS == 10, "" );
 public:
 	// For players staying in game during the match
-	static constexpr auto SAY_AT_START_TOKEN_NUM = 2;
-	static constexpr auto SAY_AT_END_TOKEN_NUM = 3;
+	static const int SAY_AT_START_TOKEN_NUM;
+	static const int SAY_AT_END_TOKEN_NUM;
 
 	/**
 	 * Finds a number of a token (a number of a token aliases group) the supplied string matches.
@@ -1565,44 +1617,45 @@ public:
 	 */
 	static int MatchByToken( const char **p );
 
-	static const char *TokenForNum( int num ) {
-		assert( (unsigned )num < ALIASES.size() );
-		return ALIASES[num][0].data();
+	static const RespectToken &TokenByName( const char *name ) {
+		for( const RespectToken &token: TOKENS ) {
+			if( !Q_stricmp( token.Name(), name ) ) {
+				return token;
+			}
+		}
+		abort();
+	}
+
+	static const RespectToken &TokenForNum( int num ) {
+		assert( (int)num < TOKENS.size() );
+		assert( TOKENS[num].TokenNum() == num );
+		return TOKENS[num];
 	}
 };
 
-// Hack: every chain must end with an empty string that acts as a terminator.
-// Otherwise a runtime crash due to wrong loop upper bounds is expected.
-// Hack: be aware of greedy matching behaviour.
-// Hack: make sure the first alias (that implicitly defines a token) is a valid identifier.
-// Otherwise Statsow rejects reported data as invalid for various reasons.
-
-static const wsw::string_view hiAliases[] = { "hi", "" };
-static const wsw::string_view byeAliases[] = { "bb", "" };
-static const wsw::string_view glhfAliases[] = { "glhf", "gl", "hf", "" };
-static const wsw::string_view ggAliases[] = { "ggs", "gg", "bgs", "bg", "" };
-static const wsw::string_view plzAliases[] = { "plz", "" };
-static const wsw::string_view tksAliases[] = { "tks", "" };
-static const wsw::string_view sozAliases[] = { "soz", "" };
-static const wsw::string_view n1Aliases[] = { "n1", "" };
-static const wsw::string_view ntAliases[] = { "nt", "" };
-static const wsw::string_view lolAliases[] = { "lol", "" };
-
-const std::array<const wsw::string_view *, 10> RespectTokensRegistry::ALIASES = {{
-	hiAliases, byeAliases, glhfAliases, ggAliases, plzAliases,
-	tksAliases, sozAliases, n1Aliases, ntAliases, lolAliases
+const std::array<RespectToken, 10> RespectTokensRegistry::TOKENS = {{
+	RespectToken( "hi", 0, "hi" ),
+	RespectToken( "bb", 1, "bb" ),
+	RespectToken( "glhf", 2, "glhf", "gl", "hf" ),
+	RespectToken( "gg", 3, "ggs", "gg", "bgs", "bg" ),
+	RespectToken( "plz", 4, "plz" ),
+	RespectToken( "tks", 5, "tks" ),
+	RespectToken( "soz", 6, "soz" ),
+	RespectToken( "n1", 7, "n1" ),
+	RespectToken( "nt", 8, "nt" ),
+	RespectToken( "lol", 9, "lol" ),
 }};
 
+const int RespectTokensRegistry::SAY_AT_START_TOKEN_NUM = RespectTokensRegistry::TokenByName( "glhf" ).TokenNum();
+const int RespectTokensRegistry::SAY_AT_END_TOKEN_NUM = RespectTokensRegistry::TokenByName( "gg" ).TokenNum();
+
 int RespectTokensRegistry::MatchByToken( const char **p ) {
-	int tokenNum = 0;
-	for( const wsw::string_view *tokenAliases: ALIASES ) {
-		for( const wsw::string_view *alias = tokenAliases; alias->size(); alias++ ) {
-			if( !Q_strnicmp( alias->data(), *p, alias->size() ) ) {
-				*p += alias->size();
-				return tokenNum;
-			}
+	for( const RespectToken &token: TOKENS ) {
+		int len = token.GetMatchedLength( *p );
+		if( len > 0 ) {
+			*p += len;
+			return token.TokenNum();
 		}
-		tokenNum++;
 	}
 	return -1;
 }
@@ -1610,8 +1663,8 @@ int RespectTokensRegistry::MatchByToken( const char **p ) {
 char RespectHandler::ClientEntry::hintBuffer[64];
 
 const char *RespectHandler::ClientEntry::MakeHintString( int tokenNum ) {
-	const char *token = RespectTokensRegistry::TokenForNum( tokenNum );
-	Q_snprintfz( hintBuffer, sizeof( hintBuffer ), S_COLOR_CYAN "Say `%s` please!", token );
+	const char *tokenName = RespectTokensRegistry::TokenForNum( tokenNum ).Name();
+	Q_snprintfz( hintBuffer, sizeof( hintBuffer ), S_COLOR_CYAN "Say `%s` please!", tokenName );
 	return hintBuffer;
 }
 
@@ -1665,7 +1718,7 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 
 	const auto levelTime = level.time;
 	const auto matchState = GS_MatchState();
-	constexpr int startTokenNum = RespectTokensRegistry::SAY_AT_START_TOKEN_NUM;
+	const int startTokenNum = RespectTokensRegistry::SAY_AT_START_TOKEN_NUM;
 
 	if( matchState == MATCH_STATE_COUNTDOWN ) {
 		// If has just said "glhf"
@@ -1761,7 +1814,7 @@ void RespectHandler::ClientEntry::CheckBehaviour( const int64_t matchStartTime )
 		return;
 	}
 
-	constexpr int endTokenNum = RespectTokensRegistry::SAY_AT_END_TOKEN_NUM;
+	const int endTokenNum = RespectTokensRegistry::SAY_AT_END_TOKEN_NUM;
 	if( levelTime - lastSaidAt[endTokenNum] < 64 ) {
 		if( !saidAfter ) {
 			AnnounceFairPlay();
@@ -1856,7 +1909,7 @@ void RespectHandler::ClientEntry::AddToReportStats( StatsowFacade::RespectStats 
 		if( !numSaidTokens[i] ) {
 			continue;
 		}
-		const char *token = RespectTokensRegistry::TokenForNum( i );
-		reportedStats->AddToEntry( token, numSaidTokens[i] );
+		const auto &token = RespectTokensRegistry::TokenForNum( i );
+		reportedStats->AddToEntry( token.Name(), numSaidTokens[i] );
 	}
 }
