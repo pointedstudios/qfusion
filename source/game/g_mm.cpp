@@ -1479,7 +1479,7 @@ bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
 
 	const int64_t millisSinceLastWarn = level.time - warnedAt;
 	// Don't warn again for occasional flood
-	if( millisSinceLastWarn < 1000 ) {
+	if( millisSinceLastWarn < 2000 ) {
 		// Swallow messages silently
 		return true;
 	}
@@ -1507,7 +1507,7 @@ void RespectHandler::ClientEntry::AnnounceMisconductBehaviour( const char *actio
 		return;
 	}
 
-	const char *subject = S_COLOR_WHITE "Respect and Sportsmanship Codex";
+	const char *subject = S_COLOR_WHITE "R&S Codex";
 
 	const char *outcome;
 	if( !StatsowFacade::Instance()->IsMatchReportDiscarded() ) {
@@ -1518,8 +1518,6 @@ void RespectHandler::ClientEntry::AnnounceMisconductBehaviour( const char *actio
 
 	constexpr const char *format = S_COLOR_WHITE "%s" S_COLOR_RED " has %s %s! %s!\n";
 	G_PrintMsg( nullptr, format, ent->r.client->netname, action, subject, outcome );
-
-	PrintToClientScreen( 3000, S_COLOR_RED "You have %s R&S Codex...", action );
 }
 
 void RespectHandler::ClientEntry::AnnounceFairPlay() {
