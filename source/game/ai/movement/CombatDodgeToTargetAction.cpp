@@ -161,13 +161,21 @@ void CombatDodgeSemiRandomlyToTargetAction::PlanPredictionStep( Context *context
 			}
 		}
 
-		const float skill = bot->Skill();
 		if( !botInput->IsSpecialButtonSet() && entityPhysicsState.Speed2D() < 650 ) {
 			const auto &oldPMove = context->oldPlayerState->pmove;
 			const auto &newPMove = context->currPlayerState->pmove;
 			// If not skimming
 			if( !( newPMove.skim_time && newPMove.skim_time != oldPMove.skim_time ) ) {
-				context->CheatingAccelerate( skill > 0.33f ? skill : 0.5f * skill );
+				const float skill = bot->Skill();
+				// Derive accelFrac from skill for medium bots
+				float accelFrac = skill;
+				// Use fixed accelFrac values for hard/easy bots
+				if( skill >= 0.66f ) {
+					accelFrac = 1.00f;
+				} else if( skill < 0.33f ) {
+					accelFrac = 0.15f;
+				}
+				context->CheatingAccelerate( accelFrac );
 			}
 		}
 	}
