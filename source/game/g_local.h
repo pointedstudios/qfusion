@@ -359,6 +359,7 @@ extern cvar_t *g_maxtimeouts;
 
 extern cvar_t *g_self_knockback;
 extern cvar_t *g_knockback_scale;
+extern cvar_t *g_volatile_explosives;
 extern cvar_t *g_allow_stun;
 extern cvar_t *g_armor_degradation;
 extern cvar_t *g_armor_protection;

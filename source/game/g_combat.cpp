@@ -798,7 +798,7 @@ void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, cplane_t *plane, edi
 	float maxstun = inflictor->projectileInfo.stun;
 	float minstun = std::min( 1.0f, maxstun );
 
-	const bool isRaceGametype = GS_RaceGametype();
+	const bool volatileExplosives = GS_RaceGametype() && g_volatile_explosives->integer;
 	const int attackerNum = attacker ? ENTNUM( attacker ) : -1;
 
 	int touch[MAX_EDICTS];
@@ -810,7 +810,7 @@ void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, cplane_t *plane, edi
 			continue;
 		}
 		if( !ent->takedamage ) {
-			if( !isRaceGametype ) {
+			if( !volatileExplosives ) {
 				continue;
 			}
 			if( ent->s.ownerNum != attackerNum ) {
@@ -838,7 +838,7 @@ void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, cplane_t *plane, edi
 		// Weapon jumps hack : when knockback on self, use strong weapon definition
 		const auto *weapondef = isSelfDamage ? WeaponDefForSelfDamage( inflictor ) : nullptr;
 		if( weapondef ) {
-			if( isRaceGametype ) {
+			if( volatileExplosives ) {
 				const float splashFrac = weapondef->firedef.splashfrac;
 				RS_SplashFrac4D( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, nullptr, 0, splashFrac );
 			} else {
@@ -870,7 +870,7 @@ void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, cplane_t *plane, edi
 		if( !ent->takedamage ) {
 			// Make sure it it going to be skipped during recursive calls
 			ent->floodnum = 1;
-			assert( isRaceGametype );
+			assert( volatileExplosives );
 			if( ent->s.type == ET_ROCKET ) {
 				W_Detonate_Rocket( ent, inflictor, nullptr, 0 );
 			} else if( ent->s.type == ET_GRENADE ) {
