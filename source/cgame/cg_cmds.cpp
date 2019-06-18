@@ -851,6 +851,10 @@ static void CG_SC_RespectEvent() {
 	}
 
 	if( !Q_stricmp( arg, "menu" ) ) {
+		// Don't show the respect menu during playtime unless it's explicitly enabled
+		if( !cg_autoRespectMenu->integer && GS_MatchState() == MATCH_STATE_PLAYTIME ) {
+			return;
+		}
 		int highlightEntryNum = -1;
 		if( numArgs > 3 ) {
 			highlightEntryNum = atoi( trap_Cmd_Argv( 3 ) );
@@ -858,6 +862,7 @@ static void CG_SC_RespectEvent() {
 		PutRespectMenuItems( highlightEntryNum );
 		CG_ShowQuickMenu( 1 );
 		cg.quickmenu_timeout_at = cg.time + timeout;
+		return;
 	}
 }
 
