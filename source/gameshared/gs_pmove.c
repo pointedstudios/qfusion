@@ -613,26 +613,56 @@ static void PM_Accelerate( vec3_t wishdir, float wishspeed, float accel ) {
 }
 
 static void PM_AirAccelerate( vec3_t wishdir, float wishspeed ) {
-	vec3_t heading = { pml.velocity[0], pml.velocity[1], 0 };
-	float speed = VectorNormalize( heading );
+	vec3_t curvel, wishvel, acceldir, curdir;
+	float addspeed, accelspeed, curspeed;
+	float dot;
+	// air movement parameters:
+	float airforwardaccel = 1.00001f; // Default: 1.0f : how fast you accelerate until you reach pm_maxspeed
+	float bunnyaccel = 0.1593f; // (0.42 0.1593f) Default: 0.1585f how fast you accelerate after reaching pm_maxspeed
+	// (it gets harder as you near bunnytopspeed)
+	float bunnytopspeed = 925; // (0.42: 925) soft speed limit (can get faster with rjs and on ramps)
+	float turnaccel = 4.0f;    // (0.42: 9.0) Default: 7 max sharpness of turns
+	float backtosideratio = 0.8f; // (0.42: 0.8) Default: 0.8f lower values make it easier to change direction without
+	// losing speed; the drawback is "understeering" in sharp turns
 
-	// Speed is below player walk speed
-	if( speed <= pml.maxPlayerSpeed ) {
-		// Apply acceleration
-		VectorMA( pml.velocity, pml.maxPlayerSpeed * pml.frametime, wishdir, pml.velocity );
+	if( !wishspeed ) {
 		return;
 	}
 
-	// Calculate a dot product between heading and wishdir
-	// Looking straight results in better acceleration
-	float dot = 50 * ( DotProduct( heading, wishdir ) - 0.98 );
-	clamp( dot, 0, 1 );
+	VectorCopy( pml.velocity, curvel );
+	curvel[2] = 0;
+	curspeed = VectorLength( curvel );
 
-	// Calculate resulting acceleration
-	float accel = dot * pml.maxPlayerSpeed * pml.maxPlayerSpeed * pml.maxPlayerSpeed / ( speed * speed );
+	if( wishspeed > curspeed * 1.01f ) { // moving below pm_maxspeed
+		accelspeed = curspeed + airforwardaccel * pml.maxPlayerSpeed * pml.frametime;
+		if( accelspeed < wishspeed ) {
+			wishspeed = accelspeed;
+		}
+	} else {
+		float f = ( bunnytopspeed - curspeed ) / ( bunnytopspeed - pml.maxPlayerSpeed );
+		if( f < 0 ) {
+			f = 0;
+		}
+		wishspeed = max( curspeed, pml.maxPlayerSpeed ) + bunnyaccel * f * pml.maxPlayerSpeed * pml.frametime;
+	}
+	VectorScale( wishdir, wishspeed, wishvel );
+	VectorSubtract( wishvel, curvel, acceldir );
+	addspeed = VectorNormalize( acceldir );
 
-	// Apply acceleration
-	VectorMA( pml.velocity, accel * pml.frametime, heading, pml.velocity );
+	accelspeed = turnaccel * pml.maxPlayerSpeed * pml.frametime;
+	if( accelspeed > addspeed ) {
+		accelspeed = addspeed;
+	}
+
+	if( backtosideratio < 1.0f ) {
+		VectorNormalize2( curvel, curdir );
+		dot = DotProduct( acceldir, curdir );
+		if( dot < 0 ) {
+			VectorMA( acceldir, -( 1.0f - backtosideratio ) * dot, curdir, acceldir );
+		}
+	}
+
+	VectorMA( pml.velocity, accelspeed, acceldir, pml.velocity );
 }
 
 // when using +strafe convert the inertia to forward speed.
@@ -908,7 +938,6 @@ static void PM_Move( void ) {
 		// (aka +fwdbunny) pressing forward or backward but not pressing strafe and not dashing
 		if( accelerating && !inhibit && !smove && fmove ) {
 			PM_AirAccelerate( wishdir, wishspeed );
-			PM_Aircontrol( wishdir, wishspeed );
 		} else {   // strafe running
 			bool aircontrol = true;
 
