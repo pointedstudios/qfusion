@@ -445,7 +445,12 @@ void IN_Init() {
 
 	in_grabinconsole = Cvar_Get( "in_grabinconsole", "0", CVAR_ARCHIVE );
 	in_disablemacosxmouseaccel = Cvar_Get( "in_disablemacosxmouseaccel", "1", CVAR_ARCHIVE );
+
+#ifdef __linux__
+	in_mousehack = Cvar_Get( "in_mousehack", "1", CVAR_ARCHIVE );
+#else
 	in_mousehack = Cvar_Get( "in_mousehack", "0", CVAR_ARCHIVE );
+#endif
 
 	SDL_GetVersion( &linked );
 
