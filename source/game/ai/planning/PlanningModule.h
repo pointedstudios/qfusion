@@ -133,6 +133,8 @@ public:
 	const ArrayRange<AiAction *> Actions() const {
 		return ArrayRange<AiAction *>( planner.actions.begin(), planner.actions.size() );
 	}
+
+	bool IsPerformingPursuit() const;
 };
 
 #endif

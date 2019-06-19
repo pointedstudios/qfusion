@@ -379,7 +379,17 @@ bool Bot::NavTargetWorthRushing() const {
 		return false;
 	}
 
-	return selectedEnemies.AreValid() && planningModule.IsTopTierItem( navTarget );
+	// Force jumps for pursuing enemies
+	if( planningModule.IsPerformingPursuit() ) {
+		return true;
+	}
+
+	// Don't jump if there's no pressure from enemies
+	if( !selectedEnemies.AreValid() ) {
+		return false;
+	}
+
+	return planningModule.IsTopTierItem( navTarget );
 }
 
 int Bot::GetWeaponsForWeaponJumping( int *weaponNumsBuffer ) {

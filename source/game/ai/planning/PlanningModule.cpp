@@ -102,3 +102,13 @@ BotScriptAction *BotPlanningModule::InstantiateScriptAction( void *scriptActionF
 	void *scriptObject = GENERIC_asInstantiateAction( scriptActionFactory, game.edicts + bot->EntNum(), nativeAddress );
 	return new( nativeAddress )BotScriptAction( this, name, scriptObject );
 }
+
+bool BotPlanningModule::IsPerformingPursuit() const {
+	// These dynamic casts are quite bad but this is not invoked on a hot code path
+	if( dynamic_cast<const ReactToEnemyLostGoal *>( planner.activeGoal ) ) {
+		if( !dynamic_cast<const TurnToLostEnemyActionRecord *>( planner.planHead ) ) {
+			return true;
+		}
+	}
+	return false;
+}

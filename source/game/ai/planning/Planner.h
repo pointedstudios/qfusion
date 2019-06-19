@@ -202,7 +202,7 @@ class AiPlanner : public AiFrameAwareComponent {
 	friend class AiGoal;
 	friend class AiAction;
 	friend class AiActionRecord;
-
+	friend class PlanningModule;
 public:
 	static constexpr unsigned MAX_GOALS = 12;
 	static constexpr unsigned MAX_ACTIONS = 36;
