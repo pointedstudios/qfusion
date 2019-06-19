@@ -364,6 +364,15 @@ bool Bot::NavTargetWorthRushing() const {
 		return true;
 	}
 
+	// Force insta-jumps regardless of GS_SelfDamage() value
+	if( GS_Instagib() && g_instajump->integer ) {
+		// Check whether the bot really has an IG.
+		const auto *inventory = self->r.client->ps.inventory;
+		if( inventory[WEAP_INSTAGUN] && inventory[AMMO_INSTAS] ) {
+			return true;
+		}
+	}
+
 	// If the bot cannot refill health
 	if( !( level.gametype.spawnableItemsMask & IT_HEALTH ) ) {
 		// TODO: Allow it at the end of round. How to detect a round state in the native code?
