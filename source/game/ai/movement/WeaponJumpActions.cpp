@@ -160,7 +160,6 @@ void ScheduleWeaponJumpAction::PlanPredictionStep( Context *context ) {
 	}
 
 	AasElementsMask::AreasMask()->Clear();
-	PrecacheBotLeafs( context );
 
 	if( worthWeaponJumping && TryJumpDirectlyToTarget( context, suitableWeapons, numSuitableWeapons ) ) {
 		context->isCompleted = true;
@@ -174,16 +173,6 @@ void ScheduleWeaponJumpAction::PlanPredictionStep( Context *context ) {
 
 	Debug( "No method/target was suitable for weapon-jumping, disabling the action for further planning\n" );
 	this->SwitchOrRollback( context, &DefaultWalkAction() );
-}
-
-inline void ScheduleWeaponJumpAction::PrecacheBotLeafs( Context *context ) {
-	const float *botOrigin = context->movementState->entityPhysicsState.Origin();
-	Vec3 mins( playerbox_stand_mins );
-	Vec3 maxs( playerbox_stand_maxs );
-	mins += botOrigin;
-	maxs += botOrigin;
-	int topNode;
-	numBotLeafs = trap_CM_BoxLeafnums( mins.Data(), maxs.Data(), botLeafNums, sizeof( botLeafNums ), &topNode );
 }
 
 inline const int *ScheduleWeaponJumpAction::GetTravelTimesForReachChainShortcut() {
@@ -374,17 +363,6 @@ int ScheduleWeaponJumpAction::GetCandidatesForJumpingToTarget( Context *context,
 	return aasWorld->BBoxAreas( mins, maxs, areaNums, 64 );
 }
 
-inline bool ScheduleWeaponJumpAction::IsAreaInPvs( const int *areaLeafsList ) const {
-	for( int i = 0; i < areaLeafsList[-1]; ++i ) {
-		for( int j = 0; j < numBotLeafs; ++j ) {
-			if( trap_CM_LeafsInPVS( areaLeafsList[i], botLeafNums[j] ) ) {
-				return true;
-			}
-		}
-	}
-	return false;
-}
-
 int ScheduleWeaponJumpAction::FilterRawCandidateAreas( Context *context, int *areaNums, int numRawAreas ) {
 	int *const filteredAreas = areaNums;
 	int numFilteredAreas = 0;
@@ -393,10 +371,28 @@ int ScheduleWeaponJumpAction::FilterRawCandidateAreas( Context *context, int *ar
 	const auto *aasAreas = aasWorld->Areas();
 	const auto *aasAreaSettings = aasWorld->AreaSettings();
 
-	const float *botOrigin = context->movementState->entityPhysicsState.Origin();
+	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
+	const float *botOrigin = entityPhysicsState.Origin();
+
+	// Prepare a mask of areas that are considered visible from bot areas
+
+	int botAreaNums[2] { 0, 0 };
+	bool *const botAreaVisRow = AasElementsMask::TmpAreasVisRow();
+	const int numBotAreas = entityPhysicsState.PrepareRoutingStartAreas( botAreaNums );
+	if( !numBotAreas ) {
+		return 0;
+	}
+	aasWorld->DecompressAreaVis( botAreaNums[0], botAreaVisRow );
+	if( numBotAreas == 2 ) {
+		aasWorld->AddToDecompressedAreaVis( botAreaNums[1], botAreaVisRow );
+	}
 
 	for( int i = 0; i < numRawAreas; ++i ) {
 		const int areaNum = areaNums[i];
+		if( !botAreaVisRow[areaNum] ) {
+			continue;
+		}
+
 		const auto &settings = aasAreaSettings[areaNum];
 		if( settings.contents & ( AREACONTENTS_LAVA | AREACONTENTS_SLIME | AREACONTENTS_WATER | AREACONTENTS_DONOTENTER ) ) {
 			continue;
@@ -411,10 +407,7 @@ int ScheduleWeaponJumpAction::FilterRawCandidateAreas( Context *context, int *ar
 		if( squareDistance < SQUARE( 40 ) || squareDistance > SQUARE( 1024 + 512 ) ) {
 			continue;
 		}
-		// Since we precompute leaf nums for every area, this PVS test is very cheap
-		if( !IsAreaInPvs( aasWorld->AreaMapLeafsList( areaNum ) ) ) {
-			continue;
-		}
+
 		if( int stairsClusterNum = aasWorld->StairsClusterNum( areaNum ) ) {
 			// The first element is a length of numbers list.
 			// Two cluster boundary areas come as next and last ones.

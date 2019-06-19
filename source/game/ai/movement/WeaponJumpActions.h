@@ -24,15 +24,6 @@ class ScheduleWeaponJumpAction: public BaseMovementAction {
 
 	void PrepareJumpTargets( MovementPredictionContext *context, const int *areaNums, vec3_t *targets, int numAreas );
 
-	// Allows precaching bot leaf nums between "direct" and "reach chain" calls without bloating their interface
-	// We should not reuse entity leaf nums as the context might have been rolled back
-	// and they do not correspond to actual start origin having been modified during planning steps.
-	int botLeafNums[16];
-	int numBotLeafs { 0 };
-
-	inline bool IsAreaInPvs( const int *areaLeafsList ) const;
-	inline void PrecacheBotLeafs( MovementPredictionContext *context );
-
 	// Monotonically increasing dummy travel times (1, 2, ...).
 	// Used for providing travel times for reach chain shortcut.
 	// Areas in a reach chain are already ordered.
@@ -61,7 +52,6 @@ public:
 
 	void BeforePlanning() override {
 		BaseMovementAction::BeforePlanning();
-		numBotLeafs = 0;
 		hasTestedComputationQuota = false;
 		hasAcquiredComputationQuota = false;
 	}
