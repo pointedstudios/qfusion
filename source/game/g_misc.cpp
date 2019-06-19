@@ -386,7 +386,7 @@ void SP_func_wall( edict_t *self ) {
 //QUAKED func_static (0 .5 .8) ?
 //Static non-solid bspmodel. Can be used for conditional walls and models.
 //-------- KEYS --------
-//model2 : path/name of model to include (eg: models/mapobjects/bitch/fembotbig.md3).
+//model2 : path/name of model to include
 //origin : alternate method of setting XYZ origin of .md3 model included with entity (See Notes).
 //light : constantLight radius of .md3 model included with entity. Has no effect on the entity's brushes (default 0).
 //color : constantLight color of .md3 model included with entity. Has no effect on the entity's brushes (default 1 1 1).
