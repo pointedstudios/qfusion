@@ -102,6 +102,10 @@ public:
 };
 
 class ReactToEnemyLostGoal : public BotGoal {
+	void ModifyWeightForTurningBack( const WorldState &currWorldState );
+	void ModifyWeightForPursuit( const WorldState &currWorldState );
+	bool HuntEnemiesLeftInMinority( const WorldState &currWorldState ) const;
+	int FindNumPlayersAlive( int team ) const;
 public:
 	explicit ReactToEnemyLostGoal( BotPlanningModule *module_ )
 		: BotGoal( module_, "ReactToEnemyLostGoal", COLOR_RGB( 0, 192, 192 ), 950 ) {}

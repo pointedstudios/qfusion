@@ -362,28 +362,110 @@ void ReactToEnemyLostGoal::UpdateWeight( const WorldState &currWorldState ) {
 	const float offensiveness = Self()->GetEffectiveOffensiveness();
 	this->weight = configGroup.baseWeight + configGroup.offCoeff * offensiveness;
 
-	// We know a certain distance threshold that losing enemy out of sight can be very dangerous. This is LG range.
+	if( currWorldState.MightSeeLostEnemyAfterTurnVar() ) {
+		ModifyWeightForTurningBack( currWorldState );
+	} else {
+		ModifyWeightForPursuit( currWorldState );
+	}
 
-	const float distanceToEnemy = currWorldState.LostEnemyLastSeenOriginVar().DistanceTo( currWorldState.BotOriginVar() );
-	// TODO: Check whether the lost enemy actually had LG and was actually going to attack the bot
-	if( distanceToEnemy > GS_GetWeaponDef( WEAP_LASERGUN )->firedef.timeout ) {
+
+}
+
+void ReactToEnemyLostGoal::ModifyWeightForTurningBack( const WorldState &currWorldState ) {
+	// There's really nothing more to do than shooting and avoiding to be shot in instagib
+	if( GS_Instagib() ) {
+		this->weight *= 3.0f;
 		return;
 	}
 
-	// If the bot might see enemy after turn, its likely the enemy sees the bot too and can attack
-	if( currWorldState.MightSeeLostEnemyAfterTurnVar() ) {
-		// Force turning back
+	const float offensiveness = Self()->GetEffectiveOffensiveness();
+	// We know a certain distance threshold that losing enemy out of sight can be very dangerous. This is LG range.
+	const float distanceToEnemy = currWorldState.LostEnemyLastSeenOriginVar().DistanceTo( currWorldState.BotOriginVar() );
+	if( distanceToEnemy < GS_GetWeaponDef( WEAP_LASERGUN )->firedef.timeout ) {
 		this->weight *= 1.75f + 3.0f * offensiveness;
 		return;
 	}
 
-	// Don't add weight for pursuing far enemies
-	if( distanceToEnemy > 192.0f ) {
+	bool hasSniperRangeWeapons = currWorldState.EnemyHasGoodSniperRangeWeaponsVar();
+	bool hasFarRangeWeapons = currWorldState.EnemyHasGoodFarRangeWeaponsVar();
+	if( !hasSniperRangeWeapons && !hasFarRangeWeapons ) {
 		return;
 	}
 
+	this->weight *= 1.0f + 1.0f * ( (int)hasSniperRangeWeapons + (int)hasFarRangeWeapons ) * offensiveness;
+}
+
+void ReactToEnemyLostGoal::ModifyWeightForPursuit( const WorldState &currWorldState ) {
+	const float offensiveness = Self()->GetEffectiveOffensiveness();
+	if( HuntEnemiesLeftInMinority( currWorldState ) ) {
+		weight = 1.0f + weight + 2.0f * ( weight + offensiveness );
+		return;
+	}
+
+	// Don't add weight for pursuing far enemies
+	float distanceThreshold = 192.0f;
+	const auto *inventory = Self()->Inventory();
+	const bool hasOffensivePowerups = inventory[POWERUP_QUAD] || inventory[POWERUP_SHELL];
+	// Increase the threshold wearing powerups or in duel-like gametypes
+	if( hasOffensivePowerups ) {
+		distanceThreshold = 1024.0f + 256.0f;
+	} else if( GS_InvidualGameType() ) {
+		distanceThreshold = 768.0f;
+	}
+
+	const float distanceToEnemy = currWorldState.LostEnemyLastSeenOriginVar().DistanceTo( currWorldState.BotOriginVar() );
+	if( distanceToEnemy > distanceThreshold ) {
+		return;
+	}
+
+	// Add an additive part in this case
+	if( hasOffensivePowerups ) {
+		this->weight += 1.0f;
+	}
+
 	// Force pursuit if the enemy is very close
-	this->weight *= 1.25f + 3.0f * ( 1.0f - std::sqrt( distanceToEnemy / 192.0f ) ) * offensiveness;
+	float distanceFactor = 1.0f - Q_Sqrt( distanceToEnemy * Q_Rcp( distanceThreshold ) );
+	this->weight *= 1.25f + 3.0f * distanceFactor * offensiveness;
+}
+
+bool ReactToEnemyLostGoal::HuntEnemiesLeftInMinority( const WorldState &currWorldState ) const {
+	// Don't chase if there's a valid (non-negative) assigned defence spot id
+	if( Self()->DefenceSpotId() >= 0 ) {
+		return false;
+	}
+
+	const edict_t *const gameEdicts = game.edicts;
+	const edict_t *const self = gameEdicts + Self()->EntNum();
+	int enemyTeam = TEAM_PLAYERS;
+	if( self->s.team > TEAM_PLAYERS ) {
+		enemyTeam = self->s.team == TEAM_ALPHA ? TEAM_BETA : TEAM_ALPHA;
+	}
+
+	// Check whether dead enemies have to wait for a round end
+	if( G_SpawnQueue_GetSystem( enemyTeam ) != SPAWNSYSTEM_HOLD ) {
+		return false;
+	}
+
+	// If there's no teammates in this gametype check if the bot is left 1v1
+	if( enemyTeam == TEAM_PLAYERS ) {
+		return FindNumPlayersAlive( TEAM_PLAYERS ) == 2;
+	}
+
+	const int ourTeam = enemyTeam == TEAM_ALPHA ? TEAM_BETA: TEAM_ALPHA;
+	return FindNumPlayersAlive( ourTeam ) >= 2 * FindNumPlayersAlive( enemyTeam );
+}
+
+int ReactToEnemyLostGoal::FindNumPlayersAlive( int team ) const {
+	int result = 0;
+	const edict_t *gameEdicts = game.edicts;
+	const auto &__restrict list = ::teamlist[team];
+	for( int i = 0; i < list.numplayers; ++i ) {
+		const edict_t *ent = gameEdicts + list.playerIndices[i];
+		if( !G_ISGHOSTING( ent ) ) {
+			result++;
+		}
+	}
+	return result;
 }
 
 void ReactToEnemyLostGoal::GetDesiredWorldState( WorldState *worldState ) {
