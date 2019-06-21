@@ -19,7 +19,11 @@ public:
 private:
 	const ProblemParams &problemParams;
 
-	Vec3 MakeDodgeHazardDir( bool *mightNegateDodgeDir ) const;
+	/**
+	 * Makes a dodge hazard direction for given {@code ProblemParams}
+	 * @return a pair of a direction and a flag indicating whether the direction is allowed to be negated.
+	 */
+	std::pair<Vec3, bool> MakeDodgeHazardDir() const;
 
 	SpotsAndScoreVector &SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) override;
 	void TryModifyingScoreByVelocityConformance( SpotsAndScoreVector &reachCheckedSpots );

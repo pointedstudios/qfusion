@@ -52,8 +52,10 @@ void DodgeHazardProblemSolver::TryModifyingScoreByVelocityConformance( SpotsAndS
 }
 
 SpotsAndScoreVector &DodgeHazardProblemSolver::SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) {
-	bool mightNegateDodgeDir = false;
-	Vec3 dodgeDir = MakeDodgeHazardDir( &mightNegateDodgeDir );
+	Vec3 dodgeDir( 0, 0, 0 );
+	bool mayNegateDodgeDir = false;
+	// TODO: Looking forward to use C++17 destructuring
+	std::tie( dodgeDir, mayNegateDodgeDir ) = MakeDodgeHazardDir();
 
 	const float searchRadius = originParams.searchRadius;
 	const float minHeightAdvantageOverOrigin = problemParams.minHeightAdvantageOverOrigin;
@@ -66,7 +68,7 @@ SpotsAndScoreVector &DodgeHazardProblemSolver::SelectCandidateSpots( const Spots
 
 	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
 
-	if( mightNegateDodgeDir ) {
+	if( mayNegateDodgeDir ) {
 		for( auto spotNum: spotsFromQuery ) {
 			const TacticalSpot &spot = spots[spotNum];
 
@@ -127,25 +129,23 @@ SpotsAndScoreVector &DodgeHazardProblemSolver::SelectCandidateSpots( const Spots
 	return result;
 }
 
-Vec3 DodgeHazardProblemSolver::MakeDodgeHazardDir( bool *mightNegateDodgeDir ) const {
-	*mightNegateDodgeDir = false;
+std::pair<Vec3, bool> DodgeHazardProblemSolver::MakeDodgeHazardDir() const {
 	if( problemParams.avoidSplashDamage ) {
 		Vec3 result( 0, 0, 0 );
 		Vec3 originToHitDir = problemParams.hazardHitPoint - originParams.origin;
 		float degrees = originParams.originEntity ? -originParams.originEntity->s.angles[YAW] : -90;
 		RotatePointAroundVector( result.Data(), &axis_identity[AXIS_UP], originToHitDir.Data(), degrees );
 		result.NormalizeFast();
-
-		if( fabs( result.X() ) < 0.3 ) {
+		if( std::fabs( result.X() ) < 0.3 ) {
 			result.X() = 0;
 		}
-		if( fabs( result.Y() ) < 0.3 ) {
+		if( std::fabs( result.Y() ) < 0.3 ) {
 			result.Y() = 0;
 		}
 		result.Z() = 0;
 		result.X() *= -1.0f;
 		result.Y() *= -1.0f;
-		return result;
+		return std::make_pair( result, false );
 	}
 
 	Vec3 selfToHitPoint = problemParams.hazardHitPoint - originParams.origin;
@@ -155,31 +155,31 @@ Vec3 DodgeHazardProblemSolver::MakeDodgeHazardDir( bool *mightNegateDodgeDir ) c
 		selfToHitPoint.NormalizeFast();
 		// Check whether this direction really helps to dodge the hazard
 		// (the less is the abs. value of the dot product, the closer is the chosen direction to a perpendicular one)
-		if( fabsf( selfToHitPoint.Dot( originParams.origin ) ) < 0.5f ) {
-			if( fabsf( selfToHitPoint.X() ) < 0.3f ) {
+		if( std::fabs( selfToHitPoint.Dot( originParams.origin ) ) < 0.5f ) {
+			if( std::fabs( selfToHitPoint.X() ) < 0.3f ) {
 				selfToHitPoint.X() = 0;
 			}
-			if( fabsf( selfToHitPoint.Y() ) < 0.3f ) {
+			if( std::fabs( selfToHitPoint.Y() ) < 0.3f ) {
 				selfToHitPoint.Y() = 0;
 			}
-			return -selfToHitPoint;
+			return std::make_pair( -selfToHitPoint, false );
 		}
 	}
 
-	*mightNegateDodgeDir = true;
 	// Otherwise just pick a direction that is perpendicular to the hazard direction
 	float maxCrossSqLen = 0.0f;
-	Vec3 result( 0, 1, 0 );
+	Vec3 result( 0, 0, 0 );
 	for( int i = 0; i < 3; ++i ) {
 		Vec3 cross = problemParams.hazardDirection.Cross( &axis_identity[i * 3] );
 		cross.Z() = 0;
 		float crossSqLen = cross.SquaredLength();
-		if( crossSqLen > maxCrossSqLen ) {
-			maxCrossSqLen = crossSqLen;
-			float invLen = Q_RSqrt( crossSqLen );
-			result.X() = cross.X() * invLen;
-			result.Y() = cross.Y() * invLen;
+		if( crossSqLen <= maxCrossSqLen ) {
+			continue;
 		}
+		maxCrossSqLen = crossSqLen;
+		float invLen = Q_RSqrt( crossSqLen );
+		result.X() = cross.X() * invLen;
+		result.Y() = cross.Y() * invLen;
 	}
-	return result;
+	return std::make_pair( result, true );
 }
