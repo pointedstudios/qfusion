@@ -26,7 +26,7 @@ private:
 	std::pair<Vec3, bool> MakeDodgeHazardDir() const;
 
 	SpotsAndScoreVector &SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) override;
-	void TryModifyingScoreByVelocityConformance( SpotsAndScoreVector &reachCheckedSpots );
+	void ModifyScoreByVelocityConformance( SpotsAndScoreVector &reachCheckedSpots );
 public:
 	DodgeHazardProblemSolver( const OriginParams &originParams_, const ProblemParams &problemParams_ )
 		: TacticalSpotsProblemSolver( originParams_, problemParams_ ), problemParams( problemParams_ ) {}

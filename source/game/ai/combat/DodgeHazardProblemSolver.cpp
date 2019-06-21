@@ -7,47 +7,48 @@ int DodgeHazardProblemSolver::FindMany( vec3_t *spotOrigins, int maxSpots ) {
 	uint16_t insideSpotNum;
 	const SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
 	SpotsAndScoreVector &candidateSpots =  SelectCandidateSpots( spotsFromQuery );
-	TryModifyingScoreByVelocityConformance( candidateSpots );
+	ModifyScoreByVelocityConformance( candidateSpots );
 	// Sort spots before a final selection so best spots are first
 	std::sort( candidateSpots.begin(), candidateSpots.end() );
 	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( candidateSpots, maxSpots );
 	return MakeResultsFilteringByProximity( reachCheckedSpots, spotOrigins, maxSpots );
 }
 
-void DodgeHazardProblemSolver::TryModifyingScoreByVelocityConformance( SpotsAndScoreVector &reachCheckedSpots ) {
+void DodgeHazardProblemSolver::ModifyScoreByVelocityConformance( SpotsAndScoreVector &reachCheckedSpots ) {
 	const edict_t *ent = originParams.originEntity;
 	if( !ent ) {
 		return;
 	}
 
+	const float *__restrict origin = ent->s.origin;
 	// Make sure that the current entity params match problem params
-	if( !VectorCompare( ent->s.origin, originParams.origin ) ) {
+	if( !VectorCompare( origin, originParams.origin ) ) {
 		return;
 	}
 
-	const float squareSpeed = VectorLengthSquared( ent->velocity );
+	Vec3 velocityDir( ent->velocity );
+	const float squareSpeed = velocityDir.SquaredLength();
 	const float runSpeed = DEFAULT_PLAYERSPEED;
 	if( squareSpeed <= runSpeed * runSpeed ) {
 		return;
 	}
 
-	const float speed = sqrtf( squareSpeed );
-	Vec3 velocityDir( ent->velocity );
-	velocityDir *= 1.0f / speed;
+	const float invSpeed = Q_RSqrt( squareSpeed );
+	velocityDir *= invSpeed;
+	const float speed = Q_Rcp( invSpeed );
 	const float dashSpeed = DEFAULT_DASHSPEED;
 	assert( dashSpeed > runSpeed );
-
 	// Grow influence up to dash speed so the score is purely based
 	// on the "velocity dot factor" on speed equal or greater the dash speed.
+	const float influence = Q_Sqrt( BoundedFraction( speed - runSpeed, dashSpeed - runSpeed ) );
+
 	const auto *const spots = tacticalSpotsRegistry->spots;
-	const float influence = sqrtf( BoundedFraction( speed - runSpeed, dashSpeed - runSpeed ) );
-	for( SpotAndScore &spotAndScore: reachCheckedSpots ) {
-		Vec3 toSpotDir( spots[spotAndScore.spotNum].origin );
-		toSpotDir -= ent->s.origin;
+	for( auto &spotAndScore: reachCheckedSpots ) {
+		Vec3 toSpotDir = Vec3( spots[spotAndScore.spotNum].origin ) - origin;
 		toSpotDir.NormalizeFast();
-		// [0..1]
 		float velocityDotFactor = 0.5f * ( 1.0f + velocityDir.Dot( toSpotDir ) );
-		spotAndScore.score = spotAndScore.score * ( 1.0f - influence ) + influence * velocityDotFactor;
+		assert( velocityDotFactor >= 0.0f && velocityDotFactor <= 1.0f );
+		spotAndScore.score = ApplyFactor( spotAndScore.score, velocityDotFactor, influence );
 	}
 }
 
@@ -58,11 +59,10 @@ SpotsAndScoreVector &DodgeHazardProblemSolver::SelectCandidateSpots( const Spots
 	std::tie( dodgeDir, mayNegateDodgeDir ) = MakeDodgeHazardDir();
 
 	const float searchRadius = originParams.searchRadius;
-	const float minHeightAdvantageOverOrigin = problemParams.minHeightAdvantageOverOrigin;
-	const float heightOverOriginInfluence = problemParams.heightOverOriginInfluence;
+	const float minHeightAdvantage = problemParams.minHeightAdvantageOverOrigin;
+	const float heightInfluence = problemParams.heightOverOriginInfluence;
 	const float originZ = originParams.origin[2];
-	// Copy to stack for faster access
-	Vec3 origin( originParams.origin );
+	const float *__restrict origin = originParams.origin;
 
 	const auto *const spots = tacticalSpotsRegistry->spots;
 
@@ -71,28 +71,27 @@ SpotsAndScoreVector &DodgeHazardProblemSolver::SelectCandidateSpots( const Spots
 		const TacticalSpot &spot = spots[spotNum];
 
 		float heightOverOrigin = spot.absMins[2] - originZ;
-		if( heightOverOrigin < minHeightAdvantageOverOrigin ) {
+		if( heightOverOrigin < minHeightAdvantage ) {
 			continue;
 		}
 
-		Vec3 toSpotDir( spot.origin );
-		toSpotDir -= origin;
-		float squaredDistanceToSpot = toSpotDir.SquaredLength();
-		if( squaredDistanceToSpot < 1 ) {
+		Vec3 toSpotDir = Vec3( spot.origin ) - origin;
+		const float squareDistance = toSpotDir.SquaredLength();
+		if( squareDistance < 1 ) {
 			continue;
 		}
 
-		toSpotDir *= Q_RSqrt( squaredDistanceToSpot );
-		float dot = toSpotDir.Dot( dodgeDir );
-		float absDot = std::fabs( dot );
+		toSpotDir *= Q_RSqrt( squareDistance );
+		const float dot = toSpotDir.Dot( dodgeDir );
+		const float absDot = std::fabs( dot );
 		// We can do smarter tricks using std::signbit() & !mightNegateDodgeDir but this is not really a hot code path
 		if( ( mayNegateDodgeDir ? absDot : dot ) < 0.2f ) {
 			continue;
 		}
 
-		heightOverOrigin -= minHeightAdvantageOverOrigin;
-		float heightOverOriginFactor = BoundedFraction( heightOverOrigin, searchRadius - minHeightAdvantageOverOrigin );
-		float score = ApplyFactor( absDot, heightOverOriginFactor, heightOverOriginInfluence );
+		heightOverOrigin -= minHeightAdvantage;
+		const float heightOverOriginFactor = BoundedFraction( heightOverOrigin, searchRadius - minHeightAdvantage );
+		const float score = ApplyFactor( absDot, heightOverOriginFactor, heightInfluence );
 
 		result.push_back( SpotAndScore( spotNum, score ) );
 	}
