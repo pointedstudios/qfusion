@@ -8,6 +8,7 @@
 #include <cstdlib>
 
 typedef TacticalSpotsProblemSolver::SpotsAndScoreVector SpotsAndScoreVector;
+typedef TacticalSpotsProblemSolver::OriginAndScoreVector OriginAndScoreVector;
 
 inline float ComputeDistanceFactor( float distance, float weightFalloffDistanceRatio, float searchRadius ) {
 	float weightFalloffRadius = weightFalloffDistanceRatio * searchRadius;

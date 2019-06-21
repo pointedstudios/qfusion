@@ -1,5 +1,6 @@
 #include "DodgeHazardProblemSolver.h"
 #include "SpotsProblemSolversLocal.h"
+#include "../navigation/AasElementsMask.h"
 
 int DodgeHazardProblemSolver::FindMany( vec3_t *spotOrigins, int maxSpots ) {
 	volatile TemporariesCleanupGuard cleanupGuard( this );
@@ -11,10 +12,21 @@ int DodgeHazardProblemSolver::FindMany( vec3_t *spotOrigins, int maxSpots ) {
 	// Sort spots before a final selection so best spots are first
 	std::sort( candidateSpots.begin(), candidateSpots.end() );
 	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( candidateSpots, maxSpots );
-	return MakeResultsFilteringByProximity( reachCheckedSpots, spotOrigins, maxSpots );
+	// TODO: Continue retrieval if numSpots < maxSpots and merge results
+	if( int numSpots = MakeResultsFilteringByProximity( reachCheckedSpots, spotOrigins, maxSpots ) ) {
+		return numSpots;
+	}
+
+	OriginAndScoreVector &fallbackCandidates = SelectFallbackSpotLikeOrigins( spotsFromQuery );
+	ModifyScoreByVelocityConformance( fallbackCandidates );
+	// We consider fallback candidates a-priori reachable so no reach test is performed.
+	// Actually this is due to way too many changes required to spots solver architecture.
+	std::sort( fallbackCandidates.begin(), fallbackCandidates.end() );
+	return MakeResultsFilteringByProximity( fallbackCandidates, spotOrigins, maxSpots );
 }
 
-void DodgeHazardProblemSolver::ModifyScoreByVelocityConformance( SpotsAndScoreVector &reachCheckedSpots ) {
+template <typename VectorWithScores>
+void DodgeHazardProblemSolver::ModifyScoreByVelocityConformance( VectorWithScores &input ) {
 	const edict_t *ent = originParams.originEntity;
 	if( !ent ) {
 		return;
@@ -43,12 +55,12 @@ void DodgeHazardProblemSolver::ModifyScoreByVelocityConformance( SpotsAndScoreVe
 	const float influence = Q_Sqrt( BoundedFraction( speed - runSpeed, dashSpeed - runSpeed ) );
 
 	const auto *const spots = tacticalSpotsRegistry->spots;
-	for( auto &spotAndScore: reachCheckedSpots ) {
-		Vec3 toSpotDir = Vec3( spots[spotAndScore.spotNum].origin ) - origin;
+	for( auto &spotAndScoreLike: input ) {
+		Vec3 toSpotDir = Vec3( spots[spotAndScoreLike.spotNum].origin ) - origin;
 		toSpotDir.NormalizeFast();
 		float velocityDotFactor = 0.5f * ( 1.0f + velocityDir.Dot( toSpotDir ) );
 		assert( velocityDotFactor >= 0.0f && velocityDotFactor <= 1.0f );
-		spotAndScore.score = ApplyFactor( spotAndScore.score, velocityDotFactor, influence );
+		spotAndScoreLike.score = ApplyFactor( spotAndScoreLike.score, velocityDotFactor, influence );
 	}
 }
 
@@ -63,9 +75,13 @@ SpotsAndScoreVector &DodgeHazardProblemSolver::SelectCandidateSpots( const Spots
 	const float heightInfluence = problemParams.heightOverOriginInfluence;
 	const float originZ = originParams.origin[2];
 	const float *__restrict origin = originParams.origin;
+	const auto *aasWorld = AiAasWorld::Instance();
+	const int originAreaNum = originParams.originAreaNum;
+	const int originFloorClusterNum = aasWorld->FloorClusterNum( originAreaNum );
+	const int topNodeHint = trap_CM_FindTopNodeForSphere( originParams.origin, originParams.searchRadius );
+	trace_t trace;
 
 	const auto *const spots = tacticalSpotsRegistry->spots;
-
 	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
 	for( auto spotNum: spotsFromQuery ) {
 		const TacticalSpot &spot = spots[spotNum];
@@ -86,6 +102,18 @@ SpotsAndScoreVector &DodgeHazardProblemSolver::SelectCandidateSpots( const Spots
 		const float absDot = std::fabs( dot );
 		// We can do smarter tricks using std::signbit() & !mightNegateDodgeDir but this is not really a hot code path
 		if( ( mayNegateDodgeDir ? absDot : dot ) < 0.2f ) {
+			continue;
+		}
+
+		// Try rejecting candidates early if the spot is in the same floor cluster and does not seem to be walkable
+		if( originFloorClusterNum && aasWorld->FloorClusterNum( spot.aasAreaNum ) == originFloorClusterNum ) {
+			if( !aasWorld->IsAreaWalkableInFloorCluster( originAreaNum, spot.aasAreaNum )) {
+				continue;
+			}
+		}
+
+		StaticWorldTrace( &trace, origin, spot.origin, CONTENTS_SOLID, vec3_origin, vec3_origin, topNodeHint );
+		if( trace.fraction != 1.0f ) {
 			continue;
 		}
 
@@ -152,4 +180,112 @@ std::pair<Vec3, bool> DodgeHazardProblemSolver::MakeDodgeHazardDir() const {
 		result.Y() = cross.Y() * invLen;
 	}
 	return std::make_pair( result, true );
+}
+
+OriginAndScoreVector &DodgeHazardProblemSolver::SelectFallbackSpotLikeOrigins( const SpotsQueryVector &spotsFromQuery ) {
+	const auto &aasWorld = AiAasWorld::Instance();
+	const auto *aasAreas = aasWorld->Areas();
+	auto &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanOriginAndScoreVector();
+
+	bool *const failedAtArea = AasElementsMask::TmpAreasVisRow();
+	::memset( failedAtArea, 0, sizeof( bool ) * aasWorld->NumAreas() );
+	const auto &spots = tacticalSpotsRegistry->spots;
+	for( const auto &spotAndScore: spotsFromQuery ) {
+		failedAtArea[spots[spotAndScore].aasAreaNum] = true;
+	}
+
+	const int originAreaNum = originParams.originAreaNum;
+	const int stairsClusterNum = aasWorld->StairsClusterNum( originAreaNum );
+	if( stairsClusterNum ) {
+		const auto *stairsClusterData = aasWorld->StairsClusterData( stairsClusterNum ) + 1;
+		for( int areaNum : { stairsClusterData[0], stairsClusterData[stairsClusterData[-1]] } ) {
+			if( !failedAtArea[areaNum] ) {
+				result.emplace_back( OriginAndScore::ForArea( aasAreas, areaNum ) );
+			}
+		}
+		return result;
+	}
+
+	const auto *aasAreaSettings = aasWorld->AreaSettings();
+	const auto &originAreaSettings = aasAreaSettings[originAreaNum];
+	if( originAreaSettings.areaflags & AREA_INCLINED_FLOOR ) {
+		// TODO: Cache this at loading
+		float minAreaHeight = +99999;
+		float maxAreaHeight = -99999;
+		int rampStartArea = 0, rampEndArea = 0;
+		const auto &aasReach = aasWorld->Reachabilities();
+		const int maxReachNum = originAreaSettings.firstreachablearea + originAreaSettings.numreachableareas;
+		for( int reachNum = originAreaSettings.firstreachablearea; reachNum < maxReachNum; ++reachNum ) {
+			const auto &reach = aasReach[reachNum];
+			if( ( reach.traveltype & TRAVELTYPE_MASK ) != TRAVEL_WALK ) {
+				continue;
+			}
+			const int reachAreaNum = aasReach[reachNum].areanum;
+			const auto &reachArea = aasWorld->Areas()[reachNum];
+			if( reachArea.mins[2] < minAreaHeight ) {
+				rampStartArea = reachAreaNum;
+				minAreaHeight = reachArea.mins[2];
+			}
+			if( reachArea.maxs[2] > maxAreaHeight ) {
+				rampEndArea = reachAreaNum;
+				maxAreaHeight = reachArea.mins[2];
+			}
+			// We've found two areas
+			if( rampStartArea * rampEndArea ) {
+				break;
+			}
+		}
+		if( rampStartArea && !failedAtArea[rampStartArea] ) {
+			result.emplace_back( OriginAndScore::ForArea( aasAreas, rampStartArea ) );
+		}
+		if( rampEndArea && !failedAtArea[rampEndArea] ) {
+			result.emplace_back( OriginAndScore::ForArea( aasAreas, rampEndArea ) );
+		}
+		return result;
+	}
+
+	const int floorClusterNum = aasWorld->AreaFloorClusterNums()[originAreaNum];
+	if( !floorClusterNum ) {
+		return result;
+	}
+
+	int skipAreaNum = originAreaNum;
+	// We perform 2D distance comparisons in a floor cluster
+	const float originX = originParams.origin[0];
+	const float originY = originParams.origin[1];
+	const float squareProximityThreshold = problemParams.spotProximityThreshold * problemParams.spotProximityThreshold;
+	if( const float *center = aasAreas[skipAreaNum].center ) {
+		const float dx = center[0] - originX;
+		const float dy = center[1] - originY;
+		if( dx * dx + dy * dy > squareProximityThreshold ) {
+			skipAreaNum = 0;
+		}
+	}
+
+	const float squareSearchRadius = originParams.searchRadius * originParams.searchRadius;
+	const auto *__restrict floorClusterData = aasWorld->FloorClusterData( floorClusterNum ) + 1;
+	for( int i = 0; i < floorClusterData[-1]; ++i ) {
+		const int areaNum = floorClusterData[i];
+		if( areaNum == skipAreaNum ) {
+			continue;
+		}
+		const auto &area = aasAreas[areaNum];
+		const float dx = area.center[0] - originX;
+		const float dy = area.center[1] - originY;
+		const float squareDistance = dx * dx + dy * dy;
+		if( squareDistance > squareSearchRadius ) {
+			continue;
+		}
+		if( squareDistance < squareProximityThreshold ) {
+			continue;
+		}
+		if( failedAtArea[areaNum] ) {
+			continue;
+		}
+		if( !aasWorld->IsAreaWalkableInFloorCluster( originAreaNum, areaNum ) ) {
+			continue;
+		}
+		result.emplace_back( OriginAndScore::ForArea( aasAreas, areaNum ) );
+	}
+	return result;
 }

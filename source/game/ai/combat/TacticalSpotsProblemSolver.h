@@ -9,8 +9,10 @@ public:
 	typedef TacticalSpotsRegistry::TacticalSpot TacticalSpot;
 	typedef TacticalSpotsRegistry::OriginParams OriginParams;
 	typedef TacticalSpotsRegistry::SpotAndScore SpotAndScore;
+	typedef TacticalSpotsRegistry::OriginAndScore OriginAndScore;
 	typedef TacticalSpotsRegistry::SpotsQueryVector SpotsQueryVector;
 	typedef TacticalSpotsRegistry::SpotsAndScoreVector SpotsAndScoreVector;
+	typedef TacticalSpotsRegistry::OriginAndScoreVector OriginAndScoreVector;
 
 	static constexpr auto MAX_SPOTS = TacticalSpotsRegistry::MAX_SPOTS;
 
@@ -123,7 +125,62 @@ protected:
 
 	virtual SpotsAndScoreVector &ApplyEnemiesInfluence( SpotsAndScoreVector &candidateSpots );
 
-	virtual int MakeResultsFilteringByProximity( SpotsAndScoreVector &spotsAndScores, vec3_t *spotOrigins, int maxSpots );
+	template <typename V>
+	int MakeResultsFilteringByProximity( V &spotsAndScores, vec3_t *spotOrigins, int maxSpots ) {
+		const auto resultsSize = spotsAndScores.size();
+		if( maxSpots == 0 || resultsSize == 0 ) {
+			return 0;
+		}
+
+		const auto *const spots = tacticalSpotsRegistry->spots;
+
+		// Its a common case so give it an optimized branch
+		if( maxSpots == 1 ) {
+			VectorCopy( spots[spotsAndScores[0].spotNum].origin, spotOrigins[0] );
+			return 1;
+		}
+
+		const float squareProximityThreshold = problemParams.spotProximityThreshold * problemParams.spotProximityThreshold;
+		bool *const isSpotExcluded = tacticalSpotsRegistry->temporariesAllocator.GetCleanExcludedSpotsMask();
+
+		int numSpots_ = 0;
+		unsigned keptSpotIndex = 0;
+		for(;; ) {
+			if( keptSpotIndex >= resultsSize ) {
+				return numSpots_;
+			}
+			if( numSpots_ >= maxSpots ) {
+				return numSpots_;
+			}
+
+			// Spots are sorted by score.
+			// So first spot not marked as excluded yet has higher priority and should be kept.
+			// The condition that terminates the outer loop ensures we have a valid kept spot.
+			const TacticalSpot &keptSpot = spots[spotsAndScores[keptSpotIndex].spotNum];
+			VectorCopy( keptSpot.origin, spotOrigins[numSpots_] );
+			++numSpots_;
+
+			// Start from the next spot of the kept one
+			unsigned testedSpotIndex = keptSpotIndex + 1;
+			// Reset kept spot index so the loop is going to terminate next step by default
+			keptSpotIndex = std::numeric_limits<unsigned>::max();
+			// For every remaining spot in results left
+			for(; testedSpotIndex < resultsSize; testedSpotIndex++ ) {
+				// Skip already excluded spots
+				if( isSpotExcluded[testedSpotIndex] ) {
+					continue;
+				}
+
+				const TacticalSpot &testedSpot = spots[spotsAndScores[testedSpotIndex].spotNum];
+				if( DistanceSquared( keptSpot.origin, testedSpot.origin ) < squareProximityThreshold ) {
+					isSpotExcluded[testedSpotIndex] = true;
+				} else if( keptSpotIndex > testedSpotIndex ) {
+					// Mark the first non-excluded next spot for the outer loop
+					keptSpotIndex = testedSpotIndex;
+				}
+			}
+		}
+	}
 
 	SpotsAndScoreVector &SortAndTakeNBestIfOptimizingAggressively( SpotsAndScoreVector &spotsAndScores, int limit ) {
 		assert( limit > 0 && limit <= MAX_SPOTS );

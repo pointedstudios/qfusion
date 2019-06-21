@@ -5,6 +5,7 @@
 #include "../navigation/AasRouteCache.h"
 #include "../static_vector.h"
 #include "../bot.h"
+#include "../../../qalgo/Links.h"
 
 class TacticalSpotsRegistry
 {
@@ -82,7 +83,28 @@ public:
 		bool operator<( const SpotAndScore &that ) const { return score > that.score; }
 	};
 
+	struct OriginAndScore {
+		Vec3 origin;
+		float score;
+		int16_t tag { -1 };
+		uint16_t spotNum { std::numeric_limits<uint16_t>::max() };
+
+		OriginAndScore( const float *origin_, float score_ ) : origin( origin_ ), score( score_ ) {}
+		OriginAndScore( const Vec3 &origin_, float score_ ) : origin( origin_ ), score( score_ ) {}
+
+		static OriginAndScore ForArea( const aas_area_t *aasAreas, int areaNum ) {
+			Vec3 origin( aasAreas[areaNum].center );
+			origin.Z() = aasAreas[areaNum].mins[2] + 8.0f;
+			OriginAndScore result( origin, 1.0f );
+			result.tag = areaNum;
+			return result;
+		}
+
+		bool operator<( const OriginAndScore &that ) const { return score > that.score; }
+	};
+
 	typedef StaticVector<SpotAndScore, MAX_SPOTS> SpotsAndScoreVector;
+	typedef StaticVector<OriginAndScore, MAX_SPOTS> OriginAndScoreVector;
 private:
 	class TemporariesAllocator {
 		// These values should be allocated, cached and used as buffers for spots query/problem params solving.
@@ -90,15 +112,75 @@ private:
 		SpotsQueryVector *query { new( G_Malloc( sizeof( SpotsQueryVector ) ) )SpotsQueryVector };
 		bool *excludedSpotsMask { (bool *)G_Malloc( sizeof( bool ) * MAX_SPOTS ) };
 
-		struct SpotsAndScoreCacheEntry {
-			SpotsAndScoreCacheEntry *next { nullptr };
-			SpotsAndScoreCacheEntry *prev { nullptr };
-			SpotsAndScoreVector data;
+		template <typename V>
+		class VectorCache {
+			struct Entry {
+				Entry *next { nullptr };
+				Entry *prev { nullptr };
+				V data;
+			};
+			Entry *freeHead { nullptr };
+			Entry *usedHead { nullptr };
+			Entry *usedTail { nullptr };
+		public:
+			~VectorCache() {
+				if( usedHead ) {
+					const char *tag = "TacticalSpotsRegistry::TemporariesAllocator::VectorCache<?>~()";
+					AI_FailWith( tag, "A user has not released resources" );
+				}
+				Entry *nextEntry;
+				for( auto *entry = freeHead; entry; entry = nextEntry ) {
+					nextEntry = entry->next;
+					entry->~Entry();
+					G_Free( entry );
+				}
+			}
+
+			V &GetNextCleanVector() {
+				// It's better to use generic link utilities even if maintaining
+				// a double-linked list adds some overhead that is however
+				// negligible both from memory and execution speed sides.
+				// We win a lot by caching these allocated results anyway compared to naive malloc calls.
+				if( freeHead ) {
+					auto *const unlinked = ::Unlink( freeHead, &freeHead );
+					::Link( unlinked, &usedHead );
+					if( !usedTail ) {
+						usedTail = unlinked;
+					}
+					auto &data = unlinked->data;
+					data.clear();
+					return data;
+				}
+
+				auto *newEntry = new( G_Malloc( sizeof( Entry ) ) )Entry;
+				::Link( newEntry, &usedHead );
+				if( !usedTail ) {
+					usedTail = newEntry;
+				}
+				return newEntry->data;
+			}
+
+			void Release() {
+				if( !usedTail ) {
+					assert( !usedHead );
+					return;
+				}
+
+				// Merge used list tail and free list head
+				assert( !usedTail->next );
+				usedTail->next = freeHead;
+				if( freeHead ) {
+					assert( !freeHead->prev );
+					freeHead->prev = usedTail;
+				}
+
+				freeHead = usedHead;
+				usedHead = usedTail = nullptr;
+			}
 		};
 
-		SpotsAndScoreCacheEntry *freeHead { nullptr };
-		SpotsAndScoreCacheEntry *usedHead { nullptr };
-		SpotsAndScoreCacheEntry *usedTail { nullptr };
+		VectorCache<SpotsAndScoreVector> spotAndScoreVectorsCache;
+		VectorCache<OriginAndScoreVector> originAndScoreVectorsCache;
 	public:
 		// TODO: We do not require explicit releasing of query vector, this is error-prone...
 		SpotsQueryVector &GetCleanQueryVector() {
@@ -111,9 +193,17 @@ private:
 			return excludedSpotsMask;
 		}
 
-		SpotsAndScoreVector &GetNextCleanSpotsAndScoreVector();
+		SpotsAndScoreVector &GetNextCleanSpotsAndScoreVector() {
+			return spotAndScoreVectorsCache.GetNextCleanVector();
+		}
+		OriginAndScoreVector &GetNextCleanOriginAndScoreVector() {
+			return originAndScoreVectorsCache.GetNextCleanVector();
+		}
 
-		void Release();
+		void Release() {
+			spotAndScoreVectorsCache.Release();
+			originAndScoreVectorsCache.Release();
+		}
 
 		~TemporariesAllocator();
 	} temporariesAllocator;

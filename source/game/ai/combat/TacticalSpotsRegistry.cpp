@@ -1159,63 +1159,7 @@ void TacticalSpotsRegistry::SpotsGridBuilder::CopyTo( PrecomputedSpotsGrid *prec
 	}
 }
 
-typedef TacticalSpotsRegistry::SpotsAndScoreVector SpotsAndScoreVector;
-
-SpotsAndScoreVector &TacticalSpotsRegistry::TemporariesAllocator::GetNextCleanSpotsAndScoreVector() {
-	// It's better to use generic link utilities even if maintaining
-	// a double-linked list adds some overhead that is however
-	// negligible both from memory and execution speed sides.
-	// We win a lot by caching these allocated results anyway compared to naive malloc calls.
-	if( freeHead ) {
-		auto *const unlinked = ::Unlink( freeHead, &freeHead );
-		::Link( unlinked, &usedHead );
-		if( !usedTail ) {
-			usedTail = unlinked;
-		}
-		auto &data = unlinked->data;
-		data.clear();
-		return data;
-	}
-
-	auto *newEntry = new( G_Malloc( sizeof( SpotsAndScoreCacheEntry ) ) )SpotsAndScoreCacheEntry;
-	::Link( newEntry, &usedHead );
-	if( !usedTail ) {
-		usedTail = newEntry;
-	}
-	return newEntry->data;
-}
-
-void TacticalSpotsRegistry::TemporariesAllocator::Release() {
-	if( !usedTail ) {
-		assert( !usedHead );
-		return;
-	}
-
-	// Merge used list tail and free list head
-
-	assert( !usedTail->next );
-	usedTail->next = freeHead;
-	if( freeHead ) {
-		assert( !freeHead->prev );
-		freeHead->prev = usedTail;
-	}
-
-	freeHead = usedHead;
-	usedHead = usedTail = nullptr;
-}
-
 TacticalSpotsRegistry::TemporariesAllocator::~TemporariesAllocator() {
-	if( usedHead ) {
-		AI_FailWith( "TacticalSpotsRegistry::TemporariesAllocator::~()", "A user has not released resources" );
-	}
-
-	SpotsAndScoreCacheEntry *nextEntry;
-	for( auto *entry = freeHead; entry; entry = nextEntry ) {
-		nextEntry = entry->next;
-		entry->~SpotsAndScoreCacheEntry();
-		G_Free( entry );
-	}
-
 	query->~StaticVector();
 	G_Free( query );
 	G_Free( excludedSpotsMask );
