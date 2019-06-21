@@ -50,6 +50,37 @@ Bot::~Bot() {
 	}
 }
 
+void Bot::OnAttachedToSquad( AiSquad *squad_ ) {
+	if( !squad_ ) {
+		FailWith( "Bot::OnAttachedToSquad(): Attempt to attach to a null squad" );
+	}
+	if( this->squad ) {
+		if( this->squad == squad_ ) {
+			FailWith( "Bot::OnAttachedToSquad(%p): Was already attached to the squad\n", squad_ );
+		} else {
+			FailWith( "Bot::OnAttachedToSquad(%p): Was attached to another squad %p\n", squad_, this->squad );
+		}
+	}
+
+	this->squad = squad_;
+	awarenessModule.OnAttachedToSquad( squad_ );
+	ForcePlanBuilding();
+}
+
+void Bot::OnDetachedFromSquad( AiSquad *squad_ ) {
+	if( squad_ != this->squad ) {
+		if( this->squad ) {
+			FailWith( "OnDetachedFromSquad(%p): Was attached to squad %p\n", squad_, this->squad );
+		} else {
+			FailWith( "OnDetachedFromSquad(%p): Was not attached to a squad\n", squad_ );
+		}
+	}
+
+	this->squad = nullptr;
+	awarenessModule.OnDetachedFromSquad( squad_ );
+	ForcePlanBuilding();
+}
+
 int Bot::DefenceSpotId() const {
 	// This call is used only for scripts compatibility so this is not that bad
 	if( dynamic_cast<AiDefenceSpot *>( objectiveSpot ) ) {

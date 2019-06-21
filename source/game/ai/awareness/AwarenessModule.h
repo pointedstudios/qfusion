@@ -16,7 +16,6 @@ class BotAwarenessModule: public AiFrameAwareComponent {
 	friend class Bot;
 
 	AiEnemiesTracker *activeEnemiesTracker { &ownEnemiesTracker };
-	AiSquad *squad { nullptr };
 	Bot *const bot;
 
 	SelectedEnemies &selectedEnemies;

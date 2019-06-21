@@ -168,17 +168,8 @@ public:
 		awarenessModule.RegisterEvent( ent, event, parm );
 	}
 
-	void OnAttachedToSquad( AiSquad *squad_ ) {
-		this->squad = squad_;
-		awarenessModule.OnAttachedToSquad( squad_ );
-		ForcePlanBuilding();
-	}
-
-	void OnDetachedFromSquad( AiSquad *squad_ ) {
-		this->squad = nullptr;
-		awarenessModule.OnDetachedFromSquad( squad_ );
-		ForcePlanBuilding();
-	}
+	void OnAttachedToSquad( AiSquad *squad_ );
+	void OnDetachedFromSquad( AiSquad *squad_ );
 
 	inline bool IsInSquad() const { return squad != nullptr; }
 

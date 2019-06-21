@@ -18,19 +18,10 @@ BotAwarenessModule::BotAwarenessModule( Bot *bot_ )
 	, ownEnemiesTracker( bot_, this ) {}
 
 void BotAwarenessModule::OnAttachedToSquad( AiSquad *squad_ ) {
-	this->squad = squad_;
 	this->activeEnemiesTracker = squad_->EnemiesTracker();
 }
 
 void BotAwarenessModule::OnDetachedFromSquad( AiSquad *squad_ ) {
-	if( squad_ != this->squad ) {
-		if( this->squad ) {
-			FailWith( "OnDetachedFromSquad(%p): Was attached to squad %p\n", squad_, this->squad );
-		} else {
-			FailWith( "OnDetachedFromSquad(%p): Was not attached to a squad\n", squad_ );
-		}
-	}
-	this->squad = nullptr;
 	this->activeEnemiesTracker = &ownEnemiesTracker;
 	// Prevent use-after-free since the squad memory might be released as well, and these entities refer to it.
 	// (happens when AI team is replaced by more feature-reach in runtime on demand)
@@ -40,14 +31,14 @@ void BotAwarenessModule::OnDetachedFromSquad( AiSquad *squad_ ) {
 
 void BotAwarenessModule::OnEnemyViewed( const edict_t *enemy ) {
 	ownEnemiesTracker.OnEnemyViewed( enemy );
-	if( squad ) {
+	if( auto *squad = bot->squad ) {
 		squad->OnBotViewedEnemy( game.edicts + bot->EntNum(), enemy );
 	}
 }
 
 void BotAwarenessModule::OnEnemyOriginGuessed( const edict_t *enemy, unsigned minMillisSinceLastSeen, const float *guessedOrigin ) {
 	ownEnemiesTracker.OnEnemyOriginGuessed( enemy, minMillisSinceLastSeen, guessedOrigin );
-	if( squad ) {
+	if( auto *squad = bot->squad ) {
 		squad->OnBotGuessedEnemyOrigin( game.edicts + bot->EntNum(), enemy, minMillisSinceLastSeen, guessedOrigin );
 	}
 }
@@ -55,7 +46,7 @@ void BotAwarenessModule::OnEnemyOriginGuessed( const edict_t *enemy, unsigned mi
 void BotAwarenessModule::OnPain( const edict_t *enemy, float kick, int damage ) {
 	const edict_t *self = game.edicts + bot->EntNum();
 	ownEnemiesTracker.OnPain( self, enemy, kick, damage );
-	if( squad ) {
+	if( auto *squad = bot->squad ) {
 		squad->OnBotPain( self, enemy, kick, damage );
 	}
 }
@@ -63,7 +54,7 @@ void BotAwarenessModule::OnPain( const edict_t *enemy, float kick, int damage ) 
 void BotAwarenessModule::OnEnemyDamaged( const edict_t *target, int damage ) {
 	const edict_t *self = game.edicts + bot->EntNum();
 	ownEnemiesTracker.OnEnemyDamaged( self, target, damage );
-	if( squad ) {
+	if( auto *squad = bot->squad ) {
 		squad->OnBotDamagedEnemy( self, target, damage );
 	}
 }
