@@ -67,63 +67,34 @@ SpotsAndScoreVector &DodgeHazardProblemSolver::SelectCandidateSpots( const Spots
 	const auto *const spots = tacticalSpotsRegistry->spots;
 
 	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
+	for( auto spotNum: spotsFromQuery ) {
+		const TacticalSpot &spot = spots[spotNum];
 
-	if( mayNegateDodgeDir ) {
-		for( auto spotNum: spotsFromQuery ) {
-			const TacticalSpot &spot = spots[spotNum];
-
-			float heightOverOrigin = spot.absMins[2] - originZ;
-			if( heightOverOrigin < minHeightAdvantageOverOrigin ) {
-				continue;
-			}
-
-			Vec3 toSpotDir( spot.origin );
-			toSpotDir -= origin;
-			float squaredDistanceToSpot = toSpotDir.SquaredLength();
-			if( squaredDistanceToSpot < 1 ) {
-				continue;
-			}
-
-			toSpotDir *= Q_RSqrt( squaredDistanceToSpot );
-			float dot = toSpotDir.Dot( dodgeDir );
-			if( dot < 0.2f ) {
-				continue;
-			}
-
-			heightOverOrigin -= minHeightAdvantageOverOrigin;
-			float heightOverOriginFactor = BoundedFraction( heightOverOrigin, searchRadius - minHeightAdvantageOverOrigin );
-			float score = ApplyFactor( dot, heightOverOriginFactor, heightOverOriginInfluence );
-
-			result.push_back( SpotAndScore( spotNum, score ) );
+		float heightOverOrigin = spot.absMins[2] - originZ;
+		if( heightOverOrigin < minHeightAdvantageOverOrigin ) {
+			continue;
 		}
-	} else {
-		for( auto spotNum: spotsFromQuery ) {
-			const TacticalSpot &spot = spots[spotNum];
 
-			float heightOverOrigin = spot.absMins[2] - originZ;
-			if( heightOverOrigin < minHeightAdvantageOverOrigin ) {
-				continue;
-			}
-
-			Vec3 toSpotDir( spot.origin );
-			toSpotDir -= origin;
-			float squaredDistanceToSpot = toSpotDir.SquaredLength();
-			if( squaredDistanceToSpot < 1 ) {
-				continue;
-			}
-
-			toSpotDir *= Q_RSqrt( squaredDistanceToSpot );
-			float absDot = fabsf( toSpotDir.Dot( dodgeDir ) );
-			if( absDot < 0.2f ) {
-				continue;
-			}
-
-			heightOverOrigin -= minHeightAdvantageOverOrigin;
-			float heightOverOriginFactor = BoundedFraction( heightOverOrigin, searchRadius - minHeightAdvantageOverOrigin );
-			float score = ApplyFactor( absDot, heightOverOriginFactor, heightOverOriginInfluence );
-
-			result.push_back( SpotAndScore( spotNum, score ) );
+		Vec3 toSpotDir( spot.origin );
+		toSpotDir -= origin;
+		float squaredDistanceToSpot = toSpotDir.SquaredLength();
+		if( squaredDistanceToSpot < 1 ) {
+			continue;
 		}
+
+		toSpotDir *= Q_RSqrt( squaredDistanceToSpot );
+		float dot = toSpotDir.Dot( dodgeDir );
+		float absDot = std::fabs( dot );
+		// We can do smarter tricks using std::signbit() & !mightNegateDodgeDir but this is not really a hot code path
+		if( ( mayNegateDodgeDir ? absDot : dot ) < 0.2f ) {
+			continue;
+		}
+
+		heightOverOrigin -= minHeightAdvantageOverOrigin;
+		float heightOverOriginFactor = BoundedFraction( heightOverOrigin, searchRadius - minHeightAdvantageOverOrigin );
+		float score = ApplyFactor( absDot, heightOverOriginFactor, heightOverOriginInfluence );
+
+		result.push_back( SpotAndScore( spotNum, score ) );
 	}
 
 	return result;
