@@ -444,7 +444,7 @@ void BotWeaponSelector::SuggestMiddleRangeWeapon( const WorldState &worldState )
 	weaponScores[MG].score = 1.0f * BoundedFraction( BulletsReadyToFireCount(), 15.0f );
 	weaponScores[RG].score = 0.7f * BoundedFraction( ShellsReadyToFireCount(), 3.0f );
 	weaponScores[GL].score = 0.5f * BoundedFraction( GrenadesReadyToFireCount(), 5.0f );
-	weaponScores[GB].score = 1.0f * BlastsReadyToFireCount();
+	weaponScores[GB].score = 0.3f * BlastsReadyToFireCount();
 
 	if( bot->IsInSquad() ) {
 		// In squad prefer continuous fire weapons to burn an enemy quick together
@@ -491,8 +491,7 @@ void BotWeaponSelector::SuggestMiddleRangeWeapon( const WorldState &worldState )
 	weaponScores[MG].score *= 1.0f - 0.4f * targetEnvironment.factor;
 	weaponScores[RG].score *= 1.0f - 0.5f * targetEnvironment.factor;
 	weaponScores[GL].score *= targetEnvironment.factor;
-	// As bots try to hit direct GB shots now the target environment does not matter so much
-	weaponScores[GB].score *= 0.7f + 0.3f * targetEnvironment.factor;
+	weaponScores[GB].score *= 0.5f + 0.5f * targetEnvironment.factor;
 
 	// Add extra scores for weapons that do not require precise aiming in this case
 	if( !bot->ShouldAimPrecisely() ) {
@@ -503,7 +502,6 @@ void BotWeaponSelector::SuggestMiddleRangeWeapon( const WorldState &worldState )
 		if( bot->WillRetreat() ) {
 			weaponScores[PG].score *= 1.5f;
 			weaponScores[GL].score *= 1.5f;
-			weaponScores[GB].score *= 1.5f;
 		}
 	}
 
@@ -588,6 +586,8 @@ void BotWeaponSelector::SuggestCloseRangeWeapon( const WorldState &worldState ) 
 			chosenWeapon = WEAP_SHOCKWAVE;
 		} else if( lasersCount > 10 ) {
 			chosenWeapon = WEAP_LASERGUN;
+		} else if( plasmasCount ) {
+			chosenWeapon = WEAP_PLASMAGUN;
 		} else if( BlastsReadyToFireCount() ) {
 			chosenWeapon = WEAP_GUNBLADE;
 		}
