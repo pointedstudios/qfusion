@@ -1160,9 +1160,9 @@ void CG_HighVelImpactPuffParticles( const vec3_t org, const vec3_t dir, int coun
 // cg_test.c - debug only
 //
 #ifndef PUBLIC_BUILD
-void CG_DrawTestLine( vec3_t start, vec3_t end );
-void CG_DrawTestBox( vec3_t origin, vec3_t mins, vec3_t maxs, vec3_t angles );
-void CG_AddTest( void );
+inline void CG_DrawTestLine( vec3_t start, vec3_t end ) {}
+inline void CG_DrawTestBox( vec3_t origin, vec3_t mins, vec3_t maxs, vec3_t angles ) {}
+inline void CG_AddTest( void ) {}
 #endif
 
 //
