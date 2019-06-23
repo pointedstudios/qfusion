@@ -7,13 +7,6 @@
 #include "../../../qalgo/Links.h"
 #include "../../../qalgo/md5.h"
 
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
-
 #include <cstdlib>
 #include <algorithm>
 #include <limits>

@@ -387,7 +387,7 @@ unsigned int CIN_GetRawSamplesLengthFromListeners( cinematics_t *cin ) {
 	for( i = 0; i < cin->num_listeners; i++ ) {
 		unsigned int l = cin->listeners[i].get_raw_samples ?
 						 cin->listeners[i].get_raw_samples( cin->listeners[i].listener ) : 0;
-		length = max( length, l );
+		length = Q_max( length, l );
 	}
 
 	return length;

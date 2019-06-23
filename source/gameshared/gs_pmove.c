@@ -643,7 +643,7 @@ static void PM_AirAccelerate( vec3_t wishdir, float wishspeed ) {
 		if( f < 0 ) {
 			f = 0;
 		}
-		wishspeed = max( curspeed, pml.maxPlayerSpeed ) + bunnyaccel * f * pml.maxPlayerSpeed * pml.frametime;
+		wishspeed = Q_max( curspeed, pml.maxPlayerSpeed ) + bunnyaccel * f * pml.maxPlayerSpeed * pml.frametime;
 	}
 	VectorScale( wishdir, wishspeed, wishvel );
 	VectorSubtract( wishvel, curvel, acceldir );
@@ -750,8 +750,8 @@ static void PM_AddCurrents( vec3_t wishvel ) {
 		}
 
 		// limit horizontal speed when on a ladder
-		clamp( wishvel[0], -25, 25 );
-		clamp( wishvel[1], -25, 25 );
+		Q_clamp( wishvel[0], -25, 25 );
+		Q_clamp( wishvel[1], -25, 25 );
 	}
 }
 
@@ -1445,7 +1445,7 @@ static void PM_CheckCrouchSlide( void ) {
 		pm->playerState->pmove.pm_flags |= PMF_CROUCH_SLIDING;
 		pm->playerState->pmove.stats[PM_STAT_CROUCHSLIDETIME] = PM_CROUCHSLIDE + PM_CROUCHSLIDE_FADE;
 	} else if( pm->playerState->pmove.pm_flags & PMF_CROUCH_SLIDING ) {
-		pm->playerState->pmove.stats[PM_STAT_CROUCHSLIDETIME] = min( pm->playerState->pmove.stats[PM_STAT_CROUCHSLIDETIME], PM_CROUCHSLIDE_FADE );
+		pm->playerState->pmove.stats[PM_STAT_CROUCHSLIDETIME] = Q_min( pm->playerState->pmove.stats[PM_STAT_CROUCHSLIDETIME], PM_CROUCHSLIDE_FADE );
 	}
 }
 
@@ -1602,10 +1602,10 @@ static void PM_CheckZoom( void ) {
 
 	if( ( pm->cmd.buttons & BUTTON_ZOOM ) && ( pm->playerState->pmove.stats[PM_STAT_FEATURES] & PMFEAT_ZOOM ) ) {
 		pm->playerState->pmove.stats[PM_STAT_ZOOMTIME] += pm->cmd.msec;
-		clamp( pm->playerState->pmove.stats[PM_STAT_ZOOMTIME], 0, ZOOMTIME );
+		Q_clamp( pm->playerState->pmove.stats[PM_STAT_ZOOMTIME], 0, ZOOMTIME );
 	} else if( pm->playerState->pmove.stats[PM_STAT_ZOOMTIME] > 0 ) {
 		pm->playerState->pmove.stats[PM_STAT_ZOOMTIME] -= pm->cmd.msec;
-		clamp( pm->playerState->pmove.stats[PM_STAT_ZOOMTIME], 0, ZOOMTIME );
+		Q_clamp( pm->playerState->pmove.stats[PM_STAT_ZOOMTIME], 0, ZOOMTIME );
 	}
 }
 
@@ -1641,7 +1641,7 @@ static void PM_AdjustBBox( void ) {
 		pm->playerState->pmove.stats[PM_STAT_WJTIME] < ( PM_WALLJUMP_TIMEDELAY - PM_SPECIAL_CROUCH_INHIBIT ) &&
 		pm->playerState->pmove.stats[PM_STAT_DASHTIME] < ( PM_DASHJUMP_TIMEDELAY - PM_SPECIAL_CROUCH_INHIBIT ) ) {
 		pm->playerState->pmove.stats[PM_STAT_CROUCHTIME] += pm->cmd.msec;
-		clamp( pm->playerState->pmove.stats[PM_STAT_CROUCHTIME], 0, CROUCHTIME );
+		Q_clamp( pm->playerState->pmove.stats[PM_STAT_CROUCHTIME], 0, CROUCHTIME );
 
 		crouchFrac = (float)pm->playerState->pmove.stats[PM_STAT_CROUCHTIME] / (float)CROUCHTIME;
 		VectorLerp( playerbox_stand_mins, crouchFrac, playerbox_crouch_mins, pm->mins );
@@ -1673,7 +1673,7 @@ static void PM_AdjustBBox( void ) {
 
 		// find the desired size
 		newcrouchtime = pm->playerState->pmove.stats[PM_STAT_CROUCHTIME] - pm->cmd.msec;
-		clamp( newcrouchtime, 0, CROUCHTIME );
+		Q_clamp( newcrouchtime, 0, CROUCHTIME );
 		crouchFrac = (float)newcrouchtime / (float)CROUCHTIME;
 		VectorLerp( playerbox_stand_mins, crouchFrac, playerbox_crouch_mins, wishmins );
 		VectorLerp( playerbox_stand_maxs, crouchFrac, playerbox_crouch_maxs, wishmaxs );
@@ -2123,7 +2123,7 @@ void Pmove( pmove_t *pmove ) {
 				damage = 0;
 			} else {
 				damage = ( ( falldelta - FALL_DAMAGE_MIN_DELTA ) / 10 ) * FALL_DAMAGE_SCALE;
-				clamp( damage, 0.0f, MAX_FALLING_DAMAGE );
+				Q_clamp( damage, 0.0f, MAX_FALLING_DAMAGE );
 			}
 
 			module_PredictedEvent( pm->playerState->POVnum, EV_FALL, damage );

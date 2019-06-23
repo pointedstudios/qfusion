@@ -21,13 +21,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../matchmaker/mm_query.h"
 #include "g_gametypes.h"
 
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
-
 #include "../qalgo/Links.h"
 #include "../qalgo/SingletonHolder.h"
 #include "../qalgo/WswStdTypes.h"

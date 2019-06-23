@@ -539,15 +539,15 @@ void GClip_LinkEntity( edict_t *ent ) {
 		} else {
 			// assume that x/y are equal and symetric
 			i = ent->r.maxs[0] / 8;
-			clamp( i, 1, 31 );
+			Q_clamp( i, 1, 31 );
 
 			// z is not symetric
 			j = ( -ent->r.mins[2] ) / 8;
-			clamp( j, 1, 31 );
+			Q_clamp( j, 1, 31 );
 
 			// and z maxs can be negative...
 			k = ( ent->r.maxs[2] + 32 ) / 8;
-			clamp( k, 1, 63 );
+			Q_clamp( k, 1, 63 );
 
 			ent->s.solid = ( k << 10 ) | ( j << 5 ) | i;
 		}

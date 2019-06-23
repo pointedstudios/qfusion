@@ -20,14 +20,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "cg_local.h"
 
-#ifdef min
-#undef min
-#endif
-
-#ifdef max
-#undef max
-#endif
-
 #include "../qalgo/WswStdTypes.h"
 
 /*
@@ -842,7 +834,7 @@ static void CG_SC_RespectEvent() {
 	}
 
 	auto timeout = (unsigned)atoi( trap_Cmd_Argv( 2 ) );
-	clamp( timeout, 1000, 5000 );
+	Q_clamp( timeout, 1000, 5000 );
 
 	if ( !Q_stricmp( arg, "print" ) ) {
 		// Hack! Use award facilities for displaying this

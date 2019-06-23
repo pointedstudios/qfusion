@@ -64,7 +64,7 @@ void AlertTracker::CheckAlertSpots( const StaticVector<uint16_t, MAX_CLIENTS> &v
 			score = 1.0f / sqrtf( score );
 		}
 		// Sanitize
-		clamp( score, 0.0f, 1.0f );
+		Q_clamp( score, 0.0f, 1.0f );
 		scores[i] = score;
 	}
 

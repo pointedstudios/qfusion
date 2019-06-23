@@ -1804,7 +1804,7 @@ void AiSquadBasedTeam::PlayerAssistanceTracker::DrainAndPick() {
 			for( int i = 0; i < MAX_CLIENTS; ++i ) {
 				static_assert( REFILL_SCORE > 1, "" );
 				botScoresRow[i] -= ( REFILL_SCORE - 1 );
-				clamp( botScoresRow[i], 0, maxScore );
+				Q_clamp( botScoresRow[i], 0, maxScore );
 			}
 			continue;
 		}
@@ -1814,7 +1814,7 @@ void AiSquadBasedTeam::PlayerAssistanceTracker::DrainAndPick() {
 		for( int i = 0; i < MAX_CLIENTS; ++i ) {
 			static_assert( REFILL_SCORE > 1, "" );
 			botScoresRow[i] -= ( REFILL_SCORE - 1 );
-			clamp( botScoresRow[i], 0, maxScore );
+			Q_clamp( botScoresRow[i], 0, maxScore );
 			// If the score is the maximal score after draining
 			if( botScoresRow[i] >= maxScore - ( REFILL_SCORE - 1 ) ) {
 				goodClientNum = i;

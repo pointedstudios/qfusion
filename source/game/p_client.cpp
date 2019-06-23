@@ -1469,7 +1469,7 @@ void ClientThink( edict_t *ent, usercmd_t *ucmd, int timeDelta ) {
 		// add smoothing to timeDelta between the last few ucmds and a small fine-tuning nudge.
 		nudge = fixedNudge + g_antilag_timenudge->integer;
 		timeDelta += nudge;
-		clamp( timeDelta, -g_antilag_maxtimedelta->integer, 0 );
+		Q_clamp( timeDelta, -g_antilag_maxtimedelta->integer, 0 );
 
 		// smooth using last valid deltas
 		i = client->timeDeltasHead - 6;
@@ -1498,7 +1498,7 @@ void ClientThink( edict_t *ent, usercmd_t *ucmd, int timeDelta ) {
 #endif
 	}
 
-	clamp( client->timeDelta, -g_antilag_maxtimedelta->integer, 0 );
+	Q_clamp( client->timeDelta, -g_antilag_maxtimedelta->integer, 0 );
 
 	// update activity if he touched any controls
 	if( ucmd->forwardmove != 0 || ucmd->sidemove != 0 || ucmd->upmove != 0 || ( ucmd->buttons & ~BUTTON_BUSYICON ) != 0
@@ -1652,13 +1652,13 @@ void G_ClientThink( edict_t *ent ) {
 		if( ent->s.team >= TEAM_PLAYERS && ent->s.team < GS_MAX_TEAMS ) {
 			if( ent->r.client->ps.inventory[POWERUP_SHELL] > 0 ) {
 				ent->r.client->resp.instashieldCharge -= ( game.frametime * 0.001f ) * 60.0f;
-				clamp( ent->r.client->resp.instashieldCharge, 0, INSTA_SHIELD_MAX );
+				Q_clamp( ent->r.client->resp.instashieldCharge, 0, INSTA_SHIELD_MAX );
 				if( ent->r.client->resp.instashieldCharge == 0 ) {
 					ent->r.client->ps.inventory[POWERUP_SHELL] = 0;
 				}
 			} else {
 				ent->r.client->resp.instashieldCharge += ( game.frametime * 0.001f ) * 20.0f;
-				clamp( ent->r.client->resp.instashieldCharge, 0, INSTA_SHIELD_MAX );
+				Q_clamp( ent->r.client->resp.instashieldCharge, 0, INSTA_SHIELD_MAX );
 			}
 		}
 	}

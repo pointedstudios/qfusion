@@ -305,7 +305,7 @@ static void G_KnockBackPush( edict_t *targ, edict_t *attacker, const vec3_t base
 
 	if( targ->r.client && targ != attacker && !( dflags & DAMAGE_KNOCKBACK_SOFT ) ) {
 		targ->r.client->ps.pmove.stats[PM_STAT_KNOCKBACK] = 3 * knockback;
-		clamp( targ->r.client->ps.pmove.stats[PM_STAT_KNOCKBACK], 100, 250 );
+		Q_clamp( targ->r.client->ps.pmove.stats[PM_STAT_KNOCKBACK], 100, 250 );
 	}
 
 	VectorMA( targ->velocity, push, dir, targ->velocity );
@@ -371,7 +371,7 @@ void G_Damage( edict_t *targ, edict_t *inflictor, edict_t *attacker, const vec3_
 			targ->r.client->ps.pmove.stats[PM_STAT_STUN] += (int)stun;
 		}
 
-		clamp( targ->r.client->ps.pmove.stats[PM_STAT_STUN], 0, MAX_STUN_TIME );
+		Q_clamp( targ->r.client->ps.pmove.stats[PM_STAT_STUN], 0, MAX_STUN_TIME );
 	}
 
 	// dont count self-damage cause it just adds the same to both stats
@@ -574,7 +574,7 @@ void G_SplashFrac( const vec3_t origin, const vec3_t mins, const vec3_t maxs, co
 	// modify the origin so the inner sphere acts as a capsule
 	VectorCopy( origin, boxcenter );
 	boxcenter[2] = hitpoint[2];
-	clamp( boxcenter[2], ( origin[2] + mins[2] ) + innerradius, ( origin[2] + maxs[2] ) - innerradius );
+	Q_clamp( boxcenter[2], ( origin[2] + mins[2] ) + innerradius, ( origin[2] + maxs[2] ) - innerradius );
 #else
 
 	// find center of the box
@@ -619,12 +619,12 @@ void G_SplashFrac( const vec3_t origin, const vec3_t mins, const vec3_t maxs, co
 	}
 
 	distance = maxradius - distance;
-	clamp( distance, 0, maxradius );
+	Q_clamp( distance, 0, maxradius );
 
 	if( dmgFrac ) {
 		// soft sin curve
 		*dmgFrac = sin( DEG2RAD( ( distance / maxradius ) * 80 ) );
-		clamp( *dmgFrac, 0.0f, 1.0f );
+		Q_clamp( *dmgFrac, 0.0f, 1.0f );
 	}
 
 	if( kickFrac ) {
@@ -634,7 +634,7 @@ void G_SplashFrac( const vec3_t origin, const vec3_t mins, const vec3_t maxs, co
 		kick *= kick;
 
 		//kick = maxradius / distance;
-		clamp( kick, 0, 1 );
+		Q_clamp( kick, 0, 1 );
 
 		// half linear half exponential
 		//*kickFrac =  ( kick + ( kick * kick ) ) * 0.5f;
@@ -642,7 +642,7 @@ void G_SplashFrac( const vec3_t origin, const vec3_t mins, const vec3_t maxs, co
 		// linear
 		*kickFrac = kick;
 
-		clamp( *kickFrac, 0.0f, 1.0f );
+		Q_clamp( *kickFrac, 0.0f, 1.0f );
 	}
 
 	//if( dmgFrac && kickFrac )
@@ -747,13 +747,13 @@ void RS_SplashFrac( const vec3_t origin, const vec3_t mins, const vec3_t maxs, c
 	{
 		// soft sin curve
 		*dmgFrac = sinf( DEG2RAD( ( distance / maxradius ) * 80 ) );
-		clamp( *dmgFrac, 0.0f, 1.0f );
+		Q_clamp( *dmgFrac, 0.0f, 1.0f );
 	}
 
 	if( kickFrac )
 	{
 		distance = fabsf( distance / maxradius );
-		clamp( distance, 0.0f, 1.0f );
+		Q_clamp( distance, 0.0f, 1.0f );
 		*kickFrac = 1.0 - powf( distance, splashFrac );
 	}
 

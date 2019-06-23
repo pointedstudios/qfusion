@@ -33,6 +33,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "cg_public.h"
 #include "cg_syscalls.h"
 
+#include <algorithm>
+#include <memory>
+#include <new>
+#include <utility>
+
 #define CG_OBITUARY_HUD     1
 #define CG_OBITUARY_CENTER  2
 #define CG_OBITUARY_CONSOLE 4

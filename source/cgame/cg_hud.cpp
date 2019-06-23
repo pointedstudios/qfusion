@@ -285,7 +285,7 @@ static int CG_GetDamageIndicatorDirValue( const void *parameter ) {
 
 	if( cg.damageBlends[index] > cg.time && !cg.view.thirdperson ) {
 		frac = ( cg.damageBlends[index] - cg.time ) / 300.0f;
-		clamp( frac, 0.0f, 1.0f );
+		Q_clamp( frac, 0.0f, 1.0f );
 	}
 
 	return frac * 1000;
@@ -409,7 +409,7 @@ static int CG_GetItemTimerTeam( const void *parameter ) {
 	if( !cent ) {
 		return 0;
 	}
-	return max( (int)cent->current.modelindex - 1, 0 );
+	return std::max( (int)cent->current.modelindex - 1, 0 );
 }
 
 static int CG_InputDeviceSupported( const void *parameter ) {
@@ -908,7 +908,7 @@ static void CG_DrawObituaries( int x, int y, int align, struct qfontface_s *font
 		return;
 	}
 
-	line_height = max( (unsigned)trap_SCR_FontHeight( font ), icon_size );
+	line_height = std::max( (unsigned)trap_SCR_FontHeight( font ), icon_size );
 	num_max = height / line_height;
 
 	if( width < (int)icon_size || !num_max ) {
@@ -1020,10 +1020,10 @@ static void CG_DrawObituaries( int x, int y, int align, struct qfontface_s *font
 
 		w = 0;
 		if( obr->type != OBITUARY_ACCIDENT ) {
-			w += min( trap_SCR_strWidth( obr->attacker, font, 0 ), ( width - icon_size ) / 2 );
+			w += std::min( (int)trap_SCR_strWidth( obr->attacker, font, 0 ), (int)( width - icon_size ) / 2 );
 		}
 		w += icon_size;
-		w += min( trap_SCR_strWidth( obr->victim, font, 0 ), ( width - icon_size ) / 2 );
+		w += std::min( (int)trap_SCR_strWidth( obr->victim, font, 0 ), (int)( width - icon_size ) / 2 );
 
 		if( internal_align == 1 ) {
 			// left
@@ -1045,7 +1045,7 @@ static void CG_DrawObituaries( int x, int y, int align, struct qfontface_s *font
 			trap_SCR_DrawStringWidth( x + xoffset, y + yoffset + ( line_height - trap_SCR_FontHeight( font ) ) / 2,
 									  ALIGN_LEFT_TOP, COM_RemoveColorTokensExt( obr->attacker, true ), ( width - icon_size ) / 2,
 									  font, teamcolor );
-			xoffset += min( trap_SCR_strWidth( obr->attacker, font, 0 ), ( width - icon_size ) / 2 );
+			xoffset += std::min( (int)trap_SCR_strWidth( obr->attacker, font, 0 ), (int)( width - icon_size ) / 2 );
 		}
 
 		if( ( obr->victim_team == TEAM_ALPHA ) || ( obr->victim_team == TEAM_BETA ) ) {
@@ -1153,7 +1153,7 @@ static struct shader_s *CG_GetWeaponIcon( int weapon ) {
 			int chargeTimeStep = chargeTime / 3;
 			if( chargeTimeStep > 0 ) {
 				int charge = ( chargeTime - cg.predictedPlayerState.stats[STAT_WEAPON_TIME] ) / chargeTimeStep;
-				clamp( charge, 0, 2 );
+				Q_clamp( charge, 0, 2 );
 				return CG_MediaShader( cgs.media.shaderInstagunChargeIcon[charge] );
 			}
 		}
@@ -1978,7 +1978,7 @@ static bool CG_LFuncColor( struct cg_layoutnode_s *commandnode, struct cg_layout
 	int i;
 	for( i = 0; i < 4; i++ ) {
 		layout_cursor_color[i] = CG_GetNumericArg( &argumentnode );
-		clamp( layout_cursor_color[i], 0, 1 );
+		Q_clamp( layout_cursor_color[i], 0, 1 );
 	}
 	return true;
 }
@@ -1997,7 +1997,7 @@ static bool CG_LFuncRotationSpeed( struct cg_layoutnode_s *commandnode, struct c
 	int i;
 	for( i = 0; i < 3; i++ ) {
 		layout_cursor_rotation[i] = CG_GetNumericArg( &argumentnode );
-		clamp( layout_cursor_rotation[i], 0, 999 );
+		Q_clamp( layout_cursor_rotation[i], 0, 999 );
 	}
 	return true;
 }
@@ -4518,7 +4518,7 @@ void CG_LoadStatusBar( void ) {
 	assert( hud );
 
 	// buffer for filenames
-	filename_size = strlen( "huds/" ) + max( strlen( default_hud ), strlen( hud->string ) ) + 4 + 1;
+	filename_size = strlen( "huds/" ) + std::max( strlen( default_hud ), strlen( hud->string ) ) + 4 + 1;
 	filename = ( char * )alloca( filename_size );
 
 	// always load default first. Custom second if needed

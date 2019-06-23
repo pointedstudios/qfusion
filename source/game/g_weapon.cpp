@@ -1104,7 +1104,7 @@ void W_Fire_Electrobolt_Combined( edict_t *self, vec3_t start, vec3_t angles, fl
 			float frac, damage, knockback;
 
 			frac = DistanceFast( tr.endpos, start ) / (float)range;
-			clamp( frac, 0.0f, 1.0f );
+			Q_clamp( frac, 0.0f, 1.0f );
 
 			damage = maxdamage - ( ( maxdamage - mindamage ) * frac );
 			knockback = maxknockback - ( ( maxknockback - minknockback ) * frac );
@@ -1223,7 +1223,7 @@ void W_Fire_Electrobolt_FullInstant( edict_t *self, vec3_t start, vec3_t angles,
 				frac = 0.0f;
 			} else {
 				frac = ( dist - FULL_DAMAGE_RANGE ) / (float)( minDamageRange - FULL_DAMAGE_RANGE );
-				clamp( frac, 0.0f, 1.0f );
+				Q_clamp( frac, 0.0f, 1.0f );
 			}
 
 			damage = maxdamage - ( ( maxdamage - mindamage ) * frac );

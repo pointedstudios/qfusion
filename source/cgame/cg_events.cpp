@@ -225,7 +225,7 @@ void CG_LaserBeamEffect( centity_t *cent ) {
 			VectorCopy( laserOrigin, projectsource.origin );
 		}
 
-		clamp( subdivisions, CURVELASERBEAM_SUBDIVISIONS, MAX_CURVELASERBEAM_SUBDIVISIONS );
+		Q_clamp( subdivisions, CURVELASERBEAM_SUBDIVISIONS, MAX_CURVELASERBEAM_SUBDIVISIONS );
 
 		CG_KillPolyBeamsByTag( cent->current.number );
 
@@ -1297,7 +1297,7 @@ void CG_EntityEvent( entity_state_t *ent, int ev, int parm, bool predicted ) {
 			ByteToDir( parm, dir );
 			if( ent->damage > 0 ) {
 				count = (int)( ent->damage * 0.25f );
-				clamp( count, 1, 10 );
+				Q_clamp( count, 1, 10 );
 			} else {
 				count = 6;
 			}

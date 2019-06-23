@@ -33,13 +33,6 @@
 #include "console.h"
 #include "l10n.h"
 
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
-
 #include <algorithm>
 #include <array>
 #include <cmath>

@@ -640,7 +640,7 @@ static void CG_DrawEntityNumbers( void ) {
 	float dist;
 	trace_t trace;
 	vec3_t eorigin;
-	int shadowOffset = max( 1, cgs.vidHeight / 600 );
+	int shadowOffset = std::max( 1, cgs.vidHeight / 600 );
 
 	for( i = 0; i < cg.frame.numEntities; i++ ) {
 		entnum = cg.frame.parsedEntities[i & ( MAX_PARSE_ENTITIES - 1 )].number;
@@ -1080,7 +1080,7 @@ static int CG_Democam_CalcView( void ) {
 			case DEMOCAM_PATH_SPLINE:
 				viewType = VIEWDEF_CAMERA;
 				cam_POVent = 0;
-				clamp( lerpfrac, 0, 1 );
+				Q_clamp( lerpfrac, 0, 1 );
 				VectorCopy( cam_origin, v );
 
 				if( !nextcam || nextcam->type == DEMOCAM_FIRSTPERSON || nextcam->type == DEMOCAM_THIRDPERSON ) {

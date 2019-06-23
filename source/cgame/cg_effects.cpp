@@ -547,7 +547,7 @@ void CG_ParticleEffect( const vec3_t org, const vec3_t dir, float r, float g, fl
 	}
 
 	// Check for the default argument value
-	if( isnan( gravity ) ) {
+	if( std::isnan( gravity ) ) {
 		gravity = -PARTICLE_GRAVITY;
 	}
 
@@ -582,7 +582,7 @@ void CG_ParticleEffect2( const vec3_t org, const vec3_t dir, float r, float g, f
 	}
 
 	// Check for the default argument value
-	if( isnan( gravity ) ) {
+	if( std::isnan( gravity ) ) {
 		gravity = -PARTICLE_GRAVITY;
 	}
 
@@ -617,7 +617,7 @@ void CG_ParticleExplosionEffect( const vec3_t org, const vec3_t dir, float r, fl
 	}
 
 	// Check for the default argument value
-	if( isnan( gravity ) ) {
+	if( std::isnan( gravity ) ) {
 		gravity = -PARTICLE_GRAVITY;
 	}
 

@@ -22,6 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../qcommon/qcommon.h"
 #include "sys_vfs_zip.h"
 
+#include <algorithm>
+
 #define VFS_ZIP_BUFSIZE             0x00004000
 
 #define VFS_ZIP_BUFREADCOMMENT      0x00000400
@@ -85,7 +87,7 @@ static unsigned Sys_VFS_Zip_SearchCentralDir( FILE *fin ) {
 		}
 
 		readPos = fileSize - backRead;
-		readSize = min( VFS_ZIP_BUFREADCOMMENT + 4, backRead );
+		readSize = std::min( VFS_ZIP_BUFREADCOMMENT + 4u, backRead );
 		if( readSize < 4 ) {
 			continue;
 		}

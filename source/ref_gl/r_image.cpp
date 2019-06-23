@@ -2338,7 +2338,7 @@ static void R_InitCoronaTexture( int *w, int *h, int *flags, int *samples ) {
 		for( x = 0; x < 32; x++ ) {
 			dx = ( x - 15.5f ) * ( 1.0f / 16.0f );
 			a = (int)( ( ( 1.0f / ( dx * dx + dy * dy + 0.2f ) ) - ( 1.0f / ( 1.0f + 0.2 ) ) ) * 32.0f / ( 1.0f / ( 1.0f + 0.2 ) ) );
-			clamp( a, 0, 255 );
+			Q_clamp( a, 0, 255 );
 			data[( y * 32 + x ) * 4 + 0] = data[( y * 32 + x ) * 4 + 1] = data[( y * 32 + x ) * 4 + 2] = a;
 		}
 	}

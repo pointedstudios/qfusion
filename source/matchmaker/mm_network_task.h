@@ -4,14 +4,6 @@
 #include "mm_query.h"
 #include "../qcommon/qcommon.h"
 
-#ifdef min
-#undef min
-#endif
-
-#ifdef max
-#undef max
-#endif
-
 // TODO: Lift this to an application-global scope
 class ScopeGuard {
 	std::function<void()> atExit;

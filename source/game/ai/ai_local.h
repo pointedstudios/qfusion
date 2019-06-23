@@ -30,14 +30,6 @@ in NO WAY supported by Steve Yeager.
 #include "../g_local.h"
 #include "../../gameshared/q_collision.h"
 
-#ifdef max
-#undef max
-#endif
-
-#ifdef min
-#undef min
-#endif
-
 // First try to include <math.h> for M_* defines
 #ifndef __USE_MATH_DEFINES
 #define __USE_MATH_DEFINES 1
@@ -168,12 +160,12 @@ __declspec( noreturn ) void AI_FailWithv( const char *tag, const char *format, v
 #endif
 
 inline float Clamp( float value ) {
-	clamp( value, 0.0f, 1.0f );
+	Q_clamp( value, 0.0f, 1.0f );
 	return value;
 }
 
 inline float Clamp( float value, float minValue, float maxValue ) {
-	clamp( value, minValue, maxValue );
+	Q_clamp( value, minValue, maxValue );
 	return value;
 }
 

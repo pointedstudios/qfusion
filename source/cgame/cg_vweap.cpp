@@ -91,7 +91,7 @@ static void CG_ViewWeapon_AddAngleEffects( vec3_t angles ) {
 			if( delta < -180 ) {
 				delta += 360;
 			}
-			clamp( delta, -45, 45 );
+			Q_clamp( delta, -45, 45 );
 
 
 			if( i == YAW ) {
@@ -225,7 +225,7 @@ setupframe:
 		framefrac = 0;
 		viewweapon->ent.oldframe = curframe;
 	} else {
-		clamp( framefrac, 0, 1 );
+		Q_clamp( framefrac, 0, 1 );
 		if( curframe != viewweapon->ent.frame ) {
 			viewweapon->ent.oldframe = viewweapon->ent.frame;
 		}

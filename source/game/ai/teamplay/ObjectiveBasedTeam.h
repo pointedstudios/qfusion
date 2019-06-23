@@ -201,10 +201,10 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		explicit DefenceSpot( const AiDefenceSpot &spot )
 			: ObjectiveSpotImpl( this ), AiDefenceSpot( spot ) {
 			clamp_low( radius, 16.0f );
-			clamp( regularEnemyAlertScale, 0.0f, 1.0f );
-			clamp( carrierEnemyAlertScale, 0.0f, 1.0f );
+			Q_clamp( regularEnemyAlertScale, 0.0f, 1.0f );
+			Q_clamp( carrierEnemyAlertScale, 0.0f, 1.0f );
 			clamp_high( minAssignedBots, MAX_SPOT_DEFENDERS );
-			clamp( maxAssignedBots, 1, MAX_SPOT_DEFENDERS );
+			Q_clamp( maxAssignedBots, 1, MAX_SPOT_DEFENDERS );
 			if( minAssignedBots > maxAssignedBots ) {
 				minAssignedBots = maxAssignedBots;
 			}
@@ -257,7 +257,7 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		explicit OffenseSpot( const AiOffenseSpot &spot )
 			: ObjectiveSpotImpl( this ), AiOffenseSpot( spot ) {
 			clamp_high( minAssignedBots, MAX_SPOT_ATTACKERS );
-			clamp( maxAssignedBots, 1, MAX_SPOT_ATTACKERS );
+			Q_clamp( maxAssignedBots, 1, MAX_SPOT_ATTACKERS );
 			if( minAssignedBots > maxAssignedBots ) {
 				minAssignedBots = maxAssignedBots;
 			}

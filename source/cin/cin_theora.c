@@ -598,7 +598,7 @@ static bool OggTheora_LoadVideoFrame( cinematics_t *cin ) {
 		qth->pub_yuv.height = height;
 		qth->pub_yuv.x_offset = qth->ti.pic_x & ~1;
 		qth->pub_yuv.y_offset = qth->ti.pic_y & ~1;
-		qth->pub_yuv.image_width = max( abs( yuv[0].stride ), (int)qth->ti.frame_width );
+		qth->pub_yuv.image_width = Q_max( abs( yuv[0].stride ), (int)qth->ti.frame_width );
 		qth->pub_yuv.image_height = qth->ti.frame_height;
 
 		if( cin->width != width || cin->height != height ) {

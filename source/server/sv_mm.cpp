@@ -32,12 +32,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "../qalgo/SingletonHolder.h"
 
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
+#include <algorithm>
 #include <functional>
 
 static SingletonHolder<SVStatsowFacade> instanceHolder;

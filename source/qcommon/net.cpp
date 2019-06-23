@@ -24,6 +24,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifdef _WIN32
 #include "../win32/winquake.h"
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
 #else
 #include <unistd.h>
 #include <netinet/in.h>
@@ -34,6 +40,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <sys/socket.h>
 #include <sys/time.h>
 #endif
+
+#include <algorithm>
 
 #define MAX_LOOPBACK    4
 
@@ -1798,7 +1806,7 @@ int NET_Monitor( int msec, socket_t *sockets[], void ( *read_cb )( socket_t *, v
 			case SOCKET_TCP:
 #endif
 				assert( sockets[i]->handle > 0 );
-				fdmax = max( (int)sockets[i]->handle, fdmax );
+				fdmax = std::max( (int)sockets[i]->handle, fdmax );
 				FD_SET( sockets[i]->handle, &fdsetr ); // network socket
 				if( p_fdsetw ) {
 					FD_SET( sockets[i]->handle, p_fdsetw );

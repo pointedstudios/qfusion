@@ -60,11 +60,11 @@ static void Sys_SynchronizeTimers_f( void *val ) {
 		switch( hwtimer_new ) {
 			case 0:
 				// switched from micro to milli precision
-				milli_offset = max( milli_offset, drift / 1000 );
+				milli_offset = Q_max( milli_offset, drift / 1000 );
 				break;
 			case 1:
 				// switched from milli to micro precision
-				micro_offset = max( micro_offset, -drift );
+				micro_offset = Q_max( micro_offset, -drift );
 				break;
 			default:
 				assert( 0 );

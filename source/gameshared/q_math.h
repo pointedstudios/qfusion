@@ -119,18 +119,18 @@ extern vec4_t color_table[MAX_S_COLORS];
 // returns b clamped to [a..c] range
 //#define bound(a,b,c) (max((a), min((b), (c))))
 
-#ifndef max
-#define max( a, b ) ( ( a ) > ( b ) ? ( a ) : ( b ) )
+#ifndef Q_max
+#define Q_max( a, b ) ( ( a ) > ( b ) ? ( a ) : ( b ) )
 #endif
 
-#ifndef min
-#define min( a, b ) ( ( a ) < ( b ) ? ( a ) : ( b ) )
+#ifndef Q_min
+#define Q_min( a, b ) ( ( a ) < ( b ) ? ( a ) : ( b ) )
 #endif
 
 #define bound( a, b, c ) ( ( a ) >= ( c ) ? ( a ) : ( b ) < ( a ) ? ( a ) : ( b ) > ( c ) ? ( c ) : ( b ) )
 
 // clamps a (must be lvalue) to [b..c] range
-#define clamp( a, b, c ) ( ( b ) >= ( c ) ? ( a ) = ( b ) : ( a ) < ( b ) ? ( a ) = ( b ) : ( a ) > ( c ) ? ( a ) = ( c ) : ( a ) )
+#define Q_clamp( a, b, c ) ( ( b ) >= ( c ) ? ( a ) = ( b ) : ( a ) < ( b ) ? ( a ) = ( b ) : ( a ) > ( c ) ? ( a ) = ( c ) : ( a ) )
 
 #define clamp_low( a, low ) ( ( a ) = ( a ) < ( low ) ? ( low ) : ( a ) )
 #define clamp_high( a, high ) ( ( a ) = ( a ) > ( high ) ? ( high ) : ( a ) )

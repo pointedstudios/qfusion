@@ -845,7 +845,7 @@ static void R_FinalizeGLExtensions( void ) {
 	/* GL_ARB_multitexture */
 	glConfig.maxTextureUnits = 1;
 	qglGetIntegerv( GL_MAX_TEXTURE_IMAGE_UNITS_ARB, &glConfig.maxTextureUnits );
-	clamp( glConfig.maxTextureUnits, 1, MAX_TEXTURE_UNITS );
+	Q_clamp( glConfig.maxTextureUnits, 1, MAX_TEXTURE_UNITS );
 
 	/* GL_EXT_framebuffer_object */
 	glConfig.maxRenderbufferSize = 0;

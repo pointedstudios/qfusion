@@ -67,13 +67,6 @@ extern struct mempool_s *soundpool;
 #define S_Malloc( size ) S_MemAlloc( soundpool, size )
 #define S_Free( data ) S_MemFree( data )
 
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
-
 typedef struct sfx_s {
 	char filename[MAX_QPATH];
 	int64_t used;           // Time last used

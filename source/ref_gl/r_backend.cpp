@@ -231,8 +231,8 @@ void RB_BindImage( int tmu, const image_t *tex ) {
 * RB_DepthRange
 */
 void RB_DepthRange( float depthmin, float depthmax ) {
-	clamp( depthmin, 0.0f, 1.0f );
-	clamp( depthmax, 0.0f, 1.0f );
+	Q_clamp( depthmin, 0.0f, 1.0f );
+	Q_clamp( depthmax, 0.0f, 1.0f );
 	rb.gl.depthmin = depthmin;
 	rb.gl.depthmax = depthmax;
 	// depthmin == depthmax is a special case when a specific depth value is going to be written

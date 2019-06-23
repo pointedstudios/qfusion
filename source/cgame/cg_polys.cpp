@@ -126,7 +126,7 @@ static cpoly_t *CG_SpawnPolygon( float r, float g, float b, float a,
 								 int64_t die, int64_t fadetime, struct shader_s *shader, int tag ) {
 	cpoly_t *pl;
 
-	fadetime = min( fadetime, die );
+	fadetime = std::min( fadetime, die );
 
 	// allocate poly
 	pl = CG_AllocPoly();
@@ -139,10 +139,10 @@ static cpoly_t *CG_SpawnPolygon( float r, float g, float b, float a,
 	pl->color[1] = g;
 	pl->color[2] = b;
 	pl->color[3] = a;
-	clamp( pl->color[0], 0.0f, 1.0f );
-	clamp( pl->color[1], 0.0f, 1.0f );
-	clamp( pl->color[2], 0.0f, 1.0f );
-	clamp( pl->color[3], 0.0f, 1.0f );
+	Q_clamp( pl->color[0], 0.0f, 1.0f );
+	Q_clamp( pl->color[1], 0.0f, 1.0f );
+	Q_clamp( pl->color[2], 0.0f, 1.0f );
+	Q_clamp( pl->color[3], 0.0f, 1.0f );
 
 	return pl;
 }
@@ -387,7 +387,7 @@ void CG_InstaPolyBeam( const vec3_t start, const vec3_t end, int team ) {
 		tcolor[2] = 0.4f;
 	}
 
-	tcolor[3] = min( cg_instabeam_alpha->value, 1 );
+	tcolor[3] = std::min( cg_instabeam_alpha->value, 1.0f );
 	if( !tcolor[3] ) {
 		return;
 	}

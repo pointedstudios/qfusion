@@ -303,7 +303,7 @@ static float R_SetupShadowmapView( shadowGroup_t *group, refdef_t *refdef, int l
 	image_t *shadowmap;
 
 	// clamp LOD to a sane value
-	clamp( lod, 0, SHADOWMAP_MAX_LOD );
+	Q_clamp( lod, 0, SHADOWMAP_MAX_LOD );
 
 	shadowmap = group->shadowmap;
 	width = shadowmap->upload_width >> lod;

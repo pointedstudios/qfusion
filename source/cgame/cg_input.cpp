@@ -477,7 +477,7 @@ static void CG_GamepadFrame( void ) {
 	float value = fabs( sticks[axes] );
 	if( value > cg_gamepad_yawThres->value ) {
 		cg_gamepadAccelYaw += ( ( value > accelThres ) ? 1.0f : -1.0f ) * cg_inputFrameTime * 0.001f * accelSpeed;
-		clamp( cg_gamepadAccelYaw, 1.0f, accelMax );
+		Q_clamp( cg_gamepadAccelYaw, 1.0f, accelMax );
 	} else {
 		cg_gamepadAccelYaw = 1.0f;
 	}
@@ -485,7 +485,7 @@ static void CG_GamepadFrame( void ) {
 	value = fabs( sticks[axes + 1] );
 	if( value > cg_gamepad_pitchThres->value ) {
 		cg_gamepadAccelPitch += ( ( value > accelThres ) ? 1.0f : -1.0f ) * cg_inputFrameTime * 0.001f * accelSpeed;
-		clamp( cg_gamepadAccelPitch, 1.0f, accelMax );
+		Q_clamp( cg_gamepadAccelPitch, 1.0f, accelMax );
 	} else {
 		cg_gamepadAccelPitch = 1.0f;
 	}
@@ -546,7 +546,7 @@ static void CG_AddGamepadMovement( vec3_t movement ) {
 	float absValue = fabs( value );
 	if( runThreshold > threshold ) {
 		absValue = ( absValue - threshold ) / ( runThreshold - threshold );
-		clamp( absValue, 0.0f, 1.0f );
+		Q_clamp( absValue, 0.0f, 1.0f );
 		absValue *= absValue;
 	} else {
 		absValue = ( float )( absValue > threshold );
@@ -561,7 +561,7 @@ static void CG_AddGamepadMovement( vec3_t movement ) {
 	absValue = fabs( value );
 	if( runThreshold > threshold ) {
 		absValue = ( absValue - threshold ) / ( runThreshold - threshold );
-		clamp( absValue, 0.0f, 1.0f );
+		Q_clamp( absValue, 0.0f, 1.0f );
 		absValue *= absValue;
 	} else {
 		absValue = ( float )( absValue > threshold );

@@ -956,7 +956,7 @@ void SP_misc_particles( edict_t *ent ) {
 
 	if( st.radius > 0 ) {
 		ent->particlesInfo.spread = st.radius;
-		clamp( ent->particlesInfo.spread, 0, 255 );
+		Q_clamp( ent->particlesInfo.spread, 0, 255 );
 	}
 
 	ent->think = SP_misc_particles_finish;

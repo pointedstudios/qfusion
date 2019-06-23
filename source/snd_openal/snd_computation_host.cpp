@@ -4,14 +4,6 @@
 #include "../qalgo/Links.h"
 #include "../qalgo/SingletonHolder.h"
 
-#ifdef min
-#undef min
-#endif
-
-#ifdef max
-#undef max
-#endif
-
 #include <thread>
 #include <algorithm>
 

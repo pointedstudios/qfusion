@@ -627,7 +627,7 @@ void SP_target_location( edict_t *self ) {
 		location = G_RegisterMapLocationName( self->message );
 	}
 
-	clamp( self->count, 0, 7 );
+	Q_clamp( self->count, 0, 7 );
 	self->style = location;
 }
 

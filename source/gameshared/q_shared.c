@@ -1919,15 +1919,15 @@ float Q_GainForAttenuation( int model, float maxdistance, float refdistance, flo
 		case 0:
 			//gain = (1 - AL_ROLLOFF_FACTOR * (distance * AL_REFERENCE_DISTANCE) / (AL_MAX_DISTANCE - AL_REFERENCE_DISTANCE))
 			//AL_LINEAR_DISTANCE
-			dist = min( dist, maxdistance );
+			dist = Q_min( dist, maxdistance );
 			gain = ( 1 - attenuation * ( dist - refdistance ) / ( maxdistance - refdistance ) );
 			break;
 		case 1:
 		default:
 			//gain = (1 - AL_ROLLOFF_FACTOR * (distance - AL_REFERENCE_DISTANCE) / (AL_MAX_DISTANCE - AL_REFERENCE_DISTANCE))
 			//AL_LINEAR_DISTANCE_CLAMPED
-			dist = max( dist, refdistance );
-			dist = min( dist, maxdistance );
+			dist = Q_max( dist, refdistance );
+			dist = Q_min( dist, maxdistance );
 			gain = ( 1 - attenuation * ( dist - refdistance ) / ( maxdistance - refdistance ) );
 			break;
 		case 2:
@@ -1938,8 +1938,8 @@ float Q_GainForAttenuation( int model, float maxdistance, float refdistance, flo
 		case 3:
 			//AL_INVERSE_DISTANCE_CLAMPED
 			//gain = AL_REFERENCE_DISTANCE / (AL_REFERENCE_DISTANCE + AL_ROLLOFF_FACTOR * (distance - AL_REFERENCE_DISTANCE));
-			dist = max( dist, refdistance );
-			dist = min( dist, maxdistance );
+			dist = Q_max( dist, refdistance );
+			dist = Q_min( dist, maxdistance );
 			gain = refdistance / ( refdistance + attenuation * ( dist - refdistance ) );
 			break;
 		case 4:
@@ -1950,8 +1950,8 @@ float Q_GainForAttenuation( int model, float maxdistance, float refdistance, flo
 		case 5:
 			//AL_EXPONENT_DISTANCE_CLAMPED
 			//gain = (distance / AL_REFERENCE_DISTANCE) ^ (- AL_ROLLOFF_FACTOR)
-			dist = max( dist, refdistance );
-			dist = min( dist, maxdistance );
+			dist = Q_max( dist, refdistance );
+			dist = Q_min( dist, maxdistance );
 			gain = pow( ( dist / refdistance ), ( -attenuation ) );
 			break;
 		case 6:

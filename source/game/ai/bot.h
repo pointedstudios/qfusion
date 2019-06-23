@@ -206,7 +206,7 @@ public:
 
 	void SetBaseOffensiveness( float baseOffensiveness_ ) {
 		this->baseOffensiveness = baseOffensiveness_;
-		clamp( this->baseOffensiveness, 0.0f, 1.0f );
+		Q_clamp( this->baseOffensiveness, 0.0f, 1.0f );
 	}
 
 	void ClearOverriddenEntityWeights() {

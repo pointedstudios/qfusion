@@ -1605,7 +1605,7 @@ static void Mod_Finish( const lump_t *faces, const lump_t *light, vec3_t gridSiz
 		}
 		mapConfig.averageLightingIntensity /= (float)loadbmodel->numlightgridelems;
 		mapConfig.averageLightingIntensity *= 1.5f;
-		clamp( mapConfig.averageLightingIntensity, 0.0f, 1.0f );
+		Q_clamp( mapConfig.averageLightingIntensity, 0.0f, 1.0f );
 	}
 
 	// outline color

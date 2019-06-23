@@ -899,19 +899,19 @@ void G_InitMover( edict_t *ent ) {
 		if( r <= 1.0 ) {
 			r *= 255;
 		}
-		clamp( r, 0, 255 );
+		Q_clamp( r, 0, 255 );
 
 		g = ent->color[1];
 		if( g <= 1.0 ) {
 			g *= 255;
 		}
-		clamp( g, 0, 255 );
+		Q_clamp( g, 0, 255 );
 
 		b = ent->color[2];
 		if( b <= 1.0 ) {
 			b *= 255;
 		}
-		clamp( b, 0, 255 );
+		Q_clamp( b, 0, 255 );
 
 		ent->s.light = COLOR_RGBA( r, g, b, i );
 	}

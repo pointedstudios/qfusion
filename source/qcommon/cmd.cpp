@@ -23,6 +23,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../qalgo/q_trie.h"
 #include "../client/console.h"
 
+#include <algorithm>
+
 #define MAX_ALIAS_NAME      64
 #define ALIAS_LOOP_COUNT    16
 
@@ -793,7 +795,7 @@ void Cmd_TokenizeString( const char *text ) {
 		if( cmd_argc < MAX_STRING_TOKENS ) {
 			size_t size = strlen( com_token ) + 1;
 			if( cmd_argv_sizes[cmd_argc] < size ) {
-				cmd_argv_sizes[cmd_argc] = min( size + 64, MAX_TOKEN_CHARS );
+				cmd_argv_sizes[cmd_argc] = std::min( size + 64, (size_t)MAX_TOKEN_CHARS );
 				if( cmd_argv[cmd_argc] ) {
 					Mem_ZoneFree( cmd_argv[cmd_argc] );
 				}
@@ -1024,7 +1026,7 @@ char **Cmd_CompleteFileList( const char *partial, const char *basedir, const cha
 		if( dir[0] ) {
 			Q_strncatz( dir, "/", sizeof( dir ) );
 		}
-		Q_strncpyz( subdir, partial, min( p - partial, (int)sizeof( subdir ) ) );
+		Q_strncpyz( subdir, partial, std::min( (int)( p - partial ), (int)sizeof( subdir ) ) );
 		for( subdir_len = strlen( subdir ); subdir[subdir_len - 1] == '/'; subdir_len-- ) subdir[subdir_len - 1] = '\0';
 		Q_strncatz( dir, subdir, sizeof( dir ) );
 		Q_strncatz( subdir, "/", sizeof( subdir ) );

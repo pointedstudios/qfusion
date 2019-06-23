@@ -189,7 +189,7 @@ bool AiObjectiveBasedTeam::SetDefenceSpotAlert( int id, float alertLevel, unsign
 		return false;
 	}
 
-	clamp( alertLevel, 0.0f, 1.0f );
+	Q_clamp( alertLevel, 0.0f, 1.0f );
 	spot->alertLevel = alertLevel;
 	spot->alertTimeoutAt = level.time + timeoutPeriod;
 	return true;
@@ -486,7 +486,7 @@ void AiObjectiveBasedTeam::AssignBots( ObjectiveSpotImpl *spotsListHead, int num
 		// Be greedy and try to assign a number of all other bots scaled by the spot weight
 		numBotsToAssign += std::round( ( candidates.size() - spot->MinAssignedBots() ) * spot->weight );
 		// Ensure the value is withing the defined bounds
-		clamp( numBotsToAssign, spot->MinAssignedBots(), spot->MaxAssignedBots() );
+		Q_clamp( numBotsToAssign, spot->MinAssignedBots(), spot->MaxAssignedBots() );
 
 		clamp_high( numBotsToAssign, candidates.size() );
 		// Best candidates are at the end of candidates vector

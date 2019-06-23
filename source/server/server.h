@@ -26,13 +26,6 @@
 #include "../game/g_public.h"
 #include "../matchmaker/mm_rating.h"
 
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
-
 #include <algorithm>
 #include <cstdlib>
 #include <cmath>

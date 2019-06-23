@@ -58,7 +58,7 @@ protected:
 
 		float operator()( float rawNewValue, float oldValue, float mins, float maxs ) const {
 			float result = newWeight * ( rawNewValue ) + oldWeight * ( oldValue );
-			clamp( result, mins, maxs );
+			Q_clamp( result, mins, maxs );
 			return result;
 		}
 	};

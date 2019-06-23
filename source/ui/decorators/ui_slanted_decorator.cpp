@@ -63,7 +63,7 @@ public:
 			return;
 		} else {
 			// Values outside this range do not really make sense
-			clamp( angle, 0.0f, 45.0f );
+			Q_clamp( angle, 0.0f, 45.0f );
 			tangent = ::tanf( DEG2RAD( angle ) );
 		}
 	}

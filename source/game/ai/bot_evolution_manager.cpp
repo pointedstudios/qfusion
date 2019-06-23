@@ -152,7 +152,7 @@ void CopyWeightConfigRandomizing( const AiWeightConfigVarGroup *from, AiWeightCo
 		// Apply the gaussian random to the value. For gaussian random = 0 value remains the same
 		value += gaussianRandom;
 		// Respect the value domain
-		clamp( value, minValue, maxValue );
+		Q_clamp( value, minValue, maxValue );
 		// Set the mutated var value
 		varsIterator.Second()->SetValue( value );
 	}

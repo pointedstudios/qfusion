@@ -18,8 +18,8 @@ void JumpToSpotScript::Activate( const vec3_t startOrigin_,
 	VectorCopy( startOrigin_, this->startOrigin );
 	this->timeout = timeout + 150u;
 	this->reachRadius = reachRadius_;
-	clamp( startAirAccelFrac_, 0.0f, 1.0f );
-	clamp( endAirAccelFrac_, 0.0f, 1.0f );
+	Q_clamp( startAirAccelFrac_, 0.0f, 1.0f );
+	Q_clamp( endAirAccelFrac_, 0.0f, 1.0f );
 	this->startAirAccelFrac = startAirAccelFrac_;
 	this->endAirAccelFrac = endAirAccelFrac_;
 	this->jumpBoostSpeed = jumpBoostSpeed_;

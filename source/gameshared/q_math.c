@@ -105,7 +105,7 @@ vec4_t color_table[MAX_S_COLORS] =
 * ColorNormalize
 */
 vec_t ColorNormalize( const vec_t *in, vec_t *out ) {
-	vec_t f = max( max( in[0], in[1] ), in[2] );
+	vec_t f = Q_max( Q_max( in[0], in[1] ), in[2] );
 
 	if( f > 1.0f ) {
 		f = 1.0f / f;
@@ -989,7 +989,7 @@ void Quat_Quat3( const vec3_t in, quat_t out ) {
 	out[0] = in[0];
 	out[1] = in[1];
 	out[2] = in[2];
-	out[3] = -sqrt( max( 1 - in[0] * in[0] - in[1] * in[1] - in[2] * in[2], 0.0f ) );
+	out[3] = -sqrt( Q_max( 1 - in[0] * in[0] - in[1] * in[1] - in[2] * in[2], 0.0f ) );
 }
 
 bool Quat_Compare( const quat_t q1, const quat_t q2 ) {

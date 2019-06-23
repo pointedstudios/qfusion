@@ -3,12 +3,6 @@
 #include "snd_allocators.h"
 
 #include "../gameshared/q_collision.h"
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
 
 #include "../qalgo/Links.h"
 #include "../qalgo/SingletonHolder.h"

@@ -371,7 +371,7 @@ void CG_DrawMiniMap( int x, int y, int iw, int ih, bool draw_playernames, bool d
 			if( isSelf ) {
 				int thisX, thisY, thisSize;
 
-				thisSize = max( box_size, 8 ) * cgs.vidHeight / 600;
+				thisSize = std::max( box_size, 8 ) * cgs.vidHeight / 600;
 				thisX = CG_VerticalAlignForHeight( x + (int)coords[0], ALIGN_CENTER_MIDDLE, thisSize );
 				thisY = CG_VerticalAlignForHeight( y + (int)coords[1] - thisSize, ALIGN_CENTER_MIDDLE, thisSize );
 				trap_R_DrawStretchPic( thisX, thisY, thisSize, thisSize, 0, 0, 1, 1, tmp_yellow_alpha, CG_MediaShader( cgs.media.shaderDownArrow ) );
@@ -495,7 +495,7 @@ void CG_DrawPicBar( int x, int y, int width, int height, int align, float percen
 		color = colorWhite;
 	}
 
-	clamp( percent, 0, 100 );
+	Q_clamp( percent, 0, 100 );
 	if( !percent ) {
 		return;
 	}

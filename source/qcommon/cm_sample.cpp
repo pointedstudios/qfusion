@@ -1,13 +1,7 @@
 #include "qcommon.h"
 #include "cm_local.h"
 
-#ifdef max
-#undef max
-#endif
-#ifdef min
-#undef min
-#endif
-
+#include <algorithm>
 #include <limits>
 
 /*

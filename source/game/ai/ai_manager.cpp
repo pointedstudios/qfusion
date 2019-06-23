@@ -290,7 +290,7 @@ float AiManager::MakeSkillForNewBot( const gclient_t *client ) const {
 		skillLevel = ( trap_Cvar_Value( "sv_skilllevel" ) + random() ) / 3.0f;
 		// Let the skill be not less than 10, so we can have nice-looking
 		// two-digit skills (not talking about formatting here)
-		clamp( skillLevel, 0.10f, 0.99f );
+		Q_clamp( skillLevel, 0.10f, 0.99f );
 	}
 
 	G_Printf( "%s skill %i\n", client->netname, (int)( skillLevel * 100 ) );

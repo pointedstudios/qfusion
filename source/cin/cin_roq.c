@@ -365,7 +365,7 @@ static cin_yuv_t *RoQ_ReadVideo( cinematics_t *cin ) {
 	vqflg_pos = -1;
 	xpos = ypos = 0;
 
-#define RoQ_ReadRaw() read = min( sizeof( raw ), remaining ); remaining -= read; trap_FS_Read( raw, read, cin->file );
+#define RoQ_ReadRaw() read = Q_min( sizeof( raw ), remaining ); remaining -= read; trap_FS_Read( raw, read, cin->file );
 #define RoQ_ReadByte( x ) if( bpos >= read ) { RoQ_ReadRaw(); bpos = 0; } ( x ) = raw[bpos++];
 #define RoQ_ReadShort( x ) if( bpos + 1 == read ) { c = raw[bpos]; RoQ_ReadRaw(); ( x ) = ( raw[0] << 8 ) | c; bpos = 1; } \
 	else { if( bpos + 1 > read ) { RoQ_ReadRaw(); bpos = 0; } ( x ) = ( raw[bpos + 1] << 8 ) | raw[bpos]; bpos += 2; }
@@ -484,7 +484,7 @@ static void RoQ_ReadAudio( cinematics_t *cin ) {
 	}
 
 	for( remaining = chunk->size; remaining > 0; remaining -= read ) {
-		read = min( sizeof( raw ), remaining );
+		read = Q_min( sizeof( raw ), remaining );
 		trap_FS_Read( raw, read, cin->file );
 
 		if( chunk->id == RoQ_SOUND_MONO ) {

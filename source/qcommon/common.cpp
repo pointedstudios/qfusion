@@ -1142,7 +1142,7 @@ void SystemFeaturesHolder::TestNumberOfProcessors( unsigned *physical, unsigned 
 	// We hope that `lscpu` works for the most client installations
 	long confValue = sysconf( _SC_NPROCESSORS_ONLN );
 	// Sanity/error checks
-	clamp( confValue, 1, 256 );
+	Q_clamp( confValue, 1, 256 );
 	*physical = (unsigned)confValue;
 	*logical = (unsigned)confValue;
 #endif
