@@ -73,6 +73,7 @@ cvar_t *cg_projectileFireTrailAlpha;
 cvar_t *cg_bloodTrailAlpha;
 cvar_t *cg_heavyRocketExplosions;
 cvar_t *cg_heavyGrenadeExplosions;
+cvar_t *cg_heavyShockwaveExplosions;
 cvar_t *cg_explosionsRing;
 cvar_t *cg_explosionsDust;
 cvar_t *cg_gibs;
@@ -773,6 +774,7 @@ static void CG_RegisterVariables( void ) {
 	cg_bloodTrailAlpha =    trap_Cvar_Get( "cg_bloodTrailAlpha", "1.0", CVAR_ARCHIVE );
 	cg_heavyRocketExplosions = trap_Cvar_Get( "cg_heavyRocketExplosions", "1", CVAR_ARCHIVE );
 	cg_heavyGrenadeExplosions = trap_Cvar_Get( "cg_heavyGrenadeExplosions", "1", CVAR_ARCHIVE );
+	cg_heavyShockwaveExplosions = trap_Cvar_Get( "cg_heavyShockwaveExplosions", "1", CVAR_ARCHIVE );
 	cg_explosionsRing = trap_Cvar_Get( "cg_explosionsRing", "1", CVAR_ARCHIVE );
 	cg_explosionsDust =    trap_Cvar_Get( "cg_explosionsDust", "1", CVAR_ARCHIVE );
 	cg_gibs =       trap_Cvar_Get( "cg_gibs", "1", CVAR_ARCHIVE );

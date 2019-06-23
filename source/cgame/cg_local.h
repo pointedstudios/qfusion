@@ -896,6 +896,7 @@ extern cvar_t *cg_cartoonHitEffect;
 
 extern cvar_t *cg_heavyRocketExplosions;
 extern cvar_t *cg_heavyGrenadeExplosions;
+extern cvar_t *cg_heavyShockwaveExplosions;
 
 extern cvar_t *cg_explosionsRing;
 extern cvar_t *cg_explosionsDust;

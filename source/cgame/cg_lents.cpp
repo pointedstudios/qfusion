@@ -703,6 +703,10 @@ void CG_WaveExplosionMode( const vec3_t pos, const vec3_t dir, int fire_mode, fl
 	} else {
 		trap_S_StartFixedSound( CG_MediaSfx( cgs.media.sfxWaveWeakHit ), pos, CHAN_AUTO, cg_volume_effects->value, ATTN_DISTANT );
 	}
+
+	if( cg_heavyShockwaveExplosions->integer ) {
+		trap_S_StartFixedSound( CG_MediaSfx( cgs.media.sfxExplosionLfe ), pos, CHAN_AUTO, cg_volume_effects->value, ATTN_NORM );
+	}
 }
 
 /*
