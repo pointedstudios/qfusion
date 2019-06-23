@@ -1225,9 +1225,6 @@ void AiSquadBasedTeam::OnBotRemoved( Bot *bot ) {
 	// Perform some additional checks unless this is a public release build.
 	// These checks have turned to be very useful to catch bugs.
 
-	// TODO: This test is skipped until the rare glitch in round-based gametypes is fixed.
-	// Currently a failure of this assertion is harmless but its better to ensure correctness for future additions.
-#if 0
 	// If the bot is in squad, we should invalidate the squad.
 	// The AiSquad::Invalidate() links all squad bots to our orphan lists.
 	bool wasInSquad = false;
@@ -1260,24 +1257,25 @@ void AiSquadBasedTeam::OnBotRemoved( Bot *bot ) {
 	} else {
 		FailWith( "OnBotRemoved(%p): the bot was not in orphans list", bot );
 	}
-#else
-	if( auto *const squad = bot->squad ) {
-		squad->Invalidate();
-	}
-
-	Unlink( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
-#endif
 }
 
 void AiSquadBasedTeam::TransferStateFrom( AiBaseTeam *that ) {
 	// The super method must always be called
 	AiBaseTeam::TransferStateFrom( that );
 
-	// Transfer the orphan bots list if possible
-	if( auto *thatSquadBasedTeam = dynamic_cast<AiSquadBasedTeam *>( that ) ) {
-		this->orphanBotsHead = thatSquadBasedTeam->orphanBotsHead;
-		thatSquadBasedTeam->orphanBotsHead = nullptr;
+	auto *thatSquadBasedTeam = dynamic_cast<AiSquadBasedTeam *>( that );
+	if( !thatSquadBasedTeam ) {
+		return;
 	}
+
+	// Force detachment of bots from squads so they end in "that" orphans list
+	for( AiSquad *squad = thatSquadBasedTeam->usedSquadsHead; squad; squad = squad->NextInList() ) {
+		squad->Invalidate();
+	}
+
+	// Transfer the orphan bots list
+	this->orphanBotsHead = thatSquadBasedTeam->orphanBotsHead;
+	thatSquadBasedTeam->orphanBotsHead = nullptr;
 }
 
 void AiSquadBasedTeam::Think() {
