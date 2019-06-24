@@ -382,6 +382,266 @@ static bool CheckStateForPositionCmd( edict_t *ent ) {
 	return false;
 }
 
+class PositionArgSeqMatcher {
+protected:
+	const char *const name;
+	vec3_t values { 0, 0, 0 };
+	const int numExpectedValues;
+	bool hasResult { false };
+
+	static float ArgToFloat( int argNum );
+	virtual int Parse( int startArgNum );
+
+	template <typename Iterable>
+	static int MatchByFirst( edict_t *user, int argNum, const char *prefix, const Iterable &matchers );
+
+	virtual const char *Validate() { return nullptr; }
+public:
+	explicit PositionArgSeqMatcher( const char *name_, int numExpectedValues_ )
+		: name( name_ ), numExpectedValues( numExpectedValues_ ) {}
+
+	virtual ~PositionArgSeqMatcher() = default;
+
+	bool CanMatch( const char *argSeqHead ) const {
+		return ( Q_stricmp( argSeqHead, name ) ) == 0;
+	}
+
+	const char *Name() const { return name; }
+	bool HasResult() const { return hasResult; }
+
+	void CopyTo( float *dest ) const {
+		if( hasResult ) {
+			std::copy_n( values, numExpectedValues, dest );
+		} else {
+			std::fill_n( dest, numExpectedValues, 0.0f );
+		}
+	}
+
+	void CopyToIfHasResult( float *dest ) const {
+		if( hasResult ) {
+			std::copy_n( values, numExpectedValues, dest );
+		}
+	}
+
+	template <typename Iterable>
+	static bool MatchAndValidate( edict_t *user, int startArgNum, const char *argSeqPrefix, const Iterable &matchers );
+};
+
+struct OriginMatcher : public PositionArgSeqMatcher {
+	OriginMatcher() : PositionArgSeqMatcher( "origin", 3 ) {}
+
+	const char *Validate() override {
+		vec3_t worldMins, worldMaxs;
+		const float *playerMins = playerbox_stand_mins;
+		const float *playerMaxs = playerbox_stand_maxs;
+		trap_CM_InlineModelBounds( trap_CM_InlineModel( 0 ), worldMins, worldMaxs );
+		for( int i = 0; i < 3; ++i ) {
+			if( values[i] + playerMins[i] <= worldMins[i] || values[i] + playerMaxs[i] >= worldMaxs[i] ) {
+				return "The position is outside of world bounds";
+			}
+		}
+		return nullptr;
+	}
+};
+
+struct AnglesMatcher : public PositionArgSeqMatcher {
+	AnglesMatcher() : PositionArgSeqMatcher( "angles", 2 ) {}
+
+	const char *Validate() override {
+		if( values[PITCH] < -90.0f || values[PITCH] > +90.0f ) {
+			return "The roll angle must be within [-90, +90] degrees range";
+		}
+		if( values[YAW] < 0 || values[YAW] > 360.0f ) {
+			return "The yaw angle must be within [-180, +180] degrees range";
+		}
+		if( values[ROLL] != 0 ) {
+			return "The roll angle must be zero";
+		}
+		return nullptr;
+	}
+};
+
+struct VelocityMatcher : public PositionArgSeqMatcher {
+	VelocityMatcher() : PositionArgSeqMatcher( "velocity", 3 ) {}
+
+	const char *Validate() override {
+		if( VectorLengthSquared( values ) > 9999 * 9999 ) {
+			return "The velocity magnitude is way too large";
+		}
+		return nullptr;
+	}
+};
+
+struct SpeedMatcher : public PositionArgSeqMatcher {
+	SpeedMatcher(): PositionArgSeqMatcher( "speed", 1 ) {}
+
+	const char *Validate() override {
+		if( std::fabs( values[0] ) > 9999 ) {
+			return "The speed is way too large";
+		}
+		return nullptr;
+	}
+};
+
+int PositionArgSeqMatcher::Parse( int startArgNum ) {
+	assert( startArgNum > 0 && numExpectedValues > 0 );
+	if( startArgNum + numExpectedValues > trap_Cmd_Argc() ) {
+		return -1;
+	}
+	for( int i = 0; i < numExpectedValues; ++i ) {
+		float val = ArgToFloat( startArgNum + i );
+		if( !std::isfinite( val ) ) {
+			return -1;
+		}
+		values[i] = val;
+	}
+	hasResult = true;
+	return numExpectedValues;
+}
+
+float PositionArgSeqMatcher::ArgToFloat( int argNum ) {
+	const char *arg = trap_Cmd_Argv( argNum );
+	if( !arg || !*arg ) {
+		return std::numeric_limits<float>::infinity();
+	}
+	// C/C++ scrubs do not have sane portable locale-independent conversions... just use ::atof()
+	double val = ::atof( arg );
+	if( !std::isfinite( val ) ) {
+		return std::numeric_limits<float>::infinity();
+	}
+	if( val == 0.0f ) {
+		// This is not 100% correct but generally does a good job at making hints.
+		// Otherwise keep following "garbage in, garbage out" as expected.
+		if( ::strspn( arg, "0." ) != ::strlen( arg ) ) {
+			return std::numeric_limits<float>::infinity();
+		}
+	}
+	return (float)val;
+}
+
+template <typename Iterable>
+bool PositionArgSeqMatcher::MatchAndValidate( edict_t *user, int argNum, const char *prefix, const Iterable &matchers ) {
+    const int endArgNum = trap_Cmd_Argc();
+    while( argNum < endArgNum ) {
+    	int matchedLength = MatchByFirst( user, argNum, prefix, matchers );
+    	if( matchedLength < 0 ) {
+    		return false;
+    	}
+    	argNum += matchedLength;
+    }
+
+	bool validationSuccess = true;
+    for ( auto it = std::begin( matchers ); it != std::end( matchers ); ++it ) {
+    	PositionArgSeqMatcher *matcher = *it;
+    	if( !matcher->HasResult() ) {
+    		continue;
+    	}
+    	const char *err = matcher->Validate();
+    	if( !err ) {
+    		continue;
+    	}
+    	G_PrintMsg( user, "%s\n", err );
+    	validationSuccess = false;
+    }
+
+    return validationSuccess;
+}
+
+template <typename Iterable>
+int PositionArgSeqMatcher::MatchByFirst( edict_t *user, int argNum, const char *prefix, const Iterable &matchers ) {
+	const char *seqHead = trap_Cmd_Argv( argNum++ );
+	size_t prefixOffset = ::strlen( prefix );
+	if( Q_strnicmp( seqHead, prefix, prefixOffset ) != 0 ) {
+		G_PrintMsg( user, "Unknown arg sequence `%s`\n", seqHead );
+		return -1;
+	}
+
+	for ( auto it = std::begin( matchers ); it != std::end( matchers ); ++it ) {
+		PositionArgSeqMatcher *matcher = *it;
+		if( !matcher->CanMatch( seqHead + prefixOffset ) ) {
+			continue;
+		}
+		int numParsedArgs = matcher->Parse( argNum );
+		if( numParsedArgs > 0 ) {
+			return numParsedArgs + 1;
+		}
+		G_PrintMsg( user, "Failed to parse `%s`\n", matcher->Name() );
+		return -1;
+	}
+
+	G_PrintMsg( user, "Unknown arg sequence `%s`\n", seqHead );
+	return -1;
+}
+
+static void SetOrLoadPosition( edict_t *ent, const char *argSeqPrefix, const char *verb, bool tryLoadingMissing ) {
+	vec3_t origin { 0, 0, 0 };
+	vec3_t angles { 0, 0, 0 };
+
+	// Fill by saved values if needed
+	if( tryLoadingMissing && ent->r.client->teamstate.position_saved ) {
+		VectorCopy( ent->r.client->teamstate.position_origin, origin );
+		VectorCopy( ent->r.client->teamstate.position_angles, angles );
+	}
+
+	OriginMatcher originMatcher;
+	AnglesMatcher anglesMatcher;
+	VelocityMatcher velocityMatcher;
+	SpeedMatcher speedMatcher;
+	PositionArgSeqMatcher *matchers[] = { &originMatcher, &anglesMatcher, &velocityMatcher, &speedMatcher };
+	if( !PositionArgSeqMatcher::MatchAndValidate( ent, 2, argSeqPrefix, matchers ) ) {
+		return;
+	}
+
+	if( !originMatcher.HasResult() ) {
+		// If we are not allowed to load saved origin
+		if( !tryLoadingMissing ) {
+			G_PrintMsg( ent, "An origin must always be specified\n" );
+			return;
+		}
+		// If there's nothing saved
+		if( !ent->r.client->teamstate.position_saved ) {
+			G_PrintMsg( ent, "A saved or specified origin must always be present\n" );
+			return;
+		}
+	}
+
+	originMatcher.CopyToIfHasResult( origin );
+	anglesMatcher.CopyToIfHasResult( angles );
+
+	if( ent->r.client->resp.chase.active ) {
+		G_SpectatorMode( ent );
+	}
+
+	if( !G_Teleport( ent, origin, angles ) ) {
+		G_PrintMsg( ent, "Position not available.\n" );
+		return;
+	}
+
+	if( !velocityMatcher.HasResult() && !speedMatcher.HasResult() ) {
+		G_PrintMsg( ent, "Position %s\n", verb );
+		return;
+	}
+
+	vec3_t velocity;
+	VectorCopy( ent->velocity, velocity );
+	velocityMatcher.CopyToIfHasResult( velocity );
+	if( speedMatcher.HasResult() ) {
+		float newSpeed = 0.0f;
+		speedMatcher.CopyTo( &newSpeed );
+		const float oldSpeed = VectorLength( velocity );
+		if( oldSpeed < 1 ) {
+			AngleVectors( angles, velocity, nullptr, nullptr );
+			VectorScale( velocity, newSpeed, velocity );
+		} else {
+			float scale = newSpeed / oldSpeed;
+			VectorScale( velocity, scale, velocity );
+		}
+	}
+
+	VectorCopy( velocity, ent->velocity );
+	G_PrintMsg( ent, "Position %s with modified velocity.\n", verb );
+}
+
 /*
 * Cmd_Position_f
 */
@@ -406,50 +666,28 @@ static void Cmd_Position_f( edict_t *ent ) {
 		return;
 	}
 
-	if( !Q_stricmp( action, "load" ) ) {
-		if( !CheckStateForPositionCmd( ent ) ) {
+	if( !Q_stricmp( action, "showSaved" ) ) {
+		if( !ent->r.client->teamstate.position_saved ) {
+			G_PrintMsg( ent, "There's no saved position\n" );
 			return;
 		}
-		if( !ent->r.client->teamstate.position_saved ) {
-			G_PrintMsg( ent, "No position saved.\n" );
-		} else {
-			if( ent->r.client->resp.chase.active ) {
-				G_SpectatorMode( ent );
-			}
+		const float *o = ent->r.client->teamstate.position_origin;
+		const float *a = ent->r.client->teamstate.position_angles;
+		G_PrintMsg( ent, "Saved origin: %.6f %.6f %.6f, angles: %.6f %.6f\n", o[0], o[1], o[2], a[0], a[1] );
+		return;
+	}
 
-			if( G_Teleport( ent, ent->r.client->teamstate.position_origin, ent->r.client->teamstate.position_angles ) ) {
-				G_PrintMsg( ent, "Position loaded.\n" );
-			} else {
-				G_PrintMsg( ent, "Position not available.\n" );
-			}
+	if( !Q_stricmp( action, "load" ) ) {
+		if( CheckStateForPositionCmd( ent ) ) {
+			SetOrLoadPosition( ent, "with", "loaded", true );
 		}
 		return;
 	}
 
-	if( !Q_stricmp( action, "set" ) && trap_Cmd_Argc() == 7 ) {
-		if( !CheckStateForPositionCmd( ent ) ) {
-			return;
+	if( !Q_stricmp( action, "set" ) ) {
+		if( CheckStateForPositionCmd( ent ) ) {
+			SetOrLoadPosition( ent, "", "set", false );
 		}
-
-		vec3_t origin, angles;
-		int i, argnumber = 2;
-
-		for( i = 0; i < 3; i++ )
-			origin[i] = atof( trap_Cmd_Argv( argnumber++ ) );
-		for( i = 0; i < 2; i++ )
-			angles[i] = atof( trap_Cmd_Argv( argnumber++ ) );
-		angles[2] = 0;
-
-		if( ent->r.client->resp.chase.active ) {
-			G_SpectatorMode( ent );
-		}
-
-		if( G_Teleport( ent, origin, angles ) ) {
-			G_PrintMsg( ent, "Position not available.\n" );
-		} else {
-			G_PrintMsg( ent, "Position set.\n" );
-		}
-
 		return;
 	}
 
@@ -488,14 +726,18 @@ static void Cmd_Position_f( edict_t *ent ) {
 		return;
 	}
 
-	char msg[MAX_STRING_CHARS];
+	wsw::stringstream ss;
+	ss << "Usage:\n";
+	ss << "position save - Save the current position (origin and angles)\n";
+	ss << "position showSaved - Displays an information about the saved position\n";
+	ss << "position load - Teleport to a saved position. Saved parameters can be overridden:\n";
+	ss << "position load [withOrigin <x> >y> <z>] [withAngles <pitch> <yaw>]";
+	   ss << " [withVelocity <vx> <vy> <vz>] [withSpeed <s>]\n";
+	ss << "position set - Teleport to a specified position. Parameters should be specified this way:\n";
+	ss << "position set origin <x> <y> <z> [angles <pitch> <yaw>] [velocity <vx> <vy> <vz>] [speed <s>]\n";
+	ss << "position details - Display a detailed information about the current position\n";
 
-	msg[0] = 0;
-	Q_strncatz( msg, "Usage:\nposition save - Save current position\n", sizeof( msg ) );
-	Q_strncatz( msg, "position load - Teleport to saved position\n", sizeof( msg ) );
-	Q_strncatz( msg, "position set <x> <y> <z> <pitch> <yaw> - Teleport to specified position\n", sizeof( msg ) );
-	Q_strncatz( msg, "position details - Display detailed information about the current position\n", sizeof( msg ) );
-	G_PrintMsg( ent, "%s", msg );
+	G_PrintMsg( ent, "%s", ss.str().c_str() );
 }
 
 /*
