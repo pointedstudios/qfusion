@@ -1721,6 +1721,17 @@ static void CL_WriteConfig_f( void ) {
 	Mem_TempFree( name );
 }
 
+static void CL_Help_f() {
+	Com_Printf( "Type commands here. Use TAB key for getting suggestions. Use PgUp/PgDn keys for scrolling.\n");
+	Com_Printf( "These commands can be useful:\n" );
+	Com_Printf( "cvarlist - Displays the list of all console vars\n" );
+	Com_Printf( "cvarlist <pattern> - Displays a list of console vars that match the pattern\n" );
+	Com_Printf( "Example: cvarlist zoom* - Displays a list of console vars that are related to zoom\n" );
+	Com_Printf( "cmdlist - Displays the list of all console commands\n" );
+	Com_Printf( "cmdlist <pattern> - Displays a list of console commands that match the pattern\n" );
+	Com_Printf( "Example: cmdlist *restart - Displays a list of commands that restart their corresponding subsystems\n" );
+}
+
 /*
 * CL_SetClientState
 */
@@ -2065,6 +2076,7 @@ static void CL_InitLocal( void ) {
 	Cmd_AddCommand( "showserverip", CL_ShowServerIP_f );
 	Cmd_AddCommand( "downloadstatus", CL_DownloadStatus_f );
 	Cmd_AddCommand( "downloadcancel", CL_DownloadCancel_f );
+	Cmd_AddCommand( "help", CL_Help_f );
 
 	Cmd_SetCompletionFunc( "demo", CL_DemoComplete );
 	Cmd_SetCompletionFunc( "demoavi", CL_DemoComplete );
