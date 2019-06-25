@@ -295,6 +295,8 @@ protected:
 	 */
 	AiSquad *AllocSquad();
 
+	void AddToOrphansList( Bot *bot );
+
 	void TransferStateFrom( AiBaseTeam *that ) override;
 
 	static AiSquadBasedTeam *InstantiateTeam( int team );

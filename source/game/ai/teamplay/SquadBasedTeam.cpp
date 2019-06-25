@@ -267,7 +267,7 @@ void AiSquad::DetachBots() {
 	for( Bot *bot = botsListHead; bot; bot = nextBot ) {
 		nextBot = bot->NextInSquad();
 		bot->OnDetachedFromSquad( this );
-		::Link( bot, &parent->orphanBotsHead, Bot::SQUAD_LINKS );
+		parent->AddToOrphansList( bot );
 	}
 	botsListHead = nullptr;
 	botsDetached = true;
@@ -295,11 +295,11 @@ constexpr unsigned CONNECTIVITY_TIMEOUT = 750;
 /**
  * This value defines a distance limit for quick rejection of non-feasible bot pairs for new squads
  */
-constexpr float CONNECTIVITY_PROXIMITY = 192.0f;
+constexpr float CONNECTIVITY_PROXIMITY = 256.0f;
 /**
  * This value defines summary AAS movement time limit from one bot to other and back
  */
-constexpr int CONNECTIVITY_MOVE_CENTISECONDS = 175;
+constexpr int CONNECTIVITY_MOVE_CENTISECONDS = 2 * 175;
 
 void AiSquad::Frame() {
 	// Update enemy pool
@@ -317,6 +317,15 @@ void AiSquad::Think() {
 		if( bot->IsGhosting() ) {
 			Invalidate();
 			return;
+		}
+	}
+
+	// Keep validating the bots list
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
+		for( Bot *otherBot = bot->NextInSquad(); otherBot; otherBot = otherBot->NextInSquad() ) {
+			if( bot == otherBot ) {
+				AI_FailWith( "AiSquad::Think()", "The bots list is malformed (there are duplicates)" );
+			}
 		}
 	}
 
@@ -1105,7 +1114,6 @@ void AiSquad::PrepareToAddBots() {
 }
 
 void AiSquad::AddBot( Bot *bot ) {
-#ifdef _DEBUG
 	if( !isValid ) {
 		AI_FailWith( "AiSquad::AddBot()", "Can't add a bot to a unused or invalid squad\n" );
 	}
@@ -1115,7 +1123,6 @@ void AiSquad::AddBot( Bot *bot ) {
 			AI_FailWith( "AiSquad::AddBot()", "Can't add a bot to the squad (it is already present)\n" );
 		}
 	}
-#endif
 
 	Link( bot, &botsListHead, Bot::SQUAD_LINKS );
 	numBots++;
@@ -1193,6 +1200,15 @@ AiSquadBasedTeam::~AiSquadBasedTeam() {
 void AiSquadBasedTeam::Frame() {
 	// Call super method first, it may contain some logic
 	AiBaseTeam::Frame();
+
+	// Keep checking whether the orphans list is valid
+	for( Bot *bot = orphanBotsHead; bot; bot = bot->NextInSquad() ) {
+		for( Bot *otherBot = bot->NextInSquad(); otherBot; otherBot = otherBot->NextInSquad() ) {
+			if( bot == otherBot ) {
+				AI_FailWith( "SquadsBuilder::Exec()", "There are duplicates in the orphans list" );
+			}
+		}
+	}
 
 	// Try to unlink invalid squads (they might have invalidated themselves)
 	AiSquad *nextSquad;
@@ -1302,18 +1318,13 @@ struct NearbyBotProps {
 	NearbyBotProps( Bot *bot_, float distance_ )
 		: bot( bot_ ), distance( distance_ ) {}
 
-	/**
-	 * An operator for sorting in ascending order by distance.
-	 * This operator gets used for eviction of a heap entry with the largest distance.
-	 * (The STL heap is a max-heap).
-	 */
 	bool operator<( const NearbyBotProps &that ) const { return distance < that.distance; }
 
 	int BotClientNum() const { return bot->EntNum() - 1; }
 };
 
 struct NearbyMates {
-	StaticVector<NearbyBotProps, AiSquad::MAX_SQUAD_SIZE> mates;
+	StaticVector<NearbyBotProps, MAX_CLIENTS> mates;
 
 	enum { RAW_LIST, SORTED_LIST };
 
@@ -1340,22 +1351,23 @@ struct NearbyMates {
 
 	int BotClientIndex() const { return orphan->EntNum() - 1; }
 
+	void Clear() { mates.clear(); }
+
 	void Add( Bot *bot, float distanceLike );
 
 	bool Contains( int botClientNum ) const;
+
+	void CompleteBuilding();
 };
 
 void NearbyMates::Add( Bot *bot, float distanceLike ) {
-	// If the capacity has been exceeded, remove the entry with the largest distance
-	if( mates.size() == AiSquad::MAX_SQUAD_SIZE ) {
-		std::pop_heap( mates.begin(), mates.end() );
-		mates.pop_back();
-	}
 	mates.emplace_back( NearbyBotProps( bot, distanceLike ) );
-	std::push_heap( mates.begin(), mates.end() );
-	if( minDistance < distanceLike ) {
-		minDistance = distanceLike;
-	}
+}
+
+void NearbyMates::CompleteBuilding() {
+	assert( !mates.empty() );
+	std::sort( mates.begin(), mates.end() );
+	minDistance = mates.front().distance;
 }
 
 bool NearbyMates::Contains( int botClientNum ) const {
@@ -1396,6 +1408,11 @@ public:
 NearbyMates *SquadsBuilder::SelectNearbyMates( Bot *orphanBotsList ) {
 	NearbyMates *resultList = nullptr;
 
+	// First clear all lists that are going to be accessed
+	for( Bot *bot = orphanBotsList; bot; bot = bot->NextInSquad() ) {
+		nearbyMatesForClient[bot->ClientNum()].Clear();
+	}
+
 	for( Bot *bot = orphanBotsList; bot; bot = bot->NextInSquad() ) {
 		NearbyMates *const matesListForBot = nearbyMatesForClient + bot->ClientNum();
 		matesListForBot->orphan = bot;
@@ -1405,7 +1422,7 @@ NearbyMates *SquadsBuilder::SelectNearbyMates( Bot *orphanBotsList ) {
 
 		for( Bot *otherBot = bot->NextInSquad(); otherBot; otherBot = otherBot->NextInSquad() ) {
 			if( bot == otherBot ) {
-				continue;
+				AI_FailWith( "SquadsBuilder::SelectNearbyMates()", "The given orphans list contains duplicates" );
 			}
 			if( otherBot->IsGhosting() ) {
 				continue;
@@ -1445,6 +1462,7 @@ NearbyMates *SquadsBuilder::SelectNearbyMates( Bot *orphanBotsList ) {
 	for( Bot *bot = orphanBotsList; bot; bot = bot->NextInSquad() ) {
 		auto *nearbyMates = nearbyMatesForClient + bot->ClientNum();
 		if( !nearbyMates->empty() ) {
+			nearbyMates->CompleteBuilding();
 			::Link( nearbyMates, &resultList, NearbyMates::RAW_LIST );
 		}
 	}
@@ -1494,8 +1512,8 @@ unsigned SquadsBuilder::AssignSquadNumbers( NearbyMates *lists, uint8_t *orphanS
 			// Mutually assign orphans
 			assignedMatesOrphanIds.push_back( thatOrphanIndex );
 			// Increase mates count of the mates list owner (the count does not include a bot itself)
-			orphanSquadMatesCount[thatOrphanIndex]++;
-			const auto matesCount = orphanSquadMatesCount[thatOrphanIndex];
+			orphanSquadMatesCount[currOrphanIndex]++;
+			const auto matesCount = orphanSquadMatesCount[currOrphanIndex];
 			// For all already assigned mates modify their mates count
 			for( auto orphanId: assignedMatesOrphanIds ) {
 				orphanSquadMatesCount[orphanId] = matesCount;
@@ -1512,7 +1530,6 @@ unsigned SquadsBuilder::AssignSquadNumbers( NearbyMates *lists, uint8_t *orphanS
 			orphanSquadIds[currOrphanIndex] = squadId;
 			orphanSquadIds[thatOrphanIndex] = squadId;
 
-			// Stop assignation of squad mates for the bot that is i-th NearbyMates owner
 			if( matesCount == AiSquad::MAX_SQUAD_SIZE - 1 ) {
 				break;
 			}
@@ -1577,6 +1594,8 @@ void SquadsBuilder::Exec( Bot **orphanBotsList ) {
 			::Unlink( bot, orphanBotsList, Bot::SQUAD_LINKS );
 			// Link the bot to the squad
 			squad->AddBot( bot );
+			// We've found a squad for the bot. Interrupt the inner loop.
+			break;
 		}
 	}
 }
@@ -1591,6 +1610,15 @@ AiSquad *AiSquadBasedTeam::AllocSquad() {
 	squad->SetFrameAffinity( frameAffinityModulo, frameAffinityOffset );
 	squad->PrepareToAddBots();
 	return squad;
+}
+
+void AiSquadBasedTeam::AddToOrphansList( Bot *bot ) {
+	for( Bot *presentBot = orphanBotsHead; presentBot; presentBot = presentBot->NextInSquad() ) {
+		if( presentBot == bot ) {
+			AI_FailWith( "AiSquadBasedTeam::AddToOrphansList()", "A bot is already in the list\n" );
+		}
+	}
+	::Link( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
 }
 
 AiSquadBasedTeam *AiSquadBasedTeam::InstantiateTeam( int teamNum ) {
