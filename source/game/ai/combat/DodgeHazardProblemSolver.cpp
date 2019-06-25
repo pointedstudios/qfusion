@@ -59,7 +59,8 @@ void DodgeHazardProblemSolver::ModifyScoreByVelocityConformance( VectorWithScore
 		Vec3 toSpotDir = Vec3( spots[spotAndScoreLike.spotNum].origin ) - origin;
 		toSpotDir.NormalizeFast();
 		float velocityDotFactor = 0.5f * ( 1.0f + velocityDir.Dot( toSpotDir ) );
-		assert( velocityDotFactor >= 0.0f && velocityDotFactor <= 1.0f );
+		// Could go slightly out of these bounds due to using of a fast and coarse normalization.
+		Q_clamp( velocityDotFactor, 0.0f, 1.0f );
 		spotAndScoreLike.score = ApplyFactor( spotAndScoreLike.score, velocityDotFactor, influence );
 	}
 }
