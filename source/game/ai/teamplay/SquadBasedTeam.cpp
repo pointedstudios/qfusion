@@ -1128,18 +1128,21 @@ void AiSquad::AddBot( Bot *bot ) {
 	bot->OnAttachedToSquad( this );
 }
 
-bool AiSquad::MayAttachBot( const Bot *bot ) const {
+float AiSquad::GetScoreForBotAttachment( const Bot *bot ) const {
 	if( !isValid ) {
-		return false;
+		return 0.0f;
 	}
 	if( numBots == MAX_SQUAD_SIZE ) {
-		return false;
+		return 0.0f;
 	}
 
+	float score = 0.0f;
 	const auto &table = ::clientToClientTable;
+	const int botNavTargetAreaNum = bot->NavTargetAasAreaNum();
 	for( Bot *presentBot = botsListHead; presentBot; presentBot = presentBot->NextInSquad() ) {
+		// The bot should not be attached again
 		if( bot == presentBot ) {
-			continue;
+			return 0.0f;
 		}
 		constexpr float squaredDistanceLimit = CONNECTIVITY_PROXIMITY * CONNECTIVITY_PROXIMITY;
 		if( DistanceSquared( bot->Origin(), presentBot->Origin() ) > squaredDistanceLimit ) {
@@ -1154,10 +1157,15 @@ bool AiSquad::MayAttachBot( const Bot *bot ) const {
 		if( !t2 || t2 > CONNECTIVITY_MOVE_CENTISECONDS ) {
 			continue;
 		}
-		return true;
+
+		score += 1.0f;
+		// Put a huge additional score if the bot has the same target as another bot does
+		if( botNavTargetAreaNum && botNavTargetAreaNum == presentBot->NavTargetAasAreaNum() ) {
+			score += 3.0f;
+		}
 	}
 
-	return false;
+	return score;
 }
 
 AiSquadBasedTeam::AiSquadBasedTeam( int team_ )
@@ -1324,6 +1332,7 @@ void AiSquadBasedTeam::SetupSquads() {
 		if( bot->IsGhosting() ) {
 			continue;
 		}
+		const int botNavTargetAreaNum = bot->NavTargetAasAreaNum();
 		for( Bot *otherBot = bot->NextInSquad(); otherBot; otherBot = otherBot->NextInSquad() ) {
 			if( otherBot->IsGhosting() ) {
 				continue;
@@ -1340,7 +1349,12 @@ void AiSquadBasedTeam::SetupSquads() {
 				continue;
 			}
 			// Let the score be negative so closest pairs get greater score
-			candidatePairs.emplace_back( CandidatePair( bot, otherBot, -( t1 + t2 ) ) );
+			float score = -( t1 + t2 );
+			// Lower the score magnitude (and thus make it greater) if they have the same nav target
+			if( botNavTargetAreaNum && botNavTargetAreaNum == otherBot->NavTargetAasAreaNum() ) {
+				score *= 0.33f;
+			}
+			candidatePairs.emplace_back( CandidatePair( bot, otherBot, score ) );
 			// Add a protection against overflow that still is possible in theory
 			if( candidatePairs.size() == candidatePairs.capacity() ) {
 				goto sortPairs;
@@ -1376,18 +1390,26 @@ sortPairs:
 	for( Bot *bot = orphanBotsHead; bot; bot = nextBot ) {
 		nextBot = bot->NextInSquad();
 
+		AiSquad *bestSquad = nullptr;
+		float bestScore = 0.0f;
 		for( AiSquad *squad = usedSquadsHead; squad; squad = squad->NextInList() ) {
-			if( !squad->MayAttachBot( bot ) ) {
+			float score = squad->GetScoreForBotAttachment( bot );
+			if( score <= bestScore ) {
 				continue;
 			}
 
-			// Unlink the bot from orphans list
-			::Unlink( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
-			// Link the bot to the squad
-			squad->AddBot( bot );
-			// We've found a squad for the bot. Interrupt the inner loop.
-			break;
+			bestScore = score;
+			bestSquad = squad;
 		}
+
+		if( !bestSquad ) {
+			continue;
+		}
+
+		// Unlink the bot from orphans list
+		::Unlink( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
+		// Link the bot to the squad
+		bestSquad->AddBot( bot );
 	}
 
 }

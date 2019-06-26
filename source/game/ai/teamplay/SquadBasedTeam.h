@@ -188,8 +188,10 @@ public:
 
 	/**
 	 * Checks whether a bot can be attached to an existing squad.
+	 * Returns zero if it cannot be attached.
+	 * Returns a positive value otherwise. The greater the value is the more suitable is the attachment.
 	 */
-	bool MayAttachBot( const Bot *bot ) const;
+	float GetScoreForBotAttachment( const Bot *bot ) const;
 
 	/**
 	 * Marks the squad as invalid. Detaches bots if necessary.
