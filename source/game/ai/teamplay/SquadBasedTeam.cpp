@@ -295,11 +295,11 @@ constexpr unsigned CONNECTIVITY_TIMEOUT = 750;
 /**
  * This value defines a distance limit for quick rejection of non-feasible bot pairs for new squads
  */
-constexpr float CONNECTIVITY_PROXIMITY = 192.0f;
+constexpr float CONNECTIVITY_PROXIMITY = 256.0f;
 /**
- * This value defines summary AAS movement time limit from one bot to other and back
+ * This value defines summary AAS movement time limit from one bot to other
  */
-constexpr int CONNECTIVITY_MOVE_CENTISECONDS = 2 * 125;
+constexpr int CONNECTIVITY_MOVE_CENTISECONDS = 100;
 
 void AiSquad::Frame() {
 	// Update enemy pool
@@ -357,6 +357,14 @@ void AiSquad::Think() {
 }
 
 bool AiSquad::CheckCanMoveTogether() const {
+	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
+		for( Bot *otherBot = bot->NextInSquad(); otherBot; otherBot = otherBot->NextInSquad() ) {
+			if( DistanceSquared( bot->Origin(), otherBot->Origin() ) > CONNECTIVITY_PROXIMITY * CONNECTIVITY_PROXIMITY ) {
+				return false;
+			}
+		}
+	}
+
 	// Test for a possible cheap shortcut using floor cluster nums of the bots
 	if( const auto firstClusterNum = GetBotFloorCluster( botsListHead ) ) {
 		// Check whether all bots are in the same floor cluster
@@ -368,18 +376,9 @@ bool AiSquad::CheckCanMoveTogether() const {
 		}
 
 		// All bots are in the same floor cluster.
+		// This does not really guarantee they are reachable to each other in CONNECTIVITY_MOVE_CENTISECONDS.
+		// However interrupting at this produces satisfiable results.
 		if( !nextBot ) {
-			// Just check the distance between bots corresponding to CONNECTIVITY_MOVE_CENTISECONDS
-			// Assume the average moving speed to be 450 ups (average as physics defines in 3D space)
-			float distanceThreshold = 450 * ( CONNECTIVITY_MOVE_CENTISECONDS * 1e-2f );
-			for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
-				for( Bot *otherBot = bot->NextInSquad(); otherBot; otherBot = otherBot->NextInSquad() ) {
-					float squareDistance = DistanceSquared( bot->Origin(), otherBot->Origin() );
-					if( squareDistance > distanceThreshold * distanceThreshold ) {
-						return false;
-					}
-				}
-			}
 			return true;
 		}
 	}
@@ -393,12 +392,12 @@ bool AiSquad::CheckCanMoveTogether() const {
 			// Check direct travel time (it's given in seconds^-2)
 			aasTravelTime = ::clientToClientTable.GetTravelTime( bot, otherBot );
 			// At least bot j is reachable from bot i, move to next bot
-			if( aasTravelTime && aasTravelTime < CONNECTIVITY_MOVE_CENTISECONDS / 2 ) {
+			if( aasTravelTime && aasTravelTime < CONNECTIVITY_MOVE_CENTISECONDS ) {
 				continue;
 			}
 			// Bot j is not reachable from bot i, check travel time from j to i
 			aasTravelTime = ::clientToClientTable.GetTravelTime( otherBot, bot );
-			if( !aasTravelTime || aasTravelTime >= CONNECTIVITY_MOVE_CENTISECONDS / 2 ) {
+			if( !aasTravelTime || aasTravelTime >= CONNECTIVITY_MOVE_CENTISECONDS ) {
 				return false;
 			}
 		}
@@ -1137,6 +1136,7 @@ bool AiSquad::MayAttachBot( const Bot *bot ) const {
 		return false;
 	}
 
+	const auto &table = ::clientToClientTable;
 	for( Bot *presentBot = botsListHead; presentBot; presentBot = presentBot->NextInSquad() ) {
 		if( bot == presentBot ) {
 			continue;
@@ -1146,17 +1146,15 @@ bool AiSquad::MayAttachBot( const Bot *bot ) const {
 			continue;
 		}
 
-		int toPresentTravelTime = ::clientToClientTable.GetTravelTime( bot, presentBot );
-		if( !toPresentTravelTime ) {
+		const int t1 = table.GetTravelTime( bot, presentBot );
+		if( !t1 || t1 > CONNECTIVITY_MOVE_CENTISECONDS ) {
 			continue;
 		}
-		int fromPresentTravelTime = ::clientToClientTable.GetTravelTime( presentBot, bot );
-		if( !fromPresentTravelTime ) {
+		const int t2 = table.GetTravelTime( presentBot, bot );
+		if( !t2 || t2 > CONNECTIVITY_MOVE_CENTISECONDS ) {
 			continue;
 		}
-		if( toPresentTravelTime + fromPresentTravelTime < CONNECTIVITY_MOVE_CENTISECONDS ) {
-			return true;
-		}
+		return true;
 	}
 
 	return false;
@@ -1334,14 +1332,11 @@ void AiSquadBasedTeam::SetupSquads() {
 				continue;
 			}
 			const auto t1 = table.GetTravelTime( bot, otherBot );
-			if( !t1 || t1 > CONNECTIVITY_MOVE_CENTISECONDS / 2 ) {
+			if( !t1 || t1 > CONNECTIVITY_MOVE_CENTISECONDS ) {
 				continue;
 			}
 			const int t2 = table.GetTravelTime( otherBot, bot );
-			if( !t2 || t2 > CONNECTIVITY_MOVE_CENTISECONDS / 2 ) {
-				continue;
-			}
-			if( t1 + t2 > CONNECTIVITY_MOVE_CENTISECONDS ) {
+			if( !t2 || t2 > CONNECTIVITY_MOVE_CENTISECONDS ) {
 				continue;
 			}
 			// Let the score be negative so closest pairs get greater score
