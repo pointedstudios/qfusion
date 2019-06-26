@@ -220,7 +220,7 @@ typedef struct {
 #define DEFAULT_MASTER_SERVERS_STEAM_IPS    "208.64.200.65:27015 208.64.200.39:27011 208.64.200.52:27011"
 #define SERVER_PINGING_TIMEOUT              50
 #define LAN_SERVER_PINGING_TIMEOUT          20
-#define DEFAULT_PLAYERMODEL                 "bigvic"
+#define DEFAULT_PLAYERMODEL                 "viciious"
 #define DEFAULT_PLAYERSKIN                  "default"
 
 #ifdef UCMDTIMENUDGE
