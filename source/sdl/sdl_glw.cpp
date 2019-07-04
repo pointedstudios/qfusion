@@ -26,7 +26,6 @@
 #include <algorithm>
 
 glwstate_t glw_state = {NULL, NULL};
-cvar_t *vid_fullscreen;
 
 static bool GLimp_InitGL( int stencilbits, bool stereo );
 

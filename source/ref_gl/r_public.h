@@ -24,6 +24,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #define REF_API_VERSION 25
 
+#define REF_HARD_LINKED
+
 //
 // these are the functions exported by the refresh module
 //
