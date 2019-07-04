@@ -120,7 +120,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wno-unused-function -fvisibility=hidden -Winvalid-pch")
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -D_DEBUG")
-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fno-strict-aliasing -ffast-math -funroll-loops -msse2")
+    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fno-strict-aliasing -ffast-math -fno-finite-math-only -funroll-loops -msse2")
 
     set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
@@ -138,7 +138,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux" OR MINGW)
 
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pipe -Wall -Wno-unused-function -fvisibility=hidden -Winvalid-pch")
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -D_DEBUG")
-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fno-strict-aliasing -ffast-math -funroll-loops -msse2 -O2")
+    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fno-strict-aliasing -ffast-math -fno-finite-math-only -funroll-loops -msse2 -O2")
 
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++14")
