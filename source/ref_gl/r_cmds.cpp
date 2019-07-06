@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "r_local.h"
 #include "r_frontend.h"
 #include "../qalgo/glob.h"
+#include "../qcommon/qcommon.h"
 
 #include <algorithm>
 
@@ -105,7 +106,7 @@ void R_TakeScreenShot( const char *path, const char *name, const char *fmtString
 			}
 		} else {
 			Q_snprintfz( checkname, checkname_size, "%s%s%s", path, timestampString, extension );
-			if( ri.FS_FOpenAbsoluteFile( checkname, NULL, FS_READ ) != -1 ) {
+			if( FS_FOpenAbsoluteFile( checkname, NULL, FS_READ ) != -1 ) {
 				lastIndex = 0;
 				addIndex = true;
 			}
@@ -113,7 +114,7 @@ void R_TakeScreenShot( const char *path, const char *name, const char *fmtString
 
 		for( ; addIndex && lastIndex < maxFiles; lastIndex++ ) {
 			Q_snprintfz( checkname, checkname_size, "%s%s%05i%s", path, timestampString, lastIndex, extension );
-			if( ri.FS_FOpenAbsoluteFile( checkname, NULL, FS_READ ) == -1 ) {
+			if( FS_FOpenAbsoluteFile( checkname, NULL, FS_READ ) == -1 ) {
 				break; // file doesn't exist
 			}
 		}
@@ -131,7 +132,7 @@ void R_TakeScreenShot( const char *path, const char *name, const char *fmtString
 				  false, false, false, silent );
 
 	if( media ) {
-		ri.FS_AddFileToMedia( checkname );
+		FS_AddFileToMedia( checkname );
 	}
 }
 
@@ -149,24 +150,24 @@ void R_ScreenShot_f( void ) {
 
 	R_Localtime( time( NULL ), &newtime );
 
-	name = ri.Cmd_Argv( 1 );
+	name = Cmd_Argv( 1 );
 
-	mediadir = ri.FS_MediaDirectory( FS_MEDIA_IMAGES );
+	mediadir = FS_MediaDirectory( FS_MEDIA_IMAGES );
 	if( mediadir ) {
 		path_size = strlen( mediadir ) + 1 /* '/' */ + strlen( glConfig.applicationName ) + 1 /* '/' */ + 1;
 		path = (char *)alloca( path_size );
 		Q_snprintfz( path, path_size, "%s/%s/", mediadir, glConfig.applicationName );
 	} else {
-		path_size = strlen( ri.FS_WriteDirectory() ) + 1 /* '/' */ + strlen( ri.FS_GameDirectory() ) + strlen( "/screenshots/" ) + 1;
+		path_size = strlen( FS_WriteDirectory() ) + 1 /* '/' */ + strlen( FS_GameDirectory() ) + strlen( "/screenshots/" ) + 1;
 		path = (char *)alloca( path_size );
-		Q_snprintfz( path, path_size, "%s/%s/screenshots/", ri.FS_WriteDirectory(), ri.FS_GameDirectory() );
+		Q_snprintfz( path, path_size, "%s/%s/screenshots/", FS_WriteDirectory(), FS_GameDirectory() );
 	}
 
 	// validate timestamp string
 	for( i = 0; i < 2; i++ ) {
 		strftime( timestamp_str, sizeof( timestamp_str ), r_screenshot_fmtstr->string, &newtime );
 		if( !COM_ValidateRelativeFilename( timestamp_str ) ) {
-			ri.Cvar_ForceSet( r_screenshot_fmtstr->name, r_screenshot_fmtstr->dvalue );
+			Cvar_ForceSet( r_screenshot_fmtstr->name, r_screenshot_fmtstr->dvalue );
 		} else {
 			break;
 		}
@@ -174,11 +175,11 @@ void R_ScreenShot_f( void ) {
 
 	// hm... shouldn't really happen, but check anyway
 	if( i == 2 ) {
-		ri.Cvar_ForceSet( r_screenshot_fmtstr->name, glConfig.screenshotPrefix );
+		Cvar_ForceSet( r_screenshot_fmtstr->name, glConfig.screenshotPrefix );
 	}
 
 	RF_ScreenShot( path, name, r_screenshot_fmtstr->string,
-				   ri.Cmd_Argc() >= 3 && !Q_stricmp( ri.Cmd_Argv( 2 ), "silent" ) ? true : false );
+				   Cmd_Argc() >= 3 && !Q_stricmp( Cmd_Argv( 2 ), "silent" ) ? true : false );
 }
 
 /*
@@ -266,18 +267,18 @@ void R_EnvShot_f( void ) {
 		return;
 	}
 
-	if( ri.Cmd_Argc() != 3 ) {
+	if( Cmd_Argc() != 3 ) {
 		Com_Printf( "usage: envshot <name> <size>\n" );
 		return;
 	}
 
-	writedir = ri.FS_WriteDirectory();
-	gamedir = ri.FS_GameDirectory();
+	writedir = FS_WriteDirectory();
+	gamedir = FS_GameDirectory();
 	path_size = strlen( writedir ) + 1 + strlen( gamedir ) + 1 + strlen( "env/" ) + 1;
 	path = (char *)alloca( path_size );
 	Q_snprintfz( path, path_size, "%s/%s/env/", writedir, gamedir );
 
-	RF_EnvShot( path, ri.Cmd_Argv( 1 ), atoi( ri.Cmd_Argv( 2 ) ) );
+	RF_EnvShot( path, Cmd_Argv( 1 ), atoi( Cmd_Argv( 2 ) ) );
 }
 
 /*
@@ -294,14 +295,14 @@ static bool R_GlobFilter( const char *pattern, const char *value ) {
 * R_ImageList_f
 */
 void R_ImageList_f( void ) {
-	R_PrintImageList( ri.Cmd_Argv( 1 ), R_GlobFilter );
+	R_PrintImageList( Cmd_Argv( 1 ), R_GlobFilter );
 }
 
 /*
 * R_ShaderList_f
 */
 void R_ShaderList_f( void ) {
-	R_PrintShaderList( ri.Cmd_Argv( 1 ), R_GlobFilter );
+	R_PrintShaderList( Cmd_Argv( 1 ), R_GlobFilter );
 }
 
 /*
@@ -313,15 +314,15 @@ void R_ShaderDump_f( void ) {
 
 	debugSurface = R_GetDebugSurface();
 
-	if( ( ri.Cmd_Argc() < 2 ) && !debugSurface ) {
-		Com_Printf( "Usage: %s [name]\n", ri.Cmd_Argv( 0 ) );
+	if( ( Cmd_Argc() < 2 ) && !debugSurface ) {
+		Com_Printf( "Usage: %s [name]\n", Cmd_Argv( 0 ) );
 		return;
 	}
 
-	if( ri.Cmd_Argc() < 2 ) {
+	if( Cmd_Argc() < 2 ) {
 		name = debugSurface->shader->name;
 	} else {
-		name = ri.Cmd_Argv( 1 );
+		name = Cmd_Argv( 1 );
 	}
 
 	R_PrintShaderCache( name );

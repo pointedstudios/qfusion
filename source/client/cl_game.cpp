@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "client.h"
 #include "cin.h"
 #include "../qcommon/asyncstream.h"
+#include "../ref_gl/r_frontend.h"
 
 static cgame_export_t *cge;
 
@@ -420,42 +421,42 @@ void CL_GameModule_Init( void ) {
 	import.NET_GetCurrentState = CL_GameModule_NET_GetCurrentState;
 
 	import.R_UpdateScreen = SCR_UpdateScreen;
-	import.R_GetClippedFragments = re.GetClippedFragments;
-	import.R_ClearScene = re.ClearScene;
-	import.R_AddEntityToScene = re.AddEntityToScene;
-	import.R_AddLightToScene = re.AddLightToScene;
-	import.R_AddPolyToScene = re.AddPolyToScene;
-	import.R_AddLightStyleToScene = re.AddLightStyleToScene;
-	import.R_RenderScene = re.RenderScene;
-	import.R_GetSpeedsMessage = re.GetSpeedsMessage;
-	import.R_GetAverageFrametime = re.GetAverageFrametime;
-	import.R_RegisterWorldModel = re.RegisterWorldModel;
-	import.R_ModelBounds = re.ModelBounds;
-	import.R_ModelFrameBounds = re.ModelFrameBounds;
-	import.R_RegisterModel = re.RegisterModel;
-	import.R_RegisterPic = re.RegisterPic;
-	import.R_RegisterRawPic = re.RegisterRawPic;
-	import.R_RegisterLevelshot = re.RegisterLevelshot;
-	import.R_RegisterSkin = re.RegisterSkin;
-	import.R_RegisterSkinFile = re.RegisterSkinFile;
-	import.R_RegisterLinearPic = re.RegisterLinearPic;
-	import.R_LerpTag = re.LerpTag;
-	import.R_LightForOrigin = re.LightForOrigin;
-	import.R_SetCustomColor = re.SetCustomColor;
-	import.R_DrawStretchPic = re.DrawStretchPic;
-	import.R_DrawStretchPoly = re.DrawStretchPoly;
-	import.R_DrawRotatedStretchPic = re.DrawRotatedStretchPic;
-	import.R_Scissor = re.Scissor;
-	import.R_GetScissor = re.GetScissor;
-	import.R_ResetScissor = re.ResetScissor;
-	import.R_GetShaderDimensions = re.GetShaderDimensions;
-	import.R_TransformVectorToScreen = re.TransformVectorToScreen;
-	import.R_SkeletalGetNumBones = re.SkeletalGetNumBones;
-	import.R_SkeletalGetBoneInfo = re.SkeletalGetBoneInfo;
-	import.R_SkeletalGetBonePose = re.SkeletalGetBonePose;
+	import.R_GetClippedFragments = R_GetClippedFragments;
+	import.R_ClearScene = RF_ClearScene;
+	import.R_AddEntityToScene = RF_AddEntityToScene;
+	import.R_AddLightToScene = RF_AddLightToScene;
+	import.R_AddPolyToScene = RF_AddPolyToScene;
+	import.R_AddLightStyleToScene = RF_AddLightStyleToScene;
+	import.R_RenderScene = RF_RenderScene;
+	import.R_GetSpeedsMessage = RF_GetSpeedsMessage;
+	import.R_GetAverageFrametime = RF_GetAverageFrametime;
+	import.R_RegisterWorldModel = RF_RegisterWorldModel;
+	import.R_ModelBounds = R_ModelBounds;
+	import.R_ModelFrameBounds = R_ModelFrameBounds;
+	import.R_RegisterModel = R_RegisterModel;
+	import.R_RegisterPic = R_RegisterPic;
+	import.R_RegisterRawPic = R_RegisterRawPic;
+	import.R_RegisterLevelshot = R_RegisterLevelshot;
+	import.R_RegisterSkin = R_RegisterSkin;
+	import.R_RegisterSkinFile = R_RegisterSkinFile;
+	import.R_RegisterLinearPic = R_RegisterLinearPic;
+	import.R_LerpTag = RF_LerpTag;
+	import.R_LightForOrigin = RF_LightForOrigin;
+	import.R_SetCustomColor = RF_SetCustomColor;
+	import.R_DrawStretchPic = RF_DrawStretchPic;
+	import.R_DrawStretchPoly = RF_DrawStretchPoly;
+	import.R_DrawRotatedStretchPic = RF_DrawRotatedStretchPic;
+	import.R_Scissor = RF_SetScissor;
+	import.R_GetScissor = RF_GetScissor;
+	import.R_ResetScissor = RF_ResetScissor;
+	import.R_GetShaderDimensions = R_GetShaderDimensions;
+	import.R_TransformVectorToScreen = RF_TransformVectorToScreen;
+	import.R_SkeletalGetNumBones = R_SkeletalGetNumBones;
+	import.R_SkeletalGetBoneInfo = R_SkeletalGetBoneInfo;
+	import.R_SkeletalGetBonePose = R_SkeletalGetBonePose;
 
-	import.R_GetShaderForOrigin = re.GetShaderForOrigin;
-	import.R_GetShaderCinematic = re.GetShaderCinematic;
+	import.R_GetShaderForOrigin = RF_GetShaderForOrigin;
+	import.R_GetShaderCinematic = RF_GetShaderCinematic;
 
 	import.VID_FlashWindow = VID_FlashWindow;
 

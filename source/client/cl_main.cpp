@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "../qcommon/asyncstream.h"
 #include "../qalgo/hash.h"
+#include "../ref_gl/r_frontend.h"
 
 #include <random>
 
@@ -672,7 +673,7 @@ static void CL_BeginRegistration( void ) {
 
 	cls.registrationOpen = true;
 
-	re.BeginRegistration();
+	RF_BeginRegistration();
 	CL_SoundModule_BeginRegistration();
 }
 
@@ -688,7 +689,7 @@ static void CL_EndRegistration( void ) {
 
 	FTLIB_TouchAllFonts();
 	CL_UIModule_TouchAllAssets();
-	re.EndRegistration();
+	RF_EndRegistration();
 	CL_SoundModule_EndRegistration();
 }
 
@@ -891,7 +892,7 @@ void CL_Disconnect( const char *message ) {
 		cls.httpbaseurl = NULL;
 	}
 
-	re.Finish();
+	RF_Finish();
 
 	CL_EndRegistration();
 
@@ -2130,7 +2131,7 @@ static void CL_TimedemoStats( void ) {
 			int msec;
 			int64_t curTime;
 
-			msec = re.GetAverageFrametime();
+			msec = RF_GetAverageFrametime();
 
 			curTime = Sys_Milliseconds();
 			if( msec  >= 100 ) {
@@ -2573,7 +2574,7 @@ void CL_Frame( int realMsec, int gameMsec ) {
 	if( CL_WriteAvi() ) {
 		int frame = ++cls.demo.avi_frame;
 		if( cls.demo.avi_video ) {
-			re.WriteAviFrame( frame, cl_demoavi_scissor->integer );
+			RF_WriteAviFrame( frame, cl_demoavi_scissor->integer );
 		}
 	}
 

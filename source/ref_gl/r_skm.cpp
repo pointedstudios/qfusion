@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_local.h"
 #include "iqm.h"
+#include "../qcommon/qcommon.h"
 
 #include <algorithm>
 
@@ -181,14 +182,14 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 
 	// check IQM magic
 	if( memcmp( header->magic, "INTERQUAKEMODEL", 16 ) ) {
-		ri.Com_Printf( S_COLOR_RED "ERROR: %s is not an Inter-Quake Model\n", mod->name );
+		Com_Printf( S_COLOR_RED "ERROR: %s is not an Inter-Quake Model\n", mod->name );
 		goto error;
 	}
 
 	// check header version
 	header->version = LittleLong( header->version );
 	if( header->version != IQM_VERSION ) {
-		ri.Com_Printf( S_COLOR_RED "ERROR: %s has wrong type number (%i should be %i)\n", mod->name, header->version, IQM_VERSION );
+		Com_Printf( S_COLOR_RED "ERROR: %s has wrong type number (%i should be %i)\n", mod->name, header->version, IQM_VERSION );
 		goto error;
 	}
 
@@ -223,15 +224,15 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 #undef H_SWAP
 
 	if( header->num_triangles < 1 || header->num_vertexes < 3 || header->num_vertexarrays < 1 || header->num_meshes < 1 ) {
-		ri.Com_Printf( S_COLOR_RED "ERROR: %s has no geometry\n", mod->name );
+		Com_Printf( S_COLOR_RED "ERROR: %s has no geometry\n", mod->name );
 		goto error;
 	}
 	if( header->num_vertexes >= USHRT_MAX ) {
-		ri.Com_Printf( S_COLOR_RED "ERROR: %s has too many vertices\n", mod->name );
+		Com_Printf( S_COLOR_RED "ERROR: %s has too many vertices\n", mod->name );
 		goto error;
 	}
 	if( header->num_joints != header->num_poses ) {
-		ri.Com_Printf( S_COLOR_RED "ERROR: %s has an invalid number of poses: %i vs %i\n", mod->name, header->num_joints, header->num_poses );
+		Com_Printf( S_COLOR_RED "ERROR: %s has an invalid number of poses: %i vs %i\n", mod->name, header->num_joints, header->num_poses );
 		goto error;
 	}
 
@@ -247,7 +248,7 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 		|| header->ofs_meshes + header->num_meshes * sizeof( iqmmesh_t ) > filesize
 		|| header->ofs_bounds + header->num_frames * sizeof( iqmbounds_t ) > filesize
 		) {
-		ri.Com_Printf( S_COLOR_RED "ERROR: %s has invalid size or offset information\n", mod->name );
+		Com_Printf( S_COLOR_RED "ERROR: %s has invalid size or offset information\n", mod->name );
 		goto error;
 	}
 
@@ -352,7 +353,7 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 	}
 
 	if( !vposition || !vtexcoord ) {
-		ri.Com_Printf( S_COLOR_RED "ERROR: %s is missing vertex array data\n", mod->name );
+		Com_Printf( S_COLOR_RED "ERROR: %s is missing vertex array data\n", mod->name );
 		goto error;
 	}
 
@@ -386,7 +387,7 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 		}
 
 		if( joints[i].parent >= (int)i ) {
-			ri.Com_Printf( S_COLOR_RED "ERROR: %s bone[%i].parent(%i) >= %i\n", mod->name, i, joint.parent, i );
+			Com_Printf( S_COLOR_RED "ERROR: %s bone[%i].parent(%i) >= %i\n", mod->name, i, joint.parent, i );
 			goto error;
 		}
 
@@ -809,7 +810,7 @@ int R_SkeletalGetBoneInfo( const model_t *mod, int bonenum, char *name, size_t n
 
 	skmodel = ( mskmodel_t * )mod->extradata;
 	if( (unsigned int)bonenum >= (int)skmodel->numbones ) {
-		ri.Com_Error( ERR_DROP, "R_SkeletalGetBone: bad bone number" );
+		Com_Error( ERR_DROP, "R_SkeletalGetBone: bad bone number" );
 	}
 
 	bone = &skmodel->bones[bonenum];
@@ -834,10 +835,10 @@ void R_SkeletalGetBonePose( const model_t *mod, int bonenum, int frame, bonepose
 
 	skmodel = ( mskmodel_t * )mod->extradata;
 	if( bonenum < 0 || bonenum >= (int)skmodel->numbones ) {
-		ri.Com_Error( ERR_DROP, "R_SkeletalGetBonePose: bad bone number" );
+		Com_Error( ERR_DROP, "R_SkeletalGetBonePose: bad bone number" );
 	}
 	if( frame < 0 || frame >= (int)skmodel->numframes ) {
-		ri.Com_Error( ERR_DROP, "R_SkeletalGetBonePose: bad frame number" );
+		Com_Error( ERR_DROP, "R_SkeletalGetBonePose: bad frame number" );
 	}
 
 	if( bonepose ) {
@@ -880,13 +881,13 @@ static float R_SkeletalModelLerpBBox( const entity_t *e, const model_t *mod, vec
 
 	if( frame < 0 || frame >= (int)skmodel->numframes ) {
 #ifndef PUBLIC_BUILD
-		ri.Com_DPrintf( "R_SkeletalModelLerpBBox %s: no such frame %i\n", mod->name, frame );
+		Com_DPrintf( "R_SkeletalModelLerpBBox %s: no such frame %i\n", mod->name, frame );
 #endif
 		frame = 0;
 	}
 	if( oldframe < 0 || oldframe >= (int)skmodel->numframes ) {
 #ifndef PUBLIC_BUILD
-		ri.Com_DPrintf( "R_SkeletalModelLerpBBox %s: no such oldframe %i\n", mod->name, oldframe );
+		Com_DPrintf( "R_SkeletalModelLerpBBox %s: no such oldframe %i\n", mod->name, oldframe );
 #endif
 		oldframe = 0;
 	}
@@ -1399,13 +1400,13 @@ bool R_SkeletalModelLerpTag( orientation_t *orient, const mskmodel_t *skmodel, i
 	// ignore invalid frames
 	if( ( framenum >= (int)skmodel->numframes ) || ( framenum < 0 ) ) {
 #ifndef PUBLIC_BUILD
-		ri.Com_DPrintf( "R_SkeletalModelLerpTag %s: no such oldframe %i\n", name, framenum );
+		Com_DPrintf( "R_SkeletalModelLerpTag %s: no such oldframe %i\n", name, framenum );
 #endif
 		framenum = 0;
 	}
 	if( ( oldframenum >= (int)skmodel->numframes ) || ( oldframenum < 0 ) ) {
 #ifndef PUBLIC_BUILD
-		ri.Com_DPrintf( "R_SkeletalModelLerpTag %s: no such oldframe %i\n", name, oldframenum );
+		Com_DPrintf( "R_SkeletalModelLerpTag %s: no such oldframe %i\n", name, oldframenum );
 #endif
 		oldframenum = 0;
 	}
@@ -1448,7 +1449,7 @@ void R_SkeletalModelFrameBounds( const model_t *mod, int frame, vec3_t mins, vec
 
 	if( ( frame >= (int)skmodel->numframes ) || ( frame < 0 ) ) {
 #ifndef PUBLIC_BUILD
-		ri.Com_DPrintf( "R_SkeletalModelFrameBounds %s: no such frame %d\n", mod->name, frame );
+		Com_DPrintf( "R_SkeletalModelFrameBounds %s: no such frame %d\n", mod->name, frame );
 #endif
 		ClearBounds( mins, maxs );
 		return;
@@ -1512,13 +1513,13 @@ static void R_AddSkeletalModelCacheJob( const entity_t *e, const model_t *mod ) 
 	} else {
 		if( ( framenum >= (int)skmodel->numframes ) || ( framenum < 0 ) ) {
 #ifndef PUBLIC_BUILD
-			ri.Com_DPrintf( "R_DrawBonesFrameLerp %s: no such frame %d\n", mod->name, framenum );
+			Com_DPrintf( "R_DrawBonesFrameLerp %s: no such frame %d\n", mod->name, framenum );
 #endif
 			framenum = 0;
 		}
 		if( ( oldframenum >= (int)skmodel->numframes ) || ( oldframenum < 0 ) ) {
 #ifndef PUBLIC_BUILD
-			ri.Com_DPrintf( "R_DrawBonesFrameLerp %s: no such oldframe %d\n", mod->name, oldframenum );
+			Com_DPrintf( "R_DrawBonesFrameLerp %s: no such oldframe %d\n", mod->name, oldframenum );
 #endif
 			oldframenum = 0;
 		}

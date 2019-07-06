@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "r_local.h"
+#include "../qcommon/qthreads.h"
 
 typedef void (*queueCmdHandler_t)( const void * );
 
@@ -54,8 +55,8 @@ void RJ_Init( void ) {
 	job_count = 0;
 
 	for( i = 0; i < NUM_JOB_THREADS; i++ ) {
-		job_queue[i] = ri.BufPipe_Create( 0x4000, 1 );
-		job_thread[i] = ri.Thread_Create( R_JobThreadProc, job_queue[i] );
+		job_queue[i] = QBufPipe_Create( 0x4000, 1 );
+		job_thread[i] = QThread_Create( R_JobThreadProc, job_queue[i] );
 	}
 }
 
@@ -86,7 +87,7 @@ void RJ_FinishJobs( void ) {
 	int i;
 
 	for( i = 0; i < NUM_JOB_THREADS; i++ )
-		ri.BufPipe_Finish( job_queue[i] );
+		QBufPipe_Finish( job_queue[i] );
 }
 
 /*
@@ -102,12 +103,12 @@ void RJ_Shutdown( void ) {
 	RJ_FinishJobs();
 
 	for( i = 0; i < NUM_JOB_THREADS; i++ ) {
-		ri.Thread_Join( job_thread[i] );
+		QThread_Join( job_thread[i] );
 		job_thread[i] = NULL;
 	}
 
 	for( i = 0; i < NUM_JOB_THREADS; i++ ) {
-		ri.BufPipe_Destroy( &job_queue[i] );
+		QBufPipe_Destroy( &job_queue[i] );
 	}
 
 	job_count = 0;
@@ -123,7 +124,7 @@ static void RJ_IssueJobTakeCmd( unsigned thread, jobfunc_t job, jobarg_t *arg, u
 	cmd.job_arg = *arg;
 	cmd.first = first;
 	cmd.items = items;
-	ri.BufPipe_WriteCmd( job_queue[thread], &cmd, sizeof( cmd ) );
+	QBufPipe_WriteCmd( job_queue[thread], &cmd, sizeof( cmd ) );
 }
 
 /*
@@ -131,7 +132,7 @@ static void RJ_IssueJobTakeCmd( unsigned thread, jobfunc_t job, jobarg_t *arg, u
  */
 static void RJ_IssueJobQuitCmd( unsigned thread ) {
 	int cmd = CMD_JOB_QUIT;
-	ri.BufPipe_WriteCmd( job_queue[thread], &cmd, sizeof( cmd ) );
+	QBufPipe_WriteCmd( job_queue[thread], &cmd, sizeof( cmd ) );
 }
 
 /*
@@ -157,7 +158,7 @@ static unsigned R_HandleJobQuitCmd( void *pcmd ) {
 */
 static int R_JobCmdsWaiter( qbufPipe_t *queue, queueCmdHandler_t *cmdHandlers, bool timeout ) {
 	typedef unsigned( **Handlers )( const void * );
-	return ri.BufPipe_ReadCmds( queue, (Handlers)cmdHandlers );
+	return QBufPipe_ReadCmds( queue, (Handlers)cmdHandlers );
 }
 
 /*
@@ -174,7 +175,7 @@ static void *R_JobThreadProc( void *param ) {
 
 	typedef unsigned( **Handlers )( const void * );
 	typedef int ( *WaitFunc )( struct qbufPipe_s *, unsigned( ** )( const void * ), bool );
-	ri.BufPipe_Wait( cmdQueue, (WaitFunc)&R_JobCmdsWaiter, (Handlers)cmdHandlers, Q_THREADS_WAIT_INFINITE );
+	QBufPipe_Wait( cmdQueue, (WaitFunc)&R_JobCmdsWaiter, (Handlers)cmdHandlers, Q_THREADS_WAIT_INFINITE );
 
 	return NULL;
 }

@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_local.h"
 #include "../qalgo/hash.h"
+#include "../qcommon/qcommon.h"
 
 #include <algorithm>
 
@@ -587,13 +588,13 @@ static image_t *Shader_FindImage( shader_t *shader, const char *name, int flags 
 	}
 
 	if( !Q_strnicmp( name, "*lm", 3 ) ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "WARNING: shader %s has a stage with explicit lightmap image\n", shader->name );
+		Com_DPrintf( S_COLOR_YELLOW "WARNING: shader %s has a stage with explicit lightmap image\n", shader->name );
 		return rsh.whiteTexture;
 	}
 
 	image = R_FindImage( name, NULL, flags, r_shaderMinMipSize, shader->imagetags );
 	if( !image ) {
-		ri.Com_Printf( S_COLOR_YELLOW "WARNING: shader %s has a stage with no image: %s\n", shader->name, name );
+		Com_Printf( S_COLOR_YELLOW "WARNING: shader %s has a stage with no image: %s\n", shader->name, name );
 		return r_defaultImage;
 	}
 
@@ -1100,7 +1101,7 @@ static void Shaderpass_CubeMapExt( shader_t *shader, shaderpass_t *pass, int add
 	if( pass->images[0] ) {
 		pass->tcgen = tcgen;
 	} else {
-		ri.Com_DPrintf( S_COLOR_YELLOW "Shader %s has a stage with no image: %s\n", shader->name, token );
+		Com_DPrintf( S_COLOR_YELLOW "Shader %s has a stage with no image: %s\n", shader->name, token );
 		pass->images[0] = rsh.noTexture;
 		pass->tcgen = TC_GEN_BASE;
 	}
@@ -1165,7 +1166,7 @@ static void Shaderpass_Material( shader_t *shader, shaderpass_t *pass, const cha
 
 	pass->images[0] = Shader_FindImage( shader, token, flags | IT_SRGB );
 	if( !pass->images[0] ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "WARNING: failed to load base/diffuse image for material %s in shader %s.\n", token, shader->name );
+		Com_DPrintf( S_COLOR_YELLOW "WARNING: failed to load base/diffuse image for material %s in shader %s.\n", token, shader->name );
 		return;
 	}
 
@@ -1243,7 +1244,7 @@ static void Shaderpass_Distortion( shader_t *shader, shaderpass_t *pass, const c
 	const char *token;
 
 	if( !r_portalmaps->integer ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "WARNING: shader %s has a distortion stage, while GLSL is not supported\n", shader->name );
+		Com_DPrintf( S_COLOR_YELLOW "WARNING: shader %s has a distortion stage, while GLSL is not supported\n", shader->name );
 		Shader_SkipLine( ptr );
 		return;
 	}
@@ -1844,12 +1845,12 @@ static void R_InitShadersCache( void ) {
 		}
 
 		// enumerate shaders
-		numfiles = ri.FS_GetFileList( dirs[d], ".shader", NULL, 0, 0, 0 );
+		numfiles = FS_GetFileList( dirs[d], ".shader", NULL, 0, 0, 0 );
 		numfiles_total += numfiles;
 
 		// now load them all
 		for( i = 0; i < numfiles; i += k ) {
-			if( ( k = ri.FS_GetFileList( dirs[d], ".shader", shaderPaths, sizeof( shaderPaths ), i, numfiles ) ) == 0 ) {
+			if( ( k = FS_GetFileList( dirs[d], ".shader", shaderPaths, sizeof( shaderPaths ), i, numfiles ) ) == 0 ) {
 				k = 1; // advance by one file
 				continue;
 			}
@@ -1867,7 +1868,7 @@ static void R_InitShadersCache( void ) {
 	}
 
 	if( !numfiles_total ) {
-		ri.Com_Error( ERR_DROP, "Could not find any shaders!" );
+		Com_Error( ERR_DROP, "Could not find any shaders!" );
 	}
 
 	if ( r_showShaderCache && r_showShaderCache->integer )
@@ -2858,7 +2859,7 @@ shader_t *R_LoadShader( const char *name, int type, bool forceDefault, const cha
 	}
 
 	if( !r_free_shaders ) {
-		ri.Com_Error( ERR_FATAL, "R_LoadShader: Shader limit exceeded" );
+		Com_Error( ERR_FATAL, "R_LoadShader: Shader limit exceeded" );
 	}
 
 	if( !text ) {
@@ -2869,7 +2870,7 @@ shader_t *R_LoadShader( const char *name, int type, bool forceDefault, const cha
 		// shader is in the shader scripts
 		if( cache ) {
 			text = cache->buffer + cache->offset;
-			ri.Com_DPrintf( "Loading shader %s from cache...\n", shortname );
+			Com_DPrintf( "Loading shader %s from cache...\n", shortname );
 		}
 	}
 
@@ -3015,7 +3016,7 @@ void R_GetShaderDimensions( const shader_t *shader, int *width, int *height ) {
 
 	baseImage = shader->passes[0].images[0];
 	if( !baseImage ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "R_GetShaderDimensions: shader %s is missing base image\n", shader->name );
+		Com_DPrintf( S_COLOR_YELLOW "R_GetShaderDimensions: shader %s is missing base image\n", shader->name );
 		return;
 	}
 

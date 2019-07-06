@@ -20,6 +20,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // r_cin.c
 #include "r_local.h"
+#include "../client/cin.h"
+#include "../qcommon/qcommon.h"
 
 #define MAX_CINEMATICS  256
 
@@ -49,27 +51,27 @@ static r_cinhandle_t r_cinematics_headnode, *r_free_cinematics;
 */
 static void R_RunCin( r_cinhandle_t *h ) {
 	bool redraw = false;
-	int64_t now = ri.Sys_Milliseconds();
+	int64_t now = Sys_Milliseconds();
 
 	// don't advance cinematics during registration
 	if( rsh.registrationOpen ) {
 		return;
 	}
 
-	ri.Mutex_Lock( h->lock );
+	QMutex_Lock( h->lock );
 
 	if( h->reset ) {
 		h->new_frame = false;
 		h->reset = false;
-		ri.CIN_Reset( h->cin, now );
+		CIN_Reset( h->cin, now );
 	}
 
-	if( ri.CIN_NeedNextFrame( h->cin, now ) ) {
+	if( CIN_NeedNextFrame( h->cin, now ) ) {
 		if( h->yuv ) {
-			h->cyuv = ri.CIN_ReadNextFrameYUV( h->cin, &h->width, &h->height, NULL, NULL, &redraw );
+			h->cyuv = CIN_ReadNextFrameYUV( h->cin, &h->width, &h->height, NULL, NULL, &redraw );
 			h->pic = ( uint8_t * )h->cyuv;
 		} else {
-			h->pic = ri.CIN_ReadNextFrame( h->cin, &h->width, &h->height, NULL, NULL, &redraw );
+			h->pic = CIN_ReadNextFrame( h->cin, &h->width, &h->height, NULL, NULL, &redraw );
 		}
 	}
 
@@ -79,7 +81,7 @@ static void R_RunCin( r_cinhandle_t *h ) {
 		h->new_frame |= redraw;
 	}
 
-	ri.Mutex_Unlock( h->lock );
+	QMutex_Unlock( h->lock );
 }
 
 /*
@@ -88,10 +90,10 @@ static void R_RunCin( r_cinhandle_t *h ) {
 static void R_UploadCinematicFrame( r_cinhandle_t *handle ) {
 	const int samples = 4;
 
-	ri.Mutex_Lock( handle->lock );
+	QMutex_Lock( handle->lock );
 
 	if( !handle->cin || !handle->pic ) {
-		ri.Mutex_Unlock( handle->lock );
+		QMutex_Unlock( handle->lock );
 		return;
 	}
 
@@ -170,7 +172,7 @@ static void R_UploadCinematicFrame( r_cinhandle_t *handle ) {
 		}
 	}
 
-	ri.Mutex_Unlock( handle->lock );
+	QMutex_Unlock( handle->lock );
 }
 
 //==================================================================================
@@ -323,7 +325,7 @@ unsigned int R_StartCinematic( const char *arg ) {
 	}
 
 	// open the file, read header, etc
-	cin = ri.CIN_Open( name, ri.Sys_Milliseconds(), &yuv, NULL );
+	cin = CIN_Open( name, Sys_Milliseconds(), CIN_LOOP, &yuv, NULL );
 
 	// take a free cinematic handle if possible
 	if( !r_free_cinematics || !cin ) {
@@ -350,7 +352,7 @@ unsigned int R_StartCinematic( const char *arg ) {
 	handle->registrationSequence = rsh.registrationSequence;
 	handle->pic = NULL;
 	handle->cyuv = NULL;
-	handle->lock = ri.Mutex_Create();
+	handle->lock = QMutex_Create();
 
 	// put handle at the start of the list
 	handle->prev = &r_cinematics_headnode;
@@ -373,7 +375,7 @@ void R_TouchCinematic( unsigned int id ) {
 		return;
 	}
 
-	ri.Mutex_Lock( handle->lock );
+	QMutex_Lock( handle->lock );
 
 	handle->registrationSequence = rsh.registrationSequence;
 
@@ -391,7 +393,7 @@ void R_TouchCinematic( unsigned int id ) {
 	handle->pic = NULL;
 	handle->cyuv = NULL;
 
-	ri.Mutex_Unlock( handle->lock );
+	QMutex_Unlock( handle->lock );
 }
 
 /*
@@ -422,9 +424,9 @@ void R_FreeCinematic( unsigned int id ) {
 	}
 
 	lock = handle->lock;
-	ri.Mutex_Lock( lock );
+	QMutex_Lock( lock );
 
-	ri.CIN_Close( handle->cin );
+	CIN_Close( handle->cin );
 	handle->cin = NULL;
 	handle->lock = NULL;
 
@@ -444,18 +446,18 @@ void R_FreeCinematic( unsigned int id ) {
 	handle->next = r_free_cinematics;
 	r_free_cinematics = handle;
 
-	ri.Mutex_Unlock( lock );
+	QMutex_Unlock( lock );
 
-	ri.Mutex_Destroy( &lock );
+	QMutex_Destroy( &lock );
 }
 
 /*
 * R_ResetCinematic
 */
 static void R_ResetCinematic( r_cinhandle_t *handle ) {
-	ri.Mutex_Lock( handle->lock );
+	QMutex_Lock( handle->lock );
 	handle->reset = true;
-	ri.Mutex_Unlock( handle->lock );
+	QMutex_Unlock( handle->lock );
 }
 
 /*

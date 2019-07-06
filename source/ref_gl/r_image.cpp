@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "r_local.h"
 #include "r_imagelib.h"
 #include "../qalgo/hash.h"
+#include "../qcommon/qcommon.h"
 
 #include <algorithm>
 
@@ -409,7 +410,7 @@ static int R_ReadImageFromDisk( int ctx, char *pathname, size_t pathname_size,
 	*width = *height = 0;
 	samples = 0;
 
-	extension = ri.FS_FirstExtension( pathname, IMAGE_EXTENSIONS, NUM_IMAGE_EXTENSIONS - 1 ); // last is KTX
+	extension =FS_FirstExtension( pathname, IMAGE_EXTENSIONS, NUM_IMAGE_EXTENSIONS - 1 ); // last is KTX
 	if( extension ) {
 		r_imginfo_t imginfo;
 		loaderCbInfo_t cbinfo = { ctx, side };
@@ -1384,7 +1385,7 @@ static bool R_LoadKTX( int ctx, image_t *image, const char *pathname ) {
 
 	header = ( ktx_header_t * )buffer;
 	if( memcmp( header->identifier, "\xABKTX 11\xBB\r\n\x1A\n", 12 ) ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Bad file identifier: %s\n", pathname );
+		Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Bad file identifier: %s\n", pathname );
 		goto error;
 	}
 
@@ -1395,15 +1396,15 @@ static bool R_LoadKTX( int ctx, image_t *image, const char *pathname ) {
 	}
 
 	if( header->format && ( header->format != header->baseInternalFormat ) ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Pixel format doesn't match internal format: %s\n", pathname );
+		Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Pixel format doesn't match internal format: %s\n", pathname );
 		goto error;
 	}
 	if( !R_IsKTXFormatValid( header->format ? header->baseInternalFormat : header->internalFormat, header->type ) ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Unsupported pixel format: %s\n", pathname );
+		Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Unsupported pixel format: %s\n", pathname );
 		goto error;
 	}
 	if( ( header->pixelWidth < 1 ) || ( header->pixelHeight < 0 ) ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Zero texture size: %s\n", pathname );
+		Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Zero texture size: %s\n", pathname );
 		goto error;
 	}
 	if( !header->pixelHeight ) {
@@ -1411,19 +1412,19 @@ static bool R_LoadKTX( int ctx, image_t *image, const char *pathname ) {
 	}
 	if( !header->type && ( ( header->pixelWidth & ( header->pixelWidth - 1 ) ) || ( header->pixelHeight & ( header->pixelHeight - 1 ) ) ) ) {
 		// NPOT compressed textures may crash on certain drivers/GPUs
-		ri.Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Compressed image must be power-of-two: %s\n", pathname );
+		Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Compressed image must be power-of-two: %s\n", pathname );
 		goto error;
 	}
 	if( ( image->flags & IT_CUBEMAP ) && ( header->pixelWidth != header->pixelHeight ) ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Not square cubemap image: %s\n", pathname );
+		Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Not square cubemap image: %s\n", pathname );
 		goto error;
 	}
 	if( ( header->pixelDepth > 1 ) || ( header->numberOfArrayElements > 1 ) ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: 3D textures and texture arrays are not supported: %s\n", pathname );
+		Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: 3D textures and texture arrays are not supported: %s\n", pathname );
 		goto error;
 	}
 	if( header->numberOfFaces != numFaces ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Bad number of cubemap faces: %s\n", pathname );
+		Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Bad number of cubemap faces: %s\n", pathname );
 		goto error;
 	}
 	if( header->numberOfMipmapLevels < 1 ) {
@@ -1444,7 +1445,7 @@ static bool R_LoadKTX( int ctx, image_t *image, const char *pathname ) {
 		if( ( header->numberOfMipmapLevels == 1 ) && ( image->flags & IT_NOMIPMAP ) ) {
 			mips = 1;
 		} else if( header->numberOfMipmapLevels < mips ) {
-			ri.Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Compressed image has too few mip levels: %s\n", pathname );
+			Com_DPrintf( S_COLOR_YELLOW "R_LoadKTX: Compressed image has too few mip levels: %s\n", pathname );
 			goto error;
 		}
 
@@ -1665,13 +1666,13 @@ static bool R_LoadImageFromDisk( int ctx, image_t *image ) {
 											   &( pic[j] ), &width, &height, &flags, j );
 				if( pic[j] ) {
 					if( width != height ) {
-						ri.Com_DPrintf( S_COLOR_YELLOW "Not square cubemap image %s\n", pathname );
+						Com_DPrintf( S_COLOR_YELLOW "Not square cubemap image %s\n", pathname );
 						break;
 					}
 					if( !j ) {
 						lastSize = width;
 					} else if( lastSize != width ) {
-						ri.Com_DPrintf( S_COLOR_YELLOW "Different cubemap image size: %s\n", pathname );
+						Com_DPrintf( S_COLOR_YELLOW "Different cubemap image size: %s\n", pathname );
 						break;
 					}
 					if( cbflags & ( IT_FLIPX | IT_FLIPY | IT_FLIPDIAGONAL ) ) {
@@ -1705,7 +1706,7 @@ static bool R_LoadImageFromDisk( int ctx, image_t *image ) {
 			Q_strncpyz( image->extension, &pathname[len + 3], sizeof( image->extension ) );
 			loaded = true;
 		} else {
-			ri.Com_DPrintf( S_COLOR_YELLOW "Missing image: %s\n", image->name );
+			Com_DPrintf( S_COLOR_YELLOW "Missing image: %s\n", image->name );
 		}
 	} else {
 		uint8_t *pic = NULL;
@@ -1726,7 +1727,7 @@ static bool R_LoadImageFromDisk( int ctx, image_t *image ) {
 			Q_strncpyz( image->extension, &pathname[len], sizeof( image->extension ) );
 			loaded = true;
 		} else {
-			ri.Com_DPrintf( S_COLOR_YELLOW "Missing image: %s\n", image->name );
+			Com_DPrintf( S_COLOR_YELLOW "Missing image: %s\n", image->name );
 		}
 	}
 
@@ -1749,7 +1750,7 @@ static image_t *R_LinkPic( unsigned int hash ) {
 		return NULL;
 	}
 
-	ri.Mutex_Lock( r_imagesLock );
+	QMutex_Lock( r_imagesLock );
 
 	hash = hash % IMAGES_HASH_SIZE;
 	image = r_free_images;
@@ -1761,7 +1762,7 @@ static image_t *R_LinkPic( unsigned int hash ) {
 	image->next->prev = image;
 	image->prev->next = image;
 
-	ri.Mutex_Unlock( r_imagesLock );
+	QMutex_Unlock( r_imagesLock );
 
 	return image;
 }
@@ -1770,7 +1771,7 @@ static image_t *R_LinkPic( unsigned int hash ) {
 * R_UnlinkPic
 */
 static void R_UnlinkPic( image_t *image ) {
-	ri.Mutex_Lock( r_imagesLock );
+	QMutex_Lock( r_imagesLock );
 
 	// remove from linked active list
 	image->prev->next = image->next;
@@ -1780,7 +1781,7 @@ static void R_UnlinkPic( image_t *image ) {
 	image->next = r_free_images;
 	r_free_images = image;
 
-	ri.Mutex_Unlock( r_imagesLock );
+	QMutex_Unlock( r_imagesLock );
 }
 
 /*
@@ -1795,7 +1796,7 @@ static image_t *R_CreateImage( const char *name, int width, int height, int laye
 
 	image = R_LinkPic( hash );
 	if( !image ) {
-		ri.Com_Error( ERR_DROP, "R_LoadImage: r_numImages == MAX_GLIMAGES" );
+		Com_Error( ERR_DROP, "R_LoadImage: r_numImages == MAX_GLIMAGES" );
 		return NULL;
 	}
 
@@ -2772,7 +2773,7 @@ void R_InitImages( void ) {
 	R_Imagelib_Init();
 
 	r_imagesPool = R_AllocPool( r_mempool, "Images" );
-	r_imagesLock = ri.Mutex_Create();
+	r_imagesLock = QMutex_Create();
 
 	r_unpackAlignment[QGL_CONTEXT_MAIN] = 4;
 	qglPixelStorei( GL_PACK_ALIGNMENT, 1 );
@@ -2904,7 +2905,7 @@ void R_ShutdownImages( void ) {
 	}
 	r_8to24table[0] = r_8to24table[1] = NULL;
 
-	ri.Mutex_Destroy( &r_imagesLock );
+	QMutex_Destroy( &r_imagesLock );
 
 	R_FreePool( &r_imagesPool );
 
@@ -2959,7 +2960,7 @@ static void R_IssueInitLoaderCmd( int id ) {
 	loaderInitCmd_t cmd;
 	cmd.id = CMD_LOADER_INIT;
 	cmd.self = id;
-	ri.BufPipe_WriteCmd( loader_queue[id], &cmd, sizeof( cmd ) );
+	QBufPipe_WriteCmd( loader_queue[id], &cmd, sizeof( cmd ) );
 }
 
 /*
@@ -2968,7 +2969,7 @@ static void R_IssueInitLoaderCmd( int id ) {
 static void R_IssueShutdownLoaderCmd( int id ) {
 	int cmd;
 	cmd = CMD_LOADER_SHUTDOWN;
-	ri.BufPipe_WriteCmd( loader_queue[id], &cmd, sizeof( cmd ) );
+	QBufPipe_WriteCmd( loader_queue[id], &cmd, sizeof( cmd ) );
 }
 
 /*
@@ -2979,7 +2980,7 @@ static void R_IssueLoadPicLoaderCmd( int id, int pic ) {
 	cmd.id = CMD_LOADER_LOAD_PIC;
 	cmd.self = id;
 	cmd.pic = pic;
-	ri.BufPipe_WriteCmd( loader_queue[id], &cmd, sizeof( cmd ) );
+	QBufPipe_WriteCmd( loader_queue[id], &cmd, sizeof( cmd ) );
 }
 
 /*
@@ -2988,7 +2989,7 @@ static void R_IssueLoadPicLoaderCmd( int id, int pic ) {
 static void R_IssueDataSyncLoaderCmd( int id ) {
 	int cmd;
 	cmd = CMD_LOADER_DATA_SYNC;
-	ri.BufPipe_WriteCmd( loader_queue[id], &cmd, sizeof( cmd ) );
+	QBufPipe_WriteCmd( loader_queue[id], &cmd, sizeof( cmd ) );
 }
 
 /*
@@ -3005,13 +3006,13 @@ static void R_InitImageLoader( int id ) {
 		return;
 	}
 
-	loader_queue[id] = ri.BufPipe_Create( 0x40000, 1 );
-	loader_thread[id] = ri.Thread_Create( R_ImageLoaderThreadProc, loader_queue[id] );
+	loader_queue[id] = QBufPipe_Create( 0x40000, 1 );
+	loader_thread[id] = QThread_Create( R_ImageLoaderThreadProc, loader_queue[id] );
 
 	R_IssueInitLoaderCmd( id );
 
 	// wait for the thread to complete context setup
-	ri.BufPipe_Finish( loader_queue[id] );
+	QBufPipe_Finish( loader_queue[id] );
 }
 
 /*
@@ -3028,7 +3029,7 @@ void R_FinishLoadingImages( void ) {
 
 	for( i = 0; i < NUM_LOADER_THREADS; i++ ) {
 		if( loader_gl_context[i] ) {
-			ri.BufPipe_Finish( loader_queue[i] );
+			QBufPipe_Finish( loader_queue[i] );
 		}
 	}
 }
@@ -3079,12 +3080,12 @@ static void R_ShutdownImageLoader( int id ) {
 
 	R_IssueShutdownLoaderCmd( id );
 
-	ri.BufPipe_Finish( loader_queue[id] );
+	QBufPipe_Finish( loader_queue[id] );
 
-	ri.Thread_Join( loader_thread[id] );
+	QThread_Join( loader_thread[id] );
 	loader_thread[id] = NULL;
 
-	ri.BufPipe_Destroy( &loader_queue[id] );
+	QBufPipe_Destroy( &loader_queue[id] );
 
 	GLimp_SharedContext_Destroy( context, surface );
 }
@@ -3154,7 +3155,7 @@ static unsigned R_HandleDataSyncLoaderCmd( void *pcmd ) {
 *R_ImageLoaderCmdsWaiter
 */
 static int R_ImageLoaderCmdsWaiter( qbufPipe_t *queue, queueCmdHandler_t *cmdHandlers, bool timeout ) {
-	return ri.BufPipe_ReadCmds( queue, cmdHandlers );
+	return QBufPipe_ReadCmds( queue, cmdHandlers );
 }
 
 /*
@@ -3170,7 +3171,7 @@ static void *R_ImageLoaderThreadProc( void *param ) {
 		(queueCmdHandler_t)R_HandleDataSyncLoaderCmd,
 	};
 
-	ri.BufPipe_Wait( cmdQueue, R_ImageLoaderCmdsWaiter, cmdHandlers, Q_THREADS_WAIT_INFINITE );
+	QBufPipe_Wait( cmdQueue, R_ImageLoaderCmdsWaiter, cmdHandlers, Q_THREADS_WAIT_INFINITE );
 
 	return NULL;
 }

@@ -20,7 +20,7 @@
 // client.h -- primary header for client
 
 #include "../qcommon/qcommon.h"
-#include "../ref_gl/r_public.h"
+#include "../cgame/ref.h"
 #include "../cgame/cg_public.h"
 #include "../ftlib/ftlib_public.h"
 #include "../matchmaker/mm_rating.h"
@@ -600,8 +600,6 @@ void CL_AddNetgraph( void );
 
 extern float scr_con_current;
 extern float scr_conlines;       // lines of console to display
-
-extern ref_export_t re;     // interface to refresh .dll
 
 //
 // sys import

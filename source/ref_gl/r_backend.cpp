@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_local.h"
 #include "r_backend_local.h"
-
+#include "../qcommon/qcommon.h"
 #include <algorithm>
 
 // Smaller buffer for 2D polygons. Also a workaround for some instances of a hardly explainable bug on Adreno
@@ -103,7 +103,7 @@ void RB_EndRegistration( void ) {
 */
 void RB_SetTime( int64_t time ) {
 	rb.time = time;
-	rb.nullEnt.shaderTime = ri.Sys_Milliseconds();
+	rb.nullEnt.shaderTime = Sys_Milliseconds();
 }
 
 /*

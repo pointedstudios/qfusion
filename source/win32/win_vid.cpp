@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <assert.h>
 #include <float.h>
 #include "../client/client.h"
+#include "../ref_gl/r_frontend.h"
 #include "winquake.h"
 #include "resource.h"
 
@@ -519,7 +520,7 @@ void *VID_GetWindowHandle( void ) {
 */
 rserr_t VID_Sys_Init( const char *applicationName, const char *screenshotsPrefix, int startupColor,
 					  const int *iconXPM, void *parentWindow, bool verbose ) {
-	return re.Init( applicationName, screenshotsPrefix, startupColor,
+	return RF_Init( applicationName, screenshotsPrefix, startupColor,
 					IDI_APPICON_VALUE, iconXPM,
 					global_hInstance, (void *)MainWndProc, parentWindow,
 					verbose );

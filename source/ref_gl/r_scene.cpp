@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "r_local.h"
-
+#include "../qcommon/qthreads.h"
 #include "../qalgo/SingletonHolder.h"
 
 #include <algorithm>
@@ -413,7 +413,7 @@ void R_AddLightStyleToScene( int style, float r, float g, float b ) {
 	lightstyle_t *ls;
 
 	if( style < 0 || style >= MAX_LIGHTSTYLES ) {
-		ri.Com_Error( ERR_DROP, "R_AddLightStyleToScene: bad light style %i", style );
+		Com_Error( ERR_DROP, "R_AddLightStyleToScene: bad light style %i", style );
 		return;
 	}
 
@@ -709,9 +709,9 @@ void R_RenderScene( const refdef_t *fd ) {
 	R_Set2DMode( true );
 
 	if( !( fd->rdflags & RDF_NOWORLDMODEL ) ) {
-		ri.Mutex_Lock( rf.speedsMsgLock );
+		QMutex_Lock( rf.speedsMsgLock );
 		R_WriteSpeedsMessage( rf.speedsMsg, sizeof( rf.speedsMsg ) );
-		ri.Mutex_Unlock( rf.speedsMsgLock );
+		QMutex_Unlock( rf.speedsMsgLock );
 	}
 
 	// blit and blend framebuffers in proper order

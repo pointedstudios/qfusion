@@ -128,7 +128,7 @@ typedef struct {
 	int64_t ( *Sys_Milliseconds )( void );
 	uint64_t ( *Sys_Microseconds )( void );
 
-	void *( *Sys_LoadLibrary )( const char *name, dllfunc_t * funcs );
+	void *( *Sys_LoadLibrary )( const char *name, struct dllfunc_s * funcs );
 	void ( *Sys_UnloadLibrary )( void **lib );
 
 	// managed memory allocation

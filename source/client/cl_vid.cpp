@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "cin.h"
 #include "ftlib.h"
 #include "xpm.h"
+#include "../ref_gl/r_frontend.h"
 
 cvar_t *vid_ref;
 cvar_t *vid_width, *vid_height;
@@ -40,8 +41,6 @@ cvar_t *win_nowinkeys;
 
 // Global variables used internally by this module
 viddef_t viddef;             // global video state; used by other modules
-
-ref_export_t re;
 
 #define VID_DEFAULTREF          "ref_gl"
 
@@ -152,7 +151,7 @@ static rserr_t VID_Sys_Init_( void *parentWindow, bool verbose ) {
 void VID_AppActivate( bool active, bool minimize, bool destroy ) {
 	vid_app_active = active;
 	vid_app_minimized = minimize;
-	re.AppActivate( active, minimize, destroy );
+	RF_AppActivate( active, minimize, destroy );
 }
 
 /*
@@ -226,7 +225,7 @@ static rserr_t VID_ChangeMode( void ) {
 		return rserr_restart_required;
 	}
 
-	err = re.SetMode( x, y, w, h, disp_freq, fs, stereo, borderless );
+	err = RF_SetMode( x, y, w, h, disp_freq, fs, stereo, borderless );
 
 	if( err == rserr_ok ) {
 		// store fallback mode
@@ -255,7 +254,7 @@ static rserr_t VID_ChangeMode( void ) {
 			vid_fullscreen->modified = false;
 			fs = false;
 
-			err = re.SetMode( x, y, w, h, disp_freq, false, stereo, borderless );
+			err = RF_SetMode( x, y, w, h, disp_freq, false, stereo, borderless );
 		}
 
 		if( err == rserr_invalid_mode ) {
@@ -267,7 +266,7 @@ static rserr_t VID_ChangeMode( void ) {
 			Cvar_ForceSet( vid_height->name, va( "%i", h ) );
 
 			// try setting it back to something safe
-			err = re.SetMode( x, y, w, h, disp_freq, fs, stereo, borderless );
+			err = RF_SetMode( x, y, w, h, disp_freq, fs, stereo, borderless );
 			if( err == rserr_invalid_fullscreen ) {
 				Com_Printf( "VID_ChangeMode() - could not revert to safe fullscreen mode\n" );
 
@@ -275,7 +274,7 @@ static rserr_t VID_ChangeMode( void ) {
 				vid_fullscreen->modified = false;
 				fs = false;
 
-				err = re.SetMode( x, y, w, h, disp_freq, false, stereo, borderless );
+				err = RF_SetMode( x, y, w, h, disp_freq, false, stereo, borderless );
 			}
 			if( err != rserr_ok ) {
 				Com_Printf( "VID_ChangeMode() - could not revert to safe mode\n" );
@@ -299,125 +298,16 @@ static void VID_UnloadRefresh( void ) {
 		return;
 	}
 
-	re.Shutdown( false );
+	RF_Shutdown( false );
 	vid_ref_active = false;
 	Mem_FreePool( &vid_ref_mempool );
 }
-
-static void *VID_RefModule_MemAllocExt( mempool_t *pool, size_t size, size_t align, int z, const char *filename, int fileline ) {
-	return _Mem_AllocExt( pool, size, align, z, MEMPOOL_REFMODULE, 0, filename, fileline );
-}
-
-static void VID_RefModule_MemFree( void *data, const char *filename, int fileline ) {
-	_Mem_Free( data, MEMPOOL_REFMODULE, 0, filename, fileline );
-}
-
-static mempool_t *VID_RefModule_MemAllocPool( mempool_t *parent, const char *name, const char *filename, int fileline ) {
-	return _Mem_AllocPool( parent ? parent : vid_ref_mempool, name, MEMPOOL_REFMODULE, filename, fileline );
-}
-
-static void VID_RefModule_MemFreePool( mempool_t **pool, const char *filename, int fileline ) {
-	_Mem_FreePool( pool, MEMPOOL_REFMODULE, 0, filename, fileline );
-}
-
-static void VID_RefModule_MemEmptyPool( mempool_t *pool, const char *filename, int fileline ) {
-	_Mem_EmptyPool( pool, MEMPOOL_REFMODULE, 0, filename, fileline );
-}
-
-static struct cinematics_s *VID_RefModule_CIN_Open( const char *name, int64_t start_time, bool *yuv, float *framerate ) {
-	return CIN_Open( name, start_time, CIN_LOOP, yuv, framerate );
-}
-
-static ref_import_t import;
 
 /*
 ** VID_LoadRefresh
 */
 static bool VID_LoadRefresh( const char *name ) {
 	VID_UnloadRefresh();
-
-	import.Com_Error = &Com_Error;
-	import.Com_Printf = &Com_Printf;
-	import.Com_DPrintf = &Com_DPrintf;
-
-	import.Sys_Milliseconds = &Sys_Milliseconds;
-	import.Sys_Microseconds = &Sys_Microseconds;
-	import.Sys_Sleep = &Sys_Sleep;
-
-	import.Com_LoadSysLibrary = Com_LoadSysLibrary;
-	import.Com_UnloadLibrary = Com_UnloadLibrary;
-	import.Com_LibraryProcAddress = Com_LibraryProcAddress;
-
-	import.Cvar_Get = &Cvar_Get;
-	import.Cvar_Set = &Cvar_Set;
-	import.Cvar_ForceSet = &Cvar_ForceSet;
-	import.Cvar_SetValue = &Cvar_SetValue;
-	import.Cvar_String = &Cvar_String;
-	import.Cvar_Value = &Cvar_Value;
-
-	import.Cmd_Argc = &Cmd_Argc;
-	import.Cmd_Argv = &Cmd_Argv;
-	import.Cmd_Args = &Cmd_Args;
-	import.Cmd_AddCommand = &Cmd_AddCommand;
-	import.Cmd_RemoveCommand = &Cmd_RemoveCommand;
-	import.Cmd_Execute = &Cbuf_Execute;
-	import.Cmd_ExecuteText = &Cbuf_ExecuteText;
-	import.Cmd_SetCompletionFunc = &Cmd_SetCompletionFunc;
-
-	import.FS_FOpenFile = &FS_FOpenFile;
-	import.FS_FOpenAbsoluteFile = &FS_FOpenAbsoluteFile;
-	import.FS_Read = &FS_Read;
-	import.FS_Write = &FS_Write;
-	import.FS_Printf = &FS_Printf;
-	import.FS_Tell = &FS_Tell;
-	import.FS_Seek = &FS_Seek;
-	import.FS_Eof = &FS_Eof;
-	import.FS_Flush = &FS_Flush;
-	import.FS_FCloseFile = &FS_FCloseFile;
-	import.FS_RemoveFile = &FS_RemoveFile;
-	import.FS_GetFileList = &FS_GetFileList;
-	import.FS_GetGameDirectoryList = &FS_GetGameDirectoryList;
-	import.FS_FirstExtension = &FS_FirstExtension;
-	import.FS_MoveFile = &FS_MoveFile;
-	import.FS_IsUrl = &FS_IsUrl;
-	import.FS_FileMTime = &FS_FileMTime;
-	import.FS_RemoveDirectory = &FS_RemoveDirectory;
-	import.FS_GameDirectory = &FS_GameDirectory;
-	import.FS_WriteDirectory = &FS_WriteDirectory;
-	import.FS_MediaDirectory = &FS_MediaDirectory;
-	import.FS_AddFileToMedia = &FS_AddFileToMedia;
-
-	import.CIN_Open = &VID_RefModule_CIN_Open;
-	import.CIN_NeedNextFrame = &CIN_NeedNextFrame;
-	import.CIN_ReadNextFrame = &CIN_ReadNextFrame;
-	import.CIN_ReadNextFrameYUV = &CIN_ReadNextFrameYUV;
-	import.CIN_Reset = &CIN_Reset;
-	import.CIN_Close = &CIN_Close;
-
-	import.Mem_AllocPool = &VID_RefModule_MemAllocPool;
-	import.Mem_FreePool = &VID_RefModule_MemFreePool;
-	import.Mem_EmptyPool = &VID_RefModule_MemEmptyPool;
-	import.Mem_AllocExt = &VID_RefModule_MemAllocExt;
-	import.Mem_Free = &VID_RefModule_MemFree;
-	import.Mem_Realloc = &_Mem_Realloc;
-	import.Mem_PoolTotalSize = &Mem_PoolTotalSize;
-
-	import.Thread_Create = QThread_Create;
-	import.Thread_Join = QThread_Join;
-	import.Thread_Yield = QThread_Yield;
-	import.Mutex_Create = QMutex_Create;
-	import.Mutex_Destroy = QMutex_Destroy;
-	import.Mutex_Lock = QMutex_Lock;
-	import.Mutex_Unlock = QMutex_Unlock;
-
-	import.BufPipe_Create = QBufPipe_Create;
-	import.BufPipe_Destroy = QBufPipe_Destroy;
-	import.BufPipe_Finish = QBufPipe_Finish;
-	import.BufPipe_WriteCmd = QBufPipe_WriteCmd;
-	import.BufPipe_ReadCmds = QBufPipe_ReadCmds;
-	import.BufPipe_Wait = QBufPipe_Wait;
-
-	re = *GetRefAPI( &import );
 
 	Com_Printf( "\n" );
 	return true;
@@ -592,7 +482,7 @@ load_refresh:
 		// stop and free all sounds
 		CL_SoundModule_Init( verbose );
 
-		re.BeginRegistration();
+		RF_BeginRegistration();
 		CL_SoundModule_BeginRegistration();
 
 		FTLIB_PrecacheFonts( verbose );
@@ -620,7 +510,7 @@ load_refresh:
 			CL_SetKeyDest( key_menu );
 		}
 
-		re.EndRegistration();
+		RF_EndRegistration();
 		CL_SoundModule_EndRegistration();
 
 		vid_ref_modified = false;

@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "r_local.h"
 #include "r_cmdque.h"
 #include "r_frontend.h"
+#include "../qcommon/qcommon.h"
 
 static ref_frontend_t rrf;
 static ref_cmdbuf_t *RF_GetNextAdapterFrame( ref_frontendAdapter_t *adapter );
@@ -90,8 +91,8 @@ static void RF_AdapterShutdown( ref_frontendAdapter_t *adapter ) {
 
 	if( adapter->thread ) {
 		adapter->shutdown = true;
-		ri.Thread_Join( adapter->thread );
-		ri.Mutex_Destroy( &adapter->frameLock );
+		QThread_Join( adapter->thread );
+		QMutex_Destroy( &adapter->frameLock );
 	}
 
 	RF_DestroyCmdPipe( &adapter->cmdPipe );
@@ -112,7 +113,7 @@ static bool RF_AdapterInit( ref_frontendAdapter_t *adapter ) {
 	adapter->cmdPipe = RF_CreateCmdPipe( !glConfig.multithreading );
 
 	if( glConfig.multithreading ) {
-		adapter->frameLock = ri.Mutex_Create();
+		adapter->frameLock = QMutex_Create();
 
 		GLimp_EnableMultithreadedRendering( true );
 
@@ -121,7 +122,7 @@ static bool RF_AdapterInit( ref_frontendAdapter_t *adapter ) {
 		}
 
 		adapter->shutdown = false;
-		adapter->thread = ri.Thread_Create( RF_AdapterThreadProc, adapter );
+		adapter->thread = QThread_Create( RF_AdapterThreadProc, adapter );
 		if( !adapter->thread ) {
 			GLimp_EnableMultithreadedRendering( false );
 			return false;
@@ -137,12 +138,12 @@ static ref_cmdbuf_t *RF_GetNextAdapterFrame( ref_frontendAdapter_t *adapter ) {
 	ref_cmdbuf_t *result = NULL;
 	auto *fe = (ref_frontend_t *)adapter->owner;
 
-	ri.Mutex_Lock( adapter->frameLock );
+	QMutex_Lock( adapter->frameLock );
 	if( adapter->frameNum != fe->lastFrameNum ) {
 		adapter->frameNum = fe->lastFrameNum;
 		result = fe->frames[adapter->frameNum];
 	}
-	ri.Mutex_Unlock( adapter->frameLock );
+	QMutex_Unlock( adapter->frameLock );
 
 	return result;
 }
@@ -275,9 +276,9 @@ static void RF_CheckCvars( void ) {
 	// keep r_outlines_cutoff value in sane bounds to prevent wallhacking
 	if( r_outlines_scale->modified ) {
 		if( r_outlines_scale->value < 0 ) {
-			ri.Cvar_ForceSet( r_outlines_scale->name, "0" );
+			Cvar_ForceSet( r_outlines_scale->name, "0" );
 		} else if( r_outlines_scale->value > 3 ) {
-			ri.Cvar_ForceSet( r_outlines_scale->name, "3" );
+			Cvar_ForceSet( r_outlines_scale->name, "3" );
 		}
 		r_outlines_scale->modified = false;
 	}
@@ -295,7 +296,7 @@ void RF_BeginFrame( float cameraSeparation, bool forceClear, bool forceVsync, bo
 
 	// take the frame the backend is not busy processing
 	if( glConfig.multithreading ) {
-		ri.Mutex_Lock( rrf.adapter.frameLock );
+		QMutex_Lock( rrf.adapter.frameLock );
 		if( rrf.lastFrameNum == rrf.adapter.frameNum ) {
 			rrf.frameNum = ( rrf.adapter.frameNum + 1 ) % 3;
 		} else {
@@ -305,7 +306,7 @@ void RF_BeginFrame( float cameraSeparation, bool forceClear, bool forceVsync, bo
 			rrf.frameNum = 1;
 		}
 		rrf.frame = rrf.frames[rrf.frameNum];
-		ri.Mutex_Unlock( rrf.adapter.frameLock );
+		QMutex_Unlock( rrf.adapter.frameLock );
 	}
 
 	rrf.frame->Clear( rrf.frame );
@@ -325,9 +326,9 @@ void RF_EndFrame( void ) {
 	rrf.frame->EndFrame( rrf.frame );
 
 	if( glConfig.multithreading ) {
-		ri.Mutex_Lock( rrf.adapter.frameLock );
+		QMutex_Lock( rrf.adapter.frameLock );
 		rrf.lastFrameNum = rrf.frameNum;
-		ri.Mutex_Unlock( rrf.adapter.frameLock );
+		QMutex_Unlock( rrf.adapter.frameLock );
 	}
 
 	rrf.adapter.cmdPipe->Fence( rrf.adapter.cmdPipe );
@@ -489,9 +490,9 @@ bool RF_RenderingEnabled( void ) {
 }
 
 const char *RF_GetSpeedsMessage( char *out, size_t size ) {
-	ri.Mutex_Lock( rf.speedsMsgLock );
+	QMutex_Lock( rf.speedsMsgLock );
 	Q_strncpyz( out, rf.speedsMsg, size );
-	ri.Mutex_Unlock( rf.speedsMsgLock );
+	QMutex_Unlock( rf.speedsMsgLock );
 	return out;
 }
 
@@ -530,8 +531,8 @@ void RF_WriteAviFrame( int frame, bool scissor ) {
 		h = glConfig.height;
 	}
 
-	writedir = ri.FS_WriteDirectory();
-	gamedir = ri.FS_GameDirectory();
+	writedir = FS_WriteDirectory();
+	gamedir = FS_GameDirectory();
 	path_size = strlen( writedir ) + 1 + strlen( gamedir ) + strlen( "/avi/" ) + 1;
 	path = (char *)alloca( path_size );
 	Q_snprintfz( path, path_size, "%s/%s/avi/", writedir, gamedir );

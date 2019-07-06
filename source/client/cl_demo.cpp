@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // cl_demo.c  -- demo recording
 
 #include "client.h"
+#include "../ref_gl/r_frontend.h"
 
 static void CL_PauseDemo( bool paused );
 
@@ -215,7 +216,7 @@ static int demofilelen, demofilelentotal;
 	cls.demo.avi_frame = 0;
 
 	if( cls.demo.avi_video ) {
-		re.BeginAviDemo();
+		RF_BeginAviDemo();
 	}
 
 	if( cls.demo.avi_audio ) {
@@ -232,7 +233,7 @@ static void CL_StopDemoAviDump( void ) {
 	}
 
 	if( cls.demo.avi_video ) {
-		re.StopAviDemo();
+		RF_StopAviDemo();
 		cls.demo.avi_video = false;
 	}
 

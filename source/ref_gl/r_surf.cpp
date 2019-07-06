@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_surf.c: surface-related refresh code
 
 #include "r_local.h"
-
+#include "../qcommon/qcommon.h"
 #include <algorithm>
 
 #define WORLDSURF_DIST 1024.0f                  // hack the draw order for world surfaces
@@ -919,7 +919,7 @@ void R_DrawWorld( void ) {
 
 	// BEGIN t_world_node
 	if( speeds ) {
-		msec = ri.Sys_Milliseconds();
+		msec = Sys_Milliseconds();
 	}
 
 	ja.uarg = clipFlags;
@@ -936,7 +936,7 @@ void R_DrawWorld( void ) {
 		memset( (void *)rf.worldDrawSurfVis, 0, rsh.worldBrushModel->numDrawSurfaces * sizeof( *rf.worldDrawSurfVis ) );
 
 		if( r_speeds->integer ) {
-			msec2 = ri.Sys_Milliseconds();
+			msec2 = Sys_Milliseconds();
 		}
 
 		//
@@ -947,7 +947,7 @@ void R_DrawWorld( void ) {
 		RJ_FinishJobs();
 
 		if( speeds ) {
-			rf.stats.t_cull_world_nodes += ri.Sys_Milliseconds() - msec2;
+			rf.stats.t_cull_world_nodes += Sys_Milliseconds() - msec2;
 		}
 	}
 
@@ -955,7 +955,7 @@ void R_DrawWorld( void ) {
 	// cull surfaces and do some background work on computed vis leafs
 	// 
 	if( speeds ) {
-		msec2 = ri.Sys_Milliseconds();
+		msec2 = Sys_Milliseconds();
 	}
 
 	RJ_ScheduleJob( &R_CullVisSurfacesJob, &ja, rsh.worldBrushModel->numModelSurfaces );
@@ -965,14 +965,14 @@ void R_DrawWorld( void ) {
 	RJ_FinishJobs();
 
 	if( speeds ) {
-		rf.stats.t_cull_world_surfs += ri.Sys_Milliseconds() - msec2;
+		rf.stats.t_cull_world_surfs += Sys_Milliseconds() - msec2;
 	}
 
 	//
 	// add visible surfaces to draw list
 	//
 	if( speeds ) {
-		msec2 = ri.Sys_Milliseconds();
+		msec2 = Sys_Milliseconds();
 	}
 	R_AddVisSurfaces( dlightBits, shadowBits );
 
@@ -988,6 +988,6 @@ void R_DrawWorld( void ) {
 
 	// END t_world_node
 	if( speeds ) {
-		rf.stats.t_world_node += ri.Sys_Milliseconds() - msec;
+		rf.stats.t_world_node += Sys_Milliseconds() - msec;
 	}
 }

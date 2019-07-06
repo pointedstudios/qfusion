@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_light.c
 
 #include "r_local.h"
-
+#include "../qcommon/qcommon.h"
 #include <algorithm>
 
 /*
@@ -366,7 +366,7 @@ static int R_PackLightmaps( int num, int w, int h, int dataSize, int stride, int
 	maxY = r_maxLightmapBlockSize / h;
 	max = std::min( maxX, maxY );
 
-	ri.Com_DPrintf( "Packing %i lightmap(s) -> ", num );
+	Com_DPrintf( "Packing %i lightmap(s) -> ", num );
 
 	if( !max || num == 1 || !mapConfig.lightmapsPacking ) {
 		// process as it is
@@ -382,7 +382,7 @@ static int R_PackLightmaps( int num, int w, int h, int dataSize, int stride, int
 			rects[0].texMatrix[1][0] = 1; rects[0].texMatrix[1][1] = 0;
 		}
 
-		ri.Com_DPrintf( "\n" );
+		Com_DPrintf( "\n" );
 
 		return 1;
 	}
@@ -447,7 +447,7 @@ static int R_PackLightmaps( int num, int w, int h, int dataSize, int stride, int
 		r_lightmapBufferSize = rectSize;
 	}
 
-	ri.Com_DPrintf( "%ix%i : %ix%i\n", rectX, rectY, rectW, rectH );
+	Com_DPrintf( "%ix%i : %ix%i\n", rectX, rectY, rectW, rectH );
 
 	block = r_lightmapBuffer;
 	for( y = 0, ty = 0.0, num = 0, rect = rects; y < rectY; y++, ty += th, block += rectX * xStride * h ) {
@@ -617,7 +617,7 @@ void R_BuildLightmaps( model_t *mod, int numLightmaps, int w, int h, const uint8
 			sizeof( *loadbmodel->lightmapImages ) * r_numUploadedLightmaps );
 	loadbmodel->numLightmapImages = r_numUploadedLightmaps;
 
-	ri.Com_DPrintf( "Packed %i lightmap blocks into %i texture(s)\n", numBlocks, r_numUploadedLightmaps );
+	Com_DPrintf( "Packed %i lightmap blocks into %i texture(s)\n", numBlocks, r_numUploadedLightmaps );
 }
 
 /*
@@ -690,7 +690,7 @@ superLightStyle_t *R_AddSuperLightStyle( model_t *mod, const int *lightmaps,
 	}
 
 	if( loadbmodel->numSuperLightStyles == MAX_SUPER_STYLES ) {
-		ri.Com_Error( ERR_DROP, "R_AddSuperLightStyle: r_numSuperLightStyles == MAX_SUPER_STYLES" );
+		Com_Error( ERR_DROP, "R_AddSuperLightStyle: r_numSuperLightStyles == MAX_SUPER_STYLES" );
 	}
 	loadbmodel->numSuperLightStyles++;
 

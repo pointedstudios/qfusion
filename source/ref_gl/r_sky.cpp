@@ -514,7 +514,7 @@ static void ClipSkyPolygon( drawSurfaceSky_t *drawSurf, int nump, vec_t *vecs, i
 	int i, j;
 
 	if( nump > MAX_CLIP_VERTS ) {
-		ri.Com_Error( ERR_DROP, "ClipSkyPolygon: MAX_CLIP_VERTS" );
+		Com_Error( ERR_DROP, "ClipSkyPolygon: MAX_CLIP_VERTS" );
 		return;
 	}
 

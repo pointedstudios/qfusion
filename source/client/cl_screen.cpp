@@ -34,6 +34,7 @@ end of unit intermissions
 
 #include "client.h"
 #include "ftlib.h"
+#include "../ref_gl/r_frontend.h"
 
 float scr_con_current;    // aproaches scr_conlines at scr_conspeed
 float scr_con_previous;
@@ -331,14 +332,14 @@ size_t SCR_DrawStringWidth( int x, int y, int align, const char *str, size_t max
 * SCR_RegisterPic
 */
 struct shader_s *SCR_RegisterPic( const char *name ) {
-	return re.RegisterPic( name );
+	return R_RegisterPic( name );
 }
 
 /*
 * SCR_DrawStretchPic
 */
 void SCR_DrawStretchPic( int x, int y, int w, int h, float s1, float t1, float s2, float t2, const float *color, const struct shader_s *shader ) {
-	re.DrawStretchPic( x, y, w, h, s1, t1, s2, t2, color, shader );
+	RF_DrawStretchPic( x, y, w, h, s1, t1, s2, t2, color, shader );
 }
 
 /*
@@ -347,7 +348,7 @@ void SCR_DrawStretchPic( int x, int y, int w, int h, float s1, float t1, float s
 * Fills a box of pixels with a single color
 */
 void SCR_DrawFillRect( int x, int y, int w, int h, vec4_t color ) {
-	re.DrawStretchPic( x, y, w, h, 0, 0, 1, 1, color, cls.whiteShader );
+	RF_DrawStretchPic( x, y, w, h, 0, 0, 1, 1, color, cls.whiteShader );
 }
 
 /*
@@ -374,7 +375,7 @@ void SCR_DrawClampFillRect( int x, int y, int w, int h, int xmin, int ymin, int 
 		return;
 	}
 
-	re.DrawStretchPic( x, y, w, h, 0, 0, 1, 1, color, cls.whiteShader );
+	RF_DrawStretchPic( x, y, w, h, 0, 0, 1, 1, color, cls.whiteShader );
 }
 
 /*
@@ -608,8 +609,8 @@ void SCR_EndLoadingPlaque( void ) {
 * SCR_RegisterConsoleMedia
 */
 void SCR_RegisterConsoleMedia() {
-	cls.whiteShader = re.RegisterPic( "$whiteimage" );
-	cls.consoleShader = re.RegisterPic( "gfx/ui/console" );
+	cls.whiteShader = R_RegisterPic( "$whiteimage" );
+	cls.consoleShader = R_RegisterPic( "gfx/ui/console" );
 
 	SCR_InitFonts();
 }
@@ -666,7 +667,7 @@ void SCR_UpdateScreen( void ) {
 		return;
 	}
 
-	if( !scr_initialized || !con_initialized || !cls.mediaInitialized || !re.RenderingEnabled() ) {
+	if( !scr_initialized || !con_initialized || !cls.mediaInitialized || !RF_RenderingEnabled() ) {
 		return;     // not ready yet
 
 	}
@@ -700,7 +701,7 @@ void SCR_UpdateScreen( void ) {
 	timedemo = cl_timedemo->integer != 0 && cls.demo.playing;
 
 	for( i = 0; i < numframes; i++ ) {
-		re.BeginFrame( separation[i], forceclear, forcevsync, timedemo );
+		RF_BeginFrame( separation[i], forceclear, forcevsync, timedemo );
 
 		if( scr_draw_loading == 2 ) {
 			// loading plaque over APP_STARTUP_COLOR screen
@@ -741,6 +742,6 @@ void SCR_UpdateScreen( void ) {
 			SCR_DrawNotify();
 		}
 
-		re.EndFrame();
+		RF_EndFrame();
 	}
 }

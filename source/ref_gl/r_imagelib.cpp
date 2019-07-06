@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "r_local.h"
 #include "r_imagelib.h"
 #include "../qalgo/hash.h"
+#include "../qcommon/qcommon.h"
 
 #if defined ( __MACOSX__ )
 #include "libjpeg/jpeglib.h"
@@ -110,7 +111,7 @@ static dllfunc_t libjpegfuncs[] =
 static void R_Imagelib_UnloadLibjpeg( void ) {
 #ifdef LIBJPEG_RUNTIME
 	if( jpegLibrary ) {
-		ri.Com_UnloadLibrary( &jpegLibrary );
+		Com_UnloadLibrary( &jpegLibrary );
 	}
 #endif
 	jpegLibrary = NULL;
@@ -123,7 +124,7 @@ static void R_Imagelib_LoadLibjpeg( void ) {
 	R_Imagelib_UnloadLibjpeg();
 
 #ifdef LIBJPEG_RUNTIME
-	jpegLibrary = ri.Com_LoadSysLibrary( LIBJPEG_LIBNAME, libjpegfuncs );
+	jpegLibrary = Com_LoadSysLibrary( LIBJPEG_LIBNAME, libjpegfuncs );
 #else
 	jpegLibrary = (void *)1;
 #endif
@@ -223,7 +224,7 @@ static dllfunc_t libpngfuncs[] =
 static void R_Imagelib_UnloadLibpng( void ) {
 #ifdef LIBPNG_RUNTIME
 	if( pngLibrary ) {
-		ri.Com_UnloadLibrary( &pngLibrary );
+		Com_UnloadLibrary( &pngLibrary );
 	}
 #endif
 	pngLibrary = NULL;
@@ -236,9 +237,9 @@ static void R_Imagelib_LoadLibpng( void ) {
 	R_Imagelib_UnloadLibpng();
 
 #ifdef LIBPNG_RUNTIME
-	pngLibrary = ri.Com_LoadSysLibrary( LIBPNG_LIBNAME, libpngfuncs );
+	pngLibrary = Com_LoadSysLibrary( LIBPNG_LIBNAME, libpngfuncs );
 	if( pngLibrary ) {
-		qpng_set_longjmp_fn = (decltype( qpng_set_longjmp_fn ))ri.Com_LibraryProcAddress( pngLibrary, "png_set_longjmp_fn" );
+		qpng_set_longjmp_fn = (decltype( qpng_set_longjmp_fn ))Com_LibraryProcAddress( pngLibrary, "png_set_longjmp_fn" );
 	}
 #else
 	pngLibrary =  (void *)1;
@@ -543,17 +544,17 @@ r_imginfo_t LoadTGA( const char *name, uint8_t *( *allocbuf )( void *, size_t, c
 	if( targa_header.image_type == 1 || targa_header.image_type == 9 ) {
 		// uncompressed colormapped image
 		if( targa_header.pixel_size != 8 ) {
-			ri.Com_DPrintf( S_COLOR_YELLOW "LoadTGA: Only 8 bit images supported for type 1 and 9" );
+			Com_DPrintf( S_COLOR_YELLOW "LoadTGA: Only 8 bit images supported for type 1 and 9" );
 			R_FreeFile( buffer );
 			return imginfo;
 		}
 		if( targa_header.colormap_length != 256 ) {
-			ri.Com_DPrintf( S_COLOR_YELLOW "LoadTGA: Only 8 bit colormaps are supported for type 1 and 9" );
+			Com_DPrintf( S_COLOR_YELLOW "LoadTGA: Only 8 bit colormaps are supported for type 1 and 9" );
 			R_FreeFile( buffer );
 			return imginfo;
 		}
 		if( targa_header.colormap_index ) {
-			ri.Com_DPrintf( S_COLOR_YELLOW "LoadTGA: colormap_index is not supported for type 1 and 9" );
+			Com_DPrintf( S_COLOR_YELLOW "LoadTGA: colormap_index is not supported for type 1 and 9" );
 			R_FreeFile( buffer );
 			return imginfo;
 		}
@@ -574,14 +575,14 @@ r_imginfo_t LoadTGA( const char *name, uint8_t *( *allocbuf )( void *, size_t, c
 				palette[i][3] = *buf_p++;
 			}
 		} else {
-			ri.Com_DPrintf( S_COLOR_YELLOW "LoadTGA: only 24 and 32 bit colormaps are supported for type 1 and 9" );
+			Com_DPrintf( S_COLOR_YELLOW "LoadTGA: only 24 and 32 bit colormaps are supported for type 1 and 9" );
 			R_FreeFile( buffer );
 			return imginfo;
 		}
 	} else if( targa_header.image_type == 2 || targa_header.image_type == 10 ) {
 		// uncompressed or RLE compressed RGB
 		if( targa_header.pixel_size != 32 && targa_header.pixel_size != 24 ) {
-			ri.Com_DPrintf( S_COLOR_YELLOW "LoadTGA: Only 32 or 24 bit images supported for type 2 and 10" );
+			Com_DPrintf( S_COLOR_YELLOW "LoadTGA: Only 32 or 24 bit images supported for type 2 and 10" );
 			R_FreeFile( buffer );
 			return imginfo;
 		}
@@ -590,7 +591,7 @@ r_imginfo_t LoadTGA( const char *name, uint8_t *( *allocbuf )( void *, size_t, c
 	} else if( targa_header.image_type == 3 || targa_header.image_type == 11 ) {
 		// uncompressed grayscale
 		if( targa_header.pixel_size != 8 ) {
-			ri.Com_DPrintf( S_COLOR_YELLOW "LoadTGA: Only 8 bit images supported for type 3 and 11" );
+			Com_DPrintf( S_COLOR_YELLOW "LoadTGA: Only 8 bit images supported for type 3 and 11" );
 			R_FreeFile( buffer );
 			return imginfo;
 		}
@@ -693,7 +694,7 @@ bool WriteTGA( const char *name, r_imginfo_t *info, int quality ) {
 	uint8_t header[18], *buffer;
 	bool bgr;
 
-	if( ri.FS_FOpenAbsoluteFile( name, &file, FS_WRITE ) == -1 ) {
+	if( FS_FOpenAbsoluteFile( name, &file, FS_WRITE ) == -1 ) {
 		Com_Printf( "WriteTGA: Couldn't create %s\n", name );
 		return false;
 	}
@@ -712,7 +713,7 @@ bool WriteTGA( const char *name, r_imginfo_t *info, int quality ) {
 	header[15] = height >> 8;
 	header[16] = samples << 3; // pixel size
 
-	ri.FS_Write( header, sizeof( header ), file );
+	FS_Write( header, sizeof( header ), file );
 
 	// swap rgb to bgr
 	c = width * height * samples;
@@ -723,8 +724,8 @@ bool WriteTGA( const char *name, r_imginfo_t *info, int quality ) {
 			buffer[i + 2] = temp;
 		}
 	}
-	ri.FS_Write( buffer, c, file );
-	ri.FS_FCloseFile( file );
+	FS_Write( buffer, c, file );
+	FS_FCloseFile( file );
 
 	return true;
 }
@@ -750,7 +751,7 @@ static void q_jpg_error_exit( j_common_ptr cinfo ) {
 
 	// create the message
 	qerr->pub.format_message( cinfo, buffer );
-	ri.Com_Printf( S_COLOR_YELLOW "LibJPEG error: %s\n", buffer );
+	Com_Printf( S_COLOR_YELLOW "LibJPEG error: %s\n", buffer );
 
 	// Return control to the setjmp point
 	longjmp( qerr->setjmp_buffer, 1 );
@@ -760,7 +761,7 @@ static void q_jpg_noop( j_decompress_ptr cinfo ) {
 }
 
 static boolean q_jpg_fill_input_buffer( j_decompress_ptr cinfo ) {
-	ri.Com_DPrintf( "Premature end of jpeg file\n" );
+	Com_DPrintf( "Premature end of jpeg file\n" );
 	return 1;
 }
 
@@ -822,7 +823,7 @@ r_imginfo_t LoadJPG( const char *name, uint8_t *( *allocbuf )( void *, size_t, c
 
 	if( samples != 3 && samples != 1 ) {
 error:
-		ri.Com_DPrintf( S_COLOR_YELLOW "Bad jpeg file %s\n", name );
+		Com_DPrintf( S_COLOR_YELLOW "Bad jpeg file %s\n", name );
 		qjpeg_destroy_decompress( &cinfo );
 		R_FreeFile( buffer );
 		return imginfo;
@@ -873,7 +874,7 @@ static void q_jpg_init_destination( j_compress_ptr cinfo ) {
 static boolean q_jpg_empty_output_buffer( j_compress_ptr cinfo ) {
 	struct q_jpeg_destination_mgr *dest = ( struct q_jpeg_destination_mgr * )( cinfo->dest );
 
-	if( ri.FS_Write( dest->buffer, JPEG_OUTPUT_BUFFER_SIZE, dest->outfile ) == 0 ) {
+	if( FS_Write( dest->buffer, JPEG_OUTPUT_BUFFER_SIZE, dest->outfile ) == 0 ) {
 		return FALSE;
 	}
 
@@ -888,7 +889,7 @@ static void q_jpg_term_destination( j_compress_ptr cinfo ) {
 	size_t datacount = JPEG_OUTPUT_BUFFER_SIZE - dest->pub.free_in_buffer;
 
 	if( datacount > 0 ) {
-		ri.FS_Write( dest->buffer, datacount, dest->outfile );
+		FS_Write( dest->buffer, datacount, dest->outfile );
 	}
 }
 
@@ -909,7 +910,7 @@ bool WriteJPG( const char *name, r_imginfo_t *info, int quality ) {
 		return false;
 	}
 
-	if( ri.FS_FOpenAbsoluteFile( name, &file, FS_WRITE ) == -1 ) {
+	if( FS_FOpenAbsoluteFile( name, &file, FS_WRITE ) == -1 ) {
 		Com_Printf( S_COLOR_YELLOW "WriteJPG: Couldn't create %s\n", name );
 		return false;
 	}
@@ -968,13 +969,13 @@ bool WriteJPG( const char *name, r_imginfo_t *info, int quality ) {
 	qjpeg_finish_compress( &cinfo );
 	qjpeg_destroy_compress( &cinfo );
 
-	ri.FS_FCloseFile( file );
+	FS_FCloseFile( file );
 
 	return true;
 
 error:
 	qjpeg_destroy_compress( &cinfo );
-	ri.FS_FCloseFile( file );
+	FS_FCloseFile( file );
 	return false;
 }
 
@@ -993,11 +994,11 @@ typedef struct {
 } q_png_iobuf_t;
 
 static void q_png_error_fn( png_structp png_ptr, const char *message ) {
-	ri.Com_DPrintf( "q_png_error_fn: error: %s\n", message );
+	Com_DPrintf( "q_png_error_fn: error: %s\n", message );
 }
 
 static void q_png_warning_fn( png_structp png_ptr, const char *message ) {
-	ri.Com_DPrintf( "q_png_warning_fn: warning: %s\n", message );
+	Com_DPrintf( "q_png_warning_fn: warning: %s\n", message );
 }
 
 //LordHavoc: removed __cdecl prefix, added overrun protection, and rewrote this to be more efficient
@@ -1006,7 +1007,7 @@ static void q_png_user_read_fn( png_structp png_ptr, unsigned char *data, size_t
 	size_t rem = io->size - io->curptr;
 
 	if( length > rem ) {
-		ri.Com_DPrintf( "q_png_user_read_fn: overrun by %i bytes\n", (int)( length - rem ) );
+		Com_DPrintf( "q_png_user_read_fn: overrun by %i bytes\n", (int)( length - rem ) );
 
 		// a read going past the end of the file, fill in the remaining bytes
 		// with 0 just to be consistent
@@ -1051,7 +1052,7 @@ r_imginfo_t LoadPNG( const char *name, uint8_t *( *allocbuf )( void *, size_t, c
 
 	if( qpng_sig_cmp( png_data, 0, png_datasize ) ) {
 error:
-		ri.Com_DPrintf( S_COLOR_YELLOW "Bad png file %s\n", name );
+		Com_DPrintf( S_COLOR_YELLOW "Bad png file %s\n", name );
 
 		if( png_ptr != NULL ) {
 			qpng_destroy_read_struct( &png_ptr, &info_ptr, NULL );

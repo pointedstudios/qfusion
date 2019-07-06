@@ -35,8 +35,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #define ALIGN( x, a ) ( ( ( x ) + ( ( size_t )( a ) - 1 ) ) & ~( ( size_t )( a ) - 1 ) )
 
-typedef struct { const char *name; void **funcPointer; } dllfunc_t;
-
 typedef struct mempool_s mempool_t;
 typedef struct cinematics_s cinematics_t;
 typedef struct qthread_s qthread_t;
@@ -57,8 +55,8 @@ enum {
 	NUM_QGL_CONTEXTS = QGL_CONTEXT_LOADER + NUM_LOADER_THREADS
 };
 
+#include "../cgame/ref.h"
 #include "r_math.h"
-#include "r_public.h"
 #include "r_vattribs.h"
 
 #ifdef min
@@ -459,8 +457,6 @@ typedef struct {
 	bool newDrawBuffer;
 } r_globals_t;
 
-extern ref_import_t ri;
-
 extern r_shared_t rsh;
 extern r_scene_t rsc;
 extern r_globals_t rf;
@@ -689,12 +685,26 @@ void        R_BatchCoronaSurf(  const entity_t *e, const shader_t *shader, const
 
 extern mempool_t *r_mempool;
 
+#ifndef MEMPOOL_REFMODULE
+#define MEMPOOL_REFMODULE ( 256 )
+#endif
+
+ATTRIBUTE_MALLOC void *_Mem_AllocExt( mempool_t *pool, size_t size, size_t aligment, int z, int musthave, int canthave, const char *filename, int fileline );
+ATTRIBUTE_MALLOC void *_Mem_Alloc( mempool_t *pool, size_t size, int musthave, int canthave, const char *filename, int fileline );
+void *_Mem_Realloc( void *data, size_t size, const char *filename, int fileline );
+void _Mem_Free( void *data, int musthave, int canthave, const char *filename, int fileline );
+mempool_t *_Mem_AllocPool( mempool_t *parent, const char *name, int flags, const char *filename, int fileline );
+mempool_t *_Mem_AllocTempPool( const char *name, const char *filename, int fileline );
+void _Mem_FreePool( mempool_t **pool, int musthave, int canthave, const char *filename, int fileline );
+void _Mem_EmptyPool( mempool_t *pool, int musthave, int canthave, const char *filename, int fileline );
+char *_Mem_CopyString( mempool_t *pool, const char *in, const char *filename, int fileline );
+
 #define R_Malloc( size ) R_Malloc_( size, __FILE__, __LINE__ )
-#define R_Realloc( data, size ) ri.Mem_Realloc( data, size, __FILE__, __LINE__ )
-#define R_Free( data ) ri.Mem_Free( data, __FILE__, __LINE__ )
-#define R_AllocPool( parent, name ) ri.Mem_AllocPool( parent, name, __FILE__, __LINE__ )
-#define R_FreePool( pool ) ri.Mem_FreePool( pool, __FILE__, __LINE__ )
-#define R_MallocExt( pool,size,align,z ) ri.Mem_AllocExt( pool,size,align,z,__FILE__,__LINE__ )
+#define R_Realloc( data, size ) _Mem_Realloc( data, size, __FILE__, __LINE__ )
+#define R_Free( data ) _Mem_Free( data, MEMPOOL_REFMODULE, 0, __FILE__, __LINE__ )
+#define R_AllocPool( parent, name ) _Mem_AllocPool( parent, name, MEMPOOL_REFMODULE, __FILE__, __LINE__ )
+#define R_FreePool( pool ) _Mem_FreePool( pool, MEMPOOL_REFMODULE, 0, __FILE__, __LINE__ )
+#define R_MallocExt( pool,size,align,z ) _Mem_AllocExt( pool,size,align,z,MEMPOOL_REFMODULE,0,__FILE__,__LINE__ )
 
 ATTRIBUTE_MALLOC void * R_Malloc_( size_t size, const char *filename, int fileline );
 char        *R_CopyString_( const char *in, const char *filename, int fileline );

@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_local.h"
 #include "r_backend_local.h"
+#include "../qcommon/qcommon.h"
 
 #include <algorithm>
 
@@ -1921,7 +1922,7 @@ void RB_RenderMeshGLSLProgrammed( const shaderpass_t *pass, int programType ) {
 			RB_RenderMeshGLSL_KawaseBlur( pass, features );
 			break;
 		default:
-			ri.Com_DPrintf( S_COLOR_YELLOW "WARNING: Unknown GLSL program type %i\n", programType );
+			Com_DPrintf( S_COLOR_YELLOW "WARNING: Unknown GLSL program type %i\n", programType );
 			return;
 	}
 }

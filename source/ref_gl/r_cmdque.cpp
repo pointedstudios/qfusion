@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_local.h"
 #include "r_cmdque.h"
+#include "../qcommon/qthreads.h"
 
 // producers and handlers for
 // frame commands buffer and reliable inter-frame commands queue
@@ -915,7 +916,7 @@ static void RF_IssueAbstractReliableCmd( ref_cmdpipe_t *cmdpipe, void *cmd, size
 		return;
 	}
 
-	ri.BufPipe_WriteCmd( cmdpipe->pipe, cmd, cmd_len );
+	QBufPipe_WriteCmd( cmdpipe->pipe, cmd, cmd_len );
 }
 
 static void RF_IssueInitReliableCmd( ref_cmdpipe_t *cmdpipe ) {
@@ -1051,7 +1052,7 @@ static void RF_IssueFenceReliableCmd( ref_cmdpipe_t *cmdpipe ) {
 // ============================================================================
 
 static int RF_CmdPipeWaiter( qbufPipe_t *queue, refPipeCmdHandler_t *cmdHandlers, bool timeout ) {
-	ri.BufPipe_ReadCmds( queue, cmdHandlers );
+	QBufPipe_ReadCmds( queue, cmdHandlers );
 	return -1;
 }
 
@@ -1059,21 +1060,21 @@ static int RF_RunCmdPipeProc( ref_cmdpipe_t *cmdpipe ) {
 	if( cmdpipe->sync ) {
 		return 0;
 	}
-	return ri.BufPipe_ReadCmds( cmdpipe->pipe, refPipeCmdHandlers );
+	return QBufPipe_ReadCmds( cmdpipe->pipe, refPipeCmdHandlers );
 }
 
 static void RF_WaitForCmdPipeProc( ref_cmdpipe_t *cmdpipe, unsigned timeout ) {
 	if( cmdpipe->sync ) {
 		return;
 	}
-	ri.BufPipe_Wait( cmdpipe->pipe, RF_CmdPipeWaiter, refPipeCmdHandlers, timeout );
+	QBufPipe_Wait( cmdpipe->pipe, RF_CmdPipeWaiter, refPipeCmdHandlers, timeout );
 }
 
 static void RF_FinishCmdPipeProc( ref_cmdpipe_t *cmdpipe ) {
 	if( cmdpipe->sync ) {
 		return;
 	}
-	ri.BufPipe_Finish( cmdpipe->pipe );
+	QBufPipe_Finish( cmdpipe->pipe );
 }
 
 ref_cmdpipe_t *RF_CreateCmdPipe( bool sync ) {
@@ -1081,7 +1082,7 @@ ref_cmdpipe_t *RF_CreateCmdPipe( bool sync ) {
 	if( sync ) {
 		cmdpipe->sync = sync;
 	} else {
-		cmdpipe->pipe = ri.BufPipe_Create( REF_PIPE_CMD_BUF_SIZE, 1 );
+		cmdpipe->pipe = QBufPipe_Create( REF_PIPE_CMD_BUF_SIZE, 1 );
 	}
 
 	cmdpipe->Init = &RF_IssueInitReliableCmd;
@@ -1118,7 +1119,7 @@ void RF_DestroyCmdPipe( ref_cmdpipe_t **pcmdpipe ) {
 	*pcmdpipe = NULL;
 
 	if( cmdpipe->pipe ) {
-		ri.BufPipe_Destroy( &cmdpipe->pipe );
+		QBufPipe_Destroy( &cmdpipe->pipe );
 	}
 	R_Free( cmdpipe );
 }

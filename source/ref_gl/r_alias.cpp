@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_alias.c: Quake III Arena .md3 model format support
 
 #include "r_local.h"
-
+#include "../qcommon/qcommon.h"
 #include <algorithm>
 
 /*
@@ -164,7 +164,7 @@ void Mod_LoadAliasMD3Model( model_t *mod, model_t *parent, void *buffer, bspForm
 	version = LittleLong( pinmodel->version );
 
 	if( version != MD3_ALIAS_VERSION ) {
-		ri.Com_Error( ERR_DROP, "%s has wrong version number (%i should be %i)",
+		Com_Error( ERR_DROP, "%s has wrong version number (%i should be %i)",
 					  mod->name, version, MD3_ALIAS_VERSION );
 	}
 
@@ -185,21 +185,21 @@ void Mod_LoadAliasMD3Model( model_t *mod, model_t *parent, void *buffer, bspForm
 	poutmodel->numtris = 0;
 
 	if( poutmodel->numframes <= 0 ) {
-		ri.Com_Error( ERR_DROP, "model %s has no frames", mod->name );
+		Com_Error( ERR_DROP, "model %s has no frames", mod->name );
 	}
 	//	else if( poutmodel->numframes > MD3_MAX_FRAMES )
 	//		ri.Com_Error( ERR_DROP, "model %s has too many frames", mod->name );
 
 	if( poutmodel->numtags > MD3_MAX_TAGS ) {
-		ri.Com_Error( ERR_DROP, "model %s has too many tags", mod->name );
+		Com_Error( ERR_DROP, "model %s has too many tags", mod->name );
 	} else if( poutmodel->numtags < 0 ) {
-		ri.Com_Error( ERR_DROP, "model %s has invalid number of tags", mod->name );
+		Com_Error( ERR_DROP, "model %s has invalid number of tags", mod->name );
 	}
 
 	if( poutmodel->nummeshes < 0 ) {
-		ri.Com_Error( ERR_DROP, "model %s has invalid number of meshes", mod->name );
+		Com_Error( ERR_DROP, "model %s has invalid number of meshes", mod->name );
 	} else if( !poutmodel->nummeshes && !poutmodel->numtags ) {
-		ri.Com_Error( ERR_DROP, "model %s has no meshes and no tags", mod->name );
+		Com_Error( ERR_DROP, "model %s has no meshes and no tags", mod->name );
 	}
 	//	else if( poutmodel->nummeshes > MD3_MAX_MESHES )
 	//		ri.Com_Error( ERR_DROP, "model %s has too many meshes", mod->name );
@@ -272,7 +272,7 @@ void Mod_LoadAliasMD3Model( model_t *mod, model_t *parent, void *buffer, bspForm
 		memcpy( &inmesh, pinmesh, sizeof( dmd3mesh_t ) );
 
 		if( strncmp( (const char *)inmesh.id, IDMD3HEADER, 4 ) ) {
-			ri.Com_Error( ERR_DROP, "mesh %s in model %s has wrong id (%s should be %s)",
+			Com_Error( ERR_DROP, "mesh %s in model %s has wrong id (%s should be %s)",
 						  inmesh.name, mod->name, inmesh.id, IDMD3HEADER );
 		}
 
@@ -290,17 +290,17 @@ void Mod_LoadAliasMD3Model( model_t *mod, model_t *parent, void *buffer, bspForm
 		/*		if( poutmesh->numskins <= 0 )
 		ri.Com_Error( ERR_DROP, "mesh %i in model %s has no skins", i, mod->name );
 		else*/if( poutmesh->numskins > MD3_MAX_SHADERS ) {
-			ri.Com_Error( ERR_DROP, "mesh %i in model %s has too many skins", i, mod->name );
+			Com_Error( ERR_DROP, "mesh %i in model %s has too many skins", i, mod->name );
 		}
 		if( poutmesh->numtris <= 0 ) {
-			ri.Com_Error( ERR_DROP, "mesh %i in model %s has no elements", i, mod->name );
+			Com_Error( ERR_DROP, "mesh %i in model %s has no elements", i, mod->name );
 		} else if( poutmesh->numtris > MD3_MAX_TRIANGLES ) {
-			ri.Com_Error( ERR_DROP, "mesh %i in model %s has too many triangles", i, mod->name );
+			Com_Error( ERR_DROP, "mesh %i in model %s has too many triangles", i, mod->name );
 		}
 		if( poutmesh->numverts <= 0 ) {
-			ri.Com_Error( ERR_DROP, "mesh %i in model %s has no vertices", i, mod->name );
+			Com_Error( ERR_DROP, "mesh %i in model %s has no vertices", i, mod->name );
 		} else if( poutmesh->numverts > MD3_MAX_VERTS ) {
-			ri.Com_Error( ERR_DROP, "mesh %i in model %s has too many vertices", i, mod->name );
+			Com_Error( ERR_DROP, "mesh %i in model %s has too many vertices", i, mod->name );
 		}
 
 		bufsize = ALIGN( sizeof( maliasskin_t ) * poutmesh->numskins, sizeof( vec_t ) ) +
@@ -438,14 +438,14 @@ static float R_AliasModelLerpBBox( const entity_t *e, const model_t *mod, vec3_t
 
 	if( ( framenum >= aliasmodel->numframes ) || ( framenum < 0 ) ) {
 #ifndef PUBLIC_BUILD
-		ri.Com_DPrintf( "R_AliasModelLerpBBox %s: no such frame %d\n", mod->name, framenum );
+		Com_DPrintf( "R_AliasModelLerpBBox %s: no such frame %d\n", mod->name, framenum );
 #endif
 		framenum = 0;
 	}
 
 	if( ( oldframenum >= aliasmodel->numframes ) || ( oldframenum < 0 ) ) {
 #ifndef PUBLIC_BUILD
-		ri.Com_DPrintf( "R_AliasModelLerpBBox %s: no such oldframe %d\n", mod->name, oldframenum );
+		Com_DPrintf( "R_AliasModelLerpBBox %s: no such oldframe %d\n", mod->name, oldframenum );
 #endif
 		oldframenum = 0;
 	}
@@ -501,13 +501,13 @@ bool R_AliasModelLerpTag( orientation_t *orient, const maliasmodel_t *aliasmodel
 	// ignore invalid frames
 	if( ( framenum >= aliasmodel->numframes ) || ( framenum < 0 ) ) {
 #ifndef PUBLIC_BUILD
-		ri.Com_DPrintf( "R_AliasModelLerpTag %s: no such oldframe %i\n", name, framenum );
+		Com_DPrintf( "R_AliasModelLerpTag %s: no such oldframe %i\n", name, framenum );
 #endif
 		framenum = 0;
 	}
 	if( ( oldframenum >= aliasmodel->numframes ) || ( oldframenum < 0 ) ) {
 #ifndef PUBLIC_BUILD
-		ri.Com_DPrintf( "R_AliasModelLerpTag %s: no such oldframe %i\n", name, oldframenum );
+		Com_DPrintf( "R_AliasModelLerpTag %s: no such oldframe %i\n", name, oldframenum );
 #endif
 		oldframenum = 0;
 	}
@@ -682,7 +682,7 @@ void R_AliasModelFrameBounds( const model_t *mod, int frame, vec3_t mins, vec3_t
 
 	if( ( frame >= (int)aliasmodel->numframes ) || ( frame < 0 ) ) {
 #ifndef PUBLIC_BUILD
-		ri.Com_DPrintf( "R_SkeletalModelFrameBounds %s: no such frame %d\n", mod->name, frame );
+		Com_DPrintf( "R_SkeletalModelFrameBounds %s: no such frame %d\n", mod->name, frame );
 #endif
 		ClearBounds( mins, maxs );
 		return;

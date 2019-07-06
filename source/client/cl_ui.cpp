@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "cl_mm.h"
 #include "../ui/ui_public.h"
 #include "../qcommon/asyncstream.h"
+#include "../ref_gl/r_frontend.h"
 
 // Structure containing functions exported from user interface DLL
 static ui_export_t *uie;
@@ -258,38 +259,38 @@ void CL_UIModule_Init( void ) {
 	import.IN_ShowSoftKeyboard = IN_ShowSoftKeyboard;
 	import.IN_SupportedDevices = IN_SupportedDevices;
 
-	import.R_ClearScene = re.ClearScene;
-	import.R_AddEntityToScene = re.AddEntityToScene;
-	import.R_AddLightToScene = re.AddLightToScene;
-	import.R_AddLightStyleToScene = re.AddLightStyleToScene;
-	import.R_AddPolyToScene = re.AddPolyToScene;
-	import.R_RenderScene = re.RenderScene;
-	import.R_BlurScreen = re.BlurScreen;
-	import.R_EndFrame = re.EndFrame;
-	import.R_RegisterWorldModel = re.RegisterWorldModel;
-	import.R_ModelBounds = re.ModelBounds;
-	import.R_ModelFrameBounds = re.ModelFrameBounds;
-	import.R_RegisterModel = re.RegisterModel;
-	import.R_RegisterPic = re.RegisterPic;
-	import.R_RegisterRawPic = re.RegisterRawPic;
-	import.R_RegisterLevelshot = re.RegisterLevelshot;
-	import.R_RegisterSkin = re.RegisterSkin;
-	import.R_RegisterSkinFile = re.RegisterSkinFile;
-	import.R_RegisterVideo = re.RegisterVideo;
-	import.R_RegisterLinearPic = re.RegisterLinearPic;
-	import.R_LerpTag = re.LerpTag;
-	import.R_DrawStretchPic = re.DrawStretchPic;
-	import.R_DrawRotatedStretchPic = re.DrawRotatedStretchPic;
-	import.R_DrawStretchPoly = re.DrawStretchPoly;
-	import.R_TransformVectorToScreen = re.TransformVectorToScreen;
-	import.R_Scissor = re.Scissor;
-	import.R_GetScissor = re.GetScissor;
-	import.R_ResetScissor = re.ResetScissor;
-	import.R_GetShaderDimensions = re.GetShaderDimensions;
-	import.R_SkeletalGetNumBones = re.SkeletalGetNumBones;
-	import.R_SkeletalGetBoneInfo = re.SkeletalGetBoneInfo;
-	import.R_SkeletalGetBonePose = re.SkeletalGetBonePose;
-	import.R_GetShaderCinematic = re.GetShaderCinematic;
+	import.R_ClearScene = RF_ClearScene;
+	import.R_AddEntityToScene = RF_AddEntityToScene;
+	import.R_AddLightToScene = RF_AddLightToScene;
+	import.R_AddLightStyleToScene = RF_AddLightStyleToScene;
+	import.R_AddPolyToScene = RF_AddPolyToScene;
+	import.R_RenderScene = RF_RenderScene;
+	import.R_BlurScreen = RF_BlurScreen;
+	import.R_EndFrame = RF_EndFrame;
+	import.R_RegisterWorldModel = RF_RegisterWorldModel;
+	import.R_ModelBounds = R_ModelBounds;
+	import.R_ModelFrameBounds = R_ModelFrameBounds;
+	import.R_RegisterModel = R_RegisterModel;
+	import.R_RegisterPic = R_RegisterPic;
+	import.R_RegisterRawPic = R_RegisterRawPic;
+	import.R_RegisterLevelshot = R_RegisterLevelshot;
+	import.R_RegisterSkin = R_RegisterSkin;
+	import.R_RegisterSkinFile = R_RegisterSkinFile;
+	import.R_RegisterVideo = R_RegisterVideo;
+	import.R_RegisterLinearPic = R_RegisterLinearPic;
+	import.R_LerpTag = RF_LerpTag;
+	import.R_DrawStretchPic = RF_DrawStretchPic;
+	import.R_DrawRotatedStretchPic = RF_DrawRotatedStretchPic;
+	import.R_DrawStretchPoly = RF_DrawStretchPoly;
+	import.R_TransformVectorToScreen = RF_TransformVectorToScreen;
+	import.R_Scissor = RF_SetScissor;
+	import.R_GetScissor = RF_GetScissor;
+	import.R_ResetScissor = RF_ResetScissor;
+	import.R_GetShaderDimensions = R_GetShaderDimensions;
+	import.R_SkeletalGetNumBones = R_SkeletalGetNumBones;
+	import.R_SkeletalGetBoneInfo = R_SkeletalGetBoneInfo;
+	import.R_SkeletalGetBonePose = R_SkeletalGetBonePose;
+	import.R_GetShaderCinematic = RF_GetShaderCinematic;
 
 	import.S_RegisterSound = CL_SoundModule_RegisterSound;
 	import.S_StartLocalSound = CL_SoundModule_StartLocalSoundByName;

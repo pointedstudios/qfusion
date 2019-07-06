@@ -22,8 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef WINQUAKE_H_
 #define WINQUAKE_H_
 
-#include <winsock2.h>
-#include <ws2tcpip.h>
+// This is a fairly common method to fix the strict requirement of winsock2.h inclusion before windows.h
+#define _WINSOCKAPI_
 
 #include <windows.h>
 #ifdef HAVE_MMSYSTEM

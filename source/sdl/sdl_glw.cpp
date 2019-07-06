@@ -106,9 +106,9 @@ rserr_t GLimp_SetMode( int x, int y, int width, int height, int displayFrequency
 	}
 #endif
 
-	ri.Com_Printf( "Initializing OpenGL display\n" );
-	ri.Com_Printf( "...setting mode:" );
-	ri.Com_Printf( " %d %d %s\n", width, height, win_fs[fullscreen] );
+	Com_Printf( "Initializing OpenGL display\n" );
+	Com_Printf( "...setting mode:" );
+	Com_Printf( " %d %d %s\n", width, height, win_fs[fullscreen] );
 
 	// destroy the existing window
 	if( glw_state.sdl_window ) {
@@ -119,7 +119,7 @@ rserr_t GLimp_SetMode( int x, int y, int width, int height, int displayFrequency
 
 	// init all the gl stuff for the window
 	if( !GLimp_InitGL( r_stencilbits->integer, stereo ) ) {
-		ri.Com_Printf( "VID_CreateWindow() - GLimp_InitGL failed\n" );
+		Com_Printf( "VID_CreateWindow() - GLimp_InitGL failed\n" );
 		return rserr_invalid_mode;
 	}
 
@@ -179,18 +179,18 @@ static bool GLimp_InitGL( int stencilbits, bool stereo ) {
 	SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, std::max( 0, stencilbits ) );
 
 	if( stereo ) {
-		ri.Com_DPrintf( "...attempting to use stereo\n" );
+		Com_Printf( "GLimp_Init() - Attempting to use stereo\n" );
 		SDL_GL_SetAttribute( SDL_GL_STEREO, 1 );
 	}
 
 	glw_state.sdl_glcontext = SDL_GL_CreateContext( glw_state.sdl_window );
 	if( glw_state.sdl_glcontext == 0 ) {
-		ri.Com_Printf( "GLimp_Init() - SDL_GL_CreateContext failed: \"%s\"\n", SDL_GetError() );
+		Com_Printf( "GLimp_Init() - SDL_GL_CreateContext failed: \"%s\"\n", SDL_GetError() );
 		goto fail;
 	}
 
 	if( SDL_GL_MakeCurrent( glw_state.sdl_window, glw_state.sdl_glcontext ) ) {
-		ri.Com_Printf( "GLimp_Init() - SDL_GL_MakeCurrent failed: \"%s\"\n", SDL_GetError() );
+		Com_Printf( "GLimp_Init() - SDL_GL_MakeCurrent failed: \"%s\"\n", SDL_GetError() );
 		goto fail;
 	}
 
@@ -205,7 +205,7 @@ static bool GLimp_InitGL( int stencilbits, bool stereo ) {
 	glConfig.stencilBits = stencilBits;
 	glConfig.stereoEnabled = stereo_ != 0;
 
-	ri.Com_Printf( "GL PFD: color(%d-bits) Z(%d-bit) stencil(%d-bits)\n", colorBits, depthBits, stencilBits );
+	Com_Printf( "GL PFD: color(%d-bits) Z(%d-bit) stencil(%d-bits)\n", colorBits, depthBits, stencilBits );
 
 	return true;
 

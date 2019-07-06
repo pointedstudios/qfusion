@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "client.h"
 #include "ftlib.h"
+#include "../ref_gl/r_frontend.h"
 
 static ftlib_export_t *ftlib_export;
 static void *ftlib_libhandle = NULL;
@@ -60,35 +61,35 @@ static void CL_FTLibModule_MemEmptyPool( mempool_t *pool, const char *filename, 
 }
 
 static struct shader_s *CL_FTLibModule_RegisterPic( const char *name ) {
-	return re.RegisterPic( name );
+	return R_RegisterPic( name );
 }
 
 static struct shader_s *CL_FTLibModule_RegisterRawPic( const char *name, int width, int height, uint8_t *data, int samples ) {
-	return re.RegisterRawPic( name, width, height, data, samples );
+	return R_RegisterRawPic( name, width, height, data, samples );
 }
 
 static struct shader_s *CL_FTLibModule_RegisterRawAlphaMask( const char *name, int width, int height, uint8_t *data ) {
-	return re.RegisterRawAlphaMask( name, width, height, data );
+	return R_RegisterRawAlphaMask( name, width, height, data );
 }
 
 static void CL_FTLibModule_DrawStretchPic( int x, int y, int w, int h, float s1, float t1, float s2, float t2, const vec4_t color, const struct shader_s *shader ) {
-	re.DrawStretchPic( x, y, w, h, s1, t1, s2, t2, color, shader );
+	RF_DrawStretchPic( x, y, w, h, s1, t1, s2, t2, color, shader );
 }
 
 static void CL_FTLibModule_ReplaceRawSubPic( struct shader_s *shader, int x, int y, int width, int height, uint8_t *data ) {
-	re.ReplaceRawSubPic( shader, x, y, width, height, data );
+	RF_ReplaceRawSubPic( shader, x, y, width, height, data );
 }
 
 static void CL_FTLibModule_Scissor( int x, int y, int w, int h ) {
-	re.Scissor( x, y, w, h );
+	RF_SetScissor( x, y, w, h );
 }
 
 static void CL_FTLibModule_GetScissor( int *x, int *y, int *w, int *h ) {
-	re.GetScissor( x, y, w, h );
+	RF_GetScissor( x, y, w, h );
 }
 
 static void CL_FTLibModule_ResetScissor( void ) {
-	re.ResetScissor();
+	RF_ResetScissor();
 }
 
 /*

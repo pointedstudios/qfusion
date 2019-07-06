@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "r_local.h"
+#include "../qcommon/qcommon.h"
 
 typedef struct {
 	char                *meshname;
@@ -143,7 +144,7 @@ static skinfile_t *R_SkinFileForName( const char *name ) {
 	}
 
 	if( R_LoadFile( filename, (void **)&buffer ) == -1 ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "R_SkinFile_Load: Failed to load %s\n", name );
+		Com_DPrintf( S_COLOR_YELLOW "R_SkinFile_Load: Failed to load %s\n", name );
 		return NULL;
 	}
 
@@ -156,7 +157,7 @@ static skinfile_t *R_SkinFileForName( const char *name ) {
 		skinfile->pairs = (mesh_shader_pair_t *)R_Malloc( skinfile->numpairs * sizeof( mesh_shader_pair_t ) );
 		SkinFile_ParseBuffer( buffer, skinfile->pairs );
 	} else {
-		ri.Com_DPrintf( S_COLOR_YELLOW "R_SkinFile_Load: no mesh/shader pairs in %s\n", name );
+		Com_DPrintf( S_COLOR_YELLOW "R_SkinFile_Load: no mesh/shader pairs in %s\n", name );
 	}
 
 	R_FreeFile( (void *)buffer );

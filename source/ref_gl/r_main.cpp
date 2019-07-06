@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_main.c
 
 #include "r_local.h"
-
+#include "../qcommon/qcommon.h"
 #include <algorithm>
 
 r_globals_t rf;
@@ -1228,20 +1228,20 @@ void R_RenderView( const refdef_t *fd ) {
 		Scene::Instance()->DrawCoronae();
 
 		if( r_speeds->integer ) {
-			msec = ri.Sys_Milliseconds();
+			msec = Sys_Milliseconds();
 		}
 		R_DrawPolys();
 		if( r_speeds->integer ) {
-			rf.stats.t_add_polys += ( ri.Sys_Milliseconds() - msec );
+			rf.stats.t_add_polys += ( Sys_Milliseconds() - msec );
 		}
 	}
 
 	if( r_speeds->integer ) {
-		msec = ri.Sys_Milliseconds();
+		msec = Sys_Milliseconds();
 	}
 	R_DrawEntities();
 	if( r_speeds->integer ) {
-		rf.stats.t_add_entities += ( ri.Sys_Milliseconds() - msec );
+		rf.stats.t_add_entities += ( Sys_Milliseconds() - msec );
 	}
 
 	RJ_FinishJobs();
@@ -1271,11 +1271,11 @@ void R_RenderView( const refdef_t *fd ) {
 	R_Clear( ~0 );
 
 	if( r_speeds->integer ) {
-		msec = ri.Sys_Milliseconds();
+		msec = Sys_Milliseconds();
 	}
 	R_DrawSurfaces( rn.meshlist );
 	if( r_speeds->integer ) {
-		rf.stats.t_draw_meshes += ( ri.Sys_Milliseconds() - msec );
+		rf.stats.t_draw_meshes += ( Sys_Milliseconds() - msec );
 	}
 
 	if( r_speeds->integer ) {
@@ -1522,9 +1522,9 @@ const char *R_WriteSpeedsMessage( char *out, size_t size ) {
 const msurface_t *R_GetDebugSurface( void ) {
 	msurface_t *debugSurface;
 
-	ri.Mutex_Lock( rf.debugSurfaceLock );
+	QMutex_Lock( rf.debugSurfaceLock );
 	debugSurface = rf.debugSurface;
-	ri.Mutex_Unlock( rf.debugSurfaceLock );
+	QMutex_Unlock( rf.debugSurfaceLock );
 
 	return debugSurface;
 }
@@ -1585,16 +1585,16 @@ void R_RenderDebugSurface( const refdef_t *fd ) {
 		}
 	}
 
-	ri.Mutex_Lock( rf.debugSurfaceLock );
+	QMutex_Lock( rf.debugSurfaceLock );
 	rf.debugSurface = debugSurf;
-	ri.Mutex_Unlock( rf.debugSurfaceLock );
+	QMutex_Unlock( rf.debugSurfaceLock );
 }
 
 /*
 * R_BeginFrame
 */
 void R_BeginFrame( float cameraSeparation, bool forceClear, int swapInterval ) {
-	int64_t time = ri.Sys_Milliseconds();
+	int64_t time = Sys_Milliseconds();
 
 	GLimp_BeginFrame();
 
@@ -1717,7 +1717,7 @@ void R_LatLongToNorm( const uint8_t latlong[2], vec3_t out ) {
 * R_CopyString
 */
 ATTRIBUTE_MALLOC void *R_Malloc_( size_t size, const char *filename, int fileline ) {
-	return ri.Mem_AllocExt( r_mempool, size, 16, 1, filename, fileline );
+	return _Mem_AllocExt( r_mempool, size, 16, 1, MEMPOOL_REFMODULE, 0, filename, fileline );
 }
 
 /*
@@ -1726,7 +1726,7 @@ ATTRIBUTE_MALLOC void *R_Malloc_( size_t size, const char *filename, int filelin
 char *R_CopyString_( const char *in, const char *filename, int fileline ) {
 	char *out;
 
-	out = (char *)ri.Mem_AllocExt( r_mempool, ( strlen( in ) + 1 ), 0, 1, filename, fileline );
+	out = (char *)_Mem_AllocExt( r_mempool, ( strlen( in ) + 1 ), 0, 1, MEMPOOL_REFMODULE, 0, filename, fileline );
 	strcpy( out, in );
 
 	return out;
@@ -1743,7 +1743,7 @@ int R_LoadFile_( const char *path, int flags, void **buffer, const char *filenam
 	buf = NULL; // quiet compiler warning
 
 	// look for it in the filesystem or pack files
-	len = ri.FS_FOpenFile( path, &fhandle, FS_READ | flags );
+	len = FS_FOpenFile( path, &fhandle, FS_READ | flags );
 
 	if( !fhandle ) {
 		if( buffer ) {
@@ -1753,16 +1753,16 @@ int R_LoadFile_( const char *path, int flags, void **buffer, const char *filenam
 	}
 
 	if( !buffer ) {
-		ri.FS_FCloseFile( fhandle );
+		FS_FCloseFile( fhandle );
 		return len;
 	}
 
-	buf = ( uint8_t *)ri.Mem_AllocExt( r_mempool, len + 1, 16, 0, filename, fileline );
+	buf = ( uint8_t *)_Mem_AllocExt( r_mempool, len + 1, 16, 0, MEMPOOL_REFMODULE, 0, filename, fileline );
 	buf[len] = 0;
 	*buffer = buf;
 
-	ri.FS_Read( buf, len, fhandle );
-	ri.FS_FCloseFile( fhandle );
+	FS_Read( buf, len, fhandle );
+	FS_FCloseFile( fhandle );
 
 	return len;
 }
@@ -1771,5 +1771,5 @@ int R_LoadFile_( const char *path, int flags, void **buffer, const char *filenam
 * R_FreeFile
 */
 void R_FreeFile_( void *buffer, const char *filename, int fileline ) {
-	ri.Mem_Free( buffer, filename, fileline );
+	_Mem_Free( buffer, MEMPOOL_REFMODULE, 0, filename, fileline );
 }

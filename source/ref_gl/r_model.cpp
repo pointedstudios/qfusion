@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_local.h"
 #include "iqm.h"
+#include "../qcommon/qcommon.h"
 
 #include <algorithm>
 
@@ -74,7 +75,7 @@ mleaf_t *Mod_PointInLeaf( vec3_t p, model_t *model ) {
 	mbrushmodel_t *bmodel;
 
 	if( !model || !( bmodel = ( mbrushmodel_t * )model->extradata ) || !bmodel->nodes ) {
-		ri.Com_Error( ERR_DROP, "Mod_PointInLeaf: bad model" );
+		Com_Error( ERR_DROP, "Mod_PointInLeaf: bad model" );
 		return NULL;
 	}
 
@@ -310,7 +311,7 @@ static void Mod_SetupSubmodels( model_t *mod ) {
 	}
 }
 
-#define VBO_Printf ri.Com_DPrintf
+#define VBO_Printf Com_DPrintf
 
 /*
 * R_CompareSurfacesByDrawSurf
@@ -956,7 +957,7 @@ void Mod_Modellist_f( void ) {
 		if( !mod->name ) {
 			continue;
 		}
-		size = ri.Mem_PoolTotalSize( mod->mempool );
+		size = Mem_PoolTotalSize( mod->mempool );
 		Com_Printf( "%8" PRIuPTR " : %s\n", (uintptr_t)size, mod->name );
 		total += size;
 	}
@@ -1087,7 +1088,7 @@ static model_t *Mod_FindSlot( const char *name ) {
 	// find a free model slot spot
 	//
 	if( mod_numknown == MAX_MOD_KNOWN ) {
-		ri.Com_Error( ERR_DROP, "mod_numknown == MAX_MOD_KNOWN" );
+		Com_Error( ERR_DROP, "mod_numknown == MAX_MOD_KNOWN" );
 	}
 	return &mod_known[mod_numknown++];
 }
@@ -1121,7 +1122,7 @@ model_t *Mod_ForName( const char *name, bool crash ) {
 	bspFormatDesc_t *bspFormat = NULL;
 
 	if( !name[0] ) {
-		ri.Com_Error( ERR_DROP, "Mod_ForName: NULL name" );
+		Com_Error( ERR_DROP, "Mod_ForName: NULL name" );
 	}
 
 	//
@@ -1130,7 +1131,7 @@ model_t *Mod_ForName( const char *name, bool crash ) {
 	if( name[0] == '*' ) {
 		int modnum = atoi( name + 1 );
 		if( modnum < 1 || !rsh.worldModel || (unsigned)modnum >= rsh.worldBrushModel->numsubmodels ) {
-			ri.Com_Error( ERR_DROP, "bad inline model number" );
+			Com_Error( ERR_DROP, "bad inline model number" );
 		}
 		return &rsh.worldBrushModel->inlines[modnum];
 	}
@@ -1152,7 +1153,7 @@ model_t *Mod_ForName( const char *name, bool crash ) {
 	//
 	modfilelen = R_LoadFile( name, (void **)&buf );
 	if( !buf && crash ) {
-		ri.Com_Error( ERR_DROP, "Mod_NumForName: %s not found", name );
+		Com_Error( ERR_DROP, "Mod_NumForName: %s not found", name );
 	}
 
 	// free data we may still have from the previous load attempt for this model slot
@@ -1173,7 +1174,7 @@ model_t *Mod_ForName( const char *name, bool crash ) {
 	// call the apropriate loader
 	descr = Q_FindFormatDescriptor( mod_supportedformats, ( const uint8_t * )buf, (const bspFormatDesc_t **)&bspFormat );
 	if( !descr ) {
-		ri.Com_DPrintf( S_COLOR_YELLOW "Mod_NumForName: unknown fileid for %s", mod->name );
+		Com_DPrintf( S_COLOR_YELLOW "Mod_NumForName: unknown fileid for %s", mod->name );
 		return NULL;
 	}
 
@@ -1298,8 +1299,8 @@ static void R_InitMapConfig( const char *model ) {
 		if( p ) {
 			*p = 0;
 			Q_strncatz( lightmapsPath, "/lm_0000.tga", sizeof( lightmapsPath ) );
-			if( ri.FS_FOpenFile( lightmapsPath, NULL, FS_READ ) != -1 ) {
-				ri.Com_DPrintf( S_COLOR_YELLOW "External lightmap stage: lightmaps packing is disabled\n" );
+			if( FS_FOpenFile( lightmapsPath, NULL, FS_READ ) != -1 ) {
+				Com_DPrintf( S_COLOR_YELLOW "External lightmap stage: lightmaps packing is disabled\n" );
 				mapConfig.lightmapsPacking = false;
 			}
 		}

@@ -270,7 +270,7 @@ Dynamic library loading
 #endif
 
 // qcommon/library.c
-typedef struct { const char *name; void **funcPointer; } dllfunc_t;
+typedef struct dllfunc_s { const char *name; void **funcPointer; } dllfunc_t;
 
 void Com_UnloadLibrary( void **lib );
 void *Com_LoadLibrary( const char *name, dllfunc_t *funcs ); // NULL-terminated array of functions
@@ -752,7 +752,10 @@ typedef struct mempool_s mempool_t;
 #define MEMPOOL_DB                  32
 #define MEMPOOL_ANGELSCRIPT         64
 #define MEMPOOL_CINMODULE           128
+
+#ifndef MEMPOOL_REFMODULE
 #define MEMPOOL_REFMODULE           256
+#endif
 
 void Memory_Init( void );
 void Memory_InitCommands( void );
