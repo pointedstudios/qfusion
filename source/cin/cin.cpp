@@ -30,6 +30,8 @@ CINEMATICS PLAYBACK ABSTRACTION LAYER
 #include "cin_theora.h"
 #include "cin_roq.h"
 
+#include "../qcommon/qcommon.h"
+
 enum {
 	CIN_TYPE_NONE = -1,
 
@@ -108,17 +110,17 @@ cinematics_t *CIN_Open( const char *name, int64_t start_time,
 	cinematics_t *cin = NULL;
 	unsigned load_msec;
 
-	load_msec = trap_Milliseconds();
+	load_msec = Sys_Milliseconds();
 	name_size = strlen( name ) + /*strlen( ".roq" )*/ 10 + 1;
 
-	mempool = CIN_AllocPool( name );
-	cin = CIN_Alloc( mempool, sizeof( *cin ) );
+	mempool = (mempool_s *)CIN_AllocPool( name );
+	cin = (cinematics_t *)CIN_Alloc( mempool, sizeof( *cin ) );
 
 	memset( cin, 0, sizeof( *cin ) );
 
 	cin->mempool = mempool;
 	cin->file = 0;
-	cin->name = CIN_Alloc( cin->mempool, name_size );
+	cin->name = (char *)CIN_Alloc( cin->mempool, name_size );
 	cin->frame = 0;
 	cin->width = cin->height = 0;
 	cin->aspect_numerator = cin->aspect_denominator = 0; // do not keep aspect ratio
@@ -126,10 +128,10 @@ cinematics_t *CIN_Open( const char *name, int64_t start_time,
 	cin->flags = 0;
 	cin->flags = flags;
 
-	if( trap_FS_IsUrl( name ) ) {
+	if( FS_IsUrl( name ) ) {
 		cin->type = CIN_TYPE_THEORA;
 		Q_strncpyz( cin->name, name, name_size );
-		trap_FS_FOpenFile( cin->name, &cin->file, FS_READ );
+		FS_FOpenFile( cin->name, &cin->file, FS_READ );
 	} else {
 		cin->type = CIN_TYPE_NONE;
 		Q_snprintfz( cin->name, name_size, "%s", name );
@@ -153,7 +155,7 @@ cinematics_t *CIN_Open( const char *name, int64_t start_time,
 			ext = t;
 			COM_ReplaceExtension( cin->name, ext, name_size );
 
-			trap_FS_FOpenFile( cin->name, &cin->file, FS_READ );
+			FS_FOpenFile( cin->name, &cin->file, FS_READ );
 			if( cin->file ) {
 				// found the file
 				cin->type = i;
@@ -190,7 +192,7 @@ cinematics_t *CIN_Open( const char *name, int64_t start_time,
 	}
 
 	// update the timers to account for loading
-	load_msec = trap_Milliseconds() - load_msec;
+	load_msec = Sys_Milliseconds() - load_msec;
 	cin->start_time = cin->cur_time = start_time + load_msec;
 
 	return cin;
@@ -433,7 +435,7 @@ void CIN_Close( cinematics_t *cin ) {
 	cin->start_time = 0; // done
 
 	if( cin->file ) {
-		trap_FS_FCloseFile( cin->file );
+		FS_FCloseFile( cin->file );
 		cin->file = 0;
 	}
 

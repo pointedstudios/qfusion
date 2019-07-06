@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // r_cin.c
 #include "r_local.h"
-#include "../client/cin.h"
+#include "../cin/cin.h"
 #include "../qcommon/qcommon.h"
 
 #define MAX_CINEMATICS  256
@@ -38,7 +38,7 @@ typedef struct r_cinhandle_s {
 	volatile bool new_frame;
 	bool yuv;
 	qmutex_t        *lock;
-	ref_yuv_t       *cyuv;
+	cin_yuv_t       *cyuv;
 	image_t         *yuv_images[3];
 	struct r_cinhandle_s *prev, *next;
 } r_cinhandle_t;

@@ -292,7 +292,6 @@ if (NOT GAME_MODULES_ONLY)
     add_subdirectory(server)
 
     if (NOT SERVER_ONLY)
-        add_subdirectory(cin)
         add_subdirectory(ftlib)
         add_subdirectory(snd_openal)
         add_subdirectory(ui)

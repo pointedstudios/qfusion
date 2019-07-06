@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "client.h"
-#include "cin.h"
+#include "../cin/cin.h"
 #include "../ref_gl/r_frontend.h"
 
 #define SCR_CinematicTime() Sys_Milliseconds()
@@ -205,7 +205,7 @@ bool SCR_DrawCinematic( void ) {
 	}
 
 	if( cl.cin.yuv ) {
-		ref_yuv_t *cyuv = cl.cin.cyuv;
+		cin_yuv_t *cyuv = cl.cin.cyuv;
 
 		RF_DrawStretchRawYUV( x, y, w, h,
 							  (float)( cyuv->x_offset ) / cyuv->image_width,
@@ -340,7 +340,7 @@ void CL_PauseCinematic_f( void ) {
 * CL_InitCinematics
 */
 void CL_InitCinematics( void ) {
-	CIN_LoadLibrary( true );
+	CIN_Init( true );
 
 	Cmd_AddCommand( "cinematic", CL_PlayCinematic_f );
 	Cmd_AddCommand( "cinepause", CL_PauseCinematic_f );
@@ -355,5 +355,5 @@ void CL_ShutdownCinematics( void ) {
 	Cmd_RemoveCommand( "cinematic" );
 	Cmd_RemoveCommand( "cinepause" );
 
-	CIN_UnloadLibrary( true );
+	CIN_Shutdown( true );
 }

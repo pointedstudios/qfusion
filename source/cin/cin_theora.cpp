@@ -30,6 +30,7 @@ OGG THEORA FORMAT PLAYBACK
 #include <vorbis/codec.h>
 #include <theora/theoradec.h>
 #include "cin_theora.h"
+#include "../qcommon/qcommon.h"
 
 #define OGG_BUFFER_SIZE     4 * 1024
 
@@ -235,7 +236,7 @@ static dllfunc_t theorafuncs[] =
 static void Theora_UnloadOggLibrary( void ) {
 #ifdef OGGLIB_RUNTIME
 	if( oggLibrary ) {
-		trap_UnloadLibrary( &oggLibrary );
+		Com_UnloadLibrary( &oggLibrary );
 	}
 #endif
 	oggLibrary = NULL;
@@ -248,7 +249,7 @@ void Theora_LoadOggLibrary( void ) {
 	Theora_UnloadOggLibrary();
 
 #ifdef OGGLIB_RUNTIME
-	oggLibrary = trap_LoadLibrary( LIBOGG_LIBNAME, oggfuncs );
+	oggLibrary = Com_LoadSysLibrary( LIBOGG_LIBNAME, oggfuncs );
 #else
 	oggLibrary = (void *)1;
 #endif
@@ -260,7 +261,7 @@ void Theora_LoadOggLibrary( void ) {
 static void Theora_UnloadVorbisLibrary( void ) {
 #ifdef VORBISLIB_RUNTIME
 	if( vorbisLibrary ) {
-		trap_UnloadLibrary( &vorbisLibrary );
+		Com_UnloadLibrary( &vorbisLibrary );
 	}
 #endif
 	vorbisLibrary = NULL;
@@ -273,7 +274,7 @@ void Theora_LoadVorbisLibrary( void ) {
 	Theora_UnloadVorbisLibrary();
 
 #ifdef VORBISLIB_RUNTIME
-	vorbisLibrary = trap_LoadLibrary( LIBVORBIS_LIBNAME, vorbisfuncs );
+	vorbisLibrary = Com_LoadSysLibrary( LIBVORBIS_LIBNAME, vorbisfuncs );
 #else
 	vorbisLibrary = (void *)1;
 #endif
@@ -285,7 +286,7 @@ void Theora_LoadVorbisLibrary( void ) {
 void Theora_UnloadTheoraLibrary( void ) {
 #ifdef VORBISLIB_RUNTIME
 	if( theoraLibrary ) {
-		trap_UnloadLibrary( &theoraLibrary );
+		Com_UnloadLibrary( &theoraLibrary );
 	}
 #endif
 	theoraLibrary = NULL;
@@ -296,7 +297,7 @@ void Theora_UnloadTheoraLibrary( void ) {
 */
 static void Theora_LoadTheoraLibrary( void ) {
 #ifdef THEORALIB_RUNTIME
-	theoraLibrary = trap_LoadLibrary( LIBTHEORA_LIBNAME, theorafuncs );
+	theoraLibrary = Com_LoadSysLibrary( LIBTHEORA_LIBNAME, theorafuncs );
 #else
 	theoraLibrary = (void *)1;
 #endif
@@ -335,14 +336,14 @@ void Theora_LoadTheoraLibraries( void ) {
 static int Ogg_LoadBlockToSync( cinematics_t *cin ) {
 	int bytes;
 	char *buffer;
-	qtheora_info_t *qth = cin->fdata;
+	qtheora_info_t *qth = (qtheora_info_t *)cin->fdata;
 
-	if( trap_FS_Eof( cin->file ) ) {
+	if( FS_Eof( cin->file ) ) {
 		return 0;
 	}
 
 	buffer = qogg_sync_buffer( &qth->oy, OGG_BUFFER_SIZE );
-	bytes = trap_FS_Read( buffer, OGG_BUFFER_SIZE, cin->file );
+	bytes = FS_Read( buffer, OGG_BUFFER_SIZE, cin->file );
 	qogg_sync_wrote( &qth->oy, bytes );
 
 	return bytes;
@@ -370,7 +371,7 @@ static void Ogg_LoadPagesToStreams( qtheora_info_t *qth, ogg_page *page ) {
 */
 static bool OggVorbis_NeedAudioData( cinematics_t *cin ) {
 	ogg_int64_t audio_time;
-	qtheora_info_t *qth = cin->fdata;
+	qtheora_info_t *qth = (qtheora_info_t *)cin->fdata;
 
 	if( !qth->a_stream || qth->a_eos ) {
 		return false;
@@ -406,7 +407,7 @@ static bool OggVorbis_LoadAudioFrame( cinematics_t *cin ) {
 	uint8_t rawBuffer[RAW_BUFFER_SIZE];
 	ogg_packet op;
 	vorbis_block vb;
-	qtheora_info_t *qth = cin->fdata;
+	qtheora_info_t *qth = (qtheora_info_t *)cin->fdata;
 
 	memset( &op, 0, sizeof( op ) );
 	memset( &vb, 0, sizeof( vb ) );
@@ -426,7 +427,7 @@ read_samples:
 			samplesNeeded = qth->s_samples_need - qth->s_samples_read;
 		}
 
-		if( cin->listeners > 0 ) {
+		if( cin->listeners[0].listener ) {
 			if( cin->s_channels == 1 ) {
 				left = right = pcm[0];
 				for( i = 0; i < samplesNeeded; i++ ) {
@@ -483,7 +484,7 @@ read_samples:
 */
 static bool OggTheora_NeedVideoData( cinematics_t *cin ) {
 	unsigned int realframe;
-	qtheora_info_t *qth = cin->fdata;
+	qtheora_info_t *qth = (qtheora_info_t *)cin->fdata;
 	int64_t sync_time = qth->s_sound_time;
 
 	if( !cin->width ) {
@@ -510,7 +511,7 @@ static bool OggTheora_NeedVideoData( cinematics_t *cin ) {
 static bool OggTheora_LoadVideoFrame( cinematics_t *cin ) {
 	int i;
 	ogg_packet op;
-	qtheora_info_t *qth = cin->fdata;
+	qtheora_info_t *qth = (qtheora_info_t *)cin->fdata;
 	th_ycbcr_buffer yuv;
 	int64_t sync_time = qth->s_sound_time;
 
@@ -612,7 +613,7 @@ static bool OggTheora_LoadVideoFrame( cinematics_t *cin ) {
 			cin->height = height;
 
 			size = cin->width * cin->height * 3;
-			cin->vid_buffer = CIN_Alloc( cin->mempool, size );
+			cin->vid_buffer = (uint8_t *)CIN_Alloc( cin->mempool, size );
 			memset( cin->vid_buffer, 0xFF, size );
 		}
 
@@ -630,7 +631,7 @@ static bool OggTheora_LoadVideoFrame( cinematics_t *cin ) {
 static bool Theora_ReadNextFrame_CIN_( cinematics_t *cin, bool *redraw, bool *eos ) {
 	unsigned int bytes, pages = 0;
 	bool redraw_ = false;
-	qtheora_info_t *qth = cin->fdata;
+	qtheora_info_t *qth = (qtheora_info_t *)cin->fdata;
 	bool haveAudio = false, haveVideo = false;
 
 	*eos = false;
@@ -940,7 +941,7 @@ uint8_t *Theora_ReadNextFrame_CIN( cinematics_t *cin, bool *redraw ) {
 */
 cin_yuv_t *Theora_ReadNextFrameYUV_CIN( cinematics_t *cin, bool *redraw ) {
 	bool eos;
-	qtheora_info_t *qth = cin->fdata;
+	qtheora_info_t *qth = (qtheora_info_t *)cin->fdata;
 
 	Theora_ReadNextFrame_CIN_( cin, redraw, &eos );
 	if( eos ) {
@@ -960,7 +961,7 @@ bool Theora_Init_CIN( cinematics_t *cin ) {
 	int vorbis_p, theora_p;
 	qtheora_info_t *qth;
 
-	qth = CIN_Alloc( cin->mempool, sizeof( *qth ) );
+	qth = (qtheora_info_t *)CIN_Alloc( cin->mempool, sizeof( *qth ) );
 	memset( qth, 0, sizeof( *qth ) );
 	cin->fdata = ( void * )qth;
 	CIN_Free( cin->vid_buffer );
@@ -1119,7 +1120,7 @@ bool Theora_Init_CIN( cinematics_t *cin ) {
 		return false;
 	}
 
-	cin->headerlen = trap_FS_Tell( cin->file );
+	cin->headerlen = FS_Tell( cin->file );
 	cin->yuv = true;
 
 	return true;
@@ -1130,7 +1131,7 @@ bool Theora_Init_CIN( cinematics_t *cin ) {
 */
 bool Theora_HasOggAudio_CIN( cinematics_t *cin ) {
 #if 1
-	qtheora_info_t *qth = cin->fdata;
+	qtheora_info_t *qth = (qtheora_info_t *)cin->fdata;
 	return qth->a_stream;
 #else
 	return false;
@@ -1141,7 +1142,7 @@ bool Theora_HasOggAudio_CIN( cinematics_t *cin ) {
 * Theora_Shutdown_CIN
 */
 void Theora_Shutdown_CIN( cinematics_t *cin ) {
-	qtheora_info_t *qth = cin->fdata;
+	qtheora_info_t *qth = (qtheora_info_t *)cin->fdata;
 
 	if( !theoraLibrary ) {
 		return;
@@ -1176,7 +1177,7 @@ void Theora_Reset_CIN( cinematics_t *cin ) {
 	CIN_Free( cin->fdata );
 	cin->fdata = NULL;
 
-	trap_FS_Seek( cin->file, 0, FS_SEEK_SET );
+	FS_Seek( cin->file, 0, FS_SEEK_SET );
 
 	Theora_Init_CIN( cin );
 }
@@ -1186,7 +1187,7 @@ void Theora_Reset_CIN( cinematics_t *cin ) {
 */
 bool Theora_NeedNextFrame_CIN( cinematics_t *cin ) {
 	int64_t sys_time;
-	qtheora_info_t *qth = cin->fdata;
+	qtheora_info_t *qth = (qtheora_info_t *)cin->fdata;
 
 	sys_time = cin->cur_time - cin->start_time;
 	if( qth->a_stream ) {

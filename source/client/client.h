@@ -58,6 +58,8 @@ typedef struct {
 	int counts[100];
 } cl_timedemo_t;
 
+struct cin_yuv_s;
+
 typedef struct {
 	void *h;
 	int width, height;
@@ -71,7 +73,7 @@ typedef struct {
 	int64_t pauseTime;
 	uint8_t *pic;
 	int aspect_numerator, aspect_denominator;
-	ref_yuv_t *cyuv;
+	cin_yuv_s *cyuv;
 	float framerate;
 } cl_cintematics_t;
 

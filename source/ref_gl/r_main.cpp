@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_main.c
 
 #include "r_local.h"
+#include "../cin/cin.h"
 #include "../qcommon/qcommon.h"
 #include <algorithm>
 
@@ -579,7 +580,7 @@ void R_UploadRawPic( image_t *texture, int cols, int rows, uint8_t *data ) {
 /*
 * R_UploadRawYUVPic
 */
-void R_UploadRawYUVPic( image_t **yuvTextures, ref_img_plane_t *yuv ) {
+void R_UploadRawYUVPic( image_t **yuvTextures, cin_img_plane_s *yuv ) {
 	int i;
 
 	for( i = 0; i < 3; i++ ) {

@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "r_local.h"
 #include "r_cmdque.h"
 #include "r_frontend.h"
+#include "../cin/cin.h"
 #include "../qcommon/qcommon.h"
 
 static ref_frontend_t rrf;
@@ -425,7 +426,7 @@ void RF_DrawStretchRaw( int x, int y, int w, int h, int cols, int rows,
 }
 
 void RF_DrawStretchRawYUV( int x, int y, int w, int h,
-						   float s1, float t1, float s2, float t2, ref_img_plane_t *yuv ) {
+						   float s1, float t1, float s2, float t2, cin_img_plane_s *yuv ) {
 	if( yuv ) {
 		R_UploadRawYUVPic( rsh.rawYUVTextures, yuv );
 	}
