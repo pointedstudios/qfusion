@@ -2116,6 +2116,7 @@ static void CL_ShutdownLocal( void ) {
 	Cmd_RemoveCommand( "showserverip" );
 	Cmd_RemoveCommand( "downloadstatus" );
 	Cmd_RemoveCommand( "downloadcancel" );
+	Cmd_RemoveCommand( "help" );
 }
 
 //============================================================================
