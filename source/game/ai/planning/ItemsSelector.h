@@ -93,8 +93,6 @@ class BotItemsSelector {
 
 	void UpdateInternalItemAndGoalWeights();
 
-	const edict_t *GetSpotEntityAndWeight( float *weight ) const;
-
 	struct ItemAndGoalWeights {
 		float itemWeight;
 		float goalWeight;
@@ -103,8 +101,8 @@ class BotItemsSelector {
 			: itemWeight( itemWeight_ ), goalWeight( goalWeight_ ) {}
 	};
 
-	ItemAndGoalWeights ComputeItemWeights( const gsitem_t *item, bool onlyGotGB ) const;
-	ItemAndGoalWeights ComputeWeaponWeights( const gsitem_t *item, bool onlyGotGB ) const;
+	ItemAndGoalWeights ComputeItemWeights( const gsitem_t *item ) const;
+	ItemAndGoalWeights ComputeWeaponWeights( const gsitem_t *item ) const;
 	ItemAndGoalWeights ComputeAmmoWeights( const gsitem_t *item ) const;
 	ItemAndGoalWeights ComputeArmorWeights( const gsitem_t *item ) const;
 	ItemAndGoalWeights ComputeHealthWeights( const gsitem_t *item ) const;

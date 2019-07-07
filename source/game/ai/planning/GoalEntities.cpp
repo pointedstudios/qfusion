@@ -75,6 +75,24 @@ bool NavEntity::IsTopTierItem( const float *overriddenEntityWeights ) const {
 	return false;
 }
 
+bool NavEntity::IsTopTierWeapon() const {
+	const auto *item = ent->item;
+	if( !item ) {
+		return false;
+	}
+
+	if( item->type != IT_WEAPON ) {
+		return false;
+	}
+
+	// Consider all other weapons top-tier ones
+	static_assert( WEAP_NONE < WEAP_GUNBLADE, "" );
+	static_assert( WEAP_GUNBLADE < WEAP_MACHINEGUN, "" );
+	static_assert( WEAP_MACHINEGUN < WEAP_RIOTGUN, "" );
+	static_assert( WEAP_RIOTGUN < WEAP_GRENADELAUNCHER, "" );
+	return item->tag > WEAP_GRENADELAUNCHER;
+}
+
 int64_t NavEntity::SpawnTime() const {
 	if( !ent->r.inuse ) {
 		return 0;

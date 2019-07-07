@@ -323,11 +323,7 @@ protected:
 	void Frame() override;
 	void Think() override;
 
-	void PreFrame() override {
-		// We should update weapons status each frame since script weapons may be changed each frame.
-		// These statuses are used by firing methods, so actual weapon statuses are required.
-		weaponsUsageModule.UpdateScriptWeaponsStatus();
-	}
+	void PreFrame() override;
 
 	void SetFrameAffinity( unsigned modulo, unsigned offset ) override {
 		AiFrameAwareComponent::SetFrameAffinity( modulo, offset );
@@ -404,6 +400,12 @@ private:
 	int64_t noItemAvailableSince { 0 };
 
 	int64_t lastBlockedNavTargetReportedAt { 0 };
+
+	/**
+	 * This value should be updated at the beginning of every frame.
+	 * Making it lazy is not good for performance reasons (the result might be accessed in tight loops).
+	 */
+	bool hasOnlyGunblade { false };
 
 	inline bool ShouldUseRoamSpotAsNavTarget() const {
 		const auto &selectedNavEntity = GetSelectedNavEntity();
@@ -567,6 +569,12 @@ public:
 	 * Provided for consistency.
 	 */
 	bool TryGetExpensiveThinkCallQuota() const;
+
+	/**
+	 * Gets whether the bot has only Gunblade for making attacks.
+	 * @note weapons without actual ammo are ignored.
+	 */
+	bool HasOnlyGunblade() const { return hasOnlyGunblade; }
 };
 
 #endif

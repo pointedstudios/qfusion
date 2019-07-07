@@ -69,6 +69,7 @@ public:
 
 	virtual float RadiusOrDefault( float defaultValue ) const { return defaultValue; }
 	virtual bool IsTopTierItem( const float *externalEntityWeights ) const { return false; }
+	virtual bool IsTopTierWeapon() const { return false; }
 	virtual bool ShouldBeReachedAtTouch() const = 0;
 	virtual bool ShouldBeReachedAtRadius() const = 0;
 	virtual bool ShouldBeReachedOnEvent() const = 0;
@@ -129,6 +130,7 @@ public:
 	uint64_t MaxWaitDuration() const;
 
 	bool IsTopTierItem( const float *overriddenEntityWeights ) const override;
+	bool IsTopTierWeapon() const override;
 
 	const char *Name() const override { return name; }
 

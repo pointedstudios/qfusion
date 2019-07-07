@@ -417,10 +417,17 @@ bool Bot::NavTargetWorthRushing() const {
 
 	// Don't jump if there's no pressure from enemies
 	if( !selectedEnemies.AreValid() ) {
-		return false;
+		// Duel-like gametypes are an exception
+		if( !( GS_TeamBasedGametype() && GS_InvidualGameType() ) ) {
+			return false;
+		}
 	}
 
-	return planningModule.IsTopTierItem( navTarget );
+	if( planningModule.IsTopTierItem( navTarget ) ) {
+		return true;
+	}
+
+	return HasOnlyGunblade() && ( navTarget && navTarget->IsTopTierWeapon() );
 }
 
 int Bot::GetWeaponsForWeaponJumping( int *weaponNumsBuffer ) {
@@ -567,4 +574,22 @@ bool Bot::TryGetVitalComputationQuota() const {
 
 bool Bot::TryGetExpensiveThinkCallQuota() const {
 	return AiManager::Instance()->TryGetExpensiveThinkCallQuota( this );
+}
+
+void Bot::PreFrame() {
+	// We should update weapons status each frame since script weapons may be changed each frame.
+	// These statuses are used by firing methods, so actual weapon statuses are required.
+	weaponsUsageModule.UpdateScriptWeaponsStatus();
+
+	const int weakAmmoShift = AMMO_GUNBLADE - WEAP_GUNBLADE;
+	const int strongAmmoShift = AMMO_WEAK_GUNBLADE - WEAP_GUNBLADE;
+	const auto *inventory = self->r.client->ps.inventory;
+
+	hasOnlyGunblade = true;
+	for( int weapon = WEAP_GUNBLADE + 1; weapon < WEAP_TOTAL; ++weapon ) {
+		if( inventory[weapon] && ( inventory[weapon + strongAmmoShift] || inventory[weapon + weakAmmoShift] ) ) {
+			hasOnlyGunblade = false;
+			break;
+		}
+	}
 }

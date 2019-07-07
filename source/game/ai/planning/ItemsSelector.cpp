@@ -9,15 +9,6 @@ void BotItemsSelector::UpdateInternalItemAndGoalWeights() {
 	const edict_t *self = game.edicts + bot->EntNum();
 	const auto *inventory = self->r.client->ps.inventory;
 
-	// Compute it once, not on each loop step
-	bool onlyGotGB = true;
-	for( int weapon = WEAP_GUNBLADE + 1; weapon < WEAP_TOTAL; ++weapon ) {
-		if( inventory[weapon] ) {
-			onlyGotGB = false;
-			break;
-		}
-	}
-
 	const auto *const botTeam = AiBaseTeam::GetTeamForNum( self->s.team );
 	const auto levelTime = level.time;
 	auto *const navEntitiesRegistry = NavEntitiesRegistry::Instance();
@@ -35,7 +26,7 @@ void BotItemsSelector::UpdateInternalItemAndGoalWeights() {
 				continue;
 			}
 
-			ItemAndGoalWeights weights = ComputeItemWeights( goalEnt->Item(), onlyGotGB );
+			ItemAndGoalWeights weights = ComputeItemWeights( goalEnt->Item() );
 			std::tie( navWeight, goalWeight ) = std::make_pair( weights.itemWeight, weights.goalWeight );
 		}
 		return;
@@ -50,7 +41,7 @@ void BotItemsSelector::UpdateInternalItemAndGoalWeights() {
 		}
 
 		if( goalEnt->Item() ) {
-			ItemAndGoalWeights weights = ComputeItemWeights( goalEnt->Item(), onlyGotGB );
+			ItemAndGoalWeights weights = ComputeItemWeights( goalEnt->Item() );
 			std::tie( navWeight, goalWeight ) = std::make_pair( weights.itemWeight, weights.goalWeight );
 			continue;
 		}
@@ -63,9 +54,9 @@ void BotItemsSelector::UpdateInternalItemAndGoalWeights() {
 	}
 }
 
-BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeItemWeights( const gsitem_t *item, bool onlyGotGB ) const {
+BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeItemWeights( const gsitem_t *item ) const {
 	switch( item->type ) {
-		case IT_WEAPON: return ComputeWeaponWeights( item, onlyGotGB );
+		case IT_WEAPON: return ComputeWeaponWeights( item );
 		case IT_AMMO: return ComputeAmmoWeights( item );
 		case IT_HEALTH: return ComputeHealthWeights( item );
 		case IT_ARMOR: return ComputeArmorWeights( item );
@@ -85,7 +76,7 @@ BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeItemWeights( const
 	return ItemAndGoalWeights( 0, 0 );
 }
 
-BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeWeaponWeights( const gsitem_t *item, bool onlyGotGB ) const {
+BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeWeaponWeights( const gsitem_t *item ) const {
 	const auto *const inventory = game.edicts[bot->EntNum()].r.client->ps.inventory;
 
 	if( inventory[item->tag] ) {
@@ -125,14 +116,15 @@ BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeWeaponWeights( con
 		}
 	}
 
+	const bool hasOnlyGunblade = bot->HasOnlyGunblade();
 	for( int i = 0; i < 4; ++i ) {
 		if( topTierWeapons[i] == item->tag ) {
-			float weight = ( onlyGotGB ? 2.0f : 0.9f ) + ( topTierWeaponGreed - 1.0f ) / 3.0f;
+			float weight = ( hasOnlyGunblade ? 2.0f : 0.9f ) + ( topTierWeaponGreed - 1.0f ) / 3.0f;
 			return ItemAndGoalWeights( weight, weight );
 		}
 	}
 
-	return onlyGotGB ? ItemAndGoalWeights( 1.5f, 2.0f ) : ItemAndGoalWeights( 0.75f, 0.75f );
+	return hasOnlyGunblade ? ItemAndGoalWeights( 1.5f, 2.0f ) : ItemAndGoalWeights( 0.75f, 0.75f );
 }
 
 BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeAmmoWeights( const gsitem_t *item ) const {
