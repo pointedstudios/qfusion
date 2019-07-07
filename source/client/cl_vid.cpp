@@ -23,7 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // qfusion refresh engine.
 #include "client.h"
 #include "../cin/cin.h"
-#include "ftlib.h"
 #include "xpm.h"
 #include "../ref_gl/r_frontend.h"
 
@@ -610,7 +609,7 @@ void VID_Init( void ) {
 	vid_ref_prevwidth = vid_modes[0].width; // the smallest mode is the "safe mode"
 	vid_ref_prevheight = vid_modes[0].height;
 
-	FTLIB_LoadLibrary( false );
+	FTLIB_Init( true );
 
 	VID_CheckChanges();
 }
@@ -625,7 +624,7 @@ void VID_Shutdown( void ) {
 
 	VID_UnloadRefresh();
 
-	FTLIB_UnloadLibrary( false );
+	FTLIB_Shutdown( true );
 
 	Cmd_RemoveCommand( "vid_restart" );
 	Cmd_RemoveCommand( "vid_modelist" );

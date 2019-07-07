@@ -18,10 +18,17 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "../ftlib/ftlib_public.h"
+#ifndef FTLIB_H
+#define FTLIB_H
 
-void FTLIB_LoadLibrary( bool verbose );
-void FTLIB_UnloadLibrary( bool verbose );
+struct shader_s;
+struct qfontface_s;
+
+typedef void ( *fdrawchar_t )( int x, int y, int w, int h, float s1, float t1, float s2, float t2, const vec4_t color, const struct shader_s *shader );
+
+bool FTLIB_Init( bool verbose );
+void FTLIB_Shutdown( bool verbose );
+
 struct qfontface_s *FTLIB_RegisterFont( const char *family, const char *fallback, int style, unsigned int size );
 void FTLIB_TouchFont( struct qfontface_s *qfont );
 void FTLIB_TouchAllFonts( void );
@@ -43,3 +50,5 @@ void FTLIB_DrawClampString( int x, int y, const char *str, int xmin, int ymin, i
 size_t FTLIB_DrawRawString( int x, int y, const char *str, size_t maxwidth, int *width, struct qfontface_s *font, vec4_t color, int flags );
 int FTLIB_DrawMultilineString( int x, int y, const char *str, int halign, int maxwidth, int maxlines, struct qfontface_s *font, vec4_t color, int flags );
 fdrawchar_t FTLIB_SetDrawCharIntercept( fdrawchar_t intercept );
+
+#endif
