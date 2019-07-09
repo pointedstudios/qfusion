@@ -4,6 +4,7 @@
 
 #include "as/asui.h"
 #include "as/asui_local.h"
+#include "../../angelwrap/qas.h"
 
 #include <list>
 
@@ -136,7 +137,6 @@ class ASModule : public ASInterface
 	UI_Main *ui_main;
 
 	asIScriptEngine *engine;
-	struct angelwrap_api_s *as_api;
 	asIObjectType *stringObjectType;
 
 // private class, its ok to have everything as public :)
@@ -144,7 +144,6 @@ class ASModule : public ASInterface
 public:
 	ASModule()
 		: ui_main( 0 ), engine( 0 ),
-		as_api( 0 ),
 		stringObjectType( 0 ) {
 	}
 
@@ -154,12 +153,7 @@ public:
 	virtual bool Init( void ) {
 		bool as_max_portability = false;
 
-		as_api = trap::asGetAngelExport();
-		if( !as_api ) {
-			return false;
-		}
-
-		engine = as_api->asCreateEngine( &as_max_portability );
+		engine = qasCreateEngine( &as_max_portability );
 		if( engine == NULL ) {
 			return false;
 		}
@@ -182,13 +176,9 @@ public:
 	virtual void Shutdown( void ) {
 		//module = 0;
 
-		if( as_api && engine != NULL ) {
-			as_api->asReleaseEngine( engine );
-		}
+		qasReleaseEngine( engine );
 
 		engine = 0;
-
-		as_api = NULL;
 
 		stringObjectType = 0;
 	}
@@ -216,11 +206,11 @@ public:
 	}
 
 	virtual asIScriptContext *getContext( void ) const {
-		return as_api ? as_api->asAcquireContext( engine ) : NULL;
+		return qasAcquireContext( engine );
 	}
 
 	virtual asIScriptContext *getActiveContext( void ) const {
-		return as_api ? as_api->asGetActiveContext() : NULL;
+		return qasGetActiveContext();
 	}
 
 	virtual asIScriptModule *getActiveModule( void ) const {
@@ -434,39 +424,25 @@ public:
 
 	// array factory
 	virtual CScriptArrayInterface *createArray( unsigned int size, asIObjectType *ot ) {
-		if( as_api ) {
-			return static_cast<CScriptArrayInterface *>( as_api->asCreateArrayCpp( size, static_cast<void *>( ot ) ) );
-		}
-		return NULL;
+		return qasCreateArrayCpp( size, static_cast<void *>( ot ) );
 	}
 
 	// AS string functions
 	virtual asstring_t *createString( const char *buffer, unsigned int length ) {
-		if( as_api ) {
-			return as_api->asStringFactoryBuffer( buffer, length );
-		}
-		return NULL;
+		return qasStringFactoryBuffer( buffer, length );
 	}
 
 	void releaseString( asstring_t *str ) {
-		if( as_api ) {
-			as_api->asStringRelease( str );
-		}
+		return qasStringRelease( str );
 	}
 
 	virtual asstring_t *assignString( asstring_t *self, const char *string, unsigned int strlen ) {
-		if( as_api ) {
-			return as_api->asStringAssignString( self, string, strlen );
-		}
-		return NULL;
+		return qasStringAssignString( self, string, strlen );
 	}
 
 	// dictionary factory
 	virtual CScriptDictionaryInterface *createDictionary( void ) {
-		if( as_api ) {
-			return static_cast<CScriptDictionaryInterface *>( as_api->asCreateDictionaryCpp( engine ) );
-		}
-		return NULL;
+		return qasCreateDictionaryCpp( engine );
 	}
 };
 

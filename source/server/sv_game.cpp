@@ -566,8 +566,6 @@ void SV_InitGameProgs( void ) {
 
 	import.LocateEntities = SV_LocateEntities;
 
-	import.asGetAngelExport = Com_asGetAngelExport;
-
 	import.MM_NewGetQuery = SV_MM_NewGetQuery;
 	import.MM_NewPostQuery = SV_MM_NewPostQuery;
 	import.MM_DeleteQuery = SV_MM_DeleteQuery;

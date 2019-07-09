@@ -712,3 +712,42 @@ void Com_Printf( const char *format, ... ) {
 	G_Printf( "%s", msg );
 }
 #endif
+
+// Adapters for linking angelwrap
+// TODO: Remove all of this once the game code gets linked statically to the server executable
+
+cvar_t *Cvar_Get( const char *var_name, const char *value, cvar_flag_t flags ) {
+	return trap_Cvar_Get( var_name, value, flags );
+}
+
+cvar_t *Cvar_Set( const char *var_name, const char *value ) {
+	return trap_Cvar_Set( var_name, value );
+}
+
+cvar_t *Cvar_ForceSet( const char *var_name, const char *value ) {
+	return trap_Cvar_ForceSet( var_name, value );
+}
+
+void Cvar_SetValue( const char *var_name, float value ) {
+	return trap_Cvar_SetValue( var_name, value );
+}
+
+float Cvar_Value( const char *var_name ) {
+	return trap_Cvar_Value( var_name );
+}
+
+const char *Cvar_String( const char *var_name ) {
+	return trap_Cvar_String( var_name );
+}
+
+int FS_FOpenFile( const char *filename, int *filenum, int mode ) {
+	return trap_FS_FOpenFile( filename, filenum, mode );
+}
+
+void FS_FCloseFile( int file ) {
+	return trap_FS_FCloseFile( file );
+}
+
+int FS_Read( void *buffer, size_t len, int file ) {
+	return trap_FS_Read( buffer, len, file );
+}

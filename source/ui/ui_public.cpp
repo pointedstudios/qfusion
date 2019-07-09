@@ -232,6 +232,45 @@ void Com_Printf( const char *format, ... ) {
 }
 #endif
 
+// Adapters for linking angelwrap
+// TODO: Remove all of this once UI gets linked statically to the client executable
+
+cvar_t *Cvar_Get( const char *var_name, const char *value, cvar_flag_t flags ) {
+	return trap::Cvar_Get( var_name, value, flags );
+}
+
+cvar_t *Cvar_Set( const char *var_name, const char *value ) {
+	return trap::Cvar_Set( var_name, value );
+}
+
+cvar_t *Cvar_ForceSet( const char *var_name, const char *value ) {
+	return trap::Cvar_ForceSet( var_name, value );
+}
+
+void Cvar_SetValue( const char *var_name, float value ) {
+	return trap::Cvar_SetValue( var_name, value );
+}
+
+float Cvar_Value( const char *var_name ) {
+	return trap::Cvar_Value( var_name );
+}
+
+const char *Cvar_String( const char *var_name ) {
+	return trap::Cvar_String( var_name );
+}
+
+int FS_FOpenFile( const char *filename, int *filenum, int mode ) {
+	return trap::FS_FOpenFile( filename, filenum, mode );
+}
+
+void FS_FCloseFile( int file ) {
+	return trap::FS_FCloseFile( file );
+}
+
+int FS_Read( void *buffer, size_t len, int file ) {
+	return trap::FS_Read( buffer, len, file );
+}
+
 #if defined( HAVE_DLLMAIN ) && !defined( UI_HARD_LINKED )
 int WINAPI DLLMain( void *hinstDll, unsigned long dwReason, void *reserved ) {
 	return 1;

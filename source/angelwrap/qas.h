@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2012 Victor Luchtz
+Copyright (C) 2008 German Garcia
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -18,8 +18,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#ifndef __Q_ANGELIFACE_H__
-#define __Q_ANGELIFACE_H__
+#ifndef __QAS_PUBLIC_H__
+#define __QAS_PUBLIC_H__
 
 #include "angelscript.h"
 
@@ -112,39 +112,31 @@ public:
 	virtual int  GetTypeId() const = 0;
 };
 
-typedef struct angelwrap_api_s {
-	int angelwrap_api_version;
+/******* C++ objects *******/
+asIScriptEngine *qasCreateEngine( bool *asMaxPortability );
+asIScriptContext *qasAcquireContext( asIScriptEngine *engine );
+void qasReleaseContext( asIScriptContext *ctx );
+void qasReleaseEngine( asIScriptEngine *engine );
+asIScriptContext *qasGetActiveContext( void );
 
-	// C++ interfaces
+// array tools
+CScriptArrayInterface *qasCreateArrayCpp( unsigned int length, void *ot );
+void qasReleaseArrayCpp( CScriptArrayInterface *arr );
 
-	// engine
-	asIScriptEngine *( *asCreateEngine )( bool *asMaxPortability );
-	void ( *asReleaseEngine )( asIScriptEngine *engine );
+// string tools
+asstring_t *qasStringFactoryBuffer( const char *buffer, unsigned int length );
+void qasStringRelease( asstring_t *str );
+asstring_t *qasStringAssignString( asstring_t *self, const char *string, unsigned int strlen );
 
-	// context
-	asIScriptContext *( *asAcquireContext )( asIScriptEngine * engine );
-	void ( *asReleaseContext )( asIScriptContext *context );
-	asIScriptContext *( *asGetActiveContext )( void );
+// dictionary tools
+CScriptDictionaryInterface *qasCreateDictionaryCpp( asIScriptEngine *engine );
+void qasReleaseDictionaryCpp( CScriptDictionaryInterface *dict );
 
-	// strings
-	asstring_t *( *asStringFactoryBuffer )( const char *buffer, unsigned int length );
-	void ( *asStringRelease )( asstring_t *str );
-	asstring_t *( *asStringAssignString )( asstring_t * self, const char *string, unsigned int strlen );
+// any tools
+CScriptAnyInterface *qasCreateAnyCpp( asIScriptEngine *engine );
+void qasReleaseAnyCpp( CScriptAnyInterface *any );
 
-	// array
-	CScriptArrayInterface *( *asCreateArrayCpp )( unsigned int length, void *ot );
-	void ( *asReleaseArrayCpp )( CScriptArrayInterface *arr );
+// projects / bundles
+asIScriptModule *qasLoadScriptProject( asIScriptEngine *engine, const char *moduleName, const char *rootDir, const char *dir, const char *filename, const char *ext );
 
-	// dictionary
-	CScriptDictionaryInterface *( *asCreateDictionaryCpp )( asIScriptEngine * engine );
-	void ( *asReleaseDictionaryCpp )( CScriptDictionaryInterface *arr );
-
-	// any
-	CScriptAnyInterface *( *asCreateAnyCpp )( asIScriptEngine * engine );
-	void ( *asReleaseAnyCpp )( CScriptAnyInterface *any );
-
-	// projects
-	asIScriptModule *( *asLoadScriptProject )( asIScriptEngine *engine, const char *moduleName, const char *rootDir, const char *dir, const char *filename, const char *ext );
-} angelwrap_api_t;
-
-#endif
+#endif // __QAS_PUBLIC_H__

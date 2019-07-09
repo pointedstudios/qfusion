@@ -339,8 +339,6 @@ void CL_UIModule_Init( void ) {
 	import.MM_GetProfileRmlUrl = CL_MM_GetProfileWebUrl;
 	import.MM_GetBaseWebUrl = CL_MM_GetBaseWebUrl;
 
-	import.asGetAngelExport = Com_asGetAngelExport;
-
 	import.L10n_LoadLangPOFile = &CL_UIModule_L10n_LoadLangPOFile;
 	import.L10n_TranslateString = &CL_UIModule_L10n_TranslateString;
 	import.L10n_ClearDomain = &CL_UIModule_L10n_ClearDomain;

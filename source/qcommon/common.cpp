@@ -868,8 +868,6 @@ void Qcommon_Init( int argc, char **argv ) {
 	Steam_LoadLibrary();
 #endif
 
-	Com_ScriptModule_Init();
-
 	MM_Init();
 
 	SV_Init();
@@ -1006,7 +1004,6 @@ void Qcommon_Shutdown( void ) {
 	}
 	isdown = true;
 
-	Com_ScriptModule_Shutdown();
 	CM_Shutdown();
 	Netchan_Shutdown();
 	NET_Shutdown();

@@ -151,9 +151,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux" OR MINGW)
 
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -D_POSIX_C_SOURCE=200112L -D_XOPEN_SOURCE=500")
 
-    # -Wl,--as-needed
-    add_common_link_flags("-Wl,--as-needed")
-
     # -s in release link flags
     add_release_link_flags("-s")
 

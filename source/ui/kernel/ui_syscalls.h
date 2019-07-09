@@ -454,10 +454,6 @@ inline void Mem_Free( void *data, const char *filename, int fileline ) {
 	UI_IMPORT.Mem_Free( data, filename, fileline );
 }
 
-inline struct angelwrap_api_s *asGetAngelExport( void ) {
-	return UI_IMPORT.asGetAngelExport();
-}
-
 inline void AsyncStream_UrlEncode( const char *src, char *dst, size_t size ) {
 	UI_IMPORT.AsyncStream_UrlEncode( src, dst, size );
 }

@@ -808,7 +808,7 @@ static unsigned objectWeightConfigVarGroup_get_nameHash(const AiWeightConfigVarG
 static const asstring_t *objectWeightConfigVarGroup_get_name(const AiWeightConfigVarGroup *obj)
 {
     const char *nameData = CHECK_ARG(obj)->Name();
-    return angelExport->asStringFactoryBuffer(nameData, (unsigned)strlen(nameData));
+    return qasStringFactoryBuffer(nameData, (unsigned)strlen(nameData));
 }
 
 static AiWeightConfigVar *objectWeightConfigVarGroup_getVarByName(AiWeightConfigVarGroup *group, const asstring_t *name, unsigned nameHash)
@@ -896,7 +896,7 @@ static unsigned objectWeightConfigVar_get_nameHash(const AiWeightConfigVar *obj)
 static const asstring_t *objectWeightConfigVar_get_name(const AiWeightConfigVar *obj)
 {
     const char *nameData = CHECK_ARG(obj)->Name();
-    return angelExport->asStringFactoryBuffer(nameData, (unsigned)strlen(nameData));
+    return qasStringFactoryBuffer(nameData, (unsigned)strlen(nameData));
 }
 
 static void objectWeightConfigVar_getValueProps(const AiWeightConfigVar *obj, float *value, float *minValue, float *maxValue, float *defaultValue)
@@ -1276,10 +1276,10 @@ private:
 protected:
     inline asIScriptContext *PrepareContext()
     {
-        if (!funcPtr || !angelExport)
+        if (!funcPtr)
             return nullptr;
 
-        asIScriptContext *ctx = angelExport->asAcquireContext(GAME_AS_ENGINE());
+        asIScriptContext *ctx = qasAcquireContext(GAME_AS_ENGINE());
         int error = ctx->Prepare(funcPtr);
         if (error < 0)
             return nullptr;

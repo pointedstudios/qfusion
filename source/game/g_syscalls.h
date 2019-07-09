@@ -296,10 +296,6 @@ static inline void trap_LocateEntities( struct edict_s *edicts, int edict_size, 
 	GAME_IMPORT.LocateEntities( edicts, edict_size, num_edicts, max_edicts );
 }
 
-static inline struct angelwrap_api_s *trap_asGetAngelExport( void ) {
-	return GAME_IMPORT.asGetAngelExport();
-}
-
 // Matchmaking
 
 inline class QueryObject *trap_MM_NewGetQuery( const char *url ) {

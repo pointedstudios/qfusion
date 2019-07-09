@@ -2,7 +2,7 @@
 #ifndef __ASUI_LOCAL_H__
 #define __ASUI_LOCAL_H__
 
-#include "../gameshared/q_angeliface.h"
+#include "../../angelwrap/qas.h"
 #include "../gameshared/q_shared.h"
 #include "../gameshared/q_comref.h"
 

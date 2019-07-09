@@ -18,7 +18,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "qas_precompiled.h"
+#include "../gameshared/q_arch.h"
+#include "../gameshared/q_math.h"
+#include "../gameshared/q_shared.h"
+#include "../gameshared/q_cvar.h"
+#include "qas.h"
 #include "addon/addon_math.h"
 #include "addon/addon_scriptarray.h"
 #include "addon/addon_string.h"
@@ -28,6 +32,22 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "addon/addon_vec3.h"
 #include "addon/addon_cvar.h"
 #include "addon/addon_stringutils.h"
+#include "../qcommon/qcommon.h"
+
+#define QAS_SECTIONS_SEPARATOR ';'
+#define QAS_FILE_EXTENSION     ".as"
+//
+#define QAS_MemAlloc( pool, size ) ::calloc( size, 1 )
+#define QAS_MemFree( mem ) ::free( mem )
+//
+#define QAS_Malloc( size ) QAS_MemAlloc( angelwrappool, size )
+#define QAS_Free( data ) QAS_MemFree( data )
+//
+#define QAS_NEW( x )        new( QAS_Malloc( sizeof( x ) ) )( x )
+#define QAS_DELETE( ptr,x ) {void *tmp = ptr; ( ptr )->~x(); QAS_Free( tmp );}
+//
+#define QAS_NEWARRAY( x,cnt )  (x*)QAS_Malloc( sizeof( x ) * cnt )
+#define QAS_DELETEARRAY( ptr ) QAS_Free( ptr )
 
 #include <list>
 
@@ -98,7 +118,7 @@ asIScriptEngine *qasCreateEngine( bool *asMaxPortability ) {
 	}
 
 	if( strstr( asGetLibraryOptions(), "AS_MAX_PORTABILITY" ) ) {
-		QAS_Printf( "* angelscript library with AS_MAX_PORTABILITY detected\n" );
+		Com_Printf( "* angelscript library with AS_MAX_PORTABILITY detected\n" );
 		engine->Release();
 		return NULL;
 	}
@@ -249,19 +269,19 @@ static char *qasLoadScriptSection( const char *rootDir, const char *dir, const c
 	}
 	Q_strlwr( filename );
 
-	length = trap_FS_FOpenFile( filename, &filenum, FS_READ );
+	length = FS_FOpenFile( filename, &filenum, FS_READ );
 
 	if( length == -1 ) {
-		QAS_Printf( "Couldn't find script section: '%s'\n", filename );
+		Com_Printf( "Couldn't find script section: '%s'\n", filename );
 		return NULL;
 	}
 
 	//load the script data into memory
 	data = ( uint8_t * )qasAlloc( length + 1 );
-	trap_FS_Read( data, length, filenum );
-	trap_FS_FCloseFile( filenum );
+	FS_Read( data, length, filenum );
+	FS_FCloseFile( filenum );
 
-	QAS_Printf( "* Loaded script section '%s'\n", filename );
+	Com_Printf( "* Loaded script section '%s'\n", filename );
 	return (char *)data;
 }
 
@@ -275,17 +295,17 @@ static asIScriptModule *qasBuildScriptProject( asIScriptEngine *asEngine, const 
 	asIScriptModule *asModule;
 
 	if( asEngine == NULL ) {
-		QAS_Printf( S_COLOR_RED "qasBuildGameScript: Angelscript API unavailable\n" );
+		Com_Printf( S_COLOR_RED "qasBuildGameScript: Angelscript API unavailable\n" );
 		return NULL;
 	}
 
-	QAS_Printf( "* Initializing script '%s'\n", scriptName );
+	Com_Printf( "* Initializing script '%s'\n", scriptName );
 
 	// count referenced script sections
 	for( numSections = 0; ( section = COM_ListNameForPosition( script, numSections, QAS_SECTIONS_SEPARATOR ) ) != NULL; numSections++ ) ;
 
 	if( !numSections ) {
-		QAS_Printf( S_COLOR_RED "* Error: script '%s' has no sections\n", scriptName );
+		Com_Printf( S_COLOR_RED "* Error: script '%s' has no sections\n", scriptName );
 		return NULL;
 	}
 
@@ -293,7 +313,7 @@ static asIScriptModule *qasBuildScriptProject( asIScriptEngine *asEngine, const 
 
 	asModule = asEngine->GetModule( moduleName, asGM_CREATE_IF_NOT_EXISTS );
 	if( asModule == NULL ) {
-		QAS_Printf( S_COLOR_RED "qasBuildGameScript: GetModule '%s' failed\n", moduleName );
+		Com_Printf( S_COLOR_RED "qasBuildGameScript: GetModule '%s' failed\n", moduleName );
 		return NULL;
 	}
 
@@ -304,21 +324,21 @@ static asIScriptModule *qasBuildScriptProject( asIScriptEngine *asEngine, const 
 		qasFree( section );
 
 		if( error ) {
-			QAS_Printf( S_COLOR_RED "* Failed to add the script section %s with error %i\n", sectionName, error );
+			Com_Printf( S_COLOR_RED "* Failed to add the script section %s with error %i\n", sectionName, error );
 			asEngine->DiscardModule( moduleName );
 			return NULL;
 		}
 	}
 
 	if( sectionNum != numSections ) {
-		QAS_Printf( S_COLOR_RED "* Error: couldn't load all script sections.\n" );
+		Com_Printf( S_COLOR_RED "* Error: couldn't load all script sections.\n" );
 		asEngine->DiscardModule( moduleName );
 		return NULL;
 	}
 
 	error = asModule->Build();
 	if( error ) {
-		QAS_Printf( S_COLOR_RED "* Failed to build script '%s'\n", scriptName );
+		Com_Printf( S_COLOR_RED "* Failed to build script '%s'\n", scriptName );
 		asEngine->DiscardModule( moduleName );
 		return NULL;
 	}
@@ -338,23 +358,23 @@ asIScriptModule *qasLoadScriptProject( asIScriptEngine *engine, const char *modu
 	Q_snprintfz( filepath, sizeof( filepath ), "%s/%s/%s", rootDir, dir, filename );
 	COM_DefaultExtension( filepath, ext, sizeof( filepath ) );
 
-	length = trap_FS_FOpenFile( filepath, &filenum, FS_READ );
+	length = FS_FOpenFile( filepath, &filenum, FS_READ );
 
 	if( length == -1 ) {
-		QAS_Printf( "qasLoadScriptProject: Couldn't find '%s'.\n", filepath );
+		Com_Printf( "qasLoadScriptProject: Couldn't find '%s'.\n", filepath );
 		return NULL;
 	}
 
 	if( !length ) {
-		QAS_Printf( "qasLoadScriptProject: '%s' is empty.\n", filepath );
-		trap_FS_FCloseFile( filenum );
+		Com_Printf( "qasLoadScriptProject: '%s' is empty.\n", filepath );
+		FS_FCloseFile( filenum );
 		return NULL;
 	}
 
 	//load the script data into memory
 	data = ( char * )qasAlloc( length + 1 );
-	trap_FS_Read( data, length, filenum );
-	trap_FS_FCloseFile( filenum );
+	FS_Read( data, length, filenum );
+	FS_FCloseFile( filenum );
 
 	// Initialize the script
 	asModule = qasBuildScriptProject( engine, moduleName, rootDir, dir, filepath, data );

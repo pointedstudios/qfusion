@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "../qalgo/WswStdTypes.h"
 
-#define UI_API_VERSION      69
+#define UI_API_VERSION      70
 
 typedef size_t ( *ui_async_stream_read_cb_t )( const void *buf, size_t numb, float percentage,
 											 int status, const char *contentType, void *privatep );
@@ -194,8 +194,6 @@ typedef struct {
 
 	void *( *Mem_Alloc )( size_t size, const char *filename, int fileline );
 	void ( *Mem_Free )( void *data, const char *filename, int fileline );
-
-	struct angelwrap_api_s *( *asGetAngelExport )( void );
 
 	// Asynchronous HTTP requests
 	void ( *AsyncStream_UrlEncode )( const char *src, char *dst, size_t size );
