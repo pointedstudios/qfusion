@@ -22,10 +22,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "snd_cmdque.h"
 #include "snd_env_sampler.h"
 
-#ifndef __cplusplus
-extern C {
-#endif
-
 static sndCmdPipe_t *s_cmdPipe;
 
 static struct qthread_s *s_backThread;

@@ -48,42 +48,44 @@ static void *GetEfxProcAddress( ALCdevice *device, const char *str ) {
 	return rv;
 }
 
+#define GPA( proc ) do { q##proc = ( decltype( q##proc ) )GetEfxProcAddress( device, #proc ); } while( 0 )
+
 static void QAL_EFX_Init( ALCdevice *device ) {
-	qalGenEffects = GetEfxProcAddress( device, "alGenEffects" );
-	qalDeleteEffects = GetEfxProcAddress( device, "alDeleteEffects" );
-	qalIsEffect = GetEfxProcAddress( device, "alIsEffect" );
-	qalEffecti = GetEfxProcAddress( device, "alEffecti" );
-	qalEffectiv = GetEfxProcAddress( device, "alEffectiv" );
-	qalEffectf = GetEfxProcAddress( device, "alEffectf" );
-	qalEffectfv = GetEfxProcAddress( device, "alEffectfv" );
-	qalGetEffecti = GetEfxProcAddress( device, "alGetEffecti" );
-	qalGetEffeciv = GetEfxProcAddress( device, "alGetEffectiv" );
-	qalGetEffectf = GetEfxProcAddress( device, "alGetEffectf" );
-	qalGetEffectfv = GetEfxProcAddress( device, "alGetEffectfv" );
+	GPA( alGenEffects );
+	GPA( alDeleteEffects );
+	GPA( alIsEffect );
+	GPA( alEffecti );
+	GPA( alEffectiv );
+	GPA( alEffectf );
+	GPA( alEffectfv );
+	GPA( alGetEffecti );
+	GPA( alGetEffectiv );
+	GPA( alGetEffectf );
+	GPA( alGetEffectfv );
 
-	qalGenFilters = GetEfxProcAddress( device, "alGenFilters" );
-	qalDeleteFilters = GetEfxProcAddress( device, "alDeleteFilters" );
-	qalIsFilter = GetEfxProcAddress( device, "alIsFilter" );
-	qalFilteri = GetEfxProcAddress( device, "alFilteri" );
-	qalFilteriv = GetEfxProcAddress( device, "alFilteriv" );
-	qalFilterf = GetEfxProcAddress( device, "alFilterf" );
-	qalFilterfv = GetEfxProcAddress( device, "alFilterfv" );
-	qalGetFilteri = GetEfxProcAddress( device, "alGetFilteri" );
-	qalGetFilteriv = GetEfxProcAddress( device, "alGetFilteriv" );
-	qalGetFilterf = GetEfxProcAddress( device, "alGetFilterf" );
-	qalGetFilterfv = GetEfxProcAddress( device, "alGetFilterfv" );
+	GPA( alGenFilters );
+	GPA( alDeleteFilters );
+	GPA( alIsFilter );
+	GPA( alFilteri );
+	GPA( alFilteriv );
+	GPA( alFilterf );
+	GPA( alFilterfv );
+	GPA( alGetFilteri );
+	GPA( alGetFilteriv );
+	GPA( alGetFilterf );
+	GPA( alGetFilterfv );
 
-	qalGenAuxiliaryEffectSlots = GetEfxProcAddress( device, "alGenAuxiliaryEffectSlots" );
-	qalDeleteAuxiliaryEffectSlots = GetEfxProcAddress( device, "alDeleteAuxiliaryEffectSlots" );
-	qalIsAuxiliaryEffectSlot = GetEfxProcAddress( device, "alIsAuxiliaryEffectSlot" );
-	qalAuxiliaryEffectSloti = GetEfxProcAddress( device, "alAuxiliaryEffectSloti" );
-	qalAuxiliaryEffectSlotiv = GetEfxProcAddress( device, "alAuxiliaryEffectSlotiv" );
-	qalAuxiliaryEffectSlotf = GetEfxProcAddress( device, "alAuxiliaryEffectSlotf" );
-	qalAuxiliaryEffectSlotfv = GetEfxProcAddress( device, "alAuxiliaryEffectSlotfv" );
-	qalGetAuxiliaryEffectSloti = GetEfxProcAddress( device, "alGetAuxiliaryEffectSloti" );
-	qalGetAuxiliaryEffectSlotiv = GetEfxProcAddress( device, "alGetAuxiliaryEffectSlotiv" );
-	qalGetAuxiliaryEffectSlotf = GetEfxProcAddress( device, "alGetAuxiliaryEffectSlotf" );
-	qalGetAuxiliaryEffectSlotfv = GetEfxProcAddress( device, "alGetAuxiliaryEffectSlotfv" );
+	GPA( alGenAuxiliaryEffectSlots );
+	GPA( alDeleteAuxiliaryEffectSlots );
+	GPA( alIsAuxiliaryEffectSlot );
+	GPA( alAuxiliaryEffectSloti );
+	GPA( alAuxiliaryEffectSlotiv );
+	GPA( alAuxiliaryEffectSlotf );
+	GPA( alAuxiliaryEffectSlotfv );
+	GPA( alGetAuxiliaryEffectSloti );
+	GPA( alGetAuxiliaryEffectSlotiv );
+	GPA( alGetAuxiliaryEffectSlotf );
+	GPA( alGetAuxiliaryEffectSlotfv );
 
 	// If the status has not been set to "failure"
 	if( efx_init_status != EFX_INIT_FAILURE ) {
@@ -101,7 +103,7 @@ static void QAL_EFX_Shutdown() {
 	qalEffectf = NULL;
 	qalEffectfv = NULL;
 	qalGetEffecti = NULL;
-	qalGetEffeciv = NULL;
+	qalGetEffectiv = NULL;
 	qalGetEffectf = NULL;
 	qalGetEffectfv = NULL;
 
@@ -134,6 +136,11 @@ static void QAL_EFX_Shutdown() {
 
 // Always define symbols for loaded procedures
 
+// We do not really want to indent these declarations and the dangling brace looks better with #ifdef
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 LPALGENEFFECTS qalGenEffects;
 LPALDELETEEFFECTS qalDeleteEffects;
 LPALISEFFECT qalIsEffect;
@@ -142,7 +149,7 @@ LPALEFFECTIV qalEffectiv;
 LPALEFFECTF qalEffectf;
 LPALEFFECTFV qalEffectfv;
 LPALGETEFFECTI qalGetEffecti;
-LPALGETEFFECTIV qalGetEffeciv;
+LPALGETEFFECTIV qalGetEffectiv;
 LPALGETEFFECTF qalGetEffectf;
 LPALGETEFFECTFV qalGetEffectfv;
 
@@ -169,6 +176,10 @@ LPALGETAUXILIARYEFFECTSLOTI qalGetAuxiliaryEffectSloti;
 LPALGETAUXILIARYEFFECTSLOTIV qalGetAuxiliaryEffectSlotiv;
 LPALGETAUXILIARYEFFECTSLOTF qalGetAuxiliaryEffectSlotf;
 LPALGETAUXILIARYEFFECTSLOTFV qalGetAuxiliaryEffectSlotfv;
+
+#ifdef __cplusplus
+}
+#endif
 
 #ifdef OPENAL_RUNTIME
 

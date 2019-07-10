@@ -332,10 +332,6 @@ void S_StopAviDemo( void );
 
 //====================================================================
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 unsigned S_GetRawSamplesLength( void );
 unsigned S_GetPositionedRawSamplesLength( int entnum );
 
@@ -373,9 +369,5 @@ void SF_RawSamples( unsigned int samples, unsigned int rate, unsigned short widt
 void SF_PositionedRawSamples( int entnum, float fvol, float attenuation,
 							  unsigned int samples, unsigned int rate,
 							  unsigned short width, unsigned short channels, const uint8_t *data );
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

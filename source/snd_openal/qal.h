@@ -304,7 +304,7 @@ extern LPALEFFECTIV qalEffectiv;
 extern LPALEFFECTF qalEffectf;
 extern LPALEFFECTFV qalEffectfv;
 extern LPALGETEFFECTI qalGetEffecti;
-extern LPALGETEFFECTIV qalGetEffeciv;
+extern LPALGETEFFECTIV qalGetEffectiv;
 extern LPALGETEFFECTF qalGetEffectf;
 extern LPALGETEFFECTFV qalGetEffectfv;
 
