@@ -22,8 +22,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 static sound_export_t *se;
 static mempool_t *cl_soundmodulepool;
 
-static void *sound_library = NULL;
-
 static cvar_t *s_module = NULL;
 static bool s_loaded = false;
 
@@ -119,48 +117,20 @@ static void CL_SoundModule_MemEmptyPool( mempool_t *pool, const char *filename, 
 	_Mem_EmptyPool( pool, MEMPOOL_SOUND, 0, filename, fileline );
 }
 
+sound_export_t *GetSoundAPI( sound_import_t * );
+
 /*
 * CL_SoundModule_Load
 *
 * Helper function to try loading sound module with certain name
 */
 static bool CL_SoundModule_Load( const char *name, sound_import_t *import, bool verbose ) {
-	int apiversion;
-	size_t file_size;
-	char *file;
-	void *( *GetSoundAPI )( void * );
-	dllfunc_t funcs[2];
-
 	if( verbose ) {
 		Com_Printf( "Loading sound module: %s\n", name );
 	}
 
-	file_size = strlen( LIB_DIRECTORY "/" LIB_PREFIX "snd_" ) + strlen( name ) + 1 + strlen( ARCH ) + strlen( LIB_SUFFIX ) + 1;
-	file = (char *)Mem_TempMalloc( file_size );
-	Q_snprintfz( file, file_size, LIB_DIRECTORY "/" LIB_PREFIX "snd_%s_" ARCH LIB_SUFFIX, name );
-
-	funcs[0].name = "GetSoundAPI";
-	funcs[0].funcPointer = ( void ** )&GetSoundAPI;
-	funcs[1].name = NULL;
-	sound_library = Com_LoadLibrary( file, funcs );
-
-	Mem_TempFree( file );
-
-	if( !sound_library ) {
-		Com_Printf( "Loading %s failed\n", name );
-		return false;
-	}
-
 	s_loaded = true;
-
 	se = ( sound_export_t * )GetSoundAPI( import );
-	apiversion = se->API();
-	if( apiversion != SOUND_API_VERSION ) {
-		CL_SoundModule_Shutdown( verbose );
-		Com_Printf( "Wrong module version for %s: %i, not %i\n", name, apiversion, SOUND_API_VERSION );
-		return false;
-	}
-
 	if( !se->Init( VID_GetWindowHandle(), MAX_EDICTS, verbose ) ) {
 		CL_SoundModule_Shutdown( verbose );
 		Com_Printf( "Initialization of %s failed\n", name );
@@ -376,7 +346,7 @@ void CL_SoundModule_Shutdown( bool verbose ) {
 
 	s_loaded = false;
 
-	if( se && se->API() == SOUND_API_VERSION ) {
+	if( se ) {
 		se->Shutdown( verbose );
 		se = NULL;
 	}
@@ -386,7 +356,6 @@ void CL_SoundModule_Shutdown( bool verbose ) {
 	}
 	cl.sound_cms = NULL;
 
-	Com_UnloadLibrary( &sound_library );
 	Mem_FreePool( &cl_soundmodulepool );
 }
 

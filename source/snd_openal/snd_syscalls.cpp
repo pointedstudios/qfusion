@@ -27,7 +27,7 @@ sound_import_t SOUND_IMPORT;
 *
 * Returns a pointer to the structure with all entry points
 */
-extern "C" QF_DLL_EXPORT sound_export_t *GetSoundAPI( sound_import_t *import ) {
+sound_export_t *GetSoundAPI( sound_import_t *import ) {
 	static sound_export_t globals;
 
 	SOUND_IMPORT = *import;
