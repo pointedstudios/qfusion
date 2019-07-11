@@ -482,7 +482,7 @@ load_refresh:
 		CL_SoundModule_Init( verbose );
 
 		RF_BeginRegistration();
-		CL_SoundModule_BeginRegistration();
+		SoundSystem::Instance()->BeginRegistration();
 
 		FTLIB_PrecacheFonts( verbose );
 
@@ -510,7 +510,7 @@ load_refresh:
 		}
 
 		RF_EndRegistration();
-		CL_SoundModule_EndRegistration();
+		SoundSystem::Instance()->EndRegistration();
 
 		vid_ref_modified = false;
 		vid_ref_verbose = true;

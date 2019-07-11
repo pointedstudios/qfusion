@@ -166,7 +166,7 @@ static void ENV_CollectRegularEnvironmentUpdates() {
 	int64_t millisNow;
 	int contents;
 
-	millisNow = trap_Milliseconds();
+	millisNow = Sys_Milliseconds();
 
 	auto &priorityQueue = ::sourcesUpdatePriorityQueue;
 
@@ -184,7 +184,7 @@ static void ENV_CollectRegularEnvironmentUpdates() {
 			continue;
 		}
 
-		contents = trap_PointContents( src->origin );
+		contents = S_PointContents( src->origin );
 		bool wasInLiquid = updateState->isInLiquid;
 		updateState->isInLiquid = ( contents & ( CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER ) ) != 0;
 		if( updateState->isInLiquid ^ wasInLiquid ) {
@@ -262,7 +262,7 @@ src_t *SourcesUpdatePriorityQueue::PopSource() {
 }
 
 static void ENV_ProcessUpdatesPriorityQueue() {
-	const uint64_t micros = trap_Microseconds();
+	const uint64_t micros = Sys_Microseconds();
 	const int64_t millis = (int64_t)( micros / 1000 );
 	src_t *src;
 
@@ -291,7 +291,7 @@ static void ENV_ProcessUpdatesPriorityQueue() {
 		// Stop updates if the time quota has been exceeded immediately.
 		// Do not block the commands queue processing.
 		// The priority queue will be rebuilt next ENV_UpdateListenerCall().
-		if( trap_Microseconds() - micros > 2000 && lastProcessedPriority < 1.0f ) {
+		if( Sys_Microseconds() - micros > 2000 && lastProcessedPriority < 1.0f ) {
 			break;
 		}
 	}
@@ -352,7 +352,7 @@ void ENV_UpdateListener( const vec3_t origin, const vec3_t velocity, const mat3_
 	// Check the "head" contents. We assume the regular player viewheight.
 	VectorCopy( origin, testedOrigin );
 	testedOrigin[2] += 18;
-	int contents = trap_PointContents( testedOrigin );
+	int contents = S_PointContents( testedOrigin );
 
 	isListenerInLiquid = ( contents & ( CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER ) ) != 0;
 	if( listenerProps.isInLiquid != isListenerInLiquid ) {
@@ -365,7 +365,7 @@ void ENV_UpdateListener( const vec3_t origin, const vec3_t velocity, const mat3_
 
 	// Sanitize the possibly modified cvar before the environment update
 	if( s_environment_sampling_quality->value < 0.0f || s_environment_sampling_quality->value > 1.0f ) {
-		trap_Cvar_ForceSet( s_environment_sampling_quality->name, "0.5" );
+		Cvar_ForceSet( s_environment_sampling_quality->name, "0.5" );
 	}
 
 	sourcesUpdatePriorityQueue.Clear();
@@ -379,7 +379,7 @@ void ENV_UpdateListener( const vec3_t origin, const vec3_t velocity, const mat3_
 	ENV_ProcessUpdatesPriorityQueue();
 
 	// Panning info is dependent of environment one, make sure it is executed last
-	ENV_UpdatePanning( trap_Milliseconds(), testedOrigin, axes );
+	ENV_UpdatePanning( Sys_Milliseconds(), testedOrigin, axes );
 }
 
 static void ENV_InterpolateEnvironmentProps( src_t *src, int64_t millisNow ) {
@@ -415,7 +415,7 @@ static void ENV_UpdateSourceEnvironment( src_t *src, int64_t millisNow, const sr
 	updateState->needsInterpolation = true;
 
 	// Get the leaf num before the update as it is important for all present tests
-	updateState->leafNum = trap_PointLeafNum( src->origin );
+	updateState->leafNum = S_PointLeafNum( src->origin );
 
 	updateState->effect = EffectSamplers::TryApply( listenerProps, src, tryReusePropsSrc );
 

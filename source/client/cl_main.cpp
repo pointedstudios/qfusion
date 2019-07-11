@@ -673,7 +673,7 @@ static void CL_BeginRegistration( void ) {
 	cls.registrationOpen = true;
 
 	RF_BeginRegistration();
-	CL_SoundModule_BeginRegistration();
+	SoundSystem::Instance()->BeginRegistration();
 }
 
 /*
@@ -689,7 +689,7 @@ static void CL_EndRegistration( void ) {
 	FTLIB_TouchAllFonts();
 	CL_UIModule_TouchAllAssets();
 	RF_EndRegistration();
-	CL_SoundModule_EndRegistration();
+	SoundSystem::Instance()->EndRegistration();
 }
 
 /*
@@ -1758,7 +1758,7 @@ void CL_SetClientState( int state ) {
 			Con_Close();
 			CL_UIModule_ForceMenuOff();
 			CL_SoundModule_StopBackgroundTrack();
-			CL_SoundModule_Clear();
+			SoundSystem::Instance()->Clear();
 			CL_SetKeyDest( key_game );
 			//SCR_UpdateScreen();
 			break;
@@ -1778,7 +1778,7 @@ void CL_SetClientState( int state ) {
 			CL_SetKeyDest( key_game );
 			//SCR_UpdateScreen();
 			CL_AddReliableCommand( "svmotd 1" );
-			CL_SoundModule_Clear();
+			SoundSystem::Instance()->Clear();
 			break;
 		default:
 			break;
@@ -2583,9 +2583,9 @@ void CL_Frame( int realMsec, int gameMsec ) {
 		// if the loading plaque is up, clear everything out to make sure we aren't looping a dirty
 		// dma buffer while loading
 		if( cls.disable_screen ) {
-			CL_SoundModule_Clear();
+			SoundSystem::Instance()->Clear();
 		} else {
-			CL_SoundModule_Update( vec3_origin, vec3_origin, axis_identity, NULL, false );
+			SoundSystem::Instance()->Update( vec3_origin, vec3_origin, axis_identity, false );
 		}
 	}
 

@@ -91,11 +91,11 @@ public:
 
 class SharingAllocator : public TaggedAllocator {
 	void *RawAlloc( size_t size, const char *logTag ) override {
-		trap_Error( "SharingAllocator::RawAlloc(): Should be unreachable\n" );
+		Com_Error( ERR_FATAL, "SharingAllocator::RawAlloc(): Should be unreachable\n" );
 	}
 
 	void RawFree( void *p, const char *logTag ) override {
-		trap_Error( "SharingAllocator::RawFree(): Should be unreachable\n" );
+		Com_Error( ERR_FATAL, "SharingAllocator::RawFree(): Should be unreachable\n" );
 	}
 protected:
 	uint32_t *RawRefCountOf( void *p );

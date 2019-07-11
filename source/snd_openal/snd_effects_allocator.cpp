@@ -30,7 +30,7 @@ void *EffectsAllocator::AllocEntry( const src_t *src, ALint forType ) {
 		}
 	}
 
-	trap_Error( "EffectsAllocator::AllocEntry(): There are no free slots for an effect\n" );
+	Com_Error( ERR_FATAL, "EffectsAllocator::AllocEntry(): There are no free slots for an effect\n" );
 }
 
 void EffectsAllocator::DeleteEffect( Effect *effect ) {
@@ -46,7 +46,7 @@ inline void EffectsAllocator::GetEntryIndices( const void *entry, int *sourceInd
 #ifndef PUBLIC_BUILD
 	if( (uint8_t *)entry < storage || (uint8_t *)entry >= storage + sizeof( storage ) ) {
 		const char *format = "EffectsAllocator::FreeEntry(): An entry %p is out of storage bounds [%p, %p)\n";
-		trap_Error( va( format, entry, storage, storage + sizeof( storage ) ) );
+		Com_Error( ERR_FATAL, format, entry, storage, storage + sizeof( storage ) );
 	}
 #endif
 
@@ -68,7 +68,7 @@ void EffectsAllocator::FreeEntry( const void *entry ) {
 #ifndef PUBLIC_BUILD
 	if( *effectTypeRef <= AL_EFFECT_NULL || *effectTypeRef > AL_EFFECT_EAXREVERB ) {
 		const char *format = "EffectsAllocator::FreeEntry(): An effect for source #%d and slot %d is not in use\n";
-		trap_Error( va( format, sourceIndex, interleavedSlotIndex ) );
+		Com_Error( ERR_FATAL, format, sourceIndex, interleavedSlotIndex );
 	}
 #endif
 

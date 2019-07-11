@@ -357,8 +357,8 @@ void EaxReverbEffect::UpdateDelegatedSpatialization( struct src_s *src, const ve
 		// Provide a fake origin for the source that is at the same distance
 		// as the real origin and is aligned to the sound propagation "window"
 		// TODO: Precache at least the listener leaf for this sound backend update frame
-		if( const int listenerLeaf = trap_PointLeafNum( listenerOrigin ) ) {
-			if( const int srcLeaf = trap_PointLeafNum( src->origin ) ) {
+		if( const int listenerLeaf = S_PointLeafNum( listenerOrigin ) ) {
+			if( const int srcLeaf = S_PointLeafNum( src->origin ) ) {
 				vec3_t dir;
 				float distance;
 				if( PropagationTable::Instance()->GetIndirectPathProps( srcLeaf, listenerLeaf, dir, &distance ) ) {

@@ -291,7 +291,7 @@ void SCR_PauseCinematic( bool pause ) {
 	if( cl.cin.pause_cnt == 1 && pause ) {
 		cl.cin.pauseTime = SCR_CinematicTime();
 		CL_SoundModule_LockBackgroundTrack( true );
-		CL_SoundModule_Clear();
+		SoundSystem::Instance()->Clear();
 	} else if( cl.cin.pause_cnt == 0 && !pause ) {
 		cl.cin.startTime += SCR_CinematicTime() - cl.cin.pauseTime;
 		cl.cin.pauseTime = 0;

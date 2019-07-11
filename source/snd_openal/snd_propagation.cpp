@@ -170,7 +170,7 @@ public:
 	bool TryUsingGlobalGraph( TargetType *target ) override;
 
 	DistanceType ComputeEdgeDistance( int leaf1, int leaf2 ) override {
-		trap_Error( "PropagationGraphBuilder<?, ?>::ComputeEdgeDistance() should not be called\n" );
+		Com_Error( ERR_FATAL, "PropagationGraphBuilder<?, ?>::ComputeEdgeDistance() should not be called\n" );
 	}
 private:
 	using SuperType = GraphBuilder<int, DistanceType>;
@@ -335,7 +335,7 @@ bool LeafToLeafDirBuilder::PrepareTestedPointForLeaf( int leafNum, int storageIn
 			float random01 = randomScale * ( randomnessEngine() - randomShift );
 			point[i] += -0.5f + random01 * leafDimensions[storageIndex][i];
 		}
-		if( trap_PointLeafNum( point, topNodeHint ) == leafNum ) {
+		if( S_PointLeafNum( point, topNodeHint ) == leafNum ) {
 			return true;
 		}
 	}
@@ -343,11 +343,11 @@ bool LeafToLeafDirBuilder::PrepareTestedPointForLeaf( int leafNum, int storageIn
 }
 
 float LeafToLeafDirBuilder::Build( int leaf1, int leaf2, vec3_t resultDir ) {
-	if( !trap_LeafsInPVS( leaf1, leaf2 ) ) {
+	if( !S_LeafsInPVS( leaf1, leaf2 ) ) {
 		return std::numeric_limits<float>::infinity();
 	}
 
-	const vec3_t *const leafBounds[2] = { trap_GetLeafBounds( leaf1 ), trap_GetLeafBounds( leaf2 ) };
+	const vec3_t *const leafBounds[2] = { S_GetLeafBounds( leaf1 ), S_GetLeafBounds( leaf2 ) };
 
 	// Add a protection against bogus leaves
 	if( VectorCompare( leafBounds[0][0], leafBounds[1][0] ) && VectorCompare( leafBounds[1][0], leafBounds[1][1] ) ) {
@@ -374,11 +374,11 @@ float LeafToLeafDirBuilder::Build( int leaf1, int leaf2, vec3_t resultDir ) {
 	VectorClear( resultDir );
 	bool hasContributingDirs = false;
 
-	const int topNodeHint = trap_FindTopNodeForBox( nodeHintBounds[0], nodeHintBounds[1] );
+	const int topNodeHint = S_FindTopNodeForBox( nodeHintBounds[0], nodeHintBounds[1] );
 	// Cast a ray from a leaf center to another leaf center.
 	// Do not test whether these centers really belong to a leaf
 	// (we remember this happening a lot for (almost) degenerate leaves while computing LeafPropsCache).
-	trap_Trace( &trace, leafCenters[0], leafCenters[1], vec3_origin, vec3_origin, MASK_SOLID, topNodeHint );
+	S_Trace( &trace, leafCenters[0], leafCenters[1], vec3_origin, vec3_origin, MASK_SOLID, topNodeHint );
 	if( trace.fraction == 1.0f ) {
 		// Add center-to-center dir contribution.
 		VectorSubtract( leafCenters[1], leafCenters[0], resultDir );
@@ -403,7 +403,7 @@ float LeafToLeafDirBuilder::Build( int leaf1, int leaf2, vec3_t resultDir ) {
 			}
 		}
 
-		trap_Trace( &trace, leafPoints[0], leafPoints[1], vec3_origin, vec3_origin, MASK_SOLID, topNodeHint );
+		S_Trace( &trace, leafPoints[0], leafPoints[1], vec3_origin, vec3_origin, MASK_SOLID, topNodeHint );
 		if( trace.fraction != 1.0f ) {
 			continue;
 		}
@@ -1194,7 +1194,7 @@ public:
 };
 
 static inline void ComputeLeafCenter( int leaf, vec3_t result ) {
-	const vec3_t *bounds = trap_GetLeafBounds( leaf );
+	const vec3_t *bounds = S_GetLeafBounds( leaf );
 	VectorSubtract( bounds[1], bounds[0], result );
 	VectorScale( result, 0.5f, result );
 	VectorAdd( bounds[0], result, result );
@@ -1426,7 +1426,7 @@ PropagationTableBuilder<DistanceType>::~PropagationTableBuilder() {
 		S_Free( table );
 	}
 	if( progressLock ) {
-		trap_Mutex_Destroy( &progressLock );
+		QMutex_Destroy( &progressLock );
 	}
 }
 
@@ -1435,10 +1435,10 @@ class QMutexLock {
 public:
 	explicit QMutexLock( struct qmutex_s *mutex_ ): mutex( mutex_ ) {
 		assert( mutex );
-		trap_Mutex_Lock( mutex );
+		QMutex_Lock( mutex );
 	}
 	~QMutexLock() {
-		trap_Mutex_Unlock( mutex );
+		QMutex_Unlock( mutex );
 	}
 };
 
@@ -1461,7 +1461,7 @@ void PropagationTableBuilder<DistanceType>::AddTaskProgress( int taskWorkloadDel
 
 template <typename DistanceType>
 bool PropagationTableBuilder<DistanceType>::Build() {
-	progressLock = trap_Mutex_Create();
+	progressLock = QMutex_Create();
 	if( !progressLock ) {
 		return false;
 	}
@@ -1585,7 +1585,7 @@ void PropagationTableBuilder<DistanceType>::ValidateJointResults() {
 	if( numLeafs <= 0 ) {
 		ValidationError( "Illegal graph NumLeafs() %d", numLeafs );
 	}
-	const int actualNumLeafs = trap_NumLeafs();
+	const int actualNumLeafs = S_NumLeafs();
 	if( numLeafs != actualNumLeafs ) {
 		ValidationError( "graph NumLeafs() %d does not match actual map num leafs %d", numLeafs, actualNumLeafs );
 	}
@@ -1646,21 +1646,13 @@ void PropagationTableBuilder<DistanceType>::ValidateJointResults() {
 template <typename DistanceType>
 void PropagationTableBuilder<DistanceType>::ValidationError( const char *format, ... ) {
 	char buffer[1024];
-	constexpr const char tag[] = "PropagationTableBuilder::ValidateJointResults(): ";
-	// Make sure we use the proper size
-	static_assert( sizeof( tag ) > sizeof( char * ), "Do not use sizeof( char * ) instead of a real array size" );
-	// Copy including the last zero byte
-	memcpy( buffer, tag, sizeof( tag ) );
-	// Start writing at the zero byte position
-	char *writablePtr = buffer + sizeof( tag ) - 1;
 
 	va_list va;
 	va_start( va, format );
-	Q_vsnprintfz( writablePtr, sizeof( buffer ) -  sizeof( tag ), format, va );
+	Q_snprintfz( buffer, sizeof( buffer ), format, va );
 	va_end( va );
-	trap_Print( buffer );
-	trap_Print("\n");
-	abort();
+
+	Com_Error( ERR_FATAL, "PropagationTableBuilder<?>::ValidateJointResults(): %s", buffer );
 }
 
 template <typename DistanceType>
@@ -2021,7 +2013,7 @@ void PropagationBuilderTask<DistanceType>::BuildInfluxDirForLeaf( float *allocat
 			// Lets hope this happens rarely enough to avoid caching leaf centers
 			vec3_t centers[2];
 			for( int j = 0; j < 2; ++j ) {
-				const vec3_t *const bounds = trap_GetLeafBounds( leafsChain[i] );
+				const vec3_t *const bounds = S_GetLeafBounds( leafsChain[i] );
 				VectorSubtract( bounds[1], bounds[0], centers[i] );
 				VectorScale( centers[i], 0.5f, centers[i] );
 				VectorAdd( centers[i], bounds[0], centers[i] );

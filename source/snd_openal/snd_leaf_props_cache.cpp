@@ -172,7 +172,7 @@ bool LeafPropsWriter::WriteProps( const LeafProps &props ) {
 									props.RoomSizeFactor(), props.SkyFactor(),
 									props.WaterFactor(), props.MetalFactor() );
 
-	int charsWritten = trap_FS_Write( buffer, (size_t)charsPrinted, fd );
+	int charsWritten = FS_Write( buffer, (size_t)charsPrinted, fd );
 	if( charsWritten != charsPrinted ) {
 		fsResult = -1;
 		return false;
@@ -389,7 +389,7 @@ bool LeafPropsSampler::ComputeLeafProps( const vec3_t origin, LeafProps *props )
 }
 
 LeafProps LeafPropsComputationTask::ComputeLeafProps( int leafNum ) {
-	const vec3_t *leafBounds = trap_GetLeafBounds( leafNum );
+	const vec3_t *leafBounds = S_GetLeafBounds( leafNum );
 	const float *leafMins = leafBounds[0];
 	const float *leafMaxs = leafBounds[1];
 
@@ -433,7 +433,7 @@ LeafProps LeafPropsComputationTask::ComputeLeafProps( int leafNum ) {
 
 			// Check whether the point is really in leaf (the leaf is not a box but is inscribed in the bounds box)
 			// Some bogus leafs (that are probably degenerate planes) lead to infinite looping otherwise
-			if( trap_PointLeafNum( point ) != leafNum ) {
+			if( S_PointLeafNum( point ) != leafNum ) {
 				continue;
 			}
 

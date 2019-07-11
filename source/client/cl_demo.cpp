@@ -220,7 +220,7 @@ static int demofilelen, demofilelentotal;
 	}
 
 	if( cls.demo.avi_audio ) {
-		CL_SoundModule_BeginAviDemo();
+		SoundSystem::Instance()->BeginAviDemo();
 	}
 }
 
@@ -238,7 +238,7 @@ static void CL_StopDemoAviDump( void ) {
 	}
 
 	if( cls.demo.avi_audio ) {
-		CL_SoundModule_StopAviDemo();
+		SoundSystem::Instance()->StopAviDemo();
 		cls.demo.avi_audio = false;
 	}
 

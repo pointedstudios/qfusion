@@ -81,7 +81,7 @@ typedef struct {
 // the client_state_t structure is wiped completely at every
 // server map change
 //
-typedef struct {
+typedef struct client_state_s {
 	int timeoutcount;
 
 	cl_timedemo_t timedemo;
@@ -99,7 +99,6 @@ typedef struct {
 	uint8_t *frames_areabits;
 
 	cmodel_state_t *cms;
-	cmodel_state_t *sound_cms;      // a separated collison model instance for sound if it needs thread safety
 
 	// the client maintains its own idea of view angles, which are
 	// sent to the server each frame.  It is cleared to 0 upon entering each level.
@@ -431,13 +430,8 @@ bool CL_GameModule_IsTouchDown( int id );
 //
 void CL_SoundModule_Init( bool verbose );
 void CL_SoundModule_Shutdown( bool verbose );
-void CL_SoundModule_BeginRegistration( void );
-void CL_SoundModule_EndRegistration( void );
 void CL_SoundModule_StopAllSounds( bool clear, bool stopMusic );
-void CL_SoundModule_Clear( void );
 void CL_SoundModule_SetEntitySpatilization( int entNum, vec3_t origin, vec3_t velocity );
-void CL_SoundModule_Update( const vec3_t origin, const vec3_t velocity, const mat3_t axis, const char *identity, bool avidump );
-void CL_SoundModule_Activate( bool activate );
 struct sfx_s *CL_SoundModule_RegisterSound( const char *sample );
 void CL_SoundModule_StartFixedSound( struct sfx_s *sfx, const vec3_t origin, int channel, float fvol, float attenuation );
 void CL_SoundModule_StartRelativeSound( struct sfx_s *sfx, int entnum, int channel, float fvol, float attenuation );
@@ -455,8 +449,6 @@ unsigned int CL_SoundModule_GetPositionedRawSamplesLength( int entnum );
 void CL_SoundModule_StartBackgroundTrack( const char *intro, const char *loop, int mode );
 void CL_SoundModule_StopBackgroundTrack( void );
 void CL_SoundModule_LockBackgroundTrack( bool lock );
-void CL_SoundModule_BeginAviDemo( void );
-void CL_SoundModule_StopAviDemo( void );
 
 //
 // cl_ui.c

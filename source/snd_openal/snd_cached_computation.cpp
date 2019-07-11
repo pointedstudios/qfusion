@@ -5,14 +5,14 @@
 #include <initializer_list>
 
 void CachedComputation::EnsureValid() {
-	const char *actualMap = trap_GetConfigString( CS_WORLDMODEL );
-	const int actualNumLeafs = trap_NumLeafs();
+	const char *actualMap = S_GetConfigString( CS_WORLDMODEL );
+	const int actualNumLeafs = S_NumLeafs();
 	// Should not be used for empty maps
 	if( !*actualMap || !actualNumLeafs ) {
 		return;
 	}
 
-	const char *actualChecksum = trap_GetConfigString( CS_MAPCHECKSUM );
+	const char *actualChecksum = S_GetConfigString( CS_MAPCHECKSUM );
 	if( actualNumLeafs == numLeafs && !strcmp( actualMap, mapName ) && !strcmp( actualChecksum, mapHash ) ) {
 		return;
 	}
@@ -38,7 +38,7 @@ void CachedComputation::EnsureValid() {
 
 	NotifyOfBeingAboutToCompute();
 
-	const bool fastAndCoarse = !trap_Cvar_Value( "developer" );
+	const bool fastAndCoarse = !Cvar_Value( "developer" );
 	if( !ComputeNewState( fastAndCoarse ) ) {
 		NotifyOfComputationFailure();
 		ProvideDummyData();
@@ -64,7 +64,7 @@ void CachedComputation::NotifyOfBeingAboutToCompute() {
 }
 
 void CachedComputation::NotifyOfComputationSuccess() {
-	if( trap_Cvar_Value( "developer" ) ) {
+	if( Cvar_Value( "developer" ) ) {
 		Com_Printf( S_COLOR_GREY "Computations of new %s have been completed successfully\n", logTag );
 	}
 }
@@ -74,7 +74,7 @@ void CachedComputation::NotifyOfComputationFailure() {
 }
 
 void CachedComputation::NotifyOfSerializationSuccess() {
-	if( trap_Cvar_Value( "developer" ) ) {
+	if( Cvar_Value( "developer" ) ) {
 		Com_Printf( S_COLOR_GREY "Computation results for %s have been saved to a file cache successfully\n", logTag );
 	}
 }
@@ -88,7 +88,8 @@ bool CachedComputationReader::ExpectString( const char *string ) {
 
 	for( const char *s = string; *s; ++s ) {
 		if( *s == '\r' || *s == '\n' || *s == ' ' || *s == '\t' ) {
-			trap_Error( "CachedComputationReader::ExpectString(): The expected string should not contain a whitespace" );
+			const char *tag = "CachedComputationReader::ExpectString()";
+			Com_Error( ERR_FATAL, "%s: The expected string should not contain a whitespace", tag );
 		}
 		// We have to be aware of both CR and LF
 		// as this method could be called for binary files too
@@ -141,7 +142,7 @@ CachedComputationReader::CachedComputationReader( const CachedComputation *paren
 	}
 
 	assert( fd >= 0 );
-	if( fsResult != trap_FS_Read( fileData, (size_t)fileSize, fd ) ) {
+	if( fsResult != FS_Read( fileData, (size_t)fileSize, fd ) ) {
 		fsResult = -1;
 		return;
 	}
@@ -185,7 +186,7 @@ CachedComputationWriter::CachedComputationWriter( const CachedComputation *paren
 bool CachedComputationWriter::WriteString( const char *string ) {
 	char buffer[MAX_STRING_CHARS];
 	auto charsPrinted = (unsigned)Q_snprintfz( buffer, sizeof( buffer ), "%s\r\n", string );
-	if( charsPrinted == (unsigned)trap_FS_Write( buffer, charsPrinted, fd ) ) {
+	if( charsPrinted == (unsigned)FS_Write( buffer, charsPrinted, fd ) ) {
 		bytesWritten += charsPrinted;
 		return true;
 	}
@@ -196,7 +197,7 @@ bool CachedComputationWriter::Write( const void *data, size_t size ) {
 	if( fsResult < 0 ) {
 		return false;
 	}
-	if( trap_FS_Write( data, size, fd ) != (int)size ) {
+	if( FS_Write( data, size, fd ) != (int)size ) {
 		fsResult = -1;
 		return false;
 	}

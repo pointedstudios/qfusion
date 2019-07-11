@@ -79,8 +79,7 @@ static sfx_t *buffer_find_free( void ) {
 		}
 	}
 
-	S_Error( "Sound Limit Exceeded.\n" );
-	return NULL;
+	Com_Error( ERR_FATAL, "Sound Limit Exceeded.\n" );
 }
 
 sfx_t *S_GetBufferById( int id ) {
@@ -124,7 +123,7 @@ bool S_UnloadBuffer( sfx_t *sfx ) {
 static bool buffer_evict() {
 	int i;
 	int candinate = -1;
-	int candinate_value = trap_Milliseconds();
+	int candinate_value = Sys_Milliseconds();
 
 	for( i = 0; i < MAX_SFX; i++ ) {
 		if( knownSfx[i].filename[0] == '\0' || !knownSfx[i].inMemory || knownSfx[i].isLocked ) {
@@ -225,7 +224,7 @@ bool S_LoadBuffer( sfx_t *sfx ) {
 	if( sfx->filename[0] == '\0' || sfx->inMemory ) {
 		return false;
 	}
-	if( trap_FS_IsUrl( sfx->filename ) ) {
+	if( FS_IsUrl( sfx->filename ) ) {
 		return false;
 	}
 
@@ -355,7 +354,7 @@ void S_MarkBufferFree( sfx_t *sfx ) {
 	sfx->used = 0;
 }
 
-void S_ForEachBuffer( void ( *callback )( sfx_t *sfx ) ) {
+void S_ForEachBuffer( const std::function<void( sfx_t *)> &callback ) {
 	int i;
 
 	if( !buffers_inited ) {
@@ -422,7 +421,7 @@ void S_UseBuffer( sfx_t *sfx ) {
 		S_LoadBuffer( sfx );
 	}
 
-	sfx->used = trap_Milliseconds();
+	sfx->used = Sys_Milliseconds();
 }
 
 

@@ -66,7 +66,7 @@ protected:
 	 * The default implementation just triggers a fatal error if a real data computation has failed.
 	 */
 	virtual void ProvideDummyData() {
-		trap_Error( "Providing a dummy data is unsupported for this descendant of CachedComputation" );
+		Com_Error( ERR_FATAL, "Providing a dummy data is unsupported for this descendant of CachedComputation" );
 	}
 
 	virtual void NotifyOfBeingAboutToCompute();
@@ -121,12 +121,12 @@ public:
 		COM_StripExtension( fileName );
 		assert( *Extension() == '.' );
 		Q_strncatz( fileName, Extension(), sizeof( fileName ) );
-		fsResult = trap_FS_FOpenFile( fileName, &fd, fileFlags );
+		fsResult = FS_FOpenFile( fileName, &fd, fileFlags );
 	}
 
 	virtual ~CachedComputationIOHelper() {
 		if( fd >= 0 ) {
-			trap_FS_FCloseFile( fd );
+			FS_FCloseFile( fd );
 		}
 	}
 };

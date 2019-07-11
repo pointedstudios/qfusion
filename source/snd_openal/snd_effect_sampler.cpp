@@ -22,7 +22,7 @@ Effect *EffectSamplers::TryApply( const ListenerProps &listenerProps, src_t *src
 		return effect;
 	}
 
-	trap_Error( "Can't find an applicable effect sampler\n" );
+	Com_Error( ERR_FATAL, "EffectSamplers::TryApply(): Can't find an applicable effect sampler\n" );
 }
 
 // We want sampling results to be reproducible especially for leaf sampling and thus use this local implementation
@@ -84,7 +84,7 @@ static bool ENV_TryReuseSourceReverbProps( src_t *src, const src_t *tryReuseProp
 	VectorSubtract( tryReusePropsSrc->origin, dir, end );
 
 	trace_t trace;
-	trap_Trace( &trace, start, end, vec3_origin, vec3_origin, MASK_SOLID );
+	S_Trace( &trace, start, end, vec3_origin, vec3_origin, MASK_SOLID );
 	if( trace.fraction != 1.0f ) {
 		return false;
 	}
@@ -147,7 +147,7 @@ float ObstructedEffectSampler::ComputeDirectObstruction( const ListenerProps &li
 		return 0.0f;
 	}
 
-	if( !trap_LeafsInPVS( listenerProps.GetLeafNum(), trap_PointLeafNum( src->origin ) ) ) {
+	if( !S_LeafsInPVS( listenerProps.GetLeafNum(), S_PointLeafNum( src->origin ) ) ) {
 		return 1.0f;
 	}
 
@@ -162,8 +162,8 @@ float ObstructedEffectSampler::ComputeDirectObstruction( const ListenerProps &li
 		hintBounds[1][i] += DirectObstructionOffsetsHolder::MAX_OFFSET;
 	}
 
-	const int topNodeHint = trap_FindTopNodeForBox( hintBounds[0], hintBounds[1] );
-	trap_Trace( &trace, testedListenerOrigin, src->origin, vec3_origin, vec3_origin, MASK_SOLID, topNodeHint );
+	const int topNodeHint = S_FindTopNodeForBox( hintBounds[0], hintBounds[1] );
+	S_Trace( &trace, testedListenerOrigin, src->origin, vec3_origin, vec3_origin, MASK_SOLID, topNodeHint );
 	if( trace.fraction == 1.0f && !trace.startsolid ) {
 		// Consider zero obstruction in this case
 		return 0.0f;
@@ -179,7 +179,7 @@ float ObstructedEffectSampler::ComputeDirectObstruction( const ListenerProps &li
 		originOffset = directObstructionOffsetsHolder.offsets[ valueIndex ];
 
 		VectorAdd( src->origin, originOffset, testedSourceOrigin );
-		trap_Trace( &trace, testedListenerOrigin, testedSourceOrigin, vec3_origin, vec3_origin, MASK_SOLID, topNodeHint );
+		S_Trace( &trace, testedListenerOrigin, testedSourceOrigin, vec3_origin, vec3_origin, MASK_SOLID, topNodeHint );
 		if( trace.fraction == 1.0f && !trace.startsolid ) {
 			numPassedRays++;
 		}
@@ -420,11 +420,11 @@ void ReverbEffectSampler::EmitSecondaryRays() {
 		panningUpdateState->numPassedSecondaryRays = 0;
 		for( unsigned i = 0; i < numPrimaryHits; i++ ) {
 			// Cut off by PVS system early, we are not interested in actual ray hit points contrary to the primary emission.
-			if( !trap_LeafsInPVS( listenerLeafNum, trap_PointLeafNum( reflectionPoints[i] ) ) ) {
+			if( !S_LeafsInPVS( listenerLeafNum, S_PointLeafNum( reflectionPoints[i] ) ) ) {
 				continue;
 			}
 
-			trap_Trace( &trace, reflectionPoints[i], testedListenerOrigin, vec3_origin, vec3_origin, MASK_SOLID );
+			S_Trace( &trace, reflectionPoints[i], testedListenerOrigin, vec3_origin, vec3_origin, MASK_SOLID );
 			if( trace.fraction == 1.0f && !trace.startsolid ) {
 				numPassedSecondaryRays++;
 				float *savedPoint = panningUpdateState->reflectionPoints[panningUpdateState->numPassedSecondaryRays++];
@@ -433,11 +433,11 @@ void ReverbEffectSampler::EmitSecondaryRays() {
 		}
 	} else {
 		for( unsigned i = 0; i < numPrimaryHits; i++ ) {
-			if( !trap_LeafsInPVS( listenerLeafNum, trap_PointLeafNum( reflectionPoints[i] ) ) ) {
+			if( !S_LeafsInPVS( listenerLeafNum, S_PointLeafNum( reflectionPoints[i] ) ) ) {
 				continue;
 			}
 
-			trap_Trace( &trace, reflectionPoints[i], testedListenerOrigin, vec3_origin, vec3_origin, MASK_SOLID );
+			S_Trace( &trace, reflectionPoints[i], testedListenerOrigin, vec3_origin, vec3_origin, MASK_SOLID );
 			if( trace.fraction == 1.0f && !trace.startsolid ) {
 				numPassedSecondaryRays++;
 			}

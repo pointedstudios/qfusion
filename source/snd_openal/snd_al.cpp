@@ -149,7 +149,7 @@ static bool S_Init( void *hwnd, int maxEntities, bool verbose ) {
 		return false;
 	}
 
-	s_openAL_device = trap_Cvar_Get( "s_openAL_device", ALDEVICE_DEFAULT ? ALDEVICE_DEFAULT : defaultDevice, CVAR_ARCHIVE | CVAR_LATCH_SOUND );
+	s_openAL_device = Cvar_Get( "s_openAL_device", ALDEVICE_DEFAULT ? ALDEVICE_DEFAULT : defaultDevice, CVAR_ARCHIVE | CVAR_LATCH_SOUND );
 
 	devices = ( char * )qalcGetString( NULL, ALC_DEVICE_SPECIFIER );
 	for( numDevices = 0; *devices; devices += strlen( devices ) + 1, numDevices++ ) {
@@ -158,7 +158,7 @@ static bool S_Init( void *hwnd, int maxEntities, bool verbose ) {
 
 			// force case sensitive
 			if( strcmp( s_openAL_device->string, devices ) ) {
-				trap_Cvar_ForceSet( "s_openAL_device", devices );
+				Cvar_ForceSet( "s_openAL_device", devices );
 			}
 		}
 	}
@@ -172,7 +172,7 @@ static bool S_Init( void *hwnd, int maxEntities, bool verbose ) {
 	if( userDeviceNum == -1 ) {
 		Com_Printf( "'s_openAL_device': incorrect device name, reseting to default\n" );
 
-		trap_Cvar_ForceSet( "s_openAL_device", ALDEVICE_DEFAULT ? ALDEVICE_DEFAULT : defaultDevice );
+		Cvar_ForceSet( "s_openAL_device", ALDEVICE_DEFAULT ? ALDEVICE_DEFAULT : defaultDevice );
 
 		devices = ( char * )qalcGetString( NULL, ALC_DEVICE_SPECIFIER );
 		for( numDevices = 0; *devices; devices += strlen( devices ) + 1, numDevices++ ) {
@@ -182,7 +182,7 @@ static bool S_Init( void *hwnd, int maxEntities, bool verbose ) {
 		}
 
 		if( userDeviceNum == -1 ) {
-			trap_Cvar_ForceSet( "s_openAL_device", defaultDevice );
+			Cvar_ForceSet( "s_openAL_device", defaultDevice );
 		}
 	}
 
@@ -193,7 +193,7 @@ static bool S_Init( void *hwnd, int maxEntities, bool verbose ) {
 	}
 
 	if ( !QAL_Is_EFX_ExtensionSupported( alDevice ) ) {
-		trap_Cvar_ForceSet( s_environment_effects->name, "0" );
+		Cvar_ForceSet( s_environment_effects->name, "0" );
 	}
 
 	attrPtr = &attrList[0];
@@ -212,7 +212,7 @@ static bool S_Init( void *hwnd, int maxEntities, bool verbose ) {
 		// HRTF still might be forced by some other way (e.g. by some proprietary runtime).
 		Com_Printf( S_COLOR_YELLOW "HRTF effects will not be guaranteed.\n" );
 		Com_Printf( S_COLOR_YELLOW "HRTF feature requires the recent version of OpenAL SOFT runtime.\n" );
-		trap_Cvar_ForceSet( s_hrtf->name, "0" );
+		Cvar_ForceSet( s_hrtf->name, "0" );
 	}
 
 	// Terminate the attributes pairs list
@@ -748,7 +748,7 @@ static pipeCmdHandler_t sndCmdHandlers[SND_CMD_NUM_CMDS] =
 */
 static int S_EnqueuedCmdsWaiter( sndCmdPipe_t *queue, pipeCmdHandler_t *cmdHandlers, bool timeout ) {
 	int read = S_ReadEnqueuedCmds( queue, cmdHandlers );
-	int64_t now = trap_Milliseconds();
+	int64_t now = Sys_Milliseconds();
 
 	if( read < 0 ) {
 		// shutdown

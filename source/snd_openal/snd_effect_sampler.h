@@ -12,7 +12,7 @@ struct ListenerProps {
 
 	int GetLeafNum() const {
 		if( leafNum < 0 ) {
-			leafNum = trap_PointLeafNum( origin );
+			leafNum = S_PointLeafNum( origin );
 		}
 		return leafNum;
 	}

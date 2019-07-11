@@ -68,7 +68,7 @@ static void source_setup( src_t *src, sfx_t *sfx, bool forceStereo, int priority
 
 	clamp_low( attenuation, 0.0f );
 
-	src->lastUse = trap_Milliseconds();
+	src->lastUse = Sys_Milliseconds();
 	src->sfx = sfx;
 	src->priority = priority;
 	src->entNum = entNum;
@@ -364,7 +364,7 @@ bool S_InitSources( int maxEntities, bool verbose ) {
 				Com_Printf( S_COLOR_YELLOW "Warning: Cannot create enough sound effects.\n" );
 				Com_Printf( S_COLOR_YELLOW "Environment sound effects will be unavailable.\n" );
 				Com_Printf( S_COLOR_YELLOW "Make sure you are using the recent OpenAL runtime.\n" );
-				trap_Cvar_ForceSet( s_environment_effects->name, "0" );
+				Cvar_ForceSet( s_environment_effects->name, "0" );
 
 				// Cleanup already created effects while keeping sources
 				for( j = 0; j < src_count; ++j ) {
@@ -451,7 +451,7 @@ void S_UpdateSources( void ) {
 	int i, entNum;
 	ALint state;
 
-	const int64_t millisNow = trap_Milliseconds();
+	const int64_t millisNow = Sys_Milliseconds();
 
 	src_t *zombieSources[MAX_SRC];
 	int numZombieSources = 0;
@@ -553,10 +553,10 @@ static void S_ProcessZombieSources( src_t **zombieSources, int numZombieSources,
 	int effectsNumberThreshold = s_effects_number_threshold->integer;
 	if( effectsNumberThreshold < 8 ) {
 		effectsNumberThreshold = 8;
-		trap_Cvar_ForceSet( s_effects_number_threshold->name, "8" );
+		Cvar_ForceSet( s_effects_number_threshold->name, "8" );
 	} else if( effectsNumberThreshold > 32 ) {
 		effectsNumberThreshold = 32;
-		trap_Cvar_ForceSet( s_effects_number_threshold->name, "32" );
+		Cvar_ForceSet( s_effects_number_threshold->name, "32" );
 	}
 
 	if( numActiveEffects <= effectsNumberThreshold ) {
@@ -670,7 +670,7 @@ src_t *S_AllocSource( int priority, int entNum, int channel ) {
 	int i;
 	int empty = -1;
 	int weakest = -1;
-	int64_t weakest_time = trap_Milliseconds();
+	int64_t weakest_time = Sys_Milliseconds();
 	int weakest_priority = priority;
 
 	for( i = 0; i < src_count; i++ ) {

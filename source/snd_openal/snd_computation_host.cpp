@@ -23,7 +23,7 @@ void ParallelComputationHost::Shutdown() {
 
 int ParallelComputationHost::SuggestNumberOfTasks() {
 	unsigned numPhysicalProcessors, numLogicalProcessors;
-	if( !trap_GetNumberOfProcessors( &numPhysicalProcessors, &numLogicalProcessors ) ) {
+	if( !Sys_GetNumberOfProcessors( &numPhysicalProcessors, &numLogicalProcessors ) ) {
 		return 2;
 	}
 	if( numLogicalProcessors > numPhysicalProcessors * 2 ) {
@@ -43,7 +43,7 @@ void *TaskThreadFunc( void *param ) {
 	auto *const task = (ParallelComputationHost::PartialTask *)param;
 	// TODO: This is not that bad as it gets started almost immediately but still...
 	while( !task->hasStarted.load( std::memory_order_relaxed ) ) {
-		trap_Thread_Yield();
+		QThread_Yield();
 	}
 
 	task->Exec();
@@ -64,7 +64,7 @@ bool ParallelComputationHost::TryAddTask( PartialTask *task ) {
 
 	assert( !task->hasStarted && !task->isCompleted );
 
-	auto *threadHandle = trap_Thread_Create( &TaskThreadFunc, task );
+	auto *threadHandle = QThread_Create( &TaskThreadFunc, task );
 	if( !threadHandle ) {
 		// Destroy the task immediately as we always acquire an ownership over the task lifetime.
 		DestroyTask( task );
@@ -114,7 +114,7 @@ void ParallelComputationHost::WaitForTasksCompletion( const PartialTask *thisThr
 			return;
 		}
 		// Should not really be bad as all tasks are going to be complete on the first iteration
-		trap_Thread_Yield();
+		QThread_Yield();
 	}
 }
 

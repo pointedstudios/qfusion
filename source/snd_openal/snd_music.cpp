@@ -53,7 +53,7 @@ static bgTrack_t *S_AllocTrack( const char *filename ) {
 	track->ignore = false;
 	track->filename = (char *)( (uint8_t *)track + sizeof( *track ) );
 	strcpy( track->filename, filename );
-	track->isUrl = trap_FS_IsUrl( filename );
+	track->isUrl = FS_IsUrl( filename );
 	track->muteOnPause = track->isUrl;
 	track->anext = s_bgTrackHead;
 	s_bgTrackHead = track;
@@ -169,9 +169,9 @@ static void *S_OpenBackgroundTrackProc( void *ptrack ) {
 
 	s_bgTrackBuffering = buffering;
 
-	start = trap_Milliseconds();
+	start = Sys_Milliseconds();
 	while( s_bgTrackBuffering ) {
-		if( trap_Milliseconds() > start + BACKGROUND_TRACK_BUFFERING_TIMEOUT ) {
+		if( Sys_Milliseconds() > start + BACKGROUND_TRACK_BUFFERING_TIMEOUT ) {
 		} else if( S_EoStream( track->stream ) ) {
 		} else {
 			if( S_SeekSteam( track->stream, MUSIC_BUFFERING_SIZE, SEEK_SET ) < 0 ) {
@@ -199,7 +199,7 @@ static void *S_OpenBackgroundTrackProc( void *ptrack ) {
 static void S_OpenBackgroundTrackTask( bgTrack_t *track ) {
 	s_bgTrackLoading = true;
 	s_bgTrackBuffering = false;
-	s_bgOpenThread = trap_Thread_Create( S_OpenBackgroundTrackProc, track );
+	s_bgOpenThread = QThread_Create( S_OpenBackgroundTrackProc, track );
 }
 
 /*
@@ -207,7 +207,7 @@ static void S_OpenBackgroundTrackTask( bgTrack_t *track ) {
 */
 static void S_CloseBackgroundTrackTask( void ) {
 	s_bgTrackBuffering = false;
-	trap_Thread_Join( s_bgOpenThread );
+	QThread_Join( s_bgOpenThread );
 	s_bgOpenThread = NULL;
 }
 
@@ -247,15 +247,15 @@ static bgTrack_t *S_ReadPlaylistFile( const char *filename, bool shuffle, bool l
 	playlistItem_t items[MAX_PLAYLIST_ITEMS];
 	int i, numItems = 0;
 
-	length = trap_FS_FOpenFile( filename, &filenum, FS_READ );
+	length = FS_FOpenFile( filename, &filenum, FS_READ );
 	if( length < 0 ) {
 		return NULL;
 	}
 
 	// load the playlist into memory
 	data = (char *)S_Malloc( length + 1 );
-	trap_FS_Read( data, length, filenum );
-	trap_FS_FCloseFile( filenum );
+	FS_Read( data, length, filenum );
+	FS_FCloseFile( filenum );
 
 	srand( time( NULL ) );
 
@@ -280,7 +280,7 @@ static bgTrack_t *S_ReadPlaylistFile( const char *filename, bool shuffle, bool l
 			continue;
 		}
 
-		if( trap_FS_IsUrl( entry ) ) {
+		if( FS_IsUrl( entry ) ) {
 			items[numItems].track = S_AllocTrack( entry );
 		} else {
 			// append the entry name to playlist path

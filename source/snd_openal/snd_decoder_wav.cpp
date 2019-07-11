@@ -38,7 +38,7 @@ struct snd_wav_stream_s {
 static int FGetLittleLong( int f ) {
 	int v;
 
-	trap_FS_Read( &v, sizeof( v ), f );
+	FS_Read( &v, sizeof( v ), f );
 
 	return LittleLong( v );
 }
@@ -46,7 +46,7 @@ static int FGetLittleLong( int f ) {
 static int FGetLittleShort( int f ) {
 	short v;
 
-	trap_FS_Read( &v, sizeof( v ), f );
+	FS_Read( &v, sizeof( v ), f );
 
 	return LittleShort( v );
 }
@@ -56,7 +56,7 @@ static int readChunkInfo( int f, char *name ) {
 
 	name[4] = 0;
 
-	read = trap_FS_Read( name, 4, f );
+	read = FS_Read( name, 4, f );
 	if( read != 4 ) {
 		return 0;
 	}
@@ -79,7 +79,7 @@ static void skipChunk( int f, int length ) {
 		if( toread > sizeof( buffer ) ) {
 			toread = sizeof( buffer );
 		}
-		trap_FS_Read( buffer, toread, f );
+		FS_Read( buffer, toread, f );
 		length -= toread;
 	}
 }
@@ -132,7 +132,7 @@ static bool read_wav_header( int filenum, snd_info_t *info ) {
 	int fmtlen = 0;
 
 	// skip the riff wav header
-	trap_FS_Read( dump, 12, filenum );
+	FS_Read( dump, 12, filenum );
 
 	// Scan for the format chunk
 	if( !( fmtlen = findWavChunk( filenum, "fmt " ) ) ) {
@@ -192,33 +192,33 @@ void *decoder_wav_load( const char *filename, snd_info_t *info ) {
 	int read;
 	void *buffer;
 
-	if( trap_FS_IsUrl( filename ) ) {
+	if( FS_IsUrl( filename ) ) {
 		return NULL;
 	}
 
-	trap_FS_FOpenFile( filename, &filenum, FS_READ | FS_NOSIZE );
+	FS_FOpenFile( filename, &filenum, FS_READ | FS_NOSIZE );
 	if( !filenum ) {
 		return NULL;
 	}
 
 	if( !read_wav_header( filenum, info ) ) {
-		trap_FS_FCloseFile( filenum );
+		FS_FCloseFile( filenum );
 		Com_Printf( "Can't understand .wav file: %s\n", filename );
 		return NULL;
 	}
 
 	buffer = S_Malloc( info->size );
-	read = trap_FS_Read( buffer, info->size, filenum );
+	read = FS_Read( buffer, info->size, filenum );
 	if( read != info->size ) {
 		S_Free( buffer );
-		trap_FS_FCloseFile( filenum );
+		FS_FCloseFile( filenum );
 		Com_Printf( "Error reading .wav file: %s\n", filename );
 		return NULL;
 	}
 
 	byteSwapRawSamples( info->samples, info->width, info->channels, (uint8_t *)buffer );
 
-	trap_FS_FCloseFile( filenum );
+	FS_FCloseFile( filenum );
 
 	return buffer;
 }
@@ -232,7 +232,7 @@ snd_stream_t *decoder_wav_open( const char *filename, bool *delay ) {
 		return NULL;
 	}
 
-	stream->isUrl = trap_FS_IsUrl( filename );
+	stream->isUrl = FS_IsUrl( filename );
 	if( stream->isUrl ) {
 		return NULL;
 	}
@@ -244,7 +244,7 @@ snd_stream_t *decoder_wav_open( const char *filename, bool *delay ) {
 	stream->ptr = S_Malloc( sizeof( snd_wav_stream_t ) );
 	wav_stream = (snd_wav_stream_t *)stream->ptr;
 
-	trap_FS_FOpenFile( filename, &wav_stream->filenum, FS_READ | FS_NOSIZE );
+	FS_FOpenFile( filename, &wav_stream->filenum, FS_READ | FS_NOSIZE );
 	if( !wav_stream->filenum ) {
 		decoder_wav_stream_shutdown( stream );
 		return NULL;
@@ -293,7 +293,7 @@ int decoder_wav_read( snd_stream_t *stream, int bytes, void *buffer ) {
 	wav_stream->position += bytes_read;
 	samples = ( bytes_read / stream->info.width ) / stream->info.channels;
 
-	trap_FS_Read( buffer, bytes_read, wav_stream->filenum );
+	FS_Read( buffer, bytes_read, wav_stream->filenum );
 	byteSwapRawSamples( samples, stream->info.width, stream->info.channels, (const uint8_t *)buffer );
 
 	return bytes_read;
@@ -302,14 +302,14 @@ int decoder_wav_read( snd_stream_t *stream, int bytes, void *buffer ) {
 void decoder_wav_close( snd_stream_t *stream ) {
 	snd_wav_stream_t *wav_stream = (snd_wav_stream_t *)stream->ptr;
 
-	trap_FS_FCloseFile( wav_stream->filenum );
+	FS_FCloseFile( wav_stream->filenum );
 	decoder_wav_stream_shutdown( stream );
 }
 
 bool decoder_wav_reset( snd_stream_t *stream ) {
 	snd_wav_stream_t *wav_stream = (snd_wav_stream_t *)stream->ptr;
 
-	if( trap_FS_Seek( wav_stream->filenum, wav_stream->content_start, FS_SEEK_SET ) ) {
+	if( FS_Seek( wav_stream->filenum, wav_stream->content_start, FS_SEEK_SET ) ) {
 		return false;
 	}
 
@@ -319,21 +319,21 @@ bool decoder_wav_reset( snd_stream_t *stream ) {
 
 bool decoder_wav_eof( snd_stream_t *stream ) {
 	snd_wav_stream_t *wav_stream = (snd_wav_stream_t *)stream->ptr;
-	return trap_FS_Eof( wav_stream->filenum );
+	return FS_Eof( wav_stream->filenum );
 }
 
 int decoder_wav_tell( snd_stream_t *stream ) {
 	snd_wav_stream_t *wav_stream = (snd_wav_stream_t *)stream->ptr;
-	return trap_FS_Tell( wav_stream->filenum );
+	return FS_Tell( wav_stream->filenum );
 }
 
 int decoder_wav_seek( snd_stream_t *stream, int offset, int whence ) {
 	snd_wav_stream_t *wav_stream = (snd_wav_stream_t *)stream->ptr;
 
 	switch( whence ) {
-		case SEEK_SET: return trap_FS_Seek( wav_stream->filenum, offset, FS_SEEK_SET );
-		case SEEK_CUR: return trap_FS_Seek( wav_stream->filenum, offset, FS_SEEK_CUR );
-		case SEEK_END: return trap_FS_Seek( wav_stream->filenum, offset, FS_SEEK_END );
+		case SEEK_SET: return FS_Seek( wav_stream->filenum, offset, FS_SEEK_SET );
+		case SEEK_CUR: return FS_Seek( wav_stream->filenum, offset, FS_SEEK_CUR );
+		case SEEK_END: return FS_Seek( wav_stream->filenum, offset, FS_SEEK_END );
 	}
 
 	return -1;

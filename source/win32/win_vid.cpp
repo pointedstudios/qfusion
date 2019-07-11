@@ -277,7 +277,7 @@ static void AppActivate( BOOL fActive, BOOL minimize, BOOL destroy ) {
 
 	if( prevActiveApp != ActiveApp ) {
 		SCR_PauseCinematic( !ActiveApp );
-		CL_SoundModule_Activate( ActiveApp );
+		SoundSystem::Instance()->Activate( ActiveApp );
 	}
 
 	if( win_noalttab->integer ) {
@@ -480,7 +480,7 @@ LONG WINAPI MainWndProc(
 		break;
 
 		case WM_ENTERSIZEMOVE:
-			CL_SoundModule_Clear();
+			SoundSystem::Instance()->Clear();
 			break;
 
 		case WM_IME_STARTCOMPOSITION:

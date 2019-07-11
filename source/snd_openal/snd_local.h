@@ -24,19 +24,18 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 //#define VORBISLIB_RUNTIME // enable this define for dynamic linked vorbis libraries
 
-// it's in qcommon.h too, but we don't include it for modules
-typedef struct { const char *name; void **funcPointer; } dllfunc_t;
-
 #include "../gameshared/q_arch.h"
 #include "../gameshared/q_math.h"
 #include "../gameshared/q_shared.h"
 #include "../gameshared/q_cvar.h"
-
+#include "../qcommon/qcommon.h"
 #include "../client/snd_public.h"
-#include "snd_syscalls.h"
 #include "snd_cmdque.h"
 
 #include "qal.h"
+
+#include <algorithm>
+#include <functional>
 
 #ifdef _WIN32
 #define ALDRIVER "OpenAL32.dll"
@@ -58,11 +57,10 @@ typedef struct { const char *name; void **funcPointer; } dllfunc_t;
 
 extern struct mempool_s *soundpool;
 
-#define S_MemAlloc( pool, size ) trap_MemAlloc( pool, size, __FILE__, __LINE__ )
-#define S_MemFree( mem ) trap_MemFree( mem, __FILE__, __LINE__ )
-#define S_MemAllocPool( name ) trap_MemAllocPool( name, __FILE__, __LINE__ )
-#define S_MemFreePool( pool ) trap_MemFreePool( pool, __FILE__, __LINE__ )
-#define S_MemEmptyPool( pool ) trap_MemEmptyPool( pool, __FILE__, __LINE__ )
+#define S_MemAlloc( pool, size ) _Mem_Alloc( pool, size, MEMPOOL_SOUND, 0, __FILE__, __LINE__ )
+#define S_MemFree( mem ) _Mem_Free( mem, MEMPOOL_SOUND, 0, __FILE__, __LINE__ )
+#define S_MemAllocPool( name ) _Mem_AllocPool( NULL, name, MEMPOOL_SOUND, __FILE__, __LINE__ )
+#define S_MemFreePool( pool ) _Mem_FreePool( pool, MEMPOOL_SOUND, 0, __FILE__, __LINE__ )
 
 #define S_Malloc( size ) S_MemAlloc( soundpool, size )
 #define S_Free( data ) S_MemFree( data )
@@ -111,12 +109,6 @@ extern ALCcontext *alContext;
 #define SRCPRI_ONESHOT  2   // One-shot sounds
 #define SRCPRI_LOCAL    3   // Local sounds
 #define SRCPRI_STREAM   4   // Streams (music, cutscenes)
-
-/*
-* Exported functions
-*/
-int S_API( void );
-void S_Error( const char *format, ... );
 
 void S_FreeSounds( void );
 void S_StopAllSounds( bool stopMusic );
@@ -171,12 +163,13 @@ void S_SoundList_f( void );
 void S_UseBuffer( sfx_t *sfx );
 sfx_t *S_FindBuffer( const char *filename );
 void S_MarkBufferFree( sfx_t *sfx );
-void S_ForEachBuffer( void ( *callback )( sfx_t *sfx ) );
+
+// TODO: Should provide iterators instead
+void S_ForEachBuffer( const std::function<void( sfx_t *)> &callback );
+
 sfx_t *S_GetBufferById( int id );
 bool S_LoadBuffer( sfx_t *sfx );
 bool S_UnloadBuffer( sfx_t *sfx );
-
-
 
 typedef struct {
 	float quality;
@@ -335,39 +328,88 @@ void S_StopAviDemo( void );
 unsigned S_GetRawSamplesLength( void );
 unsigned S_GetPositionedRawSamplesLength( int entnum );
 
-/*
-* Exported functions
-*/
-bool SF_Init( void *hwnd, int maxEntities, bool verbose );
-void SF_Shutdown( bool verbose );
-void SF_EndRegistration( void );
-void SF_BeginRegistration( void );
-sfx_t *SF_RegisterSound( const char *name );
-void SF_StartBackgroundTrack( const char *intro, const char *loop, int mode );
 void SF_StopBackgroundTrack( void );
-void SF_LockBackgroundTrack( bool lock );
-void SF_StopAllSounds( bool clear, bool stopMusic );
 void SF_PrevBackgroundTrack( void );
 void SF_NextBackgroundTrack( void );
 void SF_PauseBackgroundTrack( void );
-void SF_Activate( bool active );
-void SF_BeginAviDemo( void );
-void SF_StopAviDemo( void );
-void SF_SetAttenuationModel( int model, float maxdistance, float refdistance );
-void SF_SetEntitySpatialization( int entnum, const vec3_t origin, const vec3_t velocity );
-void SF_SetAttenuationModel( int model, float maxdistance, float refdistance );
-void SF_StartFixedSound( sfx_t *sfx, const vec3_t origin, int channel, float fvol, float attenuation );
-void SF_StartRelativeSound( sfx_t *sfx, int entnum, int channel, float fvol, float attenuation );
-void SF_StartGlobalSound( sfx_t *sfx, int channel, float fvol );
-void SF_StartLocalSoundByName( const char *sound, float fvol );
-void SF_StartLocalSound( sfx_t *sfx, float fvol );
-void SF_Clear( void );
-void SF_AddLoopSound( sfx_t *sfx, int entnum, float fvol, float attenuation );
-void SF_Update( const vec3_t origin, const vec3_t velocity, const mat3_t axis, bool avidump );
-void SF_RawSamples( unsigned int samples, unsigned int rate, unsigned short width,
-					unsigned short channels, const uint8_t *data, bool music );
-void SF_PositionedRawSamples( int entnum, float fvol, float attenuation,
-							  unsigned int samples, unsigned int rate,
-							  unsigned short width, unsigned short channels, const uint8_t *data );
+
+class ALSoundSystem : public SoundSystem {
+	friend class SoundSystem;
+
+	qbufPipe_s *pipe;
+	qthread_s *thread;
+	bool useVerboseShutdown { false };
+
+	template <typename> friend class SingletonHolder;
+
+	static ALSoundSystem *TryCreate( client_state_s *client, void *hWnd, bool verbose );
+
+	ALSoundSystem( client_state_s *client_, qbufPipe_s *pipe_, qthread_s *thread_ )
+		: SoundSystem( client_ ), pipe( pipe_ ), thread( thread_ ) {}
+
+	~ALSoundSystem() override;
+public:
+	void DeleteSelf( bool verbose ) override;
+
+	void PostInit() override;
+
+	void BeginRegistration() override;
+	void EndRegistration() override;
+
+	void StopAllSounds( bool clear, bool stopAllMusic ) override;
+
+	void Clear() override;
+	void Update( const float *origin, const float *velocity, const mat3_t axis, bool dumpAvi ) override;
+	void Activate( bool isActive ) override;
+
+	void SetEntitySpatialization( int entNum, const float *origin, const float *velocity ) override;
+
+	sfx_s *RegisterSound( const char *name ) override;
+	void StartFixedSound( sfx_s *sfx, const float *origin, int channel, float fvol, float attenuation ) override;
+	void StartRelativeSound( sfx_s *sfx, int entNum, int channel, float fvol, float attenuation ) override;
+	void StartGlobalSound( sfx_s *sfx, int channel, float fvol ) override;
+	void StartLocalSound( const char *name, float fvol ) override;
+	void StartLocalSound( sfx_s *sfx, float fvol ) override;
+	void AddLoopSound( sfx_s *sfx, int entNum, float fvol, int attenuation ) override;
+
+	void RawSamples( unsigned samples, unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data, bool music ) override;
+	void PositionedRawSamples( int entNum, float fvol, float attenuation, unsigned samples,
+							   unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data ) override;
+
+	unsigned GetRawSamplesLength() override;
+	unsigned GetPositionedRawSamplesLength( int entNum ) override;
+
+	void StartBackgroundTrack( const char *intro, const char *loop, int mode ) override;
+	void StopBackgroundTrack() override;
+	void LockBackgroundTrack( bool lock ) override;
+
+	void BeginAviDemo() override {}
+	void StopAviDemo() override {}
+
+	void ListSounds();
+	void ListDevices();
+
+	void PrevBackgroundTrack();
+	void NextBackgroundTrack();
+	void PauseBackgroundTrack();
+};
+
+// This stuff is used by the sound system implementation and is defined in the client code
+
+void S_Trace( trace_s *tr, const float *start, const float *end, const float *mins,
+			  const float *maxs, int mask, int topNodeHint = 0 );
+
+int S_PointContents( const float *p, int topNodeHint = 0 );
+int S_PointLeafNum( const float *p, int topNodeHint = 0 );
+
+int S_NumLeafs();
+
+const vec3_t *S_GetLeafBounds( int leafnum );
+bool S_LeafsInPVS( int leafNum1, int leafNum2 );
+
+int S_FindTopNodeForBox( const float *mins, const float *maxs );
+int S_FindTopNodeForSphere( const float *center, float radius );
+
+const char *S_GetConfigString( int index );
 
 #endif

@@ -27,14 +27,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 * S_CreateSoundCmdPipe
 */
 sndCmdPipe_t *S_CreateSoundCmdPipe( void ) {
-	return trap_BufPipe_Create( SND_COMMANDS_BUFSIZE, 0 );
+	return QBufPipe_Create( SND_COMMANDS_BUFSIZE, 0 );
 }
 
 /*
 * S_DestroySoundCmdPipe
 */
 void S_DestroySoundCmdPipe( sndCmdPipe_t **pqueue ) {
-	trap_BufPipe_Destroy( pqueue );
+	QBufPipe_Destroy( pqueue );
 }
 
 /*
@@ -44,14 +44,14 @@ void S_DestroySoundCmdPipe( sndCmdPipe_t **pqueue ) {
 * or terminates with an error.
 */
 void S_FinishSoundCmdPipe( sndCmdPipe_t *queue ) {
-	trap_BufPipe_Finish( queue );
+	QBufPipe_Finish( queue );
 }
 
 /*
 * S_EnqueueCmd
 */
 static void S_EnqueueCmd( sndCmdPipe_t *queue, const void *cmd, unsigned cmd_size ) {
-	trap_BufPipe_WriteCmd( queue, cmd, cmd_size );
+	QBufPipe_WriteCmd( queue, cmd, cmd_size );
 }
 
 /*
@@ -394,7 +394,7 @@ void S_IssueSetMulEntitySpatializationCmd( sndCmdPipe_t *queue, unsigned numEnts
 * S_ReadEnqueuedCmds
 */
 int S_ReadEnqueuedCmds( sndCmdPipe_t *queue, pipeCmdHandler_t *cmdHandlers ) {
-	return trap_BufPipe_ReadCmds( queue, cmdHandlers );
+	return QBufPipe_ReadCmds( queue, cmdHandlers );
 }
 
 /*
@@ -402,5 +402,5 @@ int S_ReadEnqueuedCmds( sndCmdPipe_t *queue, pipeCmdHandler_t *cmdHandlers ) {
 */
 void S_WaitEnqueuedCmds( sndCmdPipe_t *queue, int ( *read )( sndCmdPipe_t *, unsigned( ** )( const void * ), bool ),
 						 unsigned( **cmdHandlers )( const void * ), unsigned timeout_msec ) {
-	trap_BufPipe_Wait( queue, read, cmdHandlers, timeout_msec );
+	QBufPipe_Wait( queue, read, cmdHandlers, timeout_msec );
 }

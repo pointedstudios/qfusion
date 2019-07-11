@@ -177,7 +177,7 @@ static void CL_GameModule_MemFree( void *data, const char *filename, int filelin
 */
 static void CL_GameModule_SoundUpdate( const vec3_t origin, const vec3_t velocity,
 									   const mat3_t axis, const char *identity ) {
-	CL_SoundModule_Update( origin, velocity, axis, identity, CL_WriteAvi() && cls.demo.avi_audio );
+	SoundSystem::Instance()->Update( origin, velocity, axis, CL_WriteAvi() && cls.demo.avi_audio );
 }
 
 //==============================================
