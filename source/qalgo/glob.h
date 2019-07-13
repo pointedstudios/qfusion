@@ -20,14 +20,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef _GLOB_H
 #define _GLOB_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 int glob_match( const char *pattern, const char *text, const int casecmp );
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

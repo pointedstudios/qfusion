@@ -31,8 +31,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 //
 //==================================================
 
-static const char *gs_teamNames[] =
-{
+static const char *gs_teamNames[] = {
 	"SPECTATOR",
 	"PLAYERS",
 	"ALPHA",
@@ -40,8 +39,7 @@ static const char *gs_teamNames[] =
 	NULL
 };
 
-static char *gs_teamSkinsNames[] =
-{
+static const char *gs_teamSkinsNames[] = {
 	NULL,   //null means user defined skin
 	NULL,
 	"default",

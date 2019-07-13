@@ -23,10 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "q_arch.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //==============================================
 
 #if !defined ( ENDIAN_LITTLE ) && !defined ( ENDIAN_BIG )
@@ -441,9 +437,5 @@ typedef enum {
 	IN_DEVICE_TOUCHSCREEN   = 1 << 3,
 	IN_DEVICE_SOFTKEYBOARD  = 1 << 4
 } in_devicemask_t;
-
-#ifdef __cplusplus
-};
-#endif
 
 #endif

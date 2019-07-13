@@ -12,7 +12,7 @@ file(GLOB angelwrap_SOURCES
     "*.cpp"
     "*.c"
     "addon/*.cpp"
-    "../gameshared/q_*.c"
+    "../gameshared/q_*.cpp"
 )
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")

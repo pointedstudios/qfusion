@@ -198,10 +198,10 @@ typedef struct {
 	// collision detection
 	int ( *CM_NumInlineModels )( void );
 	struct cmodel_s *( *CM_InlineModel )( int num );
-	struct cmodel_s *( *CM_ModelForBBox )( vec3_t mins, vec3_t maxs );
-	struct cmodel_s *( *CM_OctagonModelForBBox )( vec3_t mins, vec3_t maxs );
-	void ( *CM_TransformedBoxTrace )( trace_t *tr, vec3_t start, vec3_t end, vec3_t mins, vec3_t maxs, struct cmodel_s *cmodel, int brushmask, vec3_t origin, vec3_t angles );
-	int ( *CM_TransformedPointContents )( vec3_t p, struct cmodel_s *cmodel, vec3_t origin, vec3_t angles );
+	struct cmodel_s *( *CM_ModelForBBox )( const vec3_t mins, const vec3_t maxs );
+	struct cmodel_s *( *CM_OctagonModelForBBox )( const vec3_t mins, const vec3_t maxs );
+	void ( *CM_TransformedBoxTrace )( trace_t *tr, const vec3_t start, const vec3_t end, const vec3_t mins, const vec3_t maxs, const struct cmodel_s *cmodel, int brushmask, const vec3_t origin, const vec3_t angles );
+	int ( *CM_TransformedPointContents )( const vec3_t p, const struct cmodel_s *cmodel, const vec3_t origin, const vec3_t angles );
 	void ( *CM_InlineModelBounds )( struct cmodel_s *cmodel, vec3_t mins, vec3_t maxs );
 	bool ( *CM_InPVS )( const vec3_t p1, const vec3_t p2 );
 
@@ -291,7 +291,7 @@ typedef struct {
 
 	float ( *GetSensitivityScale )( float sens, float zoomSens );
 
-	void ( *Trace )( trace_t *tr, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, int passent, int contentmask );
+	void ( *Trace )( trace_t *tr, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int passent, int contentmask );
 
 	void ( *RenderView )( int frameTime, int realFrameTime, int64_t realTime, int64_t serverTime, float stereo_separation, unsigned extrapolationTime );
 

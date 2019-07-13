@@ -46,12 +46,12 @@ static inline int CL_GameModule_CM_NumInlineModels( void ) {
 	return CM_NumInlineModels( cl.cms );
 }
 
-static inline int CL_GameModule_CM_TransformedPointContents( vec3_t p, struct cmodel_s *cmodel, vec3_t origin, vec3_t angles ) {
+static inline int CL_GameModule_CM_TransformedPointContents( const vec3_t p, const struct cmodel_s *cmodel, const vec3_t origin, const vec3_t angles ) {
 	return CM_TransformedPointContents( cl.cms, p, cmodel, origin, angles );
 }
 
-static inline void CL_GameModule_CM_TransformedBoxTrace( trace_t *tr, vec3_t start, vec3_t end, vec3_t mins, vec3_t maxs,
-														 struct cmodel_s *cmodel, int brushmask, vec3_t origin, vec3_t angles ) {
+static inline void CL_GameModule_CM_TransformedBoxTrace( trace_t *tr, const vec3_t start, const vec3_t end, const vec3_t mins, const vec3_t maxs,
+														 const struct cmodel_s *cmodel, int brushmask, const vec3_t origin, const vec3_t angles ) {
 	CM_TransformedBoxTrace( cl.cms, tr, start, end, mins, maxs, cmodel, brushmask, origin, angles );
 }
 
@@ -63,11 +63,11 @@ static inline void CL_GameModule_CM_InlineModelBounds( struct cmodel_s *cmodel, 
 	CM_InlineModelBounds( cl.cms, cmodel, mins, maxs );
 }
 
-static inline struct cmodel_s *CL_GameModule_CM_ModelForBBox( vec3_t mins, vec3_t maxs ) {
+static inline struct cmodel_s *CL_GameModule_CM_ModelForBBox( const vec3_t mins, const vec3_t maxs ) {
 	return CM_ModelForBBox( cl.cms, mins, maxs );
 }
 
-static inline struct cmodel_s *CL_GameModule_CM_OctagonModelForBBox( vec3_t mins, vec3_t maxs ) {
+static inline struct cmodel_s *CL_GameModule_CM_OctagonModelForBBox( const vec3_t mins, const vec3_t maxs ) {
 	return CM_OctagonModelForBBox( cl.cms, mins, maxs );
 }
 

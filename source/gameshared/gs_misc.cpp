@@ -35,11 +35,11 @@ void ( *module_Error )( const char *format, ... );
 
 void *( *module_Malloc )( size_t size );
 void ( *module_Free )( void *data );
-void ( *module_Trace )( trace_t *t, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, int ignore, int contentmask, int timeDelta );
+void ( *module_Trace )( trace_t *t, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int ignore, int contentmask, int timeDelta );
 entity_state_t *( *module_GetEntityState )( int entNum, int deltaTime );
-int ( *module_PointContents )( vec3_t point, int timeDelta );
+int ( *module_PointContents )( const vec3_t point, int timeDelta );
 void ( *module_PredictedEvent )( int entNum, int ev, int parm );
-void ( *module_PMoveTouchTriggers )( pmove_t *pm, vec3_t previous_origin );
+void ( *module_PMoveTouchTriggers )( pmove_t *pm, const vec3_t previous_origin );
 const char *( *module_GetConfigString )( int index );
 
 // TEMP MOVE ME

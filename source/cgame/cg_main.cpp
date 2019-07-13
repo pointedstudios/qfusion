@@ -295,7 +295,7 @@ static void CG_GS_Free( void *data ) {
 /*
 * CG_GS_Trace
 */
-static void CG_GS_Trace( trace_t *t, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, int ignore, int contentmask, int timeDelta ) {
+static void CG_GS_Trace( trace_t *t, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int ignore, int contentmask, int timeDelta ) {
 	assert( !timeDelta );
 	CG_Trace( t, start, mins, maxs, end, ignore, contentmask );
 }
@@ -303,7 +303,7 @@ static void CG_GS_Trace( trace_t *t, vec3_t start, vec3_t mins, vec3_t maxs, vec
 /*
 * CG_GS_PointContents
 */
-static int CG_GS_PointContents( vec3_t point, int timeDelta ) {
+static int CG_GS_PointContents( const vec3_t point, int timeDelta ) {
 	assert( !timeDelta );
 	return CG_PointContents( point );
 }

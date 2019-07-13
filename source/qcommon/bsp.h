@@ -21,10 +21,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __BSP_H__
 #define __BSP_H__
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /*
 ==============================================================
 
@@ -60,9 +56,5 @@ extern const bspFormatDesc_t q3BSPFormats[];
 
 const bspFormatDesc_t *Q_FindBSPFormat( const bspFormatDesc_t *formats, const char *header, int version );
 const modelFormatDescr_t *Q_FindFormatDescriptor( const modelFormatDescr_t *formats, const uint8_t *buf, const bspFormatDesc_t **bspFormat );
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // __BSP_H__

@@ -748,12 +748,12 @@ typedef struct link_s {
 	int entNum;
 } link_t;
 
-int G_PointContents( vec3_t p );
-void G_Trace( trace_t *tr, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, edict_t *passedict, int contentmask );
-int G_PointContents4D( vec3_t p, int timeDelta );
-void G_Trace4D( trace_t *tr, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, edict_t *passedict, int contentmask, int timeDelta );
+int G_PointContents( const vec3_t p );
+void G_Trace( trace_t *tr, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, const edict_t *passedict, int contentmask );
+int G_PointContents4D( const vec3_t p, int timeDelta );
+void G_Trace4D( trace_t *tr, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, const edict_t *passedict, int contentmask, int timeDelta );
 void GClip_BackUpCollisionFrame( void );
-int GClip_FindInRadius4D( vec3_t org, float rad, int *list, int maxcount, int timeDelta );
+int GClip_FindInRadius4D( const vec3_t org, float rad, int *list, int maxcount, int timeDelta );
 void G_SplashFrac4D( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac, int timeDelta );
 void RS_SplashFrac4D( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac, int timeDelta, float splashFrac ); // racesow
 void GClip_ClearWorld( void );
@@ -762,9 +762,9 @@ void GClip_SetAreaPortalState( edict_t *ent, bool open );
 void GClip_LinkEntity( edict_t *ent );
 void GClip_UnlinkEntity( edict_t *ent );
 void GClip_TouchTriggers( edict_t *ent );
-void G_PMoveTouchTriggers( pmove_t *pm, vec3_t previous_origin );
+void G_PMoveTouchTriggers( pmove_t *pm, const vec3_t previous_origin );
 entity_state_t *G_GetEntityStateForDeltaTime( int entNum, int deltaTime );
-int GClip_FindInRadius( vec3_t org, float rad, int *list, int maxcount );
+int GClip_FindInRadius( const vec3_t org, float rad, int *list, int maxcount );
 
 // BoxEdicts() can return a list of either solid or trigger entities
 // FIXME: eliminate AREA_ distinction?
@@ -772,7 +772,7 @@ int GClip_FindInRadius( vec3_t org, float rad, int *list, int maxcount );
 #define AREA_SOLID      1
 #define AREA_TRIGGERS   2
 int GClip_AreaEdicts( const vec3_t mins, const vec3_t maxs, int *list, int maxcount, int areatype, int timeDelta );
-bool GClip_EntityContact( vec3_t mins, vec3_t maxs, edict_t *ent );
+bool GClip_EntityContact( const vec3_t mins, const vec3_t maxs, const edict_t *ent );
 
 //
 // g_combat.c

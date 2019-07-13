@@ -29,10 +29,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 //============================================================================
 
-// item box
-vec3_t item_box_mins = { -16.0f, -16.0f, -16.0f };
-vec3_t item_box_maxs = { 16.0f, 16.0f, 40.0f };
-
 #define ARMOR_SHARD_PICKUP 5
 #define ARMOR_SHARD_MAX 200
 #define ARMOR_GA_PICKUP 50

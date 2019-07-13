@@ -20,19 +20,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef _HASH_H
 #define _HASH_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "../gameshared/q_arch.h"
 
 unsigned int COM_HashKey( const char *name, int hashsize );
 
 unsigned int COM_SuperFastHash( const unsigned char * data, size_t len, unsigned int hash );
 unsigned int COM_SuperFastHash64BitInt( uint64_t data );
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

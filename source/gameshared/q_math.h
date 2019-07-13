@@ -23,10 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "q_arch.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //==============================================================
 //
 //MATHLIB
@@ -447,9 +443,5 @@ vec_t LogisticCDF( vec_t x );
 vec_t LogisticPDF( vec_t x );
 vec_t NormalCDF( vec_t x );
 vec_t NormalPDF( vec_t x );
-
-#ifdef __cplusplus
-};
-#endif
 
 #endif // GAME_QMATH_H

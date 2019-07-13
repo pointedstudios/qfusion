@@ -182,7 +182,7 @@ edict_t *SelectDeathmatchSpawnPoint( edict_t *ent ) {
 /*
 * G_OffsetSpawnPoint - use a grid of player boxes to offset the spawn point
 */
-bool G_OffsetSpawnPoint( vec3_t origin, vec3_t box_mins, vec3_t box_maxs, float radius, bool checkground ) {
+bool G_OffsetSpawnPoint( vec3_t origin, const vec3_t box_mins, const vec3_t box_maxs, float radius, bool checkground ) {
 	trace_t trace;
 	vec3_t virtualorigin;
 	vec3_t absmins, absmaxs;

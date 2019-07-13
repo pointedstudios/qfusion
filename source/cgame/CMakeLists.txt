@@ -8,7 +8,7 @@ file(GLOB CGAME_HEADES
 
 file(GLOB CGAME_SOURCES
     "*.cpp"
-    "../gameshared/*.c"
+    "../gameshared/*.cpp"
 )
 
 add_library(cgame SHARED ${CGAME_SOURCES} ${CGAME_HEADES})

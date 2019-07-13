@@ -23,10 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "q_arch.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //
 // button bits
 //
@@ -489,10 +485,5 @@ typedef struct {
 
 	bool ladder;
 } pmove_t;
-
-
-#ifdef __cplusplus
-};
-#endif
 
 #endif // GAME_QCOMREF_H

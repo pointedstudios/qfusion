@@ -23,10 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "gs_qrespath.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define DEFAULT_TEAMALPHA_COLOR     "255 70 45"
 #define DEFAULT_TEAMBETA_COLOR      "0 255 70"
 
@@ -34,9 +30,5 @@ extern "C" {
 #define MAX_CLANNAME_CHARS 8
 
 #define NUM_CROSSHAIRS  14
-
-#ifdef __cplusplus
-};
-#endif
 
 #endif // __GS_REF_H

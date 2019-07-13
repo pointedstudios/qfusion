@@ -175,8 +175,8 @@ bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
 				continue;
 			}
 
-			float *mins = playerbox_stand_mins;
-			float *maxs = playerbox_stand_maxs;
+			const float *mins = playerbox_stand_mins;
+			const float *maxs = playerbox_stand_maxs;
 			// Test whether the box intersects solid
 			G_Trace( &trace, testedOrigin.Data(), mins, maxs, testedOrigin.Data(), ignore, MASK_SOLID );
 			if( trace.fraction != 1.0f || trace.startsolid ) {

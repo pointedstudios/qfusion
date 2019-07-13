@@ -719,9 +719,9 @@ void CG_Predict_ChangeWeapon( int new_weapon );
 void CG_PredictMovement( void );
 void CG_CheckPredictionError( void );
 void CG_BuildSolidList( void );
-void CG_Trace( trace_t *t, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, int ignore, int contentmask );
+void CG_Trace( trace_t *t, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int ignore, int contentmask );
 int CG_PointContents( const vec3_t point );
-void CG_Predict_TouchTriggers( pmove_t *pm, vec3_t previous_origin );
+void CG_Predict_TouchTriggers( pmove_t *pm, const vec3_t previous_origin );
 
 //
 // cg_screen.c

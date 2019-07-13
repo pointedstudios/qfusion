@@ -25,10 +25,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // shared callbacks
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef _MSC_VER
 extern void ( *module_Printf )( const char *format, ... ) __attribute__( ( format( printf, 1, 2 ) ) );
 extern void ( *module_Error )( const char *format, ... ) __attribute__( ( format( printf, 1, 2 ) ) ) __attribute__( ( noreturn ) );
@@ -39,31 +35,30 @@ extern void ( *module_Error )( _Printf_format_string_ const char *format, ... );
 
 extern void *( *module_Malloc )( size_t size );
 extern void ( *module_Free )( void *data );
-extern void ( *module_Trace )( trace_t *t, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, int ignore, int contentmask, int timeDelta );
+extern void ( *module_Trace )( trace_t *t, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int ignore, int contentmask, int timeDelta );
 extern entity_state_t *( *module_GetEntityState )( int entNum, int deltaTime );
-extern int ( *module_PointContents )( vec3_t point, int timeDelta );
+extern int ( *module_PointContents )( const vec3_t point, int timeDelta );
 extern void ( *module_PredictedEvent )( int entNum, int ev, int parm );
-extern void ( *module_PMoveTouchTriggers )( pmove_t *pm, vec3_t previous_origin );
+extern void ( *module_PMoveTouchTriggers )( pmove_t *pm, const vec3_t previous_origin );
 extern const char *( *module_GetConfigString )( int index );
 
 //===============================================================
 //		WARSOW player AAboxes sizes
 
-extern vec3_t playerbox_stand_mins;
-extern vec3_t playerbox_stand_maxs;
-extern int playerbox_stand_viewheight;
+constexpr const vec3_t playerbox_stand_mins = { -16, -16, -24 };
+constexpr const vec3_t playerbox_stand_maxs = { 16, 16, 40 };
+constexpr const int playerbox_stand_viewheight = 30;
 
-extern vec3_t playerbox_crouch_mins;
-extern vec3_t playerbox_crouch_maxs;
-extern int playerbox_crouch_viewheight;
+constexpr const vec3_t playerbox_crouch_mins = { -16, -16, -24 };
+constexpr const vec3_t playerbox_crouch_maxs = { 16, 16, 16 };
+constexpr const int playerbox_crouch_viewheight = 12;
 
-extern vec3_t playerbox_gib_mins;
-extern vec3_t playerbox_gib_maxs;
-extern int playerbox_gib_viewheight;
+constexpr const vec3_t playerbox_gib_mins = { -16, -16, 0 };
+constexpr const vec3_t playerbox_gib_maxs = { 16, 16, 16 };
+constexpr const int playerbox_gib_viewheight = 8;
 
-// item box
-extern vec3_t item_box_mins;
-extern vec3_t item_box_maxs;
+constexpr const vec3_t item_box_mins = { -16.0f, -16.0f, -16.0f };
+constexpr const vec3_t item_box_maxs = { 16.0f, 16.0f, 40.0f };
 
 #define BASEGRAVITY 800
 #define GRAVITY 850
@@ -501,22 +496,22 @@ typedef enum {
 
 typedef struct gitem_s {
 	//header
-	char *classname;        // spawning name
+	const char *classname;        // spawning name
 	int tag;
 	itemtype_t type;
 	int flags;              // actions the item does in the game
 
 	//media
-	char *world_model[MAX_ITEM_MODELS];
-	char *icon;
-	char *simpleitem;       // Kurim : we use different images for representing simpleitems
-	char *pickup_sound;
+	const char *world_model[MAX_ITEM_MODELS];
+	const char *icon;
+	const char *simpleitem;       // Kurim : we use different images for representing simpleitems
+	const char *pickup_sound;
 	int effects;
 
 
-	char *name;      // for printing on pickup
-	char *shortname;       // for printing on messages
-	char *color;            // for printing on messages
+	const char *name;      // for printing on pickup
+	const char *shortname;       // for printing on messages
+	const char *color;            // for printing on messages
 
 	int quantity;           // how much it gives at picking
 	int inventory_max;      // how much quantity of this the inventory can carry
@@ -525,12 +520,12 @@ typedef struct gitem_s {
 	int ammo_tag;           // uses this ammo, for weapons
 	int weakammo_tag;
 
-	void *info;             // miscelanea info goes pointed in here
+	const void *info;             // miscelanea info goes pointed in here
 
 	// space separated string of stuff to precache that's not mentioned above
-	char *precache_models;
-	char *precache_sounds;
-	char *precache_images;
+	const char *precache_models;
+	const char *precache_sounds;
+	const char *precache_images;
 } gsitem_t;
 
 extern gsitem_t itemdefs[];
@@ -1024,7 +1019,7 @@ enum {
 //===============================================================
 // gs_weapons.c
 
-extern char *gs_weaponStateNames[];
+extern const char *gs_weaponStateNames[];
 
 enum {
 	WEAPON_STATE_READY,
@@ -1080,7 +1075,7 @@ typedef struct firedef_s {
 } firedef_t;
 
 typedef struct {
-	char *name;
+	const char *name;
 	int weapon_id;
 
 	firedef_t firedef;
@@ -1116,11 +1111,5 @@ bool G_GetLaserbeamPoint( gs_laserbeamtrail_t *trail, player_state_t *playerStat
 
 //===============================================================
 // gs_weapondefs.c
-
-extern firedef_t ammoFireDefs[];
-
-#ifdef __cplusplus
-};
-#endif
 
 #endif // __GS_PUBLIC_H

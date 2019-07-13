@@ -41,7 +41,7 @@ file(GLOB CLIENT_COMMON_SOURCES
 	"../qcommon/bsp.c"
     "../server/*.cpp"
     "*.cpp"
-    "../gameshared/q_*.c"
+    "../gameshared/q_*.cpp"
     "../qalgo/*.c"
     "../matchmaker/*.cpp"
     # We have to include this for linking with shared MM facilities.
@@ -64,10 +64,10 @@ file(GLOB REF_GL_HEADERS
 
 file(GLOB REF_GL_COMMON_SOURCES
 		"../ref_gl/*.cpp"
-		"../gameshared/q_*.c"
-		"../qalgo/*.c"
-		"../qcommon/bsp.c"
-		"../qcommon/patch.c"
+		"../gameshared/q_*.cpp"
+		"../qalgo/*.cpp"
+		"../qcommon/bsp.cpp"
+		"../qcommon/patch.cpp"
 		)
 
 if (USE_SDL2)

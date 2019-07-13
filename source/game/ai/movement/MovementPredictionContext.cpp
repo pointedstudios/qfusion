@@ -270,17 +270,18 @@ static void Intercepted_PredictedEvent( int entNum, int ev, int parm ) {
 	game.edicts[entNum].ai->botRef->OnInterceptedPredictedEvent( ev, parm );
 }
 
-static void Intercepted_PMoveTouchTriggers( pmove_t *pm, vec3_t previous_origin ) {
+static void Intercepted_PMoveTouchTriggers( pmove_t *pm, const vec3_t previous_origin ) {
 	game.edicts[pm->playerState->playerNum + 1].ai->botRef->OnInterceptedPMoveTouchTriggers( pm, previous_origin );
 }
 
-static void Intercepted_Trace( trace_t *t, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end,
+static void Intercepted_Trace( trace_t *t, const vec3_t start, const vec3_t mins,
+							   const vec3_t maxs, const vec3_t end,
 							   int ignore, int contentmask, int timeDelta ) {
 	int topNodeHint = ::collisionTopNodeCache.GetTopNode( start, mins, maxs, end );
 	trap_CM_TransformedBoxTrace( t, start, end, mins, maxs, nullptr, contentmask, nullptr, nullptr, topNodeHint );
 }
 
-static int Intercepted_PointContents( vec3_t p, int timeDelta ) {
+static int Intercepted_PointContents( const vec3_t p, int timeDelta ) {
 	int topNodeHint = ::collisionTopNodeCache.GetTopNode( p, p );
 	return trap_CM_TransformedPointContents( p, nullptr, nullptr, nullptr, topNodeHint );
 }

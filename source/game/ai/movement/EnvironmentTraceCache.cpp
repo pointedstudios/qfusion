@@ -298,7 +298,7 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 		vec3_t mins;
 		VectorCopy( playerbox_stand_mins, mins );
 		mins[2] += 1.0f;
-		float *const maxs = playerbox_stand_maxs;
+		const float *const maxs = playerbox_stand_maxs;
 		for( unsigned i = 0, mask = 1; i < 8; ++i, mask <<= 1 ) {
 			// Skip not required sides
 			if( !( mask & requiredResultsMask ) ) {
@@ -346,7 +346,7 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 		vec3_t mins;
 		VectorCopy( playerbox_stand_mins, mins );
 		mins[2] += AI_JUMPABLE_HEIGHT;
-		float *const maxs = playerbox_stand_maxs;
+		const float *const maxs = playerbox_stand_maxs;
 		for( unsigned i = 0, mask = 0x100; i < 8; ++i, mask <<= 1 ) {
 			// Skip not required sides
 			if( !( mask & requiredResultsMask ) ) {

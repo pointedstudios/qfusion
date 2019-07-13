@@ -869,12 +869,12 @@ int BotWeaponSelector::SuggestHitEscapingEnemyWeapon( const WorldState &worldSta
 	extrapolatedEnemyOrigin += initialEnemyOrigin;
 	Vec3 predictedEnemyOrigin( extrapolatedEnemyOrigin );
 
-	float *const mins = playerbox_stand_mins;
-	float *const maxs = playerbox_stand_maxs;
+	const float *const mins = playerbox_stand_mins;
+	const float *const maxs = playerbox_stand_maxs;
 
 	trace_t trace;
 	// Get a coarse predicted bot origin
-	G_Trace( &trace, self->s.origin, mins, playerbox_stand_maxs, extrapolatedBotOrigin.Data(), self, MASK_AISOLID );
+	G_Trace( &trace, self->s.origin, mins, maxs, extrapolatedBotOrigin.Data(), self, MASK_AISOLID );
 	if( trace.fraction != 1.0f ) {
 		predictedBotOrigin.Set( trace.endpos );
 		// Compensate Z for ground trace hit point

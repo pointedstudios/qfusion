@@ -28,8 +28,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 /* Like glob_match, but match PATTERN against any final segment of TEXT.  */
 static int glob_match_after_star( const char *pattern, const char *text, const int casecmp ) {
-	register const char *p = pattern, *t = text;
-	register char c, c1;
+	const char *p = pattern, *t = text;
+	char c, c1;
 
 	while( ( c = *p++ ) == '?' || c == '*' )
 		if( c == '?' && *t++ == '\0' ) {
@@ -59,8 +59,8 @@ static int glob_match_after_star( const char *pattern, const char *text, const i
 #if 0 /* Not used */
 /* Return nonzero if PATTERN has any special globbing chars in it.  */
 static int glob_pattern_p( char *pattern ) {
-	register char *p = pattern;
-	register char c;
+	char *p = pattern;
+	char c;
 	int open = 0;
 
 	while( ( c = *p++ ) != '\0' )
@@ -107,8 +107,8 @@ and match the character exactly, precede it with a `\'.
 */
 
 int glob_match( const char *pattern, const char *text, const int casecmp ) {
-	register const char *p = pattern, *t = text;
-	register char c;
+	const char *p = pattern, *t = text;
+	char c;
 
 	while( ( c = *p++ ) != '\0' )
 		switch( c ) {
@@ -131,7 +131,7 @@ int glob_match( const char *pattern, const char *text, const int casecmp ) {
 
 			case '[':
 			{
-				register char c1 = *t++;
+				char c1 = *t++;
 				int invert;
 
 				if( !c1 ) {
@@ -145,7 +145,7 @@ int glob_match( const char *pattern, const char *text, const int casecmp ) {
 
 				c = *p++;
 				while( 1 ) {
-					register char cstart = c, cend = c;
+					char cstart = c, cend = c;
 
 					if( c == '\\' ) {
 						cstart = *p++;

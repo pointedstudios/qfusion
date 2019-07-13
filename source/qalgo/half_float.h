@@ -21,15 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef _HALF_FLOAT_H
 #define _HALF_FLOAT_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 unsigned short Com_FloatToHalf( float val );
 float Com_HalfToFloat( unsigned short val );
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

@@ -18,10 +18,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define PATCH_EVALUATE_DECL( type )                                       \
 	void Patch_Evaluate_ ## type                                          \
 		( const type * p, int *numcp, const int *tess, type * dest, int comp, int stride )
@@ -36,7 +32,3 @@ void Patch_GetFlatness( float maxflat, const float *points, int comp, const int 
 
 void Patch_RemoveLinearColumnsRows( vec_t *verts, int comp, int *pwidth, int *pheight,
 									int numattribs, uint8_t * const *attribs, const int *attribsizes );
-
-#ifdef __cplusplus
-}
-#endif

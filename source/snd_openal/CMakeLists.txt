@@ -15,7 +15,7 @@ file(GLOB SND_OPENAL_SOURCES
     "*.cpp"
     "../snd_common/*.c"
     "../snd_common/*.cpp"
-    "../gameshared/q_*.c"
+    "../gameshared/q_*.cpp"
 )
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")

@@ -30,7 +30,7 @@ protected:
 	trace_t localTrace;
 	Vec3 prevOrigin { 0, 0, 0 };
 
-	void ( *traceFunc )( trace_t *, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, edict_t *, int ) { nullptr };
+	void ( *traceFunc )( trace_t *, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, const edict_t *, int ) { nullptr };
 	edict_t *ignore { nullptr };
 	int contentMask { 0 };
 
