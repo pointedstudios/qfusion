@@ -357,6 +357,8 @@ public:
 
 	inline bool IsLoaded() const { return spots != nullptr && numSpots > 0; }
 
+	const TacticalSpot *Spots() const { return spots; }
+
 	static inline const TacticalSpotsRegistry *Instance() {
 		return ( instance && instance->IsLoaded() ) ? instance : nullptr;
 	}

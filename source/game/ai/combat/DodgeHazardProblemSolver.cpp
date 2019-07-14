@@ -54,9 +54,8 @@ void DodgeHazardProblemSolver::ModifyScoreByVelocityConformance( VectorWithScore
 	// on the "velocity dot factor" on speed equal or greater the dash speed.
 	const float influence = Q_Sqrt( BoundedFraction( speed - runSpeed, dashSpeed - runSpeed ) );
 
-	const auto *const spots = tacticalSpotsRegistry->spots;
 	for( auto &spotAndScoreLike: input ) {
-		Vec3 toSpotDir = Vec3( spots[spotAndScoreLike.spotNum].origin ) - origin;
+		Vec3 toSpotDir = Vec3( ::SpotOriginOf( spotAndScoreLike ) ) - origin;
 		toSpotDir.NormalizeFast();
 		float velocityDotFactor = 0.5f * ( 1.0f + velocityDir.Dot( toSpotDir ) );
 		// Could go slightly out of these bounds due to using of a fast and coarse normalization.

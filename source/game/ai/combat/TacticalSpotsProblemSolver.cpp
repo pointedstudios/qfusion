@@ -334,3 +334,70 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::ApplyEnemiesInfluence( SpotsAnd
 
 	return candidateSpots;
 }
+
+template <typename SpotsAndScores>
+int TacticalSpotsProblemSolver::MakeResultsFilteringByProximity_( const SpotsAndScores &spotsAndScores,
+																  vec3_t *origins, int maxSpots ) {
+	const auto resultsSize = spotsAndScores.size();
+	if( maxSpots == 0 || resultsSize == 0 ) {
+		return 0;
+	}
+
+	// Its a common case so give it an optimized branch
+	if( maxSpots == 1 ) {
+		const float *origin = ::SpotOriginOf( spotsAndScores[0] );
+		VectorCopy( origin, origins[0] );
+		return 1;
+	}
+
+	const float squareProximityThreshold = problemParams.spotProximityThreshold * problemParams.spotProximityThreshold;
+	bool *const isSpotExcluded = tacticalSpotsRegistry->temporariesAllocator.GetCleanExcludedSpotsMask();
+
+	int numSpots_ = 0;
+	unsigned keptSpotIndex = 0;
+	for(;; ) {
+		if( keptSpotIndex >= resultsSize ) {
+			return numSpots_;
+		}
+		if( numSpots_ >= maxSpots ) {
+			return numSpots_;
+		}
+
+		// Spots are sorted by score.
+		// So first spot not marked as excluded yet has higher priority and should be kept.
+		// The condition that terminates the outer loop ensures we have a valid kept spot.
+		const float *__restrict keptSpotOrigin = ::SpotOriginOf( spotsAndScores[keptSpotIndex] );
+		VectorCopy( keptSpotOrigin, origins[numSpots_] );
+		++numSpots_;
+
+		// Start from the next spot of the kept one
+		unsigned testedSpotIndex = keptSpotIndex + 1;
+		// Reset kept spot index so the loop is going to terminate next step by default
+		keptSpotIndex = std::numeric_limits<unsigned>::max();
+		// For every remaining spot in results left
+		for(; testedSpotIndex < resultsSize; testedSpotIndex++ ) {
+			// Skip already excluded spots
+			if( isSpotExcluded[testedSpotIndex] ) {
+				continue;
+			}
+
+			const float *__restrict testedSpotOrigin = ::SpotOriginOf( spotsAndScores[testedSpotIndex] );
+			if( DistanceSquared( keptSpotOrigin, testedSpotOrigin ) < squareProximityThreshold ) {
+				isSpotExcluded[testedSpotIndex] = true;
+			} else if( keptSpotIndex > testedSpotIndex ) {
+				// Mark the first non-excluded next spot for the outer loop
+				keptSpotIndex = testedSpotIndex;
+			}
+		}
+	}
+}
+
+int TacticalSpotsProblemSolver::MakeResultsFilteringByProximity( const SpotsAndScoreVector &spotsAndScores,
+																 vec3_t *origins, int maxSpots ) {
+	return MakeResultsFilteringByProximity_( spotsAndScores, origins, maxSpots );
+}
+
+int TacticalSpotsProblemSolver::MakeResultsFilteringByProximity( const OriginAndScoreVector &originsAndScores,
+																 vec3_t *origins, int maxSpots ) {
+	return MakeResultsFilteringByProximity_( originsAndScores, origins, maxSpots );
+}
