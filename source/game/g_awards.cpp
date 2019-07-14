@@ -234,6 +234,9 @@ void G_AwardPlayerKilled( edict_t *self, edict_t *inflictor, edict_t *attacker, 
 		return;
 	}
 
+	// First let the StatsowFacade decide whether to log the frag
+	StatsowFacade::Instance()->AddFrag( attacker, self, mod );
+
 	if( !attacker->r.client ) {
 		return;
 	}
@@ -376,8 +379,6 @@ void G_AwardPlayerKilled( edict_t *self, edict_t *inflictor, edict_t *attacker, 
 	if( G_ModToAmmo( mod ) != AMMO_NONE ) {
 		attacker->r.client->level.stats.accuracy_frags[G_ModToAmmo( mod ) - AMMO_GUNBLADE]++;
 	}
-
-	StatsowFacade::Instance()->AddFrag( attacker, self, mod );
 }
 
 void G_AwardPlayerPickup( edict_t *self, edict_t *item ) {

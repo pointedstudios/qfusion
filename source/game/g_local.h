@@ -1356,7 +1356,6 @@ class StatsowFacade {
 
 		void WriteToReport( class JsonWriter &writer, bool teamGame, const char **weaponNames );
 		void AddAwards( class JsonWriter &writer );
-		void AddFrags( class JsonWriter &writer );
 		void AddWeapons( class JsonWriter &writer, const char **weaponNames );
 	};
 
@@ -1364,6 +1363,8 @@ class StatsowFacade {
 	clientRating_t *ratingsHead { nullptr };
 
 	RunStatusQuery *runQueriesHead { nullptr };
+
+	StatsSequence<LoggedFrag> fragsSequence;
 
 	struct PlayTimeEntry {
 		mm_uuid_t clientSessionId;
@@ -1380,7 +1381,7 @@ class StatsowFacade {
 	void AddPlayerReport( edict_t *ent, bool final );
 
 	void AddToExistingEntry( edict_t *ent, bool final, ClientEntry *e );
-	void MergeAwards( StatsSequence<gameaward_t> &to, StatsSequence<gameaward_t> &&from );
+	void MergeAwards( StatsSequence<LoggedAward> &to, StatsSequence<LoggedAward> &&from );
 
 	ClientEntry *FindEntryById( const mm_uuid_t &playerSessionId );
 	RespectStats *FindRespectStatsById( const mm_uuid_t &playerSessionId );
@@ -1406,6 +1407,8 @@ class StatsowFacade {
 	PlayTimeEntry *FindPlayTimeEntry( const mm_uuid_t &clientSessionId );
 
 	void FlushRacePlayTimes();
+
+	static mm_uuid_t SessionOf( const edict_t *ent );
 public:
 	static void Init();
 	static void Shutdown();

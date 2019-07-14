@@ -1194,8 +1194,8 @@ static void Cmd_Awards_f( edict_t *ent ) {
 
 	const auto &awards = client->level.stats.awardsSequence;
 	if( !awards.empty() ) {
-		for( const gameaward_t &ga: awards ) {
-			Q_strncatz( entry, va( "\t%dx %s\n", ga.count, ga.name ), sizeof( entry ) );
+		for( const LoggedAward &ga: awards ) {
+			Q_strncatz( entry, va( "\t%dx %s\n", ga.count, ga.name.data() ), sizeof( entry ) );
 		}
 		G_PrintMsg( ent, "%s", entry );
 	}

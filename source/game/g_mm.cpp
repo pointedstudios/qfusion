@@ -813,29 +813,27 @@ void StatsowFacade::AddToExistingEntry( edict_t *ent, bool final, ClientEntry *e
 		stats.accuracy_shots[i] += thatStats.accuracy_shots[i];
 	}
 
-	// merge awards
 	// requires handling of duplicates
 	MergeAwards( e->stats.awardsSequence, std::move( cl->level.stats.awardsSequence ) );
-
-	// merge logged frags
-	e->stats.fragsSequence.MergeWith( std::move( cl->level.stats.fragsSequence ) );
 }
 
-void StatsowFacade::MergeAwards( StatsSequence<gameaward_t> &to, StatsSequence<gameaward_t> &&from ) {
-	for( const gameaward_t &mergable: from ) {
+void StatsowFacade::MergeAwards( StatsSequence<LoggedAward> &to, StatsSequence<LoggedAward> &&from ) {
+	for( const LoggedAward &mergable: from ) {
 		// search for matching one
-		StatsSequence<gameaward_t>::iterator it( to.begin() );
-		StatsSequence<gameaward_t>::iterator end( to.end() );
+		StatsSequence<LoggedAward>::iterator it( to.begin() );
+		StatsSequence<LoggedAward>::iterator end( to.end() );
 		for(; it != end; ++it ) {
-			if( !strcmp( ( *it ).name, mergable.name ) ) {
-				( *it ).count += mergable.count;
-				break;
+			if( ( *it ).name.size() != mergable.name.size() ) {
+				continue;
 			}
+			if( Q_strnicmp( ( *it ).name.data(), mergable.name.data(), mergable.name.size() ) != 0 ) {
+				continue;
+			}
+			( *it ).count += mergable.count;
+			break;
 		}
 		if( it != end ) {
-			gameaward_t *added = to.New();
-			added->name = mergable.name;
-			added->count = mergable.count;
+			to.New( mergable.name, mergable.count );
 		}
 	}
 
@@ -899,26 +897,37 @@ void StatsowFacade::AddAward( const edict_t *ent, const char *awardMsg ) {
 		return;
 	}
 
-	auto *const stats = &ent->r.client->level.stats;
+	auto &awardsSequence = ent->r.client->level.stats.awardsSequence;
 	// first check if we already have this one on the clients list
-	gameaward_t *ga = nullptr;
+	const size_t msgLen = ::strlen( awardMsg );
 
-	StatsSequence<gameaward_t>::iterator it( stats->awardsSequence.begin() );
-	StatsSequence<gameaward_t>::iterator end( stats->awardsSequence.end() );
-	for(; it != end; ++it ) {
-		if( !strcmp( ( *it ).name, awardMsg ) ) {
-			ga = &( *it );
-			break;
+	StatsSequence<LoggedAward>::iterator end( awardsSequence.end() );
+	for( StatsSequence<LoggedAward>::iterator it = awardsSequence.begin(); it != end; ++it ) {
+		LoggedAward &existing = *it;
+		const wsw::string_view &name = existing.name;
+		if( name.size() != msgLen ) {
+			continue;
+		}
+		if( Q_strnicmp( name.data(), awardMsg, name.size() ) != 0 ) {
+			continue;
+		}
+		existing.count++;
+		return;
+	}
+
+	const char *name = G_RegisterLevelString( awardMsg );
+	awardsSequence.New( wsw::string_view( name, msgLen ), 1 );
+}
+
+mm_uuid_t StatsowFacade::SessionOf( const edict_t *ent ) {
+	if( ent ) {
+		if( const auto *client = ent->r.client ) {
+			if( client->mm_session.IsValidSessionId() ) {
+				return client->mm_session;
+			}
 		}
 	}
-
-	if( it == end ) {
-		ga = stats->awardsSequence.New();
-		ga->name = G_RegisterLevelString( awardMsg );
-		ga->count = 0;
-	}
-
-	ga->count++;
+	return Uuid_ZeroUuid();
 }
 
 void StatsowFacade::AddFrag( const edict_t *attacker, const edict_t *victim, int mod ) {
@@ -930,28 +939,30 @@ void StatsowFacade::AddFrag( const edict_t *attacker, const edict_t *victim, int
 		return;
 	}
 
-	// ch : frag log
-	auto *const stats = &attacker->r.client->level.stats;
-	loggedFrag_t *const lfrag = stats->fragsSequence.New();
-	// TODO: Are these ID's required to be valid? What if there are monsters (not bots)?
-	lfrag->attacker = attacker->r.client->mm_session;
-	lfrag->victim = victim->r.client->mm_session;
-
-	// Currently frags made using weak and strong kinds of ammo
-	// share the same weapon index (thats what the stats server expect).
-	// Thus, for MOD's of weak ammo, write the corresponding strong ammo value.
-	static_assert( AMMO_GUNBLADE < AMMO_WEAK_GUNBLADE, "" );
-	int weaponIndex = G_ModToAmmo( mod );
-	if( weaponIndex >= AMMO_WEAK_GUNBLADE ) {
-		// Eliminate weak ammo values shift
-		weaponIndex -= AMMO_WEAK_GUNBLADE - AMMO_GUNBLADE;
+	const mm_uuid_t attackerId = SessionOf( attacker );
+	const mm_uuid_t victimId = SessionOf( victim );
+	// Skip logging of the frag in this case.
+	// This is very likely to be some non-player entities fragging each other
+	if( !attackerId.IsValidSessionId() && !victimId.IsValidSessionId() ) {
+		return;
 	}
-	// Shift weapon index so the first valid index correspond to Gunblade
-	// (no-weapon kills will have a negative weapon index, and the stats server is aware of it).
-	weaponIndex -= AMMO_GUNBLADE;
-	lfrag->weapon = weaponIndex;
+
+	int ammoTag = G_ModToAmmo( mod );
+	// There's no distinction between weak and strong ammo
+	static_assert( AMMO_GUNBLADE < AMMO_WEAK_GUNBLADE, "" );
+	if( ammoTag >= AMMO_WEAK_GUNBLADE ) {
+		// Eliminate weak ammo values shift
+		ammoTag -= AMMO_WEAK_GUNBLADE - AMMO_GUNBLADE;
+	}
+
+	const int weapon = ammoTag - AMMO_NONE;
+	static_assert( WEAP_NONE == 0, "The server WEAP_NONE value assumption is broken" );
+	assert( weapon >= 0 && weapon < WEAP_TOTAL );
+
 	// Changed to millis for the new stats server
-	lfrag->time = game.serverTime - GS_MatchStartTime();
+	const auto time = (int)( game.serverTime - GS_MatchStartTime() );
+
+	fragsSequence.New( attackerId, victimId, time, weapon );
 }
 
 void StatsowFacade::WriteHeaderFields( JsonWriter &writer, int teamGame ) {
@@ -975,9 +986,6 @@ void StatsowFacade::WriteHeaderFields( JsonWriter &writer, int teamGame ) {
 }
 
 void StatsowFacade::SendMatchFinishedReport() {
-	int i, teamGame, duelGame;
-	static const char *weapnames[WEAP_TOTAL] = { nullptr };
-
 	// Feature: do not report matches with duration less than 1 minute (actually 66 seconds)
 	if( level.finalMatchDuration <= SIGNIFICANT_MATCH_DURATION ) {
 		return;
@@ -989,8 +997,9 @@ void StatsowFacade::SendMatchFinishedReport() {
 	// ch : race properties through GS_RaceGametype()
 
 	// official duel frag support
-	duelGame = GS_TeamBasedGametype() && GS_MaxPlayersInTeam() == 1 ? 1 : 0;
+	int duelGame = GS_TeamBasedGametype() && GS_MaxPlayersInTeam() == 1 ? 1 : 0;
 
+	int teamGame;
 	// ch : fixme do mark duels as teamgames
 	if( duelGame ) {
 		teamGame = 0;
@@ -1006,7 +1015,7 @@ void StatsowFacade::SendMatchFinishedReport() {
 	if( teamlist[TEAM_ALPHA].numplayers > 0 && teamGame != 0 ) {
 		writer << "teams" << '[';
 		{
-			for( i = TEAM_ALPHA; i <= TEAM_BETA; i++ ) {
+			for( int i = TEAM_ALPHA; i <= TEAM_BETA; i++ ) {
 				writer << '{';
 				{
 					writer << "name" << trap_GetConfigString( CS_TEAM_SPECTATOR_NAME + ( i - TEAM_SPECTATOR ));
@@ -1020,22 +1029,42 @@ void StatsowFacade::SendMatchFinishedReport() {
 		writer << ']';
 	}
 
-	// Provide the weapon indices for the stats server
+	const char *weaponNames[WEAP_TOTAL];
+	for( int weapon = WEAP_GUNBLADE; weapon < WEAP_TOTAL; ++weapon ) {
+		weaponNames[weapon] = GS_FindItemByTag( weapon )->shortname;
+	}
+
+	// Supply weapon indices for the stats server as an object keyed by weapon names
 	// Note that redundant weapons (that were not used) are allowed to be present here
 	writer << "weapon_indices" << '{';
 	{
-		for( int j = 0; j < ( WEAP_TOTAL - WEAP_GUNBLADE ); ++j ) {
-			weapnames[j] = GS_FindItemByTag( WEAP_GUNBLADE + j )->shortname;
-			writer << weapnames[j] << j;
+		for( int weapon = WEAP_GUNBLADE; weapon < WEAP_TOTAL; ++weapon ) {
+			writer << weaponNames[weapon] << weapon;
 		}
 	}
 	writer << '}';
+
+	// Supply logged frags
+	writer << "logged_frags" << '[';
+	{
+		for( const LoggedFrag &frag: fragsSequence ) {
+			writer << '{';
+			{
+				writer << "attacker" << frag.attacker;
+				writer << "victim" << frag.victim;
+				writer << "time" << frag.time;
+				writer << "weapon" << frag.weapon;
+			}
+			writer << '}';
+		}
+	}
+	writer << ']';
 
 	// Write player properties
 	writer << "players" << '[';
 	for( ClientEntry *cl = clientEntriesHead; cl; cl = cl->next ) {
 		writer << '{';
-		cl->WriteToReport( writer, teamGame != 0, weapnames );
+		cl->WriteToReport( writer, teamGame != 0, weaponNames );
 		writer << '}';
 	}
 	writer << ']';
@@ -1087,33 +1116,16 @@ void StatsowFacade::ClientEntry::WriteToReport( JsonWriter &writer, bool teamGam
 
 	AddAwards( writer );
 	AddWeapons( writer, weaponNames );
-	AddFrags( writer );
 }
 
 void StatsowFacade::ClientEntry::AddAwards( JsonWriter &writer ) {
 	writer << "awards" << '[';
 	{
-		for( const gameaward_t &award: stats.awardsSequence ) {
+		for( const LoggedAward &award: stats.awardsSequence ) {
 			writer << '{';
 			{
-				writer << "name"  << award.name;
+				writer << "name"  << award.name.data();
 				writer << "count" << award.count;
-			}
-			writer << '}';
-		}
-	}
-	writer << ']';
-}
-
-void StatsowFacade::ClientEntry::AddFrags( JsonWriter &writer ) {
-	writer << "log_frags" << '[';
-	{
-		for( const loggedFrag_t &frag: stats.fragsSequence ) {
-			writer << '{';
-			{
-				writer << "victim" << frag.victim;
-				writer << "weapon" << frag.weapon;
-				writer << "time" << frag.time;
 			}
 			writer << '}';
 		}

@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <utility>
 
 #include "../matchmaker/mm_rating.h"
+#include "../qalgo/WswStdTypes.h"
 
 //g_gametypes.c
 extern cvar_t *g_warmup_timelimit;
@@ -44,19 +45,37 @@ extern cvar_t *g_gametypes_list;
 
 #define MAX_RACE_CHECKPOINTS    32
 
-typedef struct gameaward_s {
-	// ch : size of this?
-	const char *name;
+struct LoggedAward {
+	const wsw::string_view name;
 	int count;
-	// struct gameaward_s *next;
-} gameaward_t;
 
-typedef struct {
-	mm_uuid_t attacker; // session-id
-	mm_uuid_t victim;   // session-id
-	int weapon;         // weapon used
-	int64_t time;		// server timestamp
-} loggedFrag_t;
+	explicit LoggedAward( const wsw::string_view &name_, int count_ = 1 )
+		: name( name_ ), count( count_ ) {}
+};
+
+struct LoggedFrag {
+	/**
+	 * A session id of an attacker. May be {@code Uuid_ZeroUuid()} if an attacker is missing.
+	 */
+	const mm_uuid_t attacker;
+	/**
+	 * A session id of a victim (must be always valid)
+	 */
+	const mm_uuid_t victim;
+	/**
+	 * A time in millis since the match start
+	 */
+	const int time;
+	/**
+	 * An index of a weapon used, zero if none. There's no distinction between weak and strong ammo.
+	 */
+	const int weapon;
+
+	LoggedFrag( const mm_uuid_t &attacker_, const mm_uuid_t &victim_, int time_, int weapon_ )
+		: attacker( attacker_ ), victim( victim_ ), time( time_ ), weapon( weapon_ ){
+		assert( weapon >= 0 && weapon < WEAP_TOTAL );
+	}
+};
 
 struct alignas( 8 )RaceRun {
 	/**
@@ -488,9 +507,6 @@ typedef struct score_stats_s: public GVariousStats {
 
 		had_playtime = false;
 
-		if( currentRun )
-
-		fragsSequence.Clear();
 		awardsSequence.Clear();
 	}
 
@@ -525,8 +541,7 @@ typedef struct score_stats_s: public GVariousStats {
 
 	bool had_playtime;
 
-	StatsSequence<loggedFrag_t> fragsSequence;
-	StatsSequence<gameaward_t> awardsSequence;
+	StatsSequence<LoggedAward> awardsSequence;
 
 	RaceRun *currentRun;
 
@@ -562,7 +577,6 @@ private:
 		this->currentRun = that.currentRun;
 		that.currentRun = nullptr;
 
-		this->fragsSequence = std::move( that.fragsSequence );
 		this->awardsSequence = std::move( that.awardsSequence );
 	}
 } score_stats_t;
