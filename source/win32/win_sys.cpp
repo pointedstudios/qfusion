@@ -85,7 +85,7 @@ void Sys_Quit( void ) {
 	SV_Shutdown( "Server quit\n" );
 	CL_Shutdown();
 
-	if( dedicated && dedicated->integer ) {
+	if( ( dedicated && dedicated->integer ) || ( developer && developer->integer ) ) {
 		FreeConsole();
 	}
 
@@ -115,11 +115,11 @@ void Sys_Init( void ) {
 
 	Sys_InitThreads();
 
-	if( dedicated->integer ) {
+	if( dedicated->integer || developer->integer ) {
 		SetPriorityClass( GetCurrentProcess(), HIGH_PRIORITY_CLASS );
 
 		if( !AllocConsole() ) {
-			Sys_Error( "Couldn't create dedicated server console" );
+			Sys_Error( "Couldn't create a system console" );
 		}
 
 		// let QHOST hook in

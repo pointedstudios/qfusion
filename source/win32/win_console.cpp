@@ -154,7 +154,7 @@ void Sys_ConsoleOutput( char *string ) {
 	DWORD dummy;
 	char text[MAX_CONSOLETEXT + 2];   /* need 2 chars for the \r's */
 
-	if( !dedicated || !dedicated->integer ) {
+	if( !( dedicated && dedicated->integer ) && !( developer && developer->integer ) ) {
 		return;
 	}
 
