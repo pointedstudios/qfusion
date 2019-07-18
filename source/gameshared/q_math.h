@@ -164,8 +164,18 @@ static inline float Q_Sqrt( float number ) {
 	// Note that modern x86 handle infinities/NANs without penalties.
 	// Supplying zeroes is rare anyway.
 	float maybeSqrt = number * _mm_cvtss_f32( _mm_rsqrt_ss( _mm_set_ss( number ) ) );
-	// This should be a CMOV
-	return number ? maybeSqrt : 0.0f;
+
+	// There's unfortunately no CMOV for the actually used SSE2+ f.p. instruction set.
+	// Here's a workaround that uses the integer CMOV.
+	// As far as we know MSVC 2019 produces an expected code (while a 2-elements array approach generates a branch).
+
+	// Copy the value bits to an integer
+	int32_t maybeSqrtAsInt = *( (int32_t *)&maybeSqrt );
+	// This should be a CMOV. The UCOMISS instruction sets the needed flags.
+	// Note that in case when `number` bits are also converted to an integer the sign bit should be masked.
+	int32_t resultAsInt = number ? maybeSqrtAsInt : 0;
+	// Return the value bits as a float
+	return *( (float *)( &resultAsInt ) );
 }
 
 #else
