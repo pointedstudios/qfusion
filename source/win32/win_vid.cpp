@@ -254,7 +254,7 @@ int IN_MapKey( int key ) {
 }
 // wsw : pb :  end of paste from Q3
 
-static void AppActivate( BOOL fActive, BOOL minimize, BOOL destroy ) {
+void AppActivate( BOOL fActive, BOOL minimize, BOOL destroy ) {
 	int prevActiveApp;
 
 	Minimized = minimize;
@@ -277,7 +277,10 @@ static void AppActivate( BOOL fActive, BOOL minimize, BOOL destroy ) {
 
 	if( prevActiveApp != ActiveApp ) {
 		SCR_PauseCinematic( !ActiveApp );
-		SoundSystem::Instance()->Activate( ActiveApp );
+		// Use the Win32-specific SoundSystem accessor hack
+		if( auto *soundSystem = SoundSystem::InstanceOrNull() ) {
+			soundSystem->Activate( ActiveApp );
+		}
 	}
 
 	if( win_noalttab->integer ) {

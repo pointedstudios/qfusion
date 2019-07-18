@@ -36,6 +36,19 @@ class SoundSystem {
 	static SoundSystem *instance;
 
 	client_state_s *const client;
+
+#ifdef WIN32
+	/**
+	 * It's a good idea to limit the access to the {@code InstanceOrNull()}
+	 * method only to this function to prevent spreading of this hack over the codebase
+	 */
+	friend void AppActivate( int, int, int );
+
+	/**
+	 * A hack that makes the instance state accessible for the Win32-specific code
+	 */
+	static SoundSystem *InstanceOrNull() { return instance; }
+#endif
 protected:
 	wsw::string tmpString1 { MAX_QPATH };
 	wsw::string tmpString2 { MAX_QPATH };
