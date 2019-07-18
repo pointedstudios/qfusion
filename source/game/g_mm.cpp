@@ -1521,8 +1521,8 @@ void RespectHandler::ClientEntry::AnnounceMisconductBehaviour( const char *actio
 		outcome = S_COLOR_RED "No awards given";
 	}
 
-	constexpr const char *format = S_COLOR_WHITE "%s" S_COLOR_RED " has %s %s! %s!\n";
-	G_PrintMsg( nullptr, format, ent->r.client->netname, action, subject, outcome );
+	constexpr const char *format = S_COLOR_RED "You have %s" S_COLOR_RED " %s" S_COLOR_RED "! %s!\n";
+	G_PrintMsg( ent, format, action, subject, outcome );
 }
 
 void RespectHandler::ClientEntry::AnnounceFairPlay() {
