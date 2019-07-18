@@ -122,6 +122,14 @@ void KillEnemyGoal::UpdateWeight( const WorldState &currWorldState ) {
 		return;
 	}
 
+	// Retrieve the additional weight possibly set by GrabItemGoal
+	const float additionalWeightSet = GetAndResetAdditionalWeight();
+	// Skip this goal in case when there's a top-tier nav target but make sure the bot wasn't forced to kill enemies
+	// (todo: should this action decide everything instead?)
+	if( additionalWeightSet <= 0 && Self()->IsNavTargetATopTierItem() ) {
+		return;
+	}
+
 	const auto &configGroup = WeightConfig().nativeGoals.killEnemy;
 
 	this->weight = configGroup.baseWeight;
@@ -145,7 +153,7 @@ void KillEnemyGoal::UpdateWeight( const WorldState &currWorldState ) {
 		}
 	}
 
-	this->weight += GetAndResetAdditionalWeight();
+	this->weight += additionalWeightSet;
 }
 
 void KillEnemyGoal::GetDesiredWorldState( WorldState *worldState ) {
@@ -367,8 +375,6 @@ void ReactToEnemyLostGoal::UpdateWeight( const WorldState &currWorldState ) {
 	} else {
 		ModifyWeightForPursuit( currWorldState );
 	}
-
-
 }
 
 void ReactToEnemyLostGoal::ModifyWeightForTurningBack( const WorldState &currWorldState ) {
@@ -396,6 +402,12 @@ void ReactToEnemyLostGoal::ModifyWeightForTurningBack( const WorldState &currWor
 }
 
 void ReactToEnemyLostGoal::ModifyWeightForPursuit( const WorldState &currWorldState ) {
+	// Disallow pursuit explicitly if there's an active nav target that is a top tier item
+	if( Self()->IsNavTargetATopTierItem() ) {
+		weight = 0.0f;
+		return;
+	}
+
 	const float offensiveness = Self()->GetEffectiveOffensiveness();
 	if( HuntEnemiesLeftInMinority( currWorldState ) ) {
 		weight = 1.0f + weight + 2.0f * ( weight + offensiveness );

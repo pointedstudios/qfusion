@@ -492,6 +492,10 @@ public:
 		return NavTargetWorthRushing();
 	}
 
+	bool IsNavTargetATopTierItem() const {
+		return planningModule.IsTopTierItem( navTarget );
+	}
+
 	// Returns a number of weapons the logic allows to be used for weapon jumping.
 	// The buffer is assumed to be capable to store all implemented weapons.
 	int GetWeaponsForWeaponJumping( int *weaponNumsBuffer );
