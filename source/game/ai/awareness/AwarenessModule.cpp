@@ -88,6 +88,20 @@ void BotAwarenessModule::EnemiesTracker::OnEnemyRemoved( const TrackedEnemy *ene
 	module->OnEnemyRemoved( enemy );
 }
 
+float BotAwarenessModule::EnemiesTracker::ModifyWeightForAttacker( const edict_t *enemy, float weightSoFar ) {
+	if( bot->WillRetreat() || bot->IsNavTargetATopTierItem() ) {
+		return weightSoFar;
+	}
+	return AiEnemiesTracker::ModifyWeightForAttacker( enemy, weightSoFar );
+}
+
+float BotAwarenessModule::EnemiesTracker::ModifyWeightForHitTarget( const edict_t *enemy, float weightSoFar ) {
+	if( bot->WillRetreat() || bot->IsNavTargetATopTierItem() ) {
+		return weightSoFar;
+	}
+	return AiEnemiesTracker::ModifyWeightForHitTarget( enemy, weightSoFar );
+}
+
 void BotAwarenessModule::Frame() {
 	AiFrameAwareComponent::Frame();
 

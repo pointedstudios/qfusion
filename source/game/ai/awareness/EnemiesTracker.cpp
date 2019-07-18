@@ -323,6 +323,37 @@ void AiEnemiesTracker::Think() {
 	}
 }
 
+float AiEnemiesTracker::ModifyWeightForAttacker( const edict_t *enemy, float weightSoFar ) {
+	if( int64_t time = LastAttackedByTime( enemy ) ) {
+		// TODO: Add weight for poor attackers (by total damage / attack attempts ratio)
+		return weightSoFar + 1.5f * ( 1.0f - BoundedFraction( level.time - time, ATTACKER_TIMEOUT ) );
+	}
+	return weightSoFar;
+}
+
+float AiEnemiesTracker::ModifyWeightForHitTarget( const edict_t *enemy, float weightSoFar ) {
+	if( int64_t time = LastTargetTime( enemy ) ) {
+		// TODO: Add weight for targets that are well hit by bot
+		return weightSoFar + 1.5f * ( 1.0f - BoundedFraction( level.time - time, TARGET_TIMEOUT ) );
+	}
+	return weightSoFar;
+}
+
+float AiEnemiesTracker::ModifyWeightForDamageRatio( const edict_t *enemy, float weightSoFar ) {
+	constexpr float maxDamageToKill = 350.0f;
+
+	float damageToKill = DamageToKill( enemy );
+	if( hasQuad ) {
+		damageToKill /= 4;
+	}
+	if( ::HasShell( enemy ) ) {
+		damageToKill *= 4;
+	}
+
+	// abs(damageToBeKilled - damageToKill) / maxDamageToKill may be > 1
+	return weightSoFar + ( damageToBeKilled - damageToKill ) / maxDamageToKill;
+}
+
 float AiEnemiesTracker::ComputeRawEnemyWeight( const edict_t *enemy ) {
 	if( !enemy || G_ISGHOSTING( enemy ) ) {
 		return 0.0;
@@ -336,46 +367,17 @@ float AiEnemiesTracker::ComputeRawEnemyWeight( const edict_t *enemy ) {
 		}
 	}
 
-	if( int64_t time = LastAttackedByTime( enemy ) ) {
-		weight += 1.55f * ( 1.0f - BoundedFraction( level.time - time, ATTACKER_TIMEOUT ) );
-		// TODO: Add weight for poor attackers (by total damage / attack attepts ratio)
-	}
+	weight = ModifyWeightForAttacker( enemy, weight );
+	weight = ModifyWeightForHitTarget( enemy, weight );
 
-	if( int64_t time = LastTargetTime( enemy ) ) {
-		weight += 1.55f * ( 1.0f - BoundedFraction( level.time - time, TARGET_TIMEOUT ) );
-		// TODO: Add weight for targets that are well hit by bot
-	}
-
+	// Should we keep this hardcoded?
 	if( ::IsCarrier( enemy ) ) {
 		weight += 2.0f;
 	}
 
-	constexpr float maxDamageToKill = 350.0f;
-
-	float damageToKill = DamageToKill( enemy );
-	if( hasQuad ) {
-		damageToKill /= 4;
-	}
-	if( ::HasShell( enemy ) ) {
-		damageToKill *= 4;
-	}
-
-	// abs(damageToBeKilled - damageToKill) / maxDamageToKill may be > 1
-	weight += ( damageToBeKilled - damageToKill ) / maxDamageToKill;
-
-	if( weight > 0 ) {
-		if( hasQuad ) {
-			weight *= 1.5f;
-		}
-		if( hasShell ) {
-			weight += 0.5f;
-		}
-		if( hasQuad && hasShell ) {
-			weight *= 1.5f;
-		}
-	}
-
-	return std::min( std::max( 0.0f, weight ), MAX_ENEMY_WEIGHT );
+	weight = ModifyWeightForDamageRatio( enemy, weight );
+	Q_clamp( weight, 0.0f, MAX_ENEMY_WEIGHT );
+	return weight;
 }
 
 void AiEnemiesTracker::OnPain( const edict_t *bot, const edict_t *enemy, float kick, int damage ) {
@@ -407,28 +409,31 @@ void AiEnemiesTracker::OnPain( const edict_t *bot, const edict_t *enemy, float k
 }
 
 int64_t AiEnemiesTracker::LastAttackedByTime( const edict_t *ent ) const {
-	for( const AttackStats &attackStats: attackers )
+	for( const AttackStats &attackStats: attackers ) {
 		if( ent && attackStats.ent == ent ) {
 			return attackStats.LastActivityAt();
 		}
+	}
 
 	return 0;
 }
 
 int64_t AiEnemiesTracker::LastTargetTime( const edict_t *ent ) const {
-	for( const AttackStats &targetStats: targets )
+	for( const AttackStats &targetStats: targets ) {
 		if( ent && targetStats.ent == ent ) {
 			return targetStats.LastActivityAt();
 		}
+	}
 
 	return 0;
 }
 
 float AiEnemiesTracker::TotalDamageInflictedBy( const edict_t *ent ) const {
-	for( const AttackStats &attackStats: attackers )
+	for( const AttackStats &attackStats: attackers ) {
 		if( ent && attackStats.ent == ent ) {
 			return attackStats.totalDamage;
 		}
+	}
 
 	return 0;
 }

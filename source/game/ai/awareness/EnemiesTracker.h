@@ -380,7 +380,32 @@ private:
 	void RemoveEnemy( TrackedEnemy *enemy );
 
 	void UpdateEnemyWeight( TrackedEnemy *enemy );
-	float ComputeRawEnemyWeight( const edict_t *enemy );
+
+	virtual float ComputeRawEnemyWeight( const edict_t *enemy );
+
+	/**
+	 * Modifies weight for an enemy that has been an attacker of the bot recently.
+	 * @param enemy an enemy underlying entity (for a newly added or updated enemy)
+	 * @param weightSoFar a weight of the enemy computed to the moment of this call
+	 * @return a modified value of the enemy weight (can't be less than the supplied one)
+	 */
+	virtual float ModifyWeightForAttacker( const edict_t *enemy, float weightSoFar );
+
+	/**
+	 * Modifies weight for an enemy that has been hit by the bot recently.
+	 * @param enemy an enemy underlying entity (for a newly added or updated enemy)
+	 * @param weightSoFar a weight of the enemy computed to the moment of this call
+	 * @return a modified value of the enemy weight (can't be less than the supplied one)
+	 */
+	virtual float ModifyWeightForHitTarget( const edict_t *enemy, float weightSoFar );
+
+	/**
+	 * Modifies weight for an enemy based on a "kill enemy/be killed by enemy" damage ratio
+	 * @param enemy an enemy underlying entity (for a newly added or updated enemy)
+	 * @param weightSoFar a weight of the enemy computed to the moment of this call
+	 * @return a modified value of the enemy weight (can't be less that the supplied one)
+	 */
+	virtual float ModifyWeightForDamageRatio( const edict_t *enemy, float weightSoFar );
 
 	// Returns attacker slot number
 	int EnqueueAttacker( const edict_t *attacker, int damage );
