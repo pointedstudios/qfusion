@@ -1573,6 +1573,8 @@ class RespectToken {
 		}
 		va_end( va );
 	}
+
+	int TryMatchingByAlias( const char *p, const wsw::string_view &alias ) const;
 public:
 	RespectToken( const char *name_, int tokenNum_, const char *alias1 ) {
 		InitFrom( name_, tokenNum_, 1, alias1 );
@@ -1593,16 +1595,40 @@ public:
 	const char *Name() const { return name; }
 	int TokenNum() const { return tokenNum; }
 
-	int GetMatchedLength( const char *p ) const {
-		for( int i = 0; i < numAliases; ++i ) {
-			const wsw::string_view &alias = aliases[i];
-			if( !Q_strnicmp( alias.data(), p, alias.size() ) ) {
-				return alias.size();
+	int GetMatchedLength( const char *p ) const;
+};
+
+int RespectToken::GetMatchedLength( const char *p ) const {
+	for( int i = 0; i < numAliases; ++i ) {
+		const int len = TryMatchingByAlias( p, aliases[i] );
+		if( len > 0 ) {
+			return len;
+		}
+	}
+	return -1;
+}
+
+int RespectToken::TryMatchingByAlias( const char *p, const wsw::string_view &alias ) const {
+	const char *const start = p;
+	for( const char aliasChar: alias ) {
+		assert( !::isalpha( aliasChar ) || ::islower( aliasChar ) );
+		// Try finding a first character that is not a part of a color token
+		for(; ; ) {
+			const char charToMatch = *p++;
+			if( ::tolower( charToMatch ) == aliasChar ) {
+				break;
+			}
+			if( charToMatch != '^' ) {
+				return -1;
+			}
+			const char nextCharToMatch = *p++;
+			if( nextCharToMatch && !::isdigit( nextCharToMatch ) ) {
+				return -1;
 			}
 		}
-		return -1;
 	}
-};
+	return (int)( p - start );
+}
 
 class RespectTokensRegistry {
 	static const std::array<RespectToken, 10> TOKENS;
@@ -1655,10 +1681,11 @@ const int RespectTokensRegistry::SAY_AT_END_TOKEN_NUM = RespectTokensRegistry::T
 int RespectTokensRegistry::MatchByToken( const char **p ) {
 	for( const RespectToken &token: TOKENS ) {
 		int len = token.GetMatchedLength( *p );
-		if( len > 0 ) {
-			*p += len;
-			return token.TokenNum();
+		if( len < 0 ) {
+			continue;
 		}
+		*p += len;
+		return token.TokenNum();
 	}
 	return -1;
 }
@@ -1671,6 +1698,48 @@ const char *RespectHandler::ClientEntry::MakeHintString( int tokenNum ) {
 	return hintBuffer;
 }
 
+/**
+ * Tries to match a sequence like this: {@code ( Whitespace-Char* Color-Token? )* }
+ * @param s an address of the supplied string. Gets modified on success.
+ * @param numWhitespaceChars an address to write a number of whitespace characters met.
+ * @return false if there were malformed color tokens (the only kind of failure possible).
+ */
+static bool StripUpToMaybeToken( const char **s, int *numWhitespaceChars ) {
+	*numWhitespaceChars = 0;
+	const char *p = *s;
+	for(; ; ) {
+		const char *const oldp = p;
+		// Strip whitespace and punctuation except the circumflex that requires a special handling
+		while( ::ispunct( *p ) && *p != '^' ) {
+			p++;
+		}
+		*numWhitespaceChars += (int)( oldp - p );
+		// Interrupt at the string end
+		if( !*p ) {
+			break;
+		}
+		// Try matching a single color token
+		const char ch = *p;
+		if( ch != '^' ) {
+			break;
+		}
+		p++;
+		const char nextCh = *p++;
+		// Interrupt at an incomplete color token at the end with success
+		if( !nextCh ) {
+			break;
+		}
+		// A next character (if any) must be a digit
+		if( !::isdigit( nextCh ) ) {
+			return false;
+		}
+		// Go to a next color token (if any)
+	}
+
+	*s = p;
+	return true;
+}
+
 bool RespectHandler::ClientEntry::CheckForTokens( const char *message ) {
 	// Do not modify tokens count immediately
 	// Either this routine fails completely or stats for all tokens get updated
@@ -1679,19 +1748,30 @@ bool RespectHandler::ClientEntry::CheckForTokens( const char *message ) {
 
 	const int64_t levelTime = level.time;
 
+	bool expectPunctOrSpace = false;
 	const char *p = message;
 	for(;; ) {
-		while( ::isspace( *p ) ) {
-			p++;
+		int numWhitespaceChars = 0;
+		// If there were malformed color tokens
+		if( !StripUpToMaybeToken( &p, &numWhitespaceChars ) ) {
+			return false;
 		}
+		// If we've reached the string end
 		if( !*p ) {
 			break;
+		}
+		// If we didn't advance a displayed position after a previously matched token
+		if( expectPunctOrSpace && !numWhitespaceChars ) {
+			return false;
 		}
 		int tokenNum = RespectTokensRegistry::MatchByToken( &p );
 		if( tokenNum < 0 ) {
 			return false;
 		}
 		numFoundTokens[tokenNum]++;
+		// Expect a whitespace after just matched token
+		// (punctuation characters are actually allowed as well).
+		expectPunctOrSpace = true;
 	}
 
 	for( int tokenNum = 0; tokenNum < NUM_TOKENS; ++tokenNum ) {
