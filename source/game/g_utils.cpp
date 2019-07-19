@@ -1064,63 +1064,128 @@ void G_PrintChasersf( const edict_t *self, const char *format, ... ) {
 	}
 }
 
-/*
-* G_ChatMsg
-*
-* NULL sends the message to all clients
-*/
-void G_ChatMsg( const edict_t *ent, const edict_t *who, bool teamonly, const char *format, ... ) {
-	char msg[1024];
-	va_list argptr;
-	char *s, *p;
+ChatPrintHelper::ChatPrintHelper( const edict_t *source_, const char *format, ... ) : source( source_ ) {
+	va_list va;
+	va_start( va, format );
+	InitFromV( format, va );
+	va_end( va );
+}
 
-	va_start( argptr, format );
-	Q_vsnprintfz( msg, sizeof( msg ), format, argptr );
-	va_end( argptr );
+ChatPrintHelper::ChatPrintHelper( const char *format, ... ) : source( nullptr ) {
+	va_list va;
+	va_start( va, format );
+	InitFromV( format, va );
+	va_end( va );
+}
 
-	// double quotes are bad
-	p = msg;
-	while( ( p = strchr( p, '\"' ) ) != NULL )
+void ChatPrintHelper::InitFromV( const char *format, va_list va ) {
+	std::fill( buffer, buffer + OFFSET, ' ' );
+	messageLength = Q_vsnprintfz( buffer + OFFSET, sizeof( buffer ) - OFFSET, format, va );
+	if( messageLength < 0 ) {
+		messageLength = sizeof( buffer ) - OFFSET - 1;
+	}
+
+	// Replace double quotes in the message
+	char *p = buffer + OFFSET;
+	while( ( p = strchr( p, '\"' ) ) ) {
 		*p = '\'';
+	}
 
-	s = va( "%s %i \"%s\"", ( who && teamonly ? "tch" : "ch" ), ( who ? ENTNUM( who ) : 0 ), msg );
+	std::fill( buffer, buffer + OFFSET - 1, ' ' );
+	int numLen = Q_snprintfz( buffer + OFFSET / 2, OFFSET / 2, "%d", source ? PLAYERNUM( source ) + 1 : 0 );
+	assert( buffer[OFFSET / 2 + numLen] == '\0' );
+	buffer[OFFSET / 2 + numLen] = ' ';
 
-	if( !ent ) {
-		// mirror at server console
-		if( dedicated->integer ) {
-			if( !who ) {
-				G_Printf( S_COLOR_GREEN "console: %s\n", msg );     // admin console
-			} else if( !who->r.client ) {
-				;   // wtf?
-			} else if( teamonly ) {
-				G_Printf( S_COLOR_YELLOW "[%s]" S_COLOR_WHITE "%s" S_COLOR_YELLOW ": %s\n",
-						  who->r.client->ps.stats[STAT_TEAM] == TEAM_SPECTATOR ? "SPEC" : "TEAM", who->r.client->netname, msg );
-			} else {
-				G_Printf( "%s" S_COLOR_GREEN ": %s\n", who->r.client->netname, msg );
-			}
-		}
+	// Wrap the message in double quotes
+	buffer[OFFSET - 1] = '\"';
+	buffer[OFFSET + messageLength] = '\"';
+}
 
-		if( who && teamonly ) {
-			int i;
+void ChatPrintHelper::PrintToServerConsole( bool teamOnly ) {
+	if( !dedicated->integer ) {
+		return;
+	}
 
-			for( i = 0; i < gs.maxclients; i++ ) {
-				ent = game.edicts + 1 + i;
+	if( hasPrintedToServerConsole || skipServerConsole ) {
+		return;
+	}
 
-				if( ent->r.inuse && ent->r.client && trap_GetClientState( i ) >= CS_CONNECTED ) {
-					if( ent->s.team == who->s.team ) {
-						trap_GameCmd( ent, s );
-					}
-				}
-			}
+	hasPrintedToServerConsole = true;
+
+	const char *msg = buffer + OFFSET;
+	// Truncate the double quote at the end of the buffer
+	buffer[OFFSET + messageLength] = '\0';
+
+	if( !source ) {
+		G_Printf( S_COLOR_GREEN "console: %s\n", buffer );     // admin console
+	} else if( const auto *client = source->r.client ) {
+		if( teamOnly ) {
+			const char *team = client->ps.stats[STAT_TEAM] == TEAM_SPECTATOR ? "SPEC" : "TEAM";
+			G_Printf( S_COLOR_YELLOW "[%s]" S_COLOR_WHITE "%s" S_COLOR_YELLOW ": %s\n", team, client->netname, msg );
 		} else {
-			trap_GameCmd( NULL, s );
+			G_Printf( "%s" S_COLOR_GREEN ": %s\n", client->netname, msg );
 		}
+	}
+
+	// Restore the double quote at the end of the buffer
+	buffer[OFFSET + messageLength] = '\"';
+}
+
+void ChatPrintHelper::DispatchWithFilter( const ChatHandlersChain *filter, bool teamOnly ) {
+	SetCommandPrefix( teamOnly && source != nullptr );
+	PrintToServerConsole( true );
+
+	if( !source ) {
+		trap_GameCmd( nullptr, buffer );
+		return;
+	}
+
+	for( int i = 0; i < gs.maxclients; i++ ) {
+		edict_t *ent = game.edicts + 1 + i;
+		if( !ent->r.inuse || !ent->r.client ) {
+			continue;
+		}
+		if( teamOnly && ent->s.team != source->s.team ) {
+			continue;
+		}
+		if( trap_GetClientState( i ) < CS_CONNECTED ) {
+			continue;
+		}
+		if( filter && filter->Ignores( ent, source ) ) {
+			filter->NotifyOfIgnoredMessage( ent, source );
+			continue;
+		}
+		trap_GameCmd( ent, buffer );
+	}
+}
+
+void ChatPrintHelper::PrintTo( const edict_t *target, bool teamOnly ) {
+	if( !target->r.inuse ) {
+		return;
+	}
+
+	if( !target->r.client ) {
+		return;
+	}
+
+	if( teamOnly && source && source->s.team != target->s.team ) {
+		return;
+	}
+
+	if( trap_GetClientState( PLAYERNUM( target ) ) < CS_SPAWNED ) {
+		return;
+	}
+
+	PrintToServerConsole( teamOnly );
+	SetCommandPrefix( teamOnly );
+	trap_GameCmd( target, buffer );
+}
+
+inline void ChatPrintHelper::SetCommandPrefix( bool teamOnly ) {
+	if( teamOnly ) {
+		std::tie( buffer[0], buffer[1], buffer[2] ) = std::make_tuple( 't', 'c', 'h' );
 	} else {
-		if( ent->r.inuse && ent->r.client && trap_GetClientState( PLAYERNUM( ent ) ) >= CS_CONNECTED ) {
-			if( !who || !teamonly || ent->s.team == who->s.team ) {
-				trap_GameCmd( ent, s );
-			}
-		}
+		std::tie( buffer[0], buffer[1], buffer[2] ) = std::make_tuple( 'c', 'h', ' ' );
 	}
 }
 

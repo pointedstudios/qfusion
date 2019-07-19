@@ -29,7 +29,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 * Cmd_ConsoleSay_f
 */
 static void Cmd_ConsoleSay_f( void ) {
-	G_ChatMsg( NULL, NULL, false, "%s", trap_Cmd_Args() );
+	ChatPrintHelper chatPrintHelper( "%s", trap_Cmd_Args() );
+	chatPrintHelper.PrintToEverybody();
 }
 
 

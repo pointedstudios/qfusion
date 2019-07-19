@@ -47,7 +47,18 @@ static void CG_SC_ChatPrint( void ) {
 	const char *text = trap_Cmd_Argv( 2 );
 	const cvar_t *filter = cg_chatFilter;
 
+	// TODO: This var should be put to the client info and messages should be cut off at server level
 	if( filter->integer & ( teamonly ? 2 : 1 ) ) {
+		if( !cg_chatShowIgnored->integer ) {
+			return;
+		}
+		if( teamonly ) {
+			CG_LocalPrint( S_COLOR_GREY "A message from a teammate %s" S_COLOR_GREY " was ignored\n", name );
+		} else if( name ) {
+			CG_LocalPrint( S_COLOR_GREY "A message from %s" S_COLOR_GREY " was ignored\n", name );
+		} else {
+			CG_LocalPrint( S_COLOR_GREY "A message was ignored\n" );
+		}
 		return;
 	}
 
@@ -63,6 +74,23 @@ static void CG_SC_ChatPrint( void ) {
 	if( cg_chatBeep->integer ) {
 		trap_S_StartLocalSound( CG_MediaSfx( cgs.media.sfxChat ), 1.0f );
 	}
+}
+
+static void CG_SC_NotifyOfIgnoredMessage() {
+	if( !cg_chatShowIgnored->integer ) {
+		return;
+	}
+
+	const int who = atoi( trap_Cmd_Argv( 1 ) );
+	if( !who ) {
+		return;
+	}
+
+	if( who != bound( 1, who, MAX_CLIENTS ) ) {
+		return;
+	}
+
+	CG_LocalPrint( S_COLOR_GREY "A message from %s" S_COLOR_GREY " was ignored\n", cgs.clientInfo[who - 1].name );
 }
 
 /*
@@ -877,6 +905,7 @@ static const svcmd_t cg_svcmds[] =
 	{ "pr", CG_SC_Print },
 	{ "ch", CG_SC_ChatPrint },
 	{ "tch", CG_SC_ChatPrint },
+	{ "ign", CG_SC_NotifyOfIgnoredMessage },
 	{ "cp", CG_SC_CenterPrint },
 	{ "cpf", CG_SC_CenterPrintFormat },
 	{ "obry", CG_SC_Obituary },

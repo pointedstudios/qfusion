@@ -642,16 +642,53 @@ int G_PlayerGender( edict_t *player );
 #ifndef _MSC_VER
 void G_PrintMsg( const edict_t *ent, const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
 void G_PrintChasersf( const edict_t *self, const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
-void G_ChatMsg( const edict_t *ent, const edict_t *who, bool teamonly, const char *format, ... ) __attribute__( ( format( printf, 4, 5 ) ) );
 void G_CenterPrintMsg( const edict_t *ent, const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
 void G_CenterPrintFormatMsg( const edict_t *ent, int numVargs, const char *format, ... ) __attribute__( ( format( printf, 3, 4 ) ) );
 #else
 void G_PrintMsg( const edict_t *ent, _Printf_format_string_ const char *format, ... );
 void G_PrintChasersf( const edict_t *self, _Printf_format_string_ const char *format, ... );
-void G_ChatMsg( const edict_t *ent, const edict_t *who, bool teamonly, _Printf_format_string_ const char *format, ... );
 void G_CenterPrintMsg( const edict_t *ent, _Printf_format_string_ const char *format, ... );
 void G_CenterPrintFormatMsg( const edict_t *ent, int numVargs, _Printf_format_string_ const char *format, ... );
 #endif
+
+class ChatHandlersChain;
+
+class ChatPrintHelper {
+	enum { OFFSET = 10 };
+
+	const edict_t *const source;
+	char buffer[OFFSET + 1 + 1024];
+	int messageLength { 0 };
+	bool hasPrintedToServerConsole { false };
+	bool skipServerConsole { false };
+
+	void InitFromV( const char *format, va_list va );
+	void PrintToServerConsole( bool teamOnly );
+	inline void SetCommandPrefix( bool teamOnly );
+
+	void PrintTo( const edict_t *target, bool teamOnly );
+	void DispatchWithFilter( const ChatHandlersChain *filter, bool teamOnly );
+public:
+	ChatPrintHelper &operator=( const ChatPrintHelper & ) = delete;
+	ChatPrintHelper( const ChatPrintHelper & ) = delete;
+	ChatPrintHelper &operator=( ChatPrintHelper && ) = delete;
+	ChatPrintHelper( ChatPrintHelper && ) = delete;
+
+#ifndef _MSC_VER
+	ChatPrintHelper( const edict_t *source_, const char *format, ... ) __attribute__( ( format( printf, 3, 4 ) ) );
+	explicit ChatPrintHelper( const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
+#else
+	ChatPrintHelper( const edict_t *source_, _Printf_format_string_ const char *format, ... );
+	explicit ChatPrintHelper( _Printf_format_string_ const char *format, ... );
+#endif
+
+	void SkipServerConsole() { skipServerConsole = true; }
+
+	void PrintToChatOf( const edict_t *target ) { PrintTo( target, false ); }
+	void PrintToTeamChatOf( const edict_t *target ) { PrintTo( target, true ); }
+	void PrintToTeam( const ChatHandlersChain *filter = nullptr ) { DispatchWithFilter( filter, true ); }
+	void PrintToEverybody( const ChatHandlersChain *filter = nullptr ) { DispatchWithFilter( filter, false ); }
+};
 
 void G_UpdatePlayerMatchMsg( edict_t *ent, bool force = false );
 void G_UpdatePlayersMatchMsgs( void );
@@ -1658,6 +1695,7 @@ class RespectHandler final : public ChatHandler {
 	void Reset() override;
 
 	bool SkipStatsForClient( const edict_t *ent ) const;
+	bool SkipStatsForClient( int playerNum ) const;
 
 	bool HandleMessage( const edict_t *ent, const char *message ) override;
 
@@ -1667,6 +1705,42 @@ class RespectHandler final : public ChatHandler {
 
 	void OnClientDisconnected( const edict_t *ent );
 	void OnClientJoinedTeam( const edict_t *ent, int newTeam );
+};
+
+class ChatHandlersChain;
+
+class IgnoreFilter {
+	struct ClientEntry {
+		/**
+		 * @todo an actual memory access pattern is more appropriate for "ignored-by"
+		 * and not existing "ignores" relation, use the former one if the overhead becomes significant
+		 */
+		bool ignored[MAX_CLIENTS];
+
+		ClientEntry() {
+			Reset();
+		}
+
+		void Reset() {
+			std::fill( std::begin( ignored ), std::end( ignored ), false );
+		}
+
+		bool Ignores( int clientNum ) const { return ignored[clientNum]; }
+	};
+
+	ClientEntry entries[MAX_CLIENTS];
+public:
+	void HandleIgnoreCommand( const edict_t *ent, bool ignore );
+	void HandleIgnoreListCommand( const edict_t *ent );
+
+	void Reset();
+
+	void ResetForClient( int clientNum ) {
+		entries[clientNum].Reset();
+	}
+
+	bool Ignores( const edict_t *target, const edict_t *source ) const;
+	void NotifyOfIgnoredMessage( const edict_t *target, const edict_t *source ) const;
 };
 
 /**
@@ -1683,6 +1757,7 @@ class ChatHandlersChain final : public ChatHandler {
 	MuteFilter muteFilter;
 	FloodFilter floodFilter;
 	RespectHandler respectHandler;
+	IgnoreFilter ignoreFilter;
 
 	ChatHandlersChain() {
 		Reset();
@@ -1707,7 +1782,7 @@ public:
 	bool DetectFlood( const edict_t *ent, bool team ) {
 		return floodFilter.DetectFlood( ent, team );
 	}
-	bool SkipStatsForClient( const edict_t *ent ) {
+	bool SkipStatsForClient( const edict_t *ent ) const {
 		return respectHandler.SkipStatsForClient( ent );
 	}
 
@@ -1720,6 +1795,26 @@ public:
 
 	void AddToReportStats( const edict_t *ent, StatsowFacade::RespectStats *reportedStats ) {
 		respectHandler.AddToReportStats( ent, reportedStats );
+	}
+
+	bool Ignores( const edict_t *target, const edict_t *source ) const {
+		return ignoreFilter.Ignores( target, source );
+	}
+
+	void NotifyOfIgnoredMessage( const edict_t *target, const edict_t *source ) const {
+		ignoreFilter.NotifyOfIgnoredMessage( target, source );
+	}
+
+	static void HandleIgnoreCommand( edict_t *ent ) {
+		Instance()->ignoreFilter.HandleIgnoreCommand( ent, true );
+	}
+
+	static void HandleUnignoreCommand( edict_t *ent ) {
+		Instance()->ignoreFilter.HandleIgnoreCommand( ent, false );
+	}
+
+	static void HandleIgnoreListCommand( edict_t *ent ) {
+		Instance()->ignoreFilter.HandleIgnoreListCommand( ent );
 	}
 
 	void Frame();
@@ -1942,4 +2037,9 @@ inline void RespectHandler::OnClientDisconnected( const edict_t *ent ) {
 
 inline void RespectHandler::OnClientJoinedTeam( const edict_t *ent, int newTeam ) {
 	entries[ENTNUM( ent ) - 1].OnClientJoinedTeam( newTeam );
+}
+
+inline bool IgnoreFilter::Ignores( const edict_t *target, const edict_t *source ) const {
+	// TODO: See remarks to `ignored` field of `ClientEntry`
+	return entries[PLAYERNUM( target )].Ignores( PLAYERNUM( source ) );
 }

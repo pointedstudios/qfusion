@@ -95,7 +95,7 @@ cvar_t *cg_raceGhosts;
 cvar_t *cg_raceGhostsAlpha;
 cvar_t *cg_chatBeep;
 cvar_t *cg_chatFilter;
-cvar_t *cg_chatFilterTV;
+cvar_t *cg_chatShowIgnored;
 
 cvar_t *cg_cartoonEffects;
 cvar_t *cg_cartoonHitEffect;
@@ -814,7 +814,7 @@ static void CG_RegisterVariables( void ) {
 
 	cg_chatBeep =       trap_Cvar_Get( "cg_chatBeep", "1", CVAR_ARCHIVE );
 	cg_chatFilter =     trap_Cvar_Get( "cg_chatFilter", "0", CVAR_ARCHIVE );
-	cg_chatFilterTV =   trap_Cvar_Get( "cg_chatFilterTV", "2", CVAR_ARCHIVE );
+	cg_chatShowIgnored =   trap_Cvar_Get( "cg_chatShowIgnored", "1", CVAR_ARCHIVE );
 
 	// developer cvars
 	developer =     trap_Cvar_Get( "developer", "0", CVAR_CHEAT );

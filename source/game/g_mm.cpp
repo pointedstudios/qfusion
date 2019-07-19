@@ -1498,7 +1498,8 @@ bool RespectHandler::ClientEntry::HandleMessage( const char *message ) {
 
 	hasViolatedCodex = true;
 	// Print the message first
-	G_ChatMsg( nullptr, ent, false, "%s", message );
+	ChatPrintHelper chatPrintHelper( ent, "%s", message );
+	chatPrintHelper.PrintToEverybody( ChatHandlersChain::Instance() );
 	// Then announce
 	AnnounceMisconductBehaviour( "violated" );
 	// Interrupt handing of the message
@@ -1995,4 +1996,96 @@ void RespectHandler::ClientEntry::AddToReportStats( StatsowFacade::RespectStats 
 		const auto &token = RespectTokensRegistry::TokenForNum( i );
 		reportedStats->AddToEntry( token.Name(), numSaidTokens[i] );
 	}
+}
+
+void IgnoreFilter::HandleIgnoreCommand( const edict_t *ent, bool ignore ) {
+	const int numArgs = std::min( trap_Cmd_Argc(), MAX_CLIENTS );
+	const char *verb = ignore ? "ignore" : "unignore";
+	if( numArgs < 2 ) {
+		G_PrintMsg( ent, "Usage: %s <player1> [, <player2> ...]\n", verb );
+		return;
+	}
+
+	// Convert player numbers first before applying a modification (don't apply changes partially)
+	int numClients = 0;
+	int clientNums[MAX_CLIENTS];
+	bool present[MAX_CLIENTS];
+	std::fill( std::begin( present ), std::end( present ), false );
+	for( int i = 1; i < numArgs; ++i ) {
+		const char *arg = trap_Cmd_Argv( i );
+		const edict_t *player = G_PlayerForText( arg );
+		if( !player ) {
+			G_PrintMsg( ent, "Failed to get a player for `%s`\n", arg );
+			return;
+		}
+		if( player == ent ) {
+			G_PrintMsg( ent, "You can't %s yourself\n", verb );
+			return;
+		}
+		const int num = PLAYERNUM( player );
+		if( present[num] ) {
+			continue;
+		}
+		present[num] = true;
+		clientNums[numClients++] = num;
+	}
+
+	ClientEntry &e = entries[PLAYERNUM( ent )];
+	for( int i = 0; i < numClients; ++i ) {
+		e.ignored[clientNums[i]] = ignore;
+	}
+}
+
+void IgnoreFilter::HandleIgnoreListCommand( const edict_t *ent ) {
+	const edict_t *player = G_PlayerForText( trap_Cmd_Argv( 1 ) );
+	if( !player ) {
+		if( trap_Cmd_Argc() >= 2 ) {
+			G_PrintMsg( ent, "Usage: ignorelist [<player>]\n" );
+			return;
+		}
+		player = ent;
+	}
+
+	const char *action = S_COLOR_WHITE "You ignore";
+	char buffer[64];
+	if( player != ent ) {
+		Q_snprintfz( buffer, sizeof( buffer ), S_COLOR_WHITE "%s" S_COLOR_WHITE " ignores", player->r.client->netname );
+		action = buffer;
+	}
+
+	int numIgnored = 0;
+	const ClientEntry &e = entries[PLAYERNUM( player )];
+	for( int i = 0; i < gs.maxclients; ++i ) {
+		numIgnored += (int)e.ignored[i];
+	}
+
+	if( !numIgnored ) {
+		G_PrintMsg( ent, "%s nobody\n", action );
+		return;
+	}
+
+	wsw::stringstream ss;
+	ss << action;
+	const char *separator = " ";
+	for( int i = 0; i < gs.maxclients; ++i ) {
+		if( !e.ignored[i] ) {
+			continue;
+		}
+		const auto *client = game.edicts[1 + i].r.client;
+		ss << S_COLOR_WHITE << separator << client->netname;
+		separator = ", ";
+	}
+
+	const auto str( ss.str() );
+	G_PrintMsg( ent, "%s\n", str.c_str() );
+}
+
+void IgnoreFilter::Reset() {
+	for( ClientEntry &e: entries ) {
+		e.Reset();
+	}
+}
+
+void IgnoreFilter::NotifyOfIgnoredMessage( const edict_t *target, const edict_t *source ) const {
+	trap_GameCmd( target, va( "ign %d", PLAYERNUM( source ) + 1 ) );
 }

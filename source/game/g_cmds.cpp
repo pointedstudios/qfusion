@@ -983,6 +983,7 @@ void ChatHandlersChain::Reset() {
 	muteFilter.Reset();
 	floodFilter.Reset();
 	respectHandler.Reset();
+	ignoreFilter.Reset();
 }
 
 void ChatHandlersChain::ResetForClient( int clientNum ) {
@@ -990,6 +991,7 @@ void ChatHandlersChain::ResetForClient( int clientNum ) {
 	muteFilter.ResetForClient( clientNum );
 	floodFilter.ResetForClient( clientNum );
 	respectHandler.ResetForClient( clientNum );
+	ignoreFilter.ResetForClient( clientNum );
 }
 
 bool ChatHandlersChain::HandleMessage( const edict_t *ent, const char *message ) {
@@ -998,7 +1000,14 @@ bool ChatHandlersChain::HandleMessage( const edict_t *ent, const char *message )
 	if( authFilter.HandleMessage( ent, message ) || muteFilter.HandleMessage( ent, message ) ) {
 		return true;
 	}
-	return floodFilter.HandleMessage( ent, message ) || respectHandler.HandleMessage( ent, message );
+	if( floodFilter.HandleMessage( ent, message ) || respectHandler.HandleMessage( ent, message ) ) {
+		return true;
+	}
+
+	ChatPrintHelper chatPrintHelper( ent, "%s", message );
+	// Dispatch the message using `this` as an ignore filter
+	chatPrintHelper.PrintToEverybody( this );
+	return true;
 }
 
 void ChatAuthFilter::Reset() {
@@ -1062,11 +1071,7 @@ void Cmd_Say_f( edict_t *ent, bool arg0 ) {
 	// don't let text be too long for malicious reasons
 	text[arg0len + ( MAX_CHAT_BYTES - 1 )] = 0;
 
-	if( ChatHandlersChain::Instance()->HandleMessage( ent, text ) ) {
-		return;
-	}
-
-	G_ChatMsg( NULL, ent, false, "%s", text );
+	ChatHandlersChain::Instance()->HandleMessage( ent, text );
 }
 
 /*
@@ -1482,6 +1487,11 @@ void G_InitGameCommands( void ) {
 
 	// ch : added awards
 	G_AddCommand( "awards", Cmd_Awards_f );
+
+	// ignore-related commands
+	G_AddCommand( "ignore", ChatHandlersChain::HandleIgnoreCommand );
+	G_AddCommand( "unignore", ChatHandlersChain::HandleUnignoreCommand );
+	G_AddCommand( "ignorelist", ChatHandlersChain::HandleIgnoreListCommand );
 
 	// misc
 	G_AddCommand( "upstate", Cmd_Upstate_f );

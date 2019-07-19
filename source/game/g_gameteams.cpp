@@ -1236,7 +1236,8 @@ void G_Say_Team( edict_t *who, const char *inmsg, bool checkflood ) {
 			}
 		}
 
-		G_ChatMsg( NULL, who, true, "%s", msg );
+		ChatPrintHelper chatPrintHelper( who, "%s", msg );
+		chatPrintHelper.PrintToTeam( ChatHandlersChain::Instance() );
 		return;
 	}
 
@@ -1308,7 +1309,8 @@ void G_Say_Team( edict_t *who, const char *inmsg, bool checkflood ) {
 	}
 	*p = 0;
 
-	G_ChatMsg( NULL, who, true, "%s", outmsg );
+	ChatPrintHelper chatPrintHelper( who, "%s", outmsg );
+	chatPrintHelper.PrintToTeam( ChatHandlersChain::Instance() );
 }
 
 // coach
