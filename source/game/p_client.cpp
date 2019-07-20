@@ -1201,6 +1201,8 @@ void ClientUserinfoChanged( edict_t *ent, char *userinfo ) {
 	G_UpdateMMPlayerInfoString( PLAYERNUM( ent ) );
 
 	G_Gametype_ScoreEvent( cl, "userinfochanged", oldname );
+	
+	ChatHandlersChain::Instance()->OnUserInfoChanged( ent );
 }
 
 

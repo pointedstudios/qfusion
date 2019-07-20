@@ -1711,24 +1711,41 @@ class ChatHandlersChain;
 
 class IgnoreFilter {
 	struct ClientEntry {
-		/**
-		 * @todo an actual memory access pattern is more appropriate for "ignored-by"
-		 * and not existing "ignores" relation, use the former one if the overhead becomes significant
-		 */
-		bool ignored[MAX_CLIENTS];
+		static_assert( MAX_CLIENTS <= 64, "" );
+		uint64_t ignoredClientsMask;
+		bool ignoresEverybody;
+		bool ignoresNotTeammates;
 
 		ClientEntry() {
 			Reset();
 		}
 
 		void Reset() {
-			std::fill( std::begin( ignored ), std::end( ignored ), false );
+			ignoredClientsMask = 0;
+			ignoresEverybody = false;
+			ignoresNotTeammates = false;
 		}
 
-		bool Ignores( int clientNum ) const { return ignored[clientNum]; }
+		void SetClientBit( int clientNum, bool ignore ) {
+			assert( (unsigned)clientNum < 64u );
+			uint64_t bit = ( ( (uint64_t)1 ) << clientNum );
+			if( ignore ) {
+				ignoredClientsMask |= bit;
+			} else {
+				ignoredClientsMask &= ~bit;
+			}
+		}
+
+		bool GetClientBit( int clientNum ) const {
+			assert( (unsigned)clientNum < 64u );
+			return ( ignoredClientsMask & ( ( (uint64_t)1 ) << clientNum ) ) != 0;
+		}
 	};
 
 	ClientEntry entries[MAX_CLIENTS];
+
+	void SendChangeFilterVarCommand( const edict_t *ent );
+	void PrintIgnoreCommandUsage( const edict_t *ent, bool ignore );
 public:
 	void HandleIgnoreCommand( const edict_t *ent, bool ignore );
 	void HandleIgnoreListCommand( const edict_t *ent );
@@ -1741,6 +1758,8 @@ public:
 
 	bool Ignores( const edict_t *target, const edict_t *source ) const;
 	void NotifyOfIgnoredMessage( const edict_t *target, const edict_t *source ) const;
+
+	void OnUserInfoChanged( const edict_t *user );
 };
 
 /**
@@ -1815,6 +1834,10 @@ public:
 
 	static void HandleIgnoreListCommand( edict_t *ent ) {
 		Instance()->ignoreFilter.HandleIgnoreListCommand( ent );
+	}
+
+	void OnUserInfoChanged( const edict_t *ent ) {
+		ignoreFilter.OnUserInfoChanged( ent );
 	}
 
 	void Frame();
@@ -2040,6 +2063,15 @@ inline void RespectHandler::OnClientJoinedTeam( const edict_t *ent, int newTeam 
 }
 
 inline bool IgnoreFilter::Ignores( const edict_t *target, const edict_t *source ) const {
-	// TODO: See remarks to `ignored` field of `ClientEntry`
-	return entries[PLAYERNUM( target )].Ignores( PLAYERNUM( source ) );
+	if( target == source ) {
+		return false;
+	}
+	const ClientEntry &e = entries[PLAYERNUM( target )];
+	if( e.ignoresEverybody ) {
+		return true;
+	}
+	if( e.ignoresNotTeammates && ( target->s.team != source->s.team ) ) {
+		return true;
+	}
+	return e.GetClientBit( PLAYERNUM( source ) );
 }

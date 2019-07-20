@@ -45,22 +45,6 @@ static void CG_SC_ChatPrint( void ) {
 	const int who = atoi( trap_Cmd_Argv( 1 ) );
 	const char *name = ( who && who == bound( 1, who, MAX_CLIENTS ) ? cgs.clientInfo[who - 1].name : NULL );
 	const char *text = trap_Cmd_Argv( 2 );
-	const cvar_t *filter = cg_chatFilter;
-
-	// TODO: This var should be put to the client info and messages should be cut off at server level
-	if( filter->integer & ( teamonly ? 2 : 1 ) ) {
-		if( !cg_chatShowIgnored->integer ) {
-			return;
-		}
-		if( teamonly ) {
-			CG_LocalPrint( S_COLOR_GREY "A message from a teammate %s" S_COLOR_GREY " was ignored\n", name );
-		} else if( name ) {
-			CG_LocalPrint( S_COLOR_GREY "A message from %s" S_COLOR_GREY " was ignored\n", name );
-		} else {
-			CG_LocalPrint( S_COLOR_GREY "A message was ignored\n" );
-		}
-		return;
-	}
 
 	if( !name ) {
 		CG_LocalPrint( S_COLOR_GREEN "console: %s\n", text );
@@ -76,12 +60,20 @@ static void CG_SC_ChatPrint( void ) {
 	}
 }
 
-static void CG_SC_NotifyOfIgnoredMessage() {
+static void CG_SC_IgnoreCommand() {
+	const char *firstArg = trap_Cmd_Argv( 1 );
+	// TODO: Is there a more generic method of setting client vars?
+	// In fact this is actually a safer alternative so it should be kept
+	if( !Q_stricmp( "setVar", firstArg ) ) {
+		trap_Cvar_ForceSet( cg_chatFilter->name, trap_Cmd_Argv( 2 ) );
+		return;
+	}
+
 	if( !cg_chatShowIgnored->integer ) {
 		return;
 	}
 
-	const int who = atoi( trap_Cmd_Argv( 1 ) );
+	const int who = ::atoi( firstArg );
 	if( !who ) {
 		return;
 	}
@@ -90,7 +82,8 @@ static void CG_SC_NotifyOfIgnoredMessage() {
 		return;
 	}
 
-	CG_LocalPrint( S_COLOR_GREY "A message from %s" S_COLOR_GREY " was ignored\n", cgs.clientInfo[who - 1].name );
+	const char *format = S_COLOR_GREY "A message from " S_COLOR_WHITE "%s" S_COLOR_GREY " was ignored\n";
+	CG_LocalPrint( format, cgs.clientInfo[who - 1].name );
 }
 
 /*
@@ -905,7 +898,7 @@ static const svcmd_t cg_svcmds[] =
 	{ "pr", CG_SC_Print },
 	{ "ch", CG_SC_ChatPrint },
 	{ "tch", CG_SC_ChatPrint },
-	{ "ign", CG_SC_NotifyOfIgnoredMessage },
+	{ "ign", CG_SC_IgnoreCommand },
 	{ "cp", CG_SC_CenterPrint },
 	{ "cpf", CG_SC_CenterPrintFormat },
 	{ "obry", CG_SC_Obituary },

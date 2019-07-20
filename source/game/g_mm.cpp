@@ -2000,18 +2000,56 @@ void RespectHandler::ClientEntry::AddToReportStats( StatsowFacade::RespectStats 
 
 void IgnoreFilter::HandleIgnoreCommand( const edict_t *ent, bool ignore ) {
 	const int numArgs = std::min( trap_Cmd_Argc(), MAX_CLIENTS );
-	const char *verb = ignore ? "ignore" : "unignore";
 	if( numArgs < 2 ) {
-		G_PrintMsg( ent, "Usage: %s <player1> [, <player2> ...]\n", verb );
+		PrintIgnoreCommandUsage( ent, ignore );
 		return;
 	}
 
+	// Resetting of global flags should also unset individual bits
+
+	ClientEntry &e = entries[PLAYERNUM( ent )];
+	const char *prefix = trap_Cmd_Argv( 1 );
+	if( !Q_stricmp( prefix, "everybody" ) ) {
+		if( e.ignoresEverybody == ignore ) {
+			return;
+		}
+		e.ignoresEverybody = ignore;
+		e.ignoresNotTeammates = false;
+		if( !ignore ) {
+			e.ignoredClientsMask = 0;
+		}
+		SendChangeFilterVarCommand( ent );
+		return;
+	}
+
+	if( !Q_stricmp( prefix, "notteam" ) ) {
+		if( e.ignoresNotTeammates == ignore ) {
+			return;
+		}
+		e.ignoresNotTeammates = ignore;
+		e.ignoresEverybody = false;
+		if( !ignore ) {
+			for( int i = 0; i <= gs.maxclients; ++i ) {
+				const edict_t *player = game.edicts + i + 1;
+				if( player->r.inuse && player->s.team != ent->s.team ) {
+					e.SetClientBit( i, false );
+				}
+			}
+		}
+		SendChangeFilterVarCommand( ent );
+		return;
+	}
+
+	if( Q_stricmp( prefix, "players" ) != 0 ) {
+		PrintIgnoreCommandUsage( ent, ignore );
+		return;
+	}
+
+	uint64_t requestedMask = 0;
+	static_assert( MAX_CLIENTS <= 64, "" );
+	bool wereOnlyTeammates = true;
 	// Convert player numbers first before applying a modification (don't apply changes partially)
-	int numClients = 0;
-	int clientNums[MAX_CLIENTS];
-	bool present[MAX_CLIENTS];
-	std::fill( std::begin( present ), std::end( present ), false );
-	for( int i = 1; i < numArgs; ++i ) {
+	for( int i = 2; i < numArgs; ++i ) {
 		const char *arg = trap_Cmd_Argv( i );
 		const edict_t *player = G_PlayerForText( arg );
 		if( !player ) {
@@ -2019,21 +2057,56 @@ void IgnoreFilter::HandleIgnoreCommand( const edict_t *ent, bool ignore ) {
 			return;
 		}
 		if( player == ent ) {
-			G_PrintMsg( ent, "You can't %s yourself\n", verb );
+			G_PrintMsg( ent, "You can't ignore yourself\n" );
 			return;
 		}
-		const int num = PLAYERNUM( player );
-		if( present[num] ) {
-			continue;
-		}
-		present[num] = true;
-		clientNums[numClients++] = num;
+		wereOnlyTeammates &= ( player->s.team == ent->s.team );
+		requestedMask |= ( ( (uint64_t)1 ) << PLAYERNUM( player ) );
 	}
 
-	ClientEntry &e = entries[PLAYERNUM( ent )];
-	for( int i = 0; i < numClients; ++i ) {
-		e.ignored[clientNums[i]] = ignore;
+	// We think we should no longer keep these global flags
+	// if a player affected by these flags was mentioned in "unignore" command
+	if( !ignore && requestedMask ) {
+		if( e.ignoresEverybody ) {
+			e.ignoresEverybody = false;
+			// Convert the global flag to the per-client mask
+			e.ignoredClientsMask = ~( (uint64_t)0 );
+			SendChangeFilterVarCommand( ent );
+		} else if( e.ignoresNotTeammates && !wereOnlyTeammates ) {
+			e.ignoresNotTeammates = false;
+			// Convert the global flag to the per-client mask
+			for( int i = 0; i < gs.maxclients; ++i ) {
+				const edict_t *clientEnt = game.edicts + i + 1;
+				if( clientEnt->r.inuse && clientEnt->s.team != ent->s.team ) {
+					e.SetClientBit( i, true );
+				}
+			}
+			SendChangeFilterVarCommand( ent );
+		}
 	}
+
+	if( ignore ) {
+		e.ignoredClientsMask |= requestedMask;
+	} else {
+		e.ignoredClientsMask &= ~requestedMask;
+	}
+}
+
+void IgnoreFilter::PrintIgnoreCommandUsage( const edict_t *ent, bool ignore ) {
+	const char *usageFormat = "Usage: %s players <player1> [, <player2> ...] or %s everybody or %s notteam\n";
+	const char *verb = ignore ? "ignore" : "unignore";
+	G_PrintMsg( ent, usageFormat, verb, verb, verb );
+}
+
+void IgnoreFilter::SendChangeFilterVarCommand( const edict_t *ent ) {
+	ClientEntry &e = entries[PLAYERNUM( ent )];
+	int value = 0;
+	if( e.ignoresEverybody ) {
+		value = 1;
+	} else if( e.ignoresNotTeammates ) {
+		value = 2;
+	}
+	trap_GameCmd( ent, va( "ign setVar %d", value ) );
 }
 
 void IgnoreFilter::HandleIgnoreListCommand( const edict_t *ent ) {
@@ -2047,33 +2120,62 @@ void IgnoreFilter::HandleIgnoreListCommand( const edict_t *ent ) {
 	}
 
 	const char *action = S_COLOR_WHITE "You ignore";
+	const char *pronoun = S_COLOR_WHITE "your";
 	char buffer[64];
 	if( player != ent ) {
 		Q_snprintfz( buffer, sizeof( buffer ), S_COLOR_WHITE "%s" S_COLOR_WHITE " ignores", player->r.client->netname );
 		action = buffer;
+		pronoun = "their";
 	}
 
-	int numIgnored = 0;
 	const ClientEntry &e = entries[PLAYERNUM( player )];
-	for( int i = 0; i < gs.maxclients; ++i ) {
-		numIgnored += (int)e.ignored[i];
+	if( e.ignoresEverybody ) {
+		G_PrintMsg( ent, "%s everybody\n", action );
+		return;
 	}
 
-	if( !numIgnored ) {
-		G_PrintMsg( ent, "%s nobody\n", action );
+	if( !e.ignoredClientsMask ) {
+		if( e.ignoresNotTeammates ) {
+			G_PrintMsg( ent, "%s players not in %s team\n", action, pronoun );
+		} else {
+			G_PrintMsg( ent, "%s nobody\n", action );
+		}
 		return;
 	}
 
 	wsw::stringstream ss;
 	ss << action;
 	const char *separator = " ";
+	bool wereTeammatesMet = false;
 	for( int i = 0; i < gs.maxclients; ++i ) {
-		if( !e.ignored[i] ) {
+		const auto *clientEnt = game.edicts + i + 1;
+		if( clientEnt == player ) {
 			continue;
 		}
-		const auto *client = game.edicts[1 + i].r.client;
-		ss << S_COLOR_WHITE << separator << client->netname;
+		if( !clientEnt->r.inuse ) {
+			continue;
+		}
+		if( trap_GetClientState( i ) < CS_SPAWNED ) {
+			continue;
+		}
+		if( !e.GetClientBit( i ) ) {
+			continue;
+		}
+		if( e.ignoresNotTeammates ) {
+			if( clientEnt->s.team != player->s.team ) {
+				continue;
+			}
+			wereTeammatesMet = true;
+		}
+		ss << S_COLOR_WHITE << separator << clientEnt->r.client->netname;
 		separator = ", ";
+	}
+
+	if( e.ignoresNotTeammates ) {
+		if( wereTeammatesMet ) {
+			ss << S_COLOR_WHITE << " and";
+		}
+		ss << S_COLOR_WHITE " players not in " << pronoun << " team";
 	}
 
 	const auto str( ss.str() );
@@ -2088,4 +2190,17 @@ void IgnoreFilter::Reset() {
 
 void IgnoreFilter::NotifyOfIgnoredMessage( const edict_t *target, const edict_t *source ) const {
 	trap_GameCmd( target, va( "ign %d", PLAYERNUM( source ) + 1 ) );
+}
+
+void IgnoreFilter::OnUserInfoChanged( const edict_t *user ) {
+	const char *userInfo = user->r.client->userinfo;
+	const char *filterString = Info_ValueForKey( userInfo, "cg_chatFilter" );
+	if( !filterString || !*filterString ) {
+		return;
+	}
+
+	ClientEntry &e = entries[PLAYERNUM( user )];
+	const int filterValue = ::atof( filterString );
+	e.ignoresEverybody = ( filterValue & 1 ) != 0;
+	e.ignoresNotTeammates = ( filterValue & 2 ) != 0;
 }
