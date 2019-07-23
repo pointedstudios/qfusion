@@ -228,9 +228,6 @@ void Use_Plat( edict_t *ent, edict_t *other, edict_t *activator );
 void AITools_DrawLine( const vec3_t origin, const vec3_t dest );
 void AITools_DrawColorLine( const vec3_t origin, const vec3_t dest, int color, int parm );
 
-void GetHashAndLength( const char *str, unsigned *hash, unsigned *length );
-unsigned GetHashForLength( const char *str, unsigned length );
-
 // A cheaper version of G_Trace() that does not check against entities
 inline void StaticWorldTrace( trace_t *trace, const vec3_t from, const vec3_t to, int contentsMask,
 							  const vec3_t mins = vec3_origin, const vec3_t maxs = vec3_origin, int topNodeHint = 0 ) {

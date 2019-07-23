@@ -114,9 +114,8 @@ T *AiWeightConfigVarGroup::GetItemByName( const char *name_, unsigned nameHash_,
 		return nullptr;
 	}
 
-	unsigned dummy;
 	if( !nameHash_ ) {
-		GetHashAndLength( name_, &nameHash_, &dummy );
+		std::tie( nameHash_, std::ignore ) = GetHashAndLength( name_ );
 	}
 
 	unsigned binIndex = nameHash_ % NUM_HASH_BINS;

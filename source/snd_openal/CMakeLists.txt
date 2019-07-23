@@ -16,6 +16,7 @@ file(GLOB SND_OPENAL_SOURCES
     "../snd_common/*.c"
     "../snd_common/*.cpp"
     "../gameshared/q_*.cpp"
+    "../qalgo/hash.cpp"
 )
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")

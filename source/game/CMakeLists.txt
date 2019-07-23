@@ -36,6 +36,7 @@ file(GLOB GAME_SOURCES
 	"../matchmaker/mm_rating.cpp"
 	"../qalgo/base64.cpp"
 	"../qalgo/md5.cpp"
+	"../qalgo/hash.cpp"
 	"../qcommon/cjson.cpp"
 	"../../third-party/recastnavigation/Recast/Source/*.cpp"
 	"../../third-party/recastnavigation/Detour/Source/*.cpp"

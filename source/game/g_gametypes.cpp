@@ -18,8 +18,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-// TODO: Lift useful stuff to main headers from Ai submodule
-#include "ai/ai_local.h"
+#include "g_local.h"
+#include "../qalgo/hash.h"
 
 GVariousStats::~GVariousStats() {
 	Clear();
@@ -86,7 +86,7 @@ void GVariousStats::LinkNewNode( unsigned binIndex, const char *key, uint32_t ha
 
 int64_t GVariousStats::GetEntry( const char *key, int64_t defaultValue ) const {
 	unsigned hash, length;
-	GetHashAndLength( key, &hash, &length );
+	std::tie( hash, length ) = GetHashAndLength( key );
 
 	unsigned binIndex = hash % numHashBins;
 	if( const Node *bin = GetNode( binIndex, key, hash, length ) ) {
@@ -98,7 +98,7 @@ int64_t GVariousStats::GetEntry( const char *key, int64_t defaultValue ) const {
 
 void GVariousStats::SetEntry( const char *key, int64_t value ) {
 	unsigned hash, length;
-	GetHashAndLength( key, &hash, &length );
+	std::tie( hash, length ) = GetHashAndLength( key );
 
 	unsigned binIndex = hash % numHashBins;
 	if( Node *node = const_cast<Node *>( GetNode( binIndex, key, hash, length ) ) ) {
@@ -111,7 +111,7 @@ void GVariousStats::SetEntry( const char *key, int64_t value ) {
 
 void GVariousStats::AddToEntry( const char *key, int64_t delta ) {
 	unsigned hash, length;
-	GetHashAndLength( key, &hash, &length );
+	std::tie( hash, length ) = GetHashAndLength( key );
 
 	unsigned binIndex = hash % numHashBins;
 	if( Node *node = const_cast<Node *>( GetNode( binIndex, key, hash, length ) ) ) {

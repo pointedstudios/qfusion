@@ -4,6 +4,7 @@
 #include <tuple>
 #include "ai_local.h"
 #include "static_vector.h"
+#include "../../qalgo/hash.h"
 
 void GT_asRegisterScriptWeightConfig( class AiWeightConfig *weightConfig, const edict_t *configOwner );
 void GT_asReleaseScriptWeightConfig( class AiWeightConfig *weightConfig, const edict_t *configOwner );
@@ -29,7 +30,7 @@ protected:
 
 	explicit AiWeightConfigVarGroupChild( const char *name_ ) : name( name_ ) {
 		unsigned hash, length;
-		GetHashAndLength( name_, &hash, &length );
+		std::tie( hash, length ) = GetHashAndLength( name_ );
 		this->nameHash = hash;
 		this->nameLength = length;
 		this->isTouched = false;

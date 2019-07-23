@@ -155,37 +155,6 @@ void AITools_DrawColorLine( const vec3_t origin, const vec3_t dest, int color, i
 	GClip_LinkEntity( event );
 }
 
-// Almost same as COM_HashKey() but returns length too and does not perform division by hash size
-void GetHashAndLength( const char *str, unsigned *hash, unsigned *length ) {
-	unsigned i = 0;
-	unsigned v = 0;
-
-	for(; str[i]; i++ ) {
-		unsigned c = ( (unsigned char *)str )[i];
-		if( c == '\\' ) {
-			c = '/';
-		}
-		v = ( v + i ) * 37 + tolower( c ); // case insensitivity
-	}
-
-	*hash = v;
-	*length = i;
-}
-
-// A "dual" version of the function GetHashAndLength():
-// accepts the known length instead of computing it and computes a hash for the substring defined by the length.
-unsigned GetHashForLength( const char *str, unsigned length ) {
-	unsigned v = 0;
-	for( unsigned i = 0; i < length; i++ ) {
-		unsigned c = ( (unsigned char *)str )[i];
-		if( c == '\\' ) {
-			c = '/';
-		}
-		v = ( v + i ) * 37 + tolower( c ); // case insensitivity
-	}
-	return v;
-}
-
 static StaticVector<int, 16> hubAreas;
 
 //==========================================

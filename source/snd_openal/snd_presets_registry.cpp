@@ -8,43 +8,7 @@
 // TODO: Switch to using OpenAL SOFT headers across the entire codebase?
 #include "../../third-party/openal-soft/include/AL/efx-presets.h"
 
-static inline uint32_t NextHashStep( uint32_t hash, const char *str, uint32_t index ) {
-	auto c = ( (unsigned char *)str )[index];
-	// Use a fast lowercase conversion for ASCII letters.
-	// First, cast to a signed integer to get a difference.
-	// Second, convert the data as unsigned to promote negative values to huge ones and use a single branch.
-	if( ( (unsigned)( (int)c - 'A' ) ) <= 'Z' - 'A' ) {
-		c = ( c - 'A' ) + 'a';
-	} else if( c == '\\' ) {
-		c = '/';
-	}
-	return ( hash + index ) * 37 + c;
-}
-
-// TODO: This is a copy-paste from /game/ai/ai.cpp that is not lifted to top-level for various reasons
-// TODO: Actually this implementation has been improved
-static void GetHashAndLength( const char *str, uint32_t *hash, uint32_t *length ) {
-	uint32_t i = 0;
-	uint32_t v = 0;
-
-	for(; str[i]; i++ ) {
-		v = NextHashStep( v, str, i );
-	}
-
-	*hash = v;
-	*length = i;
-}
-
-// TODO: The same as for GetHashAndLength()
-// A "dual" version of the function GetHashAndLength():
-// accepts the known length instead of computing it and computes a hash for the substring defined by the length.
-static uint32_t GetHashForLength( const char *str, uint32_t length ) {
-	uint32_t v = 0;
-	for( uint32_t i = 0; i < length; i++ ) {
-		v = NextHashStep( v, str, i );
-	}
-	return v;
-}
+#include "../qalgo/hash.h"
 
 /**
  * Must be kept structurally-compatible with preset braced declarations from efx-presets.h
@@ -91,7 +55,7 @@ struct EfxPresetEntry {
 	explicit EfxPresetEntry( const char *presetMacroName )
 		: name( presetMacroName + sizeof( "EFX_REVERB_PRESET_" ) - 1 ) {
 		assert( !Q_strnicmp( presetMacroName, "EFX_REVERB_PRESET_", name - presetMacroName ) );
-		::GetHashAndLength( name, &nameHash, &nameLength );
+		std::tie( nameHash, nameLength ) = ::GetHashAndLength( name );
 	}
 
 	void RegisterSelf() {
@@ -113,7 +77,7 @@ void EfxPresetsRegistry::Register( EfxPresetEntry *entry ) {
 
 const EfxPresetEntry *EfxPresetsRegistry::FindByName( const char *name ) const {
 	uint32_t hash, length;
-	GetHashAndLength( name, &hash, &length );
+	std::tie( hash, length ) = GetHashAndLength( name );
 	int binIndex = hash % (int)( sizeof( hashBins ) / sizeof( *hashBins ) );
 	for( EfxPresetEntry *entry = hashBins[binIndex]; entry; entry = entry->nextInHashBin ) {
 		if( entry->nameLength == length && !Q_strnicmp( name, entry->name, length ) ) {

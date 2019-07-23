@@ -22,7 +22,27 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "../gameshared/q_arch.h"
 
-unsigned int COM_HashKey( const char *name, int hashsize );
+#include <utility>
+
+/**
+ * An utility to get a case-insensitive hash code of a string along with its length
+ * @param s a string that is supposed to be zero-terminated
+ * @return a pair of a hash code and a length of a supplied string
+ * @note Use with caution for performance-sensitive code.
+ * Case insensitivity is only guaranteed for the ASCII character set.
+ */
+std::pair<uint32_t, size_t> GetHashAndLength( const char *s );
+
+/**
+ * An utility to get a case-insensitive hash code of a string part specified by its length.
+ * This is a "dual" (to some degree) version of {@code GetHashAndLength()}
+ * @param s an address of a string part
+ * @param length a length of a given string part
+ * @return a hash code of the given string part.
+ * @note Use with caution for a performance-sensitive code.
+ * Case insensitivity is only guaranteed for the ASCII character set.
+ */
+uint32_t GetHashForLength( const char *s, size_t length );
 
 unsigned int COM_SuperFastHash( const unsigned char * data, size_t len, unsigned int hash );
 unsigned int COM_SuperFastHash64BitInt( uint64_t data );

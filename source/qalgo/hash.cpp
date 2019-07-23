@@ -20,26 +20,35 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "hash.h"
 
-/*
-* COM_HashKey
-*
-* Returns hash key for a string
-*/
-unsigned int COM_HashKey( const char *name, int hashsize ) {
-	int i;
-	unsigned int v;
-	unsigned int c;
+static inline uint32_t NextHashStep( uint32_t hash, const char *str, uint32_t index ) {
+	auto c = ( (unsigned char *)str )[index];
+	// Use a fast lowercase conversion for ASCII letters.
+	// First, cast to a signed integer to get a difference.
+	// Second, convert the data as unsigned to promote negative values to huge ones and use a single branch.
+	if( ( (unsigned)( (int)c - 'A' ) ) <= 'Z' - 'A' ) {
+		c = ( c - 'A' ) + 'a';
+	} else if( c == '\\' ) {
+		c = '/';
+	}
+	return ( hash + index ) * 37 + c;
+}
 
-	v = 0;
-	for( i = 0; name[i]; i++ ) {
-		c = name[i];
-		if( c == '\\' ) {
-			c = '/';
-		}
-		v = ( v + i ) * 37 + tolower( c ); // case insensitivity
+std::pair<uint32_t, size_t> GetHashAndLength( const char *str ) {
+	size_t i = 0;
+	uint32_t v = 0;
+	for(; str[i]; i++ ) {
+		v = NextHashStep( v, str, i );
 	}
 
-	return v % hashsize;
+	return std::make_pair( v, i );
+}
+
+uint32_t GetHashForLength( const char *str, size_t length ) {
+	uint32_t v = 0;
+	for( uint32_t i = 0; i < length; i++ ) {
+		v = NextHashStep( v, str, i );
+	}
+	return v;
 }
 
 #undef get16bits
