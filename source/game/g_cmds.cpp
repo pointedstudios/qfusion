@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../qalgo/SingletonHolder.h"
 #include "../qalgo/WswStdTypes.h"
 #include "ai/navigation/AasWorld.h"
+#include "../qcommon/CommandsHandler.h"
 
 /*
 * G_Teleport
@@ -1354,87 +1355,83 @@ static void Cmd_Upstate_f( edict_t *ent ) {
 //	client commands
 //===========================================================
 
-typedef void ( *gamecommandfunc_t )( edict_t * );
+class ClientCommandsHandler : public CommandsHandler {
+	bool AddOrReplace( Callback *callback ) override;
+	static bool IsWriteProtected( const char *name, size_t nameLength );
 
-typedef struct
-{
-	char name[MAX_QPATH];
-	gamecommandfunc_t func;
-} g_gamecommands_t;
+public:
+	class const_iterator {
+		friend class ClientCommandsHandler;
+		Callback *callback;
+		explicit const_iterator( Callback *callback_ ) : callback( callback_ ) {}
+	public:
+		const char *operator*() {
+			return callback->name;
+		}
+		const_iterator &operator++() {
+			callback = callback->NextInList();
+			return *this;
+		}
+		bool operator!=( const const_iterator &that ) const { return callback != that.callback; }
+	};
 
-g_gamecommands_t g_Commands[MAX_GAMECOMMANDS];
+	const_iterator begin() const { return const_iterator( listHead ); }
+	const_iterator end() const { return const_iterator( nullptr ); }
+};
 
-// FIXME
-void Cmd_ShowPLinks_f( edict_t *ent );
-void Cmd_deleteClosestNode_f( edict_t *ent );
+static SingletonHolder<ClientCommandsHandler> clientCommandsHandlerHolder;
 
 /*
 * G_PrecacheGameCommands
 */
 void G_PrecacheGameCommands( void ) {
-	int i;
-
-	for( i = 0; i < MAX_GAMECOMMANDS; i++ )
-		trap_ConfigString( CS_GAMECOMMANDS + i, g_Commands[i].name );
+	int i = 0;
+	for( const char *commandName : *clientCommandsHandlerHolder.Instance() ) {
+		trap_ConfigString( CS_GAMECOMMANDS + i, commandName );
+		i++;
+	}
 }
 
-/*
-* G_AddCommand
-*/
-void G_AddCommand( const char *name, gamecommandfunc_t callback ) {
-	int i;
-	char temp[MAX_QPATH];
-	static const char *blacklist[] = { "callvotevalidate", "callvotepassed", NULL };
+static const wsw::string_view callvoteValidate( "callvoteValidate" );
+static const wsw::string_view callvotePassed( "callvotePassed" );
 
-	Q_strncpyz( temp, name, sizeof( temp ) );
-
-	for( i = 0; blacklist[i] != NULL; i++ ) {
-		if( !Q_stricmp( blacklist[i], temp ) ) {
-			G_Printf( "WARNING: G_AddCommand: command name '%s' is write protected\n", temp );
-			return;
+bool ClientCommandsHandler::IsWriteProtected( const char *name, size_t nameLength ) {
+	for( const wsw::string_view &s: { callvoteValidate, callvotePassed } ) {
+		if( s.size() == nameLength && !Q_strnicmp( s.data(), name, s.size() ) ) {
+			return true;
 		}
 	}
+	return false;
+}
 
-	// see if we already had it in game side
-	for( i = 0; i < MAX_GAMECOMMANDS; i++ ) {
-		if( !g_Commands[i].name[0] ) {
-			break;
-		}
-		if( !Q_stricmp( g_Commands[i].name, temp ) ) {
-			// update func if different
-			if( g_Commands[i].func != callback ) {
-				g_Commands[i].func = ( gamecommandfunc_t )callback;
-			}
-			return;
-		}
+bool ClientCommandsHandler::AddOrReplace( Callback *callback ) {
+	if( IsWriteProtected( callback->name, callback->nameLength ) ) {
+		G_Printf( "WARNING: G_AddCommand: command name '%s' is write protected\n", callback->name );
+		return false;
 	}
 
-	if( i == MAX_GAMECOMMANDS ) {
-		G_Error( "G_AddCommand: Couldn't find a free g_Commands spot for the new command. (increase MAX_GAMECOMMANDS)\n" );
-		return;
+	// If there was an existing command
+	if( !CommandsHandler::AddOrReplace( callback ) ) {
+		return false;
 	}
 
-	// we don't have it, add it
-	g_Commands[i].func = ( gamecommandfunc_t )callback;
-	Q_strncpyz( g_Commands[i].name, temp, sizeof( g_Commands[i].name ) );
+	// If the size has grew up over this value after the AddOrReplace() call
+	if( size > MAX_GAMECOMMANDS ) {
+		G_Error( "ClientCommandsHandler::AddOrReplace(`%s`): Too many commands\n", callback->name );
+	}
 
 	// add the configstring if the precache process was already done
 	if( level.canSpawnEntities ) {
-		trap_ConfigString( CS_GAMECOMMANDS + i, g_Commands[i].name );
+		trap_ConfigString( CS_GAMECOMMANDS + ( size - 1 ), callback->name );
 	}
+
+	return true;
 }
 
 /*
 * G_InitGameCommands
 */
 void G_InitGameCommands( void ) {
-	int i;
-
-	for( i = 0; i < MAX_GAMECOMMANDS; i++ ) {
-		g_Commands[i].func = NULL;
-		g_Commands[i].name[0] = 0;
-	}
-
 	G_AddCommand( "cvarinfo", Cmd_CvarInfo_f );
 	G_AddCommand( "position", Cmd_Position_f );
 	G_AddCommand( "players", Cmd_Players_f );
@@ -1501,32 +1498,20 @@ void G_InitGameCommands( void ) {
 * ClientCommand
 */
 void ClientCommand( edict_t *ent ) {
-	char *cmd;
-	int i;
-
+	// Check whether the client is fully in-game
 	if( !ent->r.client || trap_GetClientState( PLAYERNUM( ent ) ) < CS_SPAWNED ) {
-		return; // not fully in game yet
-
+		return;
 	}
-	cmd = trap_Cmd_Argv( 0 );
 
-	if( Q_stricmp( cmd, "cvarinfo" ) ) { // skip cvarinfo cmds because they are automatic responses
+	const char *cmd = trap_Cmd_Argv( 0 );
+
+	// Skip cvarinfo cmds because they are automatic responses
+	if( Q_stricmp( cmd, "cvarinfo" ) != 0 ) {
 		G_Client_UpdateActivity( ent->r.client ); // activity detected
-
 	}
-	for( i = 0; i < MAX_GAMECOMMANDS; i++ ) {
-		if( !g_Commands[i].name[0] ) {
-			break;
-		}
 
-		if( !Q_stricmp( g_Commands[i].name, cmd ) ) {
-			if( g_Commands[i].func ) {
-				g_Commands[i].func( ent );
-			} else {
-				GT_asCallGameCommand( ent->r.client, cmd, trap_Cmd_Args(), trap_Cmd_Argc() - 1 );
-			}
-			return;
-		}
+	if( clientCommandsHandlerHolder.Instance()->Handle( cmd ) ) {
+		return;
 	}
 
 	G_PrintMsg( ent, "Bad user command: %s\n", cmd );

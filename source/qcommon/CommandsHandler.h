@@ -7,8 +7,10 @@
 #include <tuple>
 
 #include "../qalgo/hash.h"
+#include "../qalgo/WswStdTypes.h"
 
 class CommandsHandler {
+protected:
 	struct Callback {
 		enum { HASH_LINKS, LIST_LINKS };
 		Callback *prev[2] { nullptr, nullptr };
@@ -36,6 +38,7 @@ class CommandsHandler {
 	Callback *listHead { nullptr };
 	Callback *hashBins[NUM_BINS];
 
+	unsigned size { 0 };
 protected:
 	void Link( Callback *entry, unsigned binIndex );
 	void Unlink( Callback *entry );

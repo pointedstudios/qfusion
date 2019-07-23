@@ -25,12 +25,15 @@ void CommandsHandler::Link( CommandsHandler::Callback *entry, unsigned binIndex 
 	entry->binIndex = binIndex;
 	::Link( entry, &hashBins[binIndex], Callback::HASH_LINKS );
 	::Link( entry, &listHead, Callback::LIST_LINKS );
+	size++;
 }
 
 void CommandsHandler::Unlink( Callback *entry ) {
 	assert( entry->binIndex < NUM_BINS );
 	::Link( entry, &hashBins[entry->binIndex], Callback::HASH_LINKS );
 	::Link( entry, &listHead, Callback::LIST_LINKS );
+	assert( size > 0 );
+	size--;
 }
 
 CommandsHandler::~CommandsHandler() {
