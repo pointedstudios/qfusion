@@ -1355,15 +1355,15 @@ static void Cmd_Upstate_f( edict_t *ent ) {
 //	client commands
 //===========================================================
 
-class ClientCommandsHandler : public CommandsHandler {
-	bool AddOrReplace( Callback *callback ) override;
+class ClientCommandsHandler : public SingleArgCommandsHandler<edict_t *> {
+	bool AddOrReplace( GenericCommandCallback *callback ) override;
 	static bool IsWriteProtected( const char *name, size_t nameLength );
 
 public:
 	class const_iterator {
 		friend class ClientCommandsHandler;
-		Callback *callback;
-		explicit const_iterator( Callback *callback_ ) : callback( callback_ ) {}
+		GenericCommandCallback *callback;
+		explicit const_iterator( GenericCommandCallback *callback_ ) : callback( callback_ ) {}
 	public:
 		const char *operator*() {
 			return callback->name;
@@ -1404,7 +1404,7 @@ bool ClientCommandsHandler::IsWriteProtected( const char *name, size_t nameLengt
 	return false;
 }
 
-bool ClientCommandsHandler::AddOrReplace( Callback *callback ) {
+bool ClientCommandsHandler::AddOrReplace( GenericCommandCallback *callback ) {
 	if( IsWriteProtected( callback->name, callback->nameLength ) ) {
 		G_Printf( "WARNING: G_AddCommand: command name '%s' is write protected\n", callback->name );
 		return false;
@@ -1510,7 +1510,7 @@ void ClientCommand( edict_t *ent ) {
 		G_Client_UpdateActivity( ent->r.client ); // activity detected
 	}
 
-	if( clientCommandsHandlerHolder.Instance()->Handle( cmd ) ) {
+	if( clientCommandsHandlerHolder.Instance()->Handle( cmd, ent ) ) {
 		return;
 	}
 
