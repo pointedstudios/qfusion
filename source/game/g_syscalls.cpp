@@ -34,6 +34,10 @@ static void G_RemoveRating( edict_t *ent ) {
 	StatsowFacade::Instance()->RemoveRating( ent );
 }
 
+static void ClientCommand( edict_t *ent ) {
+	ClientCommandsHandler::Instance()->HandleClientCommand( ent );
+}
+
 /*
 * GetGameAPI
 *

@@ -561,12 +561,35 @@ extern const field_t fields[];
 // g_cmds.c
 //
 
-typedef void ( *gamecommandfunc_t )( edict_t * );
-
 char *G_StatsMessage( edict_t *ent );
-void G_InitGameCommands( void );
-void G_PrecacheGameCommands( void );
-void G_AddCommand( const char *name, gamecommandfunc_t cmdfunc );
+
+#include "../qcommon/CommandsHandler.h"
+
+class ClientCommandsHandler : public SingleArgCommandsHandler<edict_t *> {
+	using Super = SingleArgCommandsHandler<edict_t *>;
+
+	class ScriptCommandCallback : public Super::SingleArgCallback {
+	public:
+		ScriptCommandCallback( wsw::HashedStringRef &&name )
+			: SingleArgCallback( "script", std::move( name ) ) {}
+
+		bool operator()( edict_t *arg ) override;
+	};
+
+	bool AddOrReplace( GenericCommandCallback *callback ) override;
+	static bool IsWriteProtected( const wsw::StringView &name );
+public:
+	static void Init();
+	static void Shutdown();
+	static ClientCommandsHandler *Instance();
+
+	ClientCommandsHandler();
+
+	void PrecacheCommands();
+
+	void HandleClientCommand( edict_t *ent );
+	void AddScriptCommand( const char *name );
+};
 
 //
 // g_items.c
@@ -915,7 +938,6 @@ void G_CheckClientRespawnClick( edict_t *ent );
 bool ClientConnect( edict_t *ent, char *userinfo, bool fakeClient );
 void ClientDisconnect( edict_t *ent, const char *reason );
 void ClientBegin( edict_t *ent );
-void ClientCommand( edict_t *ent );
 void G_PredictedEvent( int entNum, int ev, int parm );
 void G_TeleportPlayer( edict_t *player, edict_t *dest );
 bool G_PlayerCanTeleport( edict_t *player );

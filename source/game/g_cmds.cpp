@@ -1355,49 +1355,40 @@ static void Cmd_Upstate_f( edict_t *ent ) {
 //	client commands
 //===========================================================
 
-class ClientCommandsHandler : public SingleArgCommandsHandler<edict_t *> {
-	bool AddOrReplace( GenericCommandCallback *callback ) override;
-	static bool IsWriteProtected( const char *name, size_t nameLength );
 
-public:
-	class const_iterator {
-		friend class ClientCommandsHandler;
-		GenericCommandCallback *callback;
-		explicit const_iterator( GenericCommandCallback *callback_ ) : callback( callback_ ) {}
-	public:
-		const char *operator*() {
-			return callback->name;
-		}
-		const_iterator &operator++() {
-			callback = callback->NextInList();
-			return *this;
-		}
-		bool operator!=( const const_iterator &that ) const { return callback != that.callback; }
-	};
-
-	const_iterator begin() const { return const_iterator( listHead ); }
-	const_iterator end() const { return const_iterator( nullptr ); }
-};
 
 static SingletonHolder<ClientCommandsHandler> clientCommandsHandlerHolder;
 
-/*
-* G_PrecacheGameCommands
-*/
-void G_PrecacheGameCommands( void ) {
+void ClientCommandsHandler::Init() {
+	::clientCommandsHandlerHolder.Init();
+}
+
+void ClientCommandsHandler::Shutdown() {
+	::clientCommandsHandlerHolder.Shutdown();
+}
+
+ClientCommandsHandler *ClientCommandsHandler::Instance() {
+	return ::clientCommandsHandlerHolder.Instance();
+}
+
+void ClientCommandsHandler::PrecacheCommands() {
 	int i = 0;
-	for( const char *commandName : *clientCommandsHandlerHolder.Instance() ) {
-		trap_ConfigString( CS_GAMECOMMANDS + i, commandName );
+	for( auto *callback = listHead; callback; callback = callback->NextInList() ) {
+		// TODO: This assumes zero-terminated string views!
+		trap_ConfigString( CS_GAMECOMMANDS + i, callback->name.Data() );
 		i++;
+	}
+	for(; i < MAX_GAMECOMMANDS; ++i ) {
+		trap_ConfigString( CS_GAMECOMMANDS + i, "" );
 	}
 }
 
-static const wsw::string_view callvoteValidate( "callvoteValidate" );
-static const wsw::string_view callvotePassed( "callvotePassed" );
+static const wsw::StringView callvoteValidate( "callvoteValidate" );
+static const wsw::StringView callvotePassed( "callvotePassed" );
 
-bool ClientCommandsHandler::IsWriteProtected( const char *name, size_t nameLength ) {
+bool ClientCommandsHandler::IsWriteProtected( const wsw::StringView &name ) {
 	for( const wsw::string_view &s: { callvoteValidate, callvotePassed } ) {
-		if( s.size() == nameLength && !Q_strnicmp( s.data(), name, s.size() ) ) {
+		if( s.EqualsIgnoreCase( name ) ) {
 			return true;
 		}
 	}
@@ -1405,8 +1396,10 @@ bool ClientCommandsHandler::IsWriteProtected( const char *name, size_t nameLengt
 }
 
 bool ClientCommandsHandler::AddOrReplace( GenericCommandCallback *callback ) {
-	if( IsWriteProtected( callback->name, callback->nameLength ) ) {
-		G_Printf( "WARNING: G_AddCommand: command name '%s' is write protected\n", callback->name );
+	// TODO: The code assumes zero-terminated string views!
+
+	if( IsWriteProtected( callback->name ) ) {
+		G_Printf( "WARNING: G_AddCommand: command name '%s' is write protected\n", callback->name.Data() );
 		return false;
 	}
 
@@ -1417,87 +1410,82 @@ bool ClientCommandsHandler::AddOrReplace( GenericCommandCallback *callback ) {
 
 	// If the size has grew up over this value after the AddOrReplace() call
 	if( size > MAX_GAMECOMMANDS ) {
-		G_Error( "ClientCommandsHandler::AddOrReplace(`%s`): Too many commands\n", callback->name );
+		G_Error( "ClientCommandsHandler::AddOrReplace(`%s`): Too many commands\n", callback->name.Data() );
 	}
 
 	// add the configstring if the precache process was already done
 	if( level.canSpawnEntities ) {
-		trap_ConfigString( CS_GAMECOMMANDS + ( size - 1 ), callback->name );
+		trap_ConfigString( CS_GAMECOMMANDS + ( size - 1 ), callback->name.Data() );
 	}
 
 	return true;
 }
 
-/*
-* G_InitGameCommands
-*/
-void G_InitGameCommands( void ) {
-	G_AddCommand( "cvarinfo", Cmd_CvarInfo_f );
-	G_AddCommand( "position", Cmd_Position_f );
-	G_AddCommand( "players", Cmd_Players_f );
-	G_AddCommand( "spectators", Cmd_Spectators_f );
-	G_AddCommand( "stats", Cmd_ShowStats_f );
-	G_AddCommand( "say", Cmd_SayCmd_f );
-	G_AddCommand( "say_team", Cmd_SayTeam_f );
-	G_AddCommand( "svscore", Cmd_Score_f );
-	G_AddCommand( "god", Cmd_God_f );
-	G_AddCommand( "noclip", Cmd_Noclip_f );
-	G_AddCommand( "use", Cmd_Use_f );
-	G_AddCommand( "give", Cmd_Give_f );
-	G_AddCommand( "kill", Cmd_Kill_f );
-	G_AddCommand( "putaway", Cmd_PutAway_f );
-	G_AddCommand( "chase", Cmd_ChaseCam_f );
-	G_AddCommand( "chasenext", Cmd_ChaseNext_f );
-	G_AddCommand( "chaseprev", Cmd_ChasePrev_f );
-	G_AddCommand( "spec", Cmd_Spec_f );
-	G_AddCommand( "enterqueue", G_Teams_JoinChallengersQueue );
-	G_AddCommand( "leavequeue", G_Teams_LeaveChallengersQueue );
-	G_AddCommand( "camswitch", Cmd_SwitchChaseCamMode_f );
-	G_AddCommand( "timeout", Cmd_Timeout_f );
-	G_AddCommand( "timein", Cmd_Timein_f );
-	G_AddCommand( "cointoss", Cmd_CoinToss_f );
-	G_AddCommand( "whois", Cmd_Whois_f );
+ClientCommandsHandler::ClientCommandsHandler() {
+	auto adapter( AdapterForTag( "builtin" ) );
+	adapter.Add( "cvarinfo", Cmd_CvarInfo_f );
+	adapter.Add( "position", Cmd_Position_f );
+	adapter.Add( "players", Cmd_Players_f );
+	adapter.Add( "spectators", Cmd_Spectators_f );
+	adapter.Add( "stats", Cmd_ShowStats_f );
+	adapter.Add( "say", Cmd_SayCmd_f );
+	adapter.Add( "say_team", Cmd_SayTeam_f );
+	adapter.Add( "svscore", Cmd_Score_f );
+	adapter.Add( "god", Cmd_God_f );
+	adapter.Add( "noclip", Cmd_Noclip_f );
+	adapter.Add( "use", Cmd_Use_f );
+	adapter.Add( "give", Cmd_Give_f );
+	adapter.Add( "kill", Cmd_Kill_f );
+	adapter.Add( "putaway", Cmd_PutAway_f );
+	adapter.Add( "chase", Cmd_ChaseCam_f );
+	adapter.Add( "chasenext", Cmd_ChaseNext_f );
+	adapter.Add( "chaseprev", Cmd_ChasePrev_f );
+	adapter.Add( "spec", Cmd_Spec_f );
+	adapter.Add( "enterqueue", G_Teams_JoinChallengersQueue );
+	adapter.Add( "leavequeue", G_Teams_LeaveChallengersQueue );
+	adapter.Add( "camswitch", Cmd_SwitchChaseCamMode_f );
+	adapter.Add( "timeout", Cmd_Timeout_f );
+	adapter.Add( "timein", Cmd_Timein_f );
+	adapter.Add( "cointoss", Cmd_CoinToss_f );
+	adapter.Add( "whois", Cmd_Whois_f );
 
 	// callvotes commands
-	G_AddCommand( "callvote", G_CallVote_Cmd );
-	G_AddCommand( "vote", G_CallVotes_CmdVote );
+	adapter.Add( "callvote", G_CallVote_Cmd );
+	adapter.Add( "vote", G_CallVotes_CmdVote );
 
-	G_AddCommand( "opcall", G_OperatorVote_Cmd );
-	G_AddCommand( "operator", Cmd_GameOperator_f );
-	G_AddCommand( "op", Cmd_GameOperator_f );
+	adapter.Add( "opcall", G_OperatorVote_Cmd );
+	adapter.Add( "operator", Cmd_GameOperator_f );
+	adapter.Add( "op", Cmd_GameOperator_f );
 
 	// teams commands
-	G_AddCommand( "ready", G_Match_Ready );
-	G_AddCommand( "unready", G_Match_NotReady );
-	G_AddCommand( "notready", G_Match_NotReady );
-	G_AddCommand( "toggleready", G_Match_ToggleReady );
-	G_AddCommand( "join", Cmd_Join_f );
+	adapter.Add( "ready", G_Match_Ready );
+	adapter.Add( "unready", G_Match_NotReady );
+	adapter.Add( "notready", G_Match_NotReady );
+	adapter.Add( "toggleready", G_Match_ToggleReady );
+	adapter.Add( "join", Cmd_Join_f );
 
 	// coach commands
-	G_AddCommand( "coach", G_Teams_Coach );
-	G_AddCommand( "lockteam", G_Teams_CoachLockTeam );
-	G_AddCommand( "unlockteam", G_Teams_CoachUnLockTeam );
-	G_AddCommand( "invite", G_Teams_Invite_f );
+	adapter.Add( "coach", G_Teams_Coach );
+	adapter.Add( "lockteam", G_Teams_CoachLockTeam );
+	adapter.Add( "unlockteam", G_Teams_CoachUnLockTeam );
+	adapter.Add( "invite", G_Teams_Invite_f );
 
 	// bot commands
-	G_AddCommand( "botnotarget", AI_Cheat_NoTarget );
+	adapter.Add( "botnotarget", AI_Cheat_NoTarget );
 
 	// ch : added awards
-	G_AddCommand( "awards", Cmd_Awards_f );
+	adapter.Add( "awards", Cmd_Awards_f );
 
 	// ignore-related commands
-	G_AddCommand( "ignore", ChatHandlersChain::HandleIgnoreCommand );
-	G_AddCommand( "unignore", ChatHandlersChain::HandleUnignoreCommand );
-	G_AddCommand( "ignorelist", ChatHandlersChain::HandleIgnoreListCommand );
+	adapter.Add( "ignore", ChatHandlersChain::HandleIgnoreCommand );
+	adapter.Add( "unignore", ChatHandlersChain::HandleUnignoreCommand );
+	adapter.Add( "ignorelist", ChatHandlersChain::HandleIgnoreListCommand );
 
 	// misc
-	G_AddCommand( "upstate", Cmd_Upstate_f );
+	adapter.Add( "upstate", Cmd_Upstate_f );
 }
 
-/*
-* ClientCommand
-*/
-void ClientCommand( edict_t *ent ) {
+void ClientCommandsHandler::HandleClientCommand( edict_t *ent ) {
 	// Check whether the client is fully in-game
 	if( !ent->r.client || trap_GetClientState( PLAYERNUM( ent ) ) < CS_SPAWNED ) {
 		return;
@@ -1510,9 +1498,18 @@ void ClientCommand( edict_t *ent ) {
 		G_Client_UpdateActivity( ent->r.client ); // activity detected
 	}
 
-	if( clientCommandsHandlerHolder.Instance()->Handle( cmd, ent ) ) {
+	if( Super::Handle( cmd, ent ) ) {
 		return;
 	}
 
 	G_PrintMsg( ent, "Bad user command: %s\n", cmd );
 }
+
+void ClientCommandsHandler::AddScriptCommand( const char *name ) {
+	Add( new ScriptCommandCallback( wsw::HashedStringRef::DeepCopyOf( name ) ) );
+}
+
+bool ClientCommandsHandler::ScriptCommandCallback::operator()( edict_t *arg ) {
+	return GT_asCallGameCommand( arg->r.client, name.Data(), trap_Cmd_Args(), trap_Cmd_Argc() - 1 );
+}
+

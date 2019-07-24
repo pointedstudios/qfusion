@@ -2888,7 +2888,7 @@ static void asFunc_RegisterCommand( asstring_t *str ) {
 		return;
 	}
 
-	G_AddCommand( str->buffer, NULL );
+	ClientCommandsHandler::Instance()->AddScriptCommand( str->buffer );
 }
 
 static void asFunc_RegisterCallvote( asstring_t *asname, asstring_t *asusage, asstring_t *astype, asstring_t *ashelp ) {
