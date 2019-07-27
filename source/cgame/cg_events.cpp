@@ -1032,16 +1032,22 @@ void CG_Event_DoubleJump( entity_state_t *state, int parm ) {
 * CG_Event_Jump
 */
 void CG_Event_Jump( entity_state_t *state, int parm ) {
-#define MOVEDIREPSILON 0.25f
-	centity_t *cent;
-	int xyspeedcheck;
+	float attenuation = state->attenuation;
+	// Hack for the bobot jump sound.
+	// Amplifying it is not an option as it becomes annoying at close range.
+	// Note that this can not and should not be handled at the game-server level as a client may use an arbitrary model.
+	if( const char *modelName = cg_entPModels[state->number].pmodelinfo->name ) {
+		if( ::strstr( modelName, "bobot" ) ) {
+			attenuation = ATTN_DISTANT;
+		}
+	}
 
-	cent = &cg_entities[state->number];
-	xyspeedcheck = SQRTFAST( cent->animVelocity[0] * cent->animVelocity[0] + cent->animVelocity[1] * cent->animVelocity[1] );
+	centity_t *cent = &cg_entities[state->number];
+	float xyspeedcheck = Q_Sqrt( cent->animVelocity[0] * cent->animVelocity[0] + cent->animVelocity[1] * cent->animVelocity[1] );
 	if( xyspeedcheck < 100 ) { // the player is jumping on the same place, not running
 		CG_PModel_AddAnimation( state->number, LEGS_JUMP_NEUTRAL, 0, 0, EVENT_CHANNEL );
 		CG_SexedSound( state->number, CHAN_BODY, va( S_PLAYER_JUMP_1_to_2, ( rand() & 1 ) + 1 ),
-					   cg_volume_players->value, state->attenuation );
+					   cg_volume_players->value, attenuation );
 	} else {
 		vec3_t movedir;
 		mat3_t viewaxis;
@@ -1054,24 +1060,23 @@ void CG_Event_Jump( entity_state_t *state, int parm ) {
 		Matrix3_FromAngles( tv( 0, cent->current.angles[YAW], 0 ), viewaxis );
 
 		// see what's his relative movement direction
-		if( DotProduct( movedir, &viewaxis[AXIS_FORWARD] ) > MOVEDIREPSILON ) {
+		if( DotProduct( movedir, &viewaxis[AXIS_FORWARD] ) > 0.25f ) {
 			cent->jumpedLeft = !cent->jumpedLeft;
 			if( !cent->jumpedLeft ) {
 				CG_PModel_AddAnimation( state->number, LEGS_JUMP_LEG2, 0, 0, EVENT_CHANNEL );
 				CG_SexedSound( state->number, CHAN_BODY, va( S_PLAYER_JUMP_1_to_2, ( rand() & 1 ) + 1 ),
-							   cg_volume_players->value, state->attenuation );
+							   cg_volume_players->value, attenuation );
 			} else {
 				CG_PModel_AddAnimation( state->number, LEGS_JUMP_LEG1, 0, 0, EVENT_CHANNEL );
 				CG_SexedSound( state->number, CHAN_BODY, va( S_PLAYER_JUMP_1_to_2, ( rand() & 1 ) + 1 ),
-							   cg_volume_players->value, state->attenuation );
+							   cg_volume_players->value, attenuation );
 			}
 		} else {
 			CG_PModel_AddAnimation( state->number, LEGS_JUMP_NEUTRAL, 0, 0, EVENT_CHANNEL );
 			CG_SexedSound( state->number, CHAN_BODY, va( S_PLAYER_JUMP_1_to_2, ( rand() & 1 ) + 1 ),
-						   cg_volume_players->value, state->attenuation );
+						   cg_volume_players->value, attenuation );
 		}
 	}
-#undef MOVEDIREPSILON
 }
 
 /*
