@@ -12,6 +12,10 @@ inline RenderProcessLogger *PendingCallbackRequest::Logger() {
 	return parent->Logger();
 }
 
+inline RenderProcessLogger *PendingRequestLauncher::Logger() {
+	return parent->Logger();
+}
+
 const CefString PendingCallbackRequest::getCVar( "getCVar" );
 const CefString PendingCallbackRequest::setCVar( "setCVar" );
 const CefString PendingCallbackRequest::executeCmd( "executeCmd" );
