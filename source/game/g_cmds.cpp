@@ -19,6 +19,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 #include "g_local.h"
 
+#include "../qalgo/SingletonHolder.h"
+#include "../qalgo/WswStdTypes.h"
+#include "ai/navigation/AasWorld.h"
+#include "../qcommon/CommandsHandler.h"
+
 /*
 * G_Teleport
 *
@@ -364,75 +369,376 @@ static void Cmd_CvarInfo_f( edict_t *ent ) {
 	}
 }
 
+static bool CheckStateForPositionCmd( edict_t *ent ) {
+	if( sv_cheats->integer ) {
+		return true;
+	}
+	if( GS_MatchState() <= MATCH_STATE_WARMUP ) {
+		return true;
+	}
+	if ( ent->r.client->ps.pmove.pm_type != PM_SPECTATOR ) {
+		return true;
+	}
+	G_PrintMsg( ent, "Position command is only available in warmup and in spectator mode.\n" );
+	return false;
+}
+
+class PositionArgSeqMatcher {
+protected:
+	const char *const name;
+	vec3_t values { 0, 0, 0 };
+	const int numExpectedValues;
+	bool hasResult { false };
+
+	static float ArgToFloat( int argNum );
+	virtual int Parse( int startArgNum );
+
+	template <typename Iterable>
+	static int MatchByFirst( edict_t *user, int argNum, const char *prefix, const Iterable &matchers );
+
+	virtual const char *Validate() { return nullptr; }
+public:
+	explicit PositionArgSeqMatcher( const char *name_, int numExpectedValues_ )
+		: name( name_ ), numExpectedValues( numExpectedValues_ ) {}
+
+	virtual ~PositionArgSeqMatcher() = default;
+
+	bool CanMatch( const char *argSeqHead ) const {
+		return ( Q_stricmp( argSeqHead, name ) ) == 0;
+	}
+
+	const char *Name() const { return name; }
+	bool HasResult() const { return hasResult; }
+
+	void CopyTo( float *dest ) const {
+		if( hasResult ) {
+			std::copy_n( values, numExpectedValues, dest );
+		} else {
+			std::fill_n( dest, numExpectedValues, 0.0f );
+		}
+	}
+
+	void CopyToIfHasResult( float *dest ) const {
+		if( hasResult ) {
+			std::copy_n( values, numExpectedValues, dest );
+		}
+	}
+
+	template <typename Iterable>
+	static bool MatchAndValidate( edict_t *user, int startArgNum, const char *argSeqPrefix, const Iterable &matchers );
+};
+
+struct OriginMatcher : public PositionArgSeqMatcher {
+	OriginMatcher() : PositionArgSeqMatcher( "origin", 3 ) {}
+
+	const char *Validate() override {
+		vec3_t worldMins, worldMaxs;
+		const float *playerMins = playerbox_stand_mins;
+		const float *playerMaxs = playerbox_stand_maxs;
+		trap_CM_InlineModelBounds( trap_CM_InlineModel( 0 ), worldMins, worldMaxs );
+		for( int i = 0; i < 3; ++i ) {
+			if( values[i] + playerMins[i] <= worldMins[i] || values[i] + playerMaxs[i] >= worldMaxs[i] ) {
+				return "The position is outside of world bounds";
+			}
+		}
+		return nullptr;
+	}
+};
+
+struct AnglesMatcher : public PositionArgSeqMatcher {
+	AnglesMatcher() : PositionArgSeqMatcher( "angles", 2 ) {}
+
+	const char *Validate() override {
+		if( values[PITCH] < -90.0f || values[PITCH] > +90.0f ) {
+			return "The roll angle must be within [-90, +90] degrees range";
+		}
+		if( values[YAW] < 0 || values[YAW] > 360.0f ) {
+			return "The yaw angle must be within [-180, +180] degrees range";
+		}
+		if( values[ROLL] != 0 ) {
+			return "The roll angle must be zero";
+		}
+		return nullptr;
+	}
+};
+
+struct VelocityMatcher : public PositionArgSeqMatcher {
+	VelocityMatcher() : PositionArgSeqMatcher( "velocity", 3 ) {}
+
+	const char *Validate() override {
+		if( VectorLengthSquared( values ) > 9999 * 9999 ) {
+			return "The velocity magnitude is way too large";
+		}
+		return nullptr;
+	}
+};
+
+struct SpeedMatcher : public PositionArgSeqMatcher {
+	SpeedMatcher(): PositionArgSeqMatcher( "speed", 1 ) {}
+
+	const char *Validate() override {
+		if( std::fabs( values[0] ) > 9999 ) {
+			return "The speed is way too large";
+		}
+		return nullptr;
+	}
+};
+
+int PositionArgSeqMatcher::Parse( int startArgNum ) {
+	assert( startArgNum > 0 && numExpectedValues > 0 );
+	if( startArgNum + numExpectedValues > trap_Cmd_Argc() ) {
+		return -1;
+	}
+	for( int i = 0; i < numExpectedValues; ++i ) {
+		float val = ArgToFloat( startArgNum + i );
+		if( !std::isfinite( val ) ) {
+			return -1;
+		}
+		values[i] = val;
+	}
+	hasResult = true;
+	return numExpectedValues;
+}
+
+float PositionArgSeqMatcher::ArgToFloat( int argNum ) {
+	const char *arg = trap_Cmd_Argv( argNum );
+	if( !arg || !*arg ) {
+		return std::numeric_limits<float>::infinity();
+	}
+	// C/C++ scrubs do not have sane portable locale-independent conversions... just use ::atof()
+	double val = ::atof( arg );
+	if( !std::isfinite( val ) ) {
+		return std::numeric_limits<float>::infinity();
+	}
+	if( val == 0.0f ) {
+		// This is not 100% correct but generally does a good job at making hints.
+		// Otherwise keep following "garbage in, garbage out" as expected.
+		if( ::strspn( arg, "0." ) != ::strlen( arg ) ) {
+			return std::numeric_limits<float>::infinity();
+		}
+	}
+	return (float)val;
+}
+
+template <typename Iterable>
+bool PositionArgSeqMatcher::MatchAndValidate( edict_t *user, int argNum, const char *prefix, const Iterable &matchers ) {
+    const int endArgNum = trap_Cmd_Argc();
+    while( argNum < endArgNum ) {
+    	int matchedLength = MatchByFirst( user, argNum, prefix, matchers );
+    	if( matchedLength < 0 ) {
+    		return false;
+    	}
+    	argNum += matchedLength;
+    }
+
+	bool validationSuccess = true;
+    for ( auto it = std::begin( matchers ); it != std::end( matchers ); ++it ) {
+    	PositionArgSeqMatcher *matcher = *it;
+    	if( !matcher->HasResult() ) {
+    		continue;
+    	}
+    	const char *err = matcher->Validate();
+    	if( !err ) {
+    		continue;
+    	}
+    	G_PrintMsg( user, "%s\n", err );
+    	validationSuccess = false;
+    }
+
+    return validationSuccess;
+}
+
+template <typename Iterable>
+int PositionArgSeqMatcher::MatchByFirst( edict_t *user, int argNum, const char *prefix, const Iterable &matchers ) {
+	const char *seqHead = trap_Cmd_Argv( argNum++ );
+	size_t prefixOffset = ::strlen( prefix );
+	if( Q_strnicmp( seqHead, prefix, prefixOffset ) != 0 ) {
+		G_PrintMsg( user, "Unknown arg sequence `%s`\n", seqHead );
+		return -1;
+	}
+
+	for ( auto it = std::begin( matchers ); it != std::end( matchers ); ++it ) {
+		PositionArgSeqMatcher *matcher = *it;
+		if( !matcher->CanMatch( seqHead + prefixOffset ) ) {
+			continue;
+		}
+		int numParsedArgs = matcher->Parse( argNum );
+		if( numParsedArgs > 0 ) {
+			return numParsedArgs + 1;
+		}
+		G_PrintMsg( user, "Failed to parse `%s`\n", matcher->Name() );
+		return -1;
+	}
+
+	G_PrintMsg( user, "Unknown arg sequence `%s`\n", seqHead );
+	return -1;
+}
+
+static void SetOrLoadPosition( edict_t *ent, const char *argSeqPrefix, const char *verb, bool tryLoadingMissing ) {
+	vec3_t origin { 0, 0, 0 };
+	vec3_t angles { 0, 0, 0 };
+
+	// Fill by saved values if needed
+	if( tryLoadingMissing && ent->r.client->teamstate.position_saved ) {
+		VectorCopy( ent->r.client->teamstate.position_origin, origin );
+		VectorCopy( ent->r.client->teamstate.position_angles, angles );
+	}
+
+	OriginMatcher originMatcher;
+	AnglesMatcher anglesMatcher;
+	VelocityMatcher velocityMatcher;
+	SpeedMatcher speedMatcher;
+	PositionArgSeqMatcher *matchers[] = { &originMatcher, &anglesMatcher, &velocityMatcher, &speedMatcher };
+	if( !PositionArgSeqMatcher::MatchAndValidate( ent, 2, argSeqPrefix, matchers ) ) {
+		return;
+	}
+
+	if( !originMatcher.HasResult() ) {
+		// If we are not allowed to load saved origin
+		if( !tryLoadingMissing ) {
+			G_PrintMsg( ent, "An origin must always be specified\n" );
+			return;
+		}
+		// If there's nothing saved
+		if( !ent->r.client->teamstate.position_saved ) {
+			G_PrintMsg( ent, "A saved or specified origin must always be present\n" );
+			return;
+		}
+	}
+
+	originMatcher.CopyToIfHasResult( origin );
+	anglesMatcher.CopyToIfHasResult( angles );
+
+	if( ent->r.client->resp.chase.active ) {
+		G_SpectatorMode( ent );
+	}
+
+	if( !G_Teleport( ent, origin, angles ) ) {
+		G_PrintMsg( ent, "Position not available.\n" );
+		return;
+	}
+
+	if( !velocityMatcher.HasResult() && !speedMatcher.HasResult() ) {
+		G_PrintMsg( ent, "Position %s\n", verb );
+		return;
+	}
+
+	vec3_t velocity;
+	VectorCopy( ent->velocity, velocity );
+	velocityMatcher.CopyToIfHasResult( velocity );
+	if( speedMatcher.HasResult() ) {
+		float newSpeed = 0.0f;
+		speedMatcher.CopyTo( &newSpeed );
+		const float oldSpeed = VectorLength( velocity );
+		if( oldSpeed < 1 ) {
+			AngleVectors( angles, velocity, nullptr, nullptr );
+			VectorScale( velocity, newSpeed, velocity );
+		} else {
+			float scale = newSpeed / oldSpeed;
+			VectorScale( velocity, scale, velocity );
+		}
+	}
+
+	VectorCopy( velocity, ent->velocity );
+	G_PrintMsg( ent, "Position %s with modified velocity.\n", verb );
+}
+
 /*
 * Cmd_Position_f
 */
 static void Cmd_Position_f( edict_t *ent ) {
-	char *action;
-
-	if( !sv_cheats->integer && GS_MatchState() > MATCH_STATE_WARMUP &&
-		ent->r.client->ps.pmove.pm_type != PM_SPECTATOR ) {
-		G_PrintMsg( ent, "Position command is only available in warmup and in spectator mode.\n" );
-		return;
-	}
-
 	// flood protect
 	if( ent->r.client->teamstate.position_lastcmd + 500 > game.realtime ) {
 		return;
 	}
+
 	ent->r.client->teamstate.position_lastcmd = game.realtime;
 
-	action = trap_Cmd_Argv( 1 );
+	const char *action = trap_Cmd_Argv( 1 );
 
 	if( !Q_stricmp( action, "save" ) ) {
+		if( !CheckStateForPositionCmd( ent ) ) {
+			return;
+		}
 		ent->r.client->teamstate.position_saved = true;
 		VectorCopy( ent->s.origin, ent->r.client->teamstate.position_origin );
 		VectorCopy( ent->s.angles, ent->r.client->teamstate.position_angles );
 		G_PrintMsg( ent, "Position saved.\n" );
-	} else if( !Q_stricmp( action, "load" ) ) {
-		if( !ent->r.client->teamstate.position_saved ) {
-			G_PrintMsg( ent, "No position saved.\n" );
-		} else {
-			if( ent->r.client->resp.chase.active ) {
-				G_SpectatorMode( ent );
-			}
-
-			if( G_Teleport( ent, ent->r.client->teamstate.position_origin, ent->r.client->teamstate.position_angles ) ) {
-				G_PrintMsg( ent, "Position loaded.\n" );
-			} else {
-				G_PrintMsg( ent, "Position not available.\n" );
-			}
-		}
-	} else if( !Q_stricmp( action, "set" ) && trap_Cmd_Argc() == 7 ) {
-		vec3_t origin, angles;
-		int i, argnumber = 2;
-
-		for( i = 0; i < 3; i++ )
-			origin[i] = atof( trap_Cmd_Argv( argnumber++ ) );
-		for( i = 0; i < 2; i++ )
-			angles[i] = atof( trap_Cmd_Argv( argnumber++ ) );
-		angles[2] = 0;
-
-		if( ent->r.client->resp.chase.active ) {
-			G_SpectatorMode( ent );
-		}
-
-		if( G_Teleport( ent, origin, angles ) ) {
-			G_PrintMsg( ent, "Position not available.\n" );
-		} else {
-			G_PrintMsg( ent, "Position set.\n" );
-		}
-	} else {
-		char msg[MAX_STRING_CHARS];
-
-		msg[0] = 0;
-		Q_strncatz( msg, "Usage:\nposition save - Save current position\n", sizeof( msg ) );
-		Q_strncatz( msg, "position load - Teleport to saved position\n", sizeof( msg ) );
-		Q_strncatz( msg, "position set <x> <y> <z> <pitch> <yaw> - Teleport to specified position\n", sizeof( msg ) );
-		Q_strncatz( msg, va( "Current position: %.4f %.4f %.4f %.4f %.4f\n", ent->s.origin[0], ent->s.origin[1],
-							 ent->s.origin[2], ent->s.angles[0], ent->s.angles[1] ), sizeof( msg ) );
-		G_PrintMsg( ent, "%s", msg );
+		return;
 	}
+
+	if( !Q_stricmp( action, "showSaved" ) ) {
+		if( !ent->r.client->teamstate.position_saved ) {
+			G_PrintMsg( ent, "There's no saved position\n" );
+			return;
+		}
+		const float *o = ent->r.client->teamstate.position_origin;
+		const float *a = ent->r.client->teamstate.position_angles;
+		G_PrintMsg( ent, "Saved origin: %.6f %.6f %.6f, angles: %.6f %.6f\n", o[0], o[1], o[2], a[0], a[1] );
+		return;
+	}
+
+	if( !Q_stricmp( action, "load" ) ) {
+		if( CheckStateForPositionCmd( ent ) ) {
+			SetOrLoadPosition( ent, "with", "loaded", true );
+		}
+		return;
+	}
+
+	if( !Q_stricmp( action, "set" ) ) {
+		if( CheckStateForPositionCmd( ent ) ) {
+			SetOrLoadPosition( ent, "", "set", false );
+		}
+		return;
+	}
+
+	if( !Q_stricmp( action, "details" ) ) {
+		wsw::stringstream ss;
+		ss << va( "Origin: %.6f %.6f %.6f, ", ent->s.origin[0], ent->s.origin[1], ent->s.origin[2] );
+		ss << va( "angles: %.6f %.6f\n", ent->s.angles[0], ent->s.angles[1] );
+		if( G_ISGHOSTING( ent ) ) {
+			G_PrintMsg( ent, "%s\n", ss.str().c_str() );
+			return;
+		}
+
+		const int topNode = trap_CM_FindTopNodeForBox( ent->r.absmin, ent->r.absmax );
+		int tmp, nums[32];
+		const int numLeaves = trap_CM_BoxLeafnums( ent->r.absmin, ent->r.absmax, nums, 32, &tmp, topNode );
+		ss << "CM top node for box: " << topNode << ", leaves: [";
+		for( int i = 0; i < numLeaves; ++i ) {
+			ss << nums[i] << ( ( i + 1 != numLeaves ) ? "," : "" );
+		}
+		ss << "]";
+
+		const auto *aasWorld = AiAasWorld::Instance();
+		if( !aasWorld->IsLoaded() ) {
+			G_PrintMsg( ent, "%s\n", ss.str().c_str() );
+			return;
+		}
+
+		const int numAreas = aasWorld->BBoxAreas( ent->r.absmin, ent->r.absmax, nums, 32 );
+		ss << ", AAS areas for box: [";
+		for( int i = 0; i < numAreas; ++i ) {
+			ss << nums[i] << ( ( i + 1 != numAreas ) ? "," : "" );
+		}
+		ss << "]";
+
+		G_PrintMsg( ent, "%s", ss.str().c_str() );
+		return;
+	}
+
+	wsw::stringstream ss;
+	ss << "Usage:\n";
+	ss << "position save - Save the current position (origin and angles)\n";
+	ss << "position showSaved - Displays an information about the saved position\n";
+	ss << "position load - Teleport to a saved position. Saved parameters can be overridden:\n";
+	ss << "position load [withOrigin <x> >y> <z>] [withAngles <pitch> <yaw>]";
+	   ss << " [withVelocity <vx> <vy> <vz>] [withSpeed <s>]\n";
+	ss << "position set - Teleport to a specified position. Parameters should be specified this way:\n";
+	ss << "position set origin <x> <y> <z> [angles <pitch> <yaw>] [velocity <vx> <vy> <vz>] [speed <s>]\n";
+	ss << "position details - Display a detailed information about the current position\n";
+
+	G_PrintMsg( ent, "%s", ss.str().c_str() );
 }
 
 /*
@@ -448,7 +754,7 @@ static void Cmd_PlayersExt_f( edict_t *ent, bool onlyspecs ) {
 	if( trap_Cmd_Argc() > 1 ) {
 		start = atoi( trap_Cmd_Argv( 1 ) );
 	}
-	clamp( start, 0, gs.maxclients - 1 );
+	Q_clamp( start, 0, gs.maxclients - 1 );
 
 	// print information
 	msg[0] = 0;
@@ -518,15 +824,7 @@ static void Cmd_Spectators_f( edict_t *ent ) {
 	Cmd_PlayersExt_f( ent, true );
 }
 
-bool CheckFlood( edict_t *ent, bool teamonly ) {
-	int i;
-	gclient_t *client;
-
-	assert( ent != NULL );
-
-	client = ent->r.client;
-	assert( client != NULL );
-
+void ChatHandlersChain::Frame() {
 	if( g_floodprotection_messages->modified ) {
 		if( g_floodprotection_messages->integer < 0 ) {
 			trap_Cvar_Set( "g_floodprotection_messages", "0" );
@@ -560,6 +858,28 @@ bool CheckFlood( edict_t *ent, bool teamonly ) {
 		}
 		g_floodprotection_penalty->modified = false;
 	}
+
+	if( respectHandler.lastFrameMatchState == MATCH_STATE_PLAYTIME && GS_MatchState() == MATCH_STATE_POSTMATCH ) {
+		// Unlock to say `gg` postmatch
+		muteFilter.Reset();
+		floodFilter.Reset();
+	}
+
+	respectHandler.Frame();
+}
+
+bool FloodFilter::DetectFlood( const edict_t *ent, bool teamonly ) {
+	// TODO: Rewrite so the client do not actually have to maintain its flood state
+
+	int i;
+	gclient_t *client;
+
+	assert( ent != NULL );
+
+	client = ent->r.client;
+	assert( client != NULL );
+
+
 
 	// old protection still active
 	if( !teamonly || g_floodprotection_team->integer ) {
@@ -619,7 +939,7 @@ static void Cmd_CoinToss_f( edict_t *ent ) {
 		G_PrintMsg( ent, "You can only toss coins during warmup or timeouts\n" );
 		return;
 	}
-	if( CheckFlood( ent, false ) ) {
+	if( ChatHandlersChain::Instance()->DetectFlood( ent, false ) ) {
 		return;
 	}
 
@@ -645,33 +965,86 @@ static void Cmd_CoinToss_f( edict_t *ent ) {
 	G_PrintMsg( NULL, S_COLOR_YELLOW "COINTOSS %s: " S_COLOR_WHITE "It was %s! %s " S_COLOR_WHITE "tossed a coin and " S_COLOR_RED "lost!\n", upper, qtails ? "heads" : "tails", ent->r.client->netname );
 }
 
+static SingletonHolder<ChatHandlersChain> chatHandlersChainHolder;
+
+void ChatHandlersChain::Init() {
+	::chatHandlersChainHolder.Init();
+}
+
+void ChatHandlersChain::Shutdown() {
+	::chatHandlersChainHolder.Shutdown();
+}
+
+ChatHandlersChain *ChatHandlersChain::Instance() {
+	return ::chatHandlersChainHolder.Instance();
+}
+
+void ChatHandlersChain::Reset() {
+	authFilter.Reset();
+	muteFilter.Reset();
+	floodFilter.Reset();
+	respectHandler.Reset();
+	ignoreFilter.Reset();
+}
+
+void ChatHandlersChain::ResetForClient( int clientNum ) {
+	authFilter.ResetForClient( clientNum );
+	muteFilter.ResetForClient( clientNum );
+	floodFilter.ResetForClient( clientNum );
+	respectHandler.ResetForClient( clientNum );
+	ignoreFilter.ResetForClient( clientNum );
+}
+
+bool ChatHandlersChain::HandleMessage( const edict_t *ent, const char *message ) {
+	// We want to call overridden methods directly just to avoid pointless virtual invocations.
+	// Filters are applied in order of their priority.
+	if( authFilter.HandleMessage( ent, message ) || muteFilter.HandleMessage( ent, message ) ) {
+		return true;
+	}
+	if( floodFilter.HandleMessage( ent, message ) || respectHandler.HandleMessage( ent, message ) ) {
+		return true;
+	}
+
+	ChatPrintHelper chatPrintHelper( ent, "%s", message );
+	// Dispatch the message using `this` as an ignore filter
+	chatPrintHelper.PrintToEverybody( this );
+	return true;
+}
+
+void ChatAuthFilter::Reset() {
+	authOnly = sv_mm_enable->integer && trap_Cvar_Value( "sv_mm_chat_loginonly" ) != 0;
+}
+
+bool ChatAuthFilter::HandleMessage( const edict_t *ent, const char * ) {
+	if( !authOnly ) {
+		return false;
+	}
+
+	if( GS_MatchState() != MATCH_STATE_PLAYTIME ) {
+		return false;
+	}
+
+	// Allow talking in timeouts
+	if( GS_MatchPaused() ) {
+		return false;
+	}
+
+	if( ent->r.client->mm_session.IsValidSessionId() ) {
+		return false;
+	}
+
+	// unauthed players are only allowed to chat to public at non play-time
+	G_PrintMsg( ent, S_COLOR_YELLOW "Register at Warsow.net and log in to say public chat messages during a match\n" );
+	return true;
+}
+
 /*
 * Cmd_Say_f
 */
-void Cmd_Say_f( edict_t *ent, bool arg0, bool checkflood ) {
+void Cmd_Say_f( edict_t *ent, bool arg0 ) {
 	char *p;
 	char text[2048];
 	size_t arg0len = 0;
-
-#ifdef AUTHED_SAY
-	if( sv_mm_enable->integer && ent->r.client && ent->r.client->mm_session <= 0 ) {
-		// unauthed players are only allowed to chat to public at non play-time
-		if( GS_MatchState() == MATCH_STATE_PLAYTIME ) {
-			G_PrintMsg( ent, "%s", S_COLOR_YELLOW "You must authenticate to be able to communicate to other players during the match.\n" );
-			return;
-		}
-	}
-#endif
-
-	if( checkflood ) {
-		if( CheckFlood( ent, false ) ) {
-			return;
-		}
-	}
-
-	if( ent->r.client && ( ent->r.client->muted & 1 ) ) {
-		return;
-	}
 
 	if( trap_Cmd_Argc() < 2 && !arg0 ) {
 		return;
@@ -699,14 +1072,14 @@ void Cmd_Say_f( edict_t *ent, bool arg0, bool checkflood ) {
 	// don't let text be too long for malicious reasons
 	text[arg0len + ( MAX_CHAT_BYTES - 1 )] = 0;
 
-	G_ChatMsg( NULL, ent, false, "%s", text );
+	ChatHandlersChain::Instance()->HandleMessage( ent, text );
 }
 
 /*
 * Cmd_SayCmd_f
 */
 static void Cmd_SayCmd_f( edict_t *ent ) {
-	Cmd_Say_f( ent, false, true );
+	Cmd_Say_f( ent, false );
 }
 
 /*
@@ -720,7 +1093,7 @@ static void Cmd_SayTeam_f( edict_t *ent ) {
 * Cmd_Join_f
 */
 static void Cmd_Join_f( edict_t *ent ) {
-	if( CheckFlood( ent, false ) ) {
+	if( ChatHandlersChain::Instance()->DetectFlood( ent, false ) ) {
 		return;
 	}
 
@@ -818,8 +1191,6 @@ static void Cmd_Timein_f( edict_t *ent ) {
 */
 static void Cmd_Awards_f( edict_t *ent ) {
 	gclient_t *client;
-	gameaward_t *ga;
-	int i, size;
 	static char entry[MAX_TOKEN_CHARS];
 
 	assert( ent && ent->r.client );
@@ -827,11 +1198,10 @@ static void Cmd_Awards_f( edict_t *ent ) {
 
 	Q_snprintfz( entry, sizeof( entry ), "Awards for %s\n", client->netname );
 
-	if( client->level.stats.awardAllocator ) {
-		size = LA_Size( client->level.stats.awardAllocator );
-		for( i = 0; i < size; i++ ) {
-			ga = ( gameaward_t * )LA_Pointer( client->level.stats.awardAllocator, i );
-			Q_strncatz( entry, va( "\t%dx %s\n", ga->count, ga->name ), sizeof( entry ) );
+	const auto &awards = client->level.stats.awardsSequence;
+	if( !awards.empty() ) {
+		for( const LoggedAward &ga: awards ) {
+			Q_strncatz( entry, va( "\t%dx %s\n", ga.count, ga.name.data() ), sizeof( entry ) );
 		}
 		G_PrintMsg( ent, "%s", entry );
 	}
@@ -985,175 +1355,161 @@ static void Cmd_Upstate_f( edict_t *ent ) {
 //	client commands
 //===========================================================
 
-typedef void ( *gamecommandfunc_t )( edict_t * );
 
-typedef struct
-{
-	char name[MAX_QPATH];
-	gamecommandfunc_t func;
-} g_gamecommands_t;
 
-g_gamecommands_t g_Commands[MAX_GAMECOMMANDS];
+static SingletonHolder<ClientCommandsHandler> clientCommandsHandlerHolder;
 
-// FIXME
-void Cmd_ShowPLinks_f( edict_t *ent );
-void Cmd_deleteClosestNode_f( edict_t *ent );
-
-/*
-* G_PrecacheGameCommands
-*/
-void G_PrecacheGameCommands( void ) {
-	int i;
-
-	for( i = 0; i < MAX_GAMECOMMANDS; i++ )
-		trap_ConfigString( CS_GAMECOMMANDS + i, g_Commands[i].name );
+void ClientCommandsHandler::Init() {
+	::clientCommandsHandlerHolder.Init();
 }
 
-/*
-* G_AddCommand
-*/
-void G_AddCommand( const char *name, gamecommandfunc_t callback ) {
-	int i;
-	char temp[MAX_QPATH];
-	static const char *blacklist[] = { "callvotevalidate", "callvotepassed", NULL };
+void ClientCommandsHandler::Shutdown() {
+	::clientCommandsHandlerHolder.Shutdown();
+}
 
-	Q_strncpyz( temp, name, sizeof( temp ) );
+ClientCommandsHandler *ClientCommandsHandler::Instance() {
+	return ::clientCommandsHandlerHolder.Instance();
+}
 
-	for( i = 0; blacklist[i] != NULL; i++ ) {
-		if( !Q_stricmp( blacklist[i], temp ) ) {
-			G_Printf( "WARNING: G_AddCommand: command name '%s' is write protected\n", temp );
-			return;
+void ClientCommandsHandler::PrecacheCommands() {
+	int i = 0;
+	for( auto *callback = listHead; callback; callback = callback->NextInList() ) {
+		// TODO: This assumes zero-terminated string views!
+		trap_ConfigString( CS_GAMECOMMANDS + i, callback->name.Data() );
+		i++;
+	}
+	for(; i < MAX_GAMECOMMANDS; ++i ) {
+		trap_ConfigString( CS_GAMECOMMANDS + i, "" );
+	}
+}
+
+static const wsw::StringView callvoteValidate( "callvoteValidate" );
+static const wsw::StringView callvotePassed( "callvotePassed" );
+
+bool ClientCommandsHandler::IsWriteProtected( const wsw::StringView &name ) {
+	for( const wsw::string_view &s: { callvoteValidate, callvotePassed } ) {
+		if( s.EqualsIgnoreCase( name ) ) {
+			return true;
 		}
 	}
+	return false;
+}
 
-	// see if we already had it in game side
-	for( i = 0; i < MAX_GAMECOMMANDS; i++ ) {
-		if( !g_Commands[i].name[0] ) {
-			break;
-		}
-		if( !Q_stricmp( g_Commands[i].name, temp ) ) {
-			// update func if different
-			if( g_Commands[i].func != callback ) {
-				g_Commands[i].func = ( gamecommandfunc_t )callback;
-			}
-			return;
-		}
+bool ClientCommandsHandler::AddOrReplace( GenericCommandCallback *callback ) {
+	// TODO: The code assumes zero-terminated string views!
+
+	if( IsWriteProtected( callback->name ) ) {
+		G_Printf( "WARNING: G_AddCommand: command name '%s' is write protected\n", callback->name.Data() );
+		return false;
 	}
 
-	if( i == MAX_GAMECOMMANDS ) {
-		G_Error( "G_AddCommand: Couldn't find a free g_Commands spot for the new command. (increase MAX_GAMECOMMANDS)\n" );
-		return;
+	// If there was an existing command
+	if( !CommandsHandler::AddOrReplace( callback ) ) {
+		return false;
 	}
 
-	// we don't have it, add it
-	g_Commands[i].func = ( gamecommandfunc_t )callback;
-	Q_strncpyz( g_Commands[i].name, temp, sizeof( g_Commands[i].name ) );
+	// If the size has grew up over this value after the AddOrReplace() call
+	if( size > MAX_GAMECOMMANDS ) {
+		G_Error( "ClientCommandsHandler::AddOrReplace(`%s`): Too many commands\n", callback->name.Data() );
+	}
 
 	// add the configstring if the precache process was already done
 	if( level.canSpawnEntities ) {
-		trap_ConfigString( CS_GAMECOMMANDS + i, g_Commands[i].name );
+		trap_ConfigString( CS_GAMECOMMANDS + ( size - 1 ), callback->name.Data() );
 	}
+
+	return true;
 }
 
-/*
-* G_InitGameCommands
-*/
-void G_InitGameCommands( void ) {
-	int i;
-
-	for( i = 0; i < MAX_GAMECOMMANDS; i++ ) {
-		g_Commands[i].func = NULL;
-		g_Commands[i].name[0] = 0;
-	}
-
-	G_AddCommand( "cvarinfo", Cmd_CvarInfo_f );
-	G_AddCommand( "position", Cmd_Position_f );
-	G_AddCommand( "players", Cmd_Players_f );
-	G_AddCommand( "spectators", Cmd_Spectators_f );
-	G_AddCommand( "stats", Cmd_ShowStats_f );
-	G_AddCommand( "say", Cmd_SayCmd_f );
-	G_AddCommand( "say_team", Cmd_SayTeam_f );
-	G_AddCommand( "svscore", Cmd_Score_f );
-	G_AddCommand( "god", Cmd_God_f );
-	G_AddCommand( "noclip", Cmd_Noclip_f );
-	G_AddCommand( "use", Cmd_Use_f );
-	G_AddCommand( "give", Cmd_Give_f );
-	G_AddCommand( "kill", Cmd_Kill_f );
-	G_AddCommand( "putaway", Cmd_PutAway_f );
-	G_AddCommand( "chase", Cmd_ChaseCam_f );
-	G_AddCommand( "chasenext", Cmd_ChaseNext_f );
-	G_AddCommand( "chaseprev", Cmd_ChasePrev_f );
-	G_AddCommand( "spec", Cmd_Spec_f );
-	G_AddCommand( "enterqueue", G_Teams_JoinChallengersQueue );
-	G_AddCommand( "leavequeue", G_Teams_LeaveChallengersQueue );
-	G_AddCommand( "camswitch", Cmd_SwitchChaseCamMode_f );
-	G_AddCommand( "timeout", Cmd_Timeout_f );
-	G_AddCommand( "timein", Cmd_Timein_f );
-	G_AddCommand( "cointoss", Cmd_CoinToss_f );
-	G_AddCommand( "whois", Cmd_Whois_f );
+ClientCommandsHandler::ClientCommandsHandler() {
+	auto adapter( AdapterForTag( "builtin" ) );
+	adapter.Add( "cvarinfo", Cmd_CvarInfo_f );
+	adapter.Add( "position", Cmd_Position_f );
+	adapter.Add( "players", Cmd_Players_f );
+	adapter.Add( "spectators", Cmd_Spectators_f );
+	adapter.Add( "stats", Cmd_ShowStats_f );
+	adapter.Add( "say", Cmd_SayCmd_f );
+	adapter.Add( "say_team", Cmd_SayTeam_f );
+	adapter.Add( "svscore", Cmd_Score_f );
+	adapter.Add( "god", Cmd_God_f );
+	adapter.Add( "noclip", Cmd_Noclip_f );
+	adapter.Add( "use", Cmd_Use_f );
+	adapter.Add( "give", Cmd_Give_f );
+	adapter.Add( "kill", Cmd_Kill_f );
+	adapter.Add( "putaway", Cmd_PutAway_f );
+	adapter.Add( "chase", Cmd_ChaseCam_f );
+	adapter.Add( "chasenext", Cmd_ChaseNext_f );
+	adapter.Add( "chaseprev", Cmd_ChasePrev_f );
+	adapter.Add( "spec", Cmd_Spec_f );
+	adapter.Add( "enterqueue", G_Teams_JoinChallengersQueue );
+	adapter.Add( "leavequeue", G_Teams_LeaveChallengersQueue );
+	adapter.Add( "camswitch", Cmd_SwitchChaseCamMode_f );
+	adapter.Add( "timeout", Cmd_Timeout_f );
+	adapter.Add( "timein", Cmd_Timein_f );
+	adapter.Add( "cointoss", Cmd_CoinToss_f );
+	adapter.Add( "whois", Cmd_Whois_f );
 
 	// callvotes commands
-	G_AddCommand( "callvote", G_CallVote_Cmd );
-	G_AddCommand( "vote", G_CallVotes_CmdVote );
+	adapter.Add( "callvote", G_CallVote_Cmd );
+	adapter.Add( "vote", G_CallVotes_CmdVote );
 
-	G_AddCommand( "opcall", G_OperatorVote_Cmd );
-	G_AddCommand( "operator", Cmd_GameOperator_f );
-	G_AddCommand( "op", Cmd_GameOperator_f );
+	adapter.Add( "opcall", G_OperatorVote_Cmd );
+	adapter.Add( "operator", Cmd_GameOperator_f );
+	adapter.Add( "op", Cmd_GameOperator_f );
 
 	// teams commands
-	G_AddCommand( "ready", G_Match_Ready );
-	G_AddCommand( "unready", G_Match_NotReady );
-	G_AddCommand( "notready", G_Match_NotReady );
-	G_AddCommand( "toggleready", G_Match_ToggleReady );
-	G_AddCommand( "join", Cmd_Join_f );
+	adapter.Add( "ready", G_Match_Ready );
+	adapter.Add( "unready", G_Match_NotReady );
+	adapter.Add( "notready", G_Match_NotReady );
+	adapter.Add( "toggleready", G_Match_ToggleReady );
+	adapter.Add( "join", Cmd_Join_f );
 
 	// coach commands
-	G_AddCommand( "coach", G_Teams_Coach );
-	G_AddCommand( "lockteam", G_Teams_CoachLockTeam );
-	G_AddCommand( "unlockteam", G_Teams_CoachUnLockTeam );
-	G_AddCommand( "invite", G_Teams_Invite_f );
+	adapter.Add( "coach", G_Teams_Coach );
+	adapter.Add( "lockteam", G_Teams_CoachLockTeam );
+	adapter.Add( "unlockteam", G_Teams_CoachUnLockTeam );
+	adapter.Add( "invite", G_Teams_Invite_f );
 
 	// bot commands
-	G_AddCommand( "botnotarget", AI_Cheat_NoTarget );
+	adapter.Add( "botnotarget", AI_Cheat_NoTarget );
 
 	// ch : added awards
-	G_AddCommand( "awards", Cmd_Awards_f );
+	adapter.Add( "awards", Cmd_Awards_f );
+
+	// ignore-related commands
+	adapter.Add( "ignore", ChatHandlersChain::HandleIgnoreCommand );
+	adapter.Add( "unignore", ChatHandlersChain::HandleUnignoreCommand );
+	adapter.Add( "ignorelist", ChatHandlersChain::HandleIgnoreListCommand );
 
 	// misc
-	G_AddCommand( "upstate", Cmd_Upstate_f );
+	adapter.Add( "upstate", Cmd_Upstate_f );
 }
 
-/*
-* ClientCommand
-*/
-void ClientCommand( edict_t *ent ) {
-	char *cmd;
-	int i;
-
+void ClientCommandsHandler::HandleClientCommand( edict_t *ent ) {
+	// Check whether the client is fully in-game
 	if( !ent->r.client || trap_GetClientState( PLAYERNUM( ent ) ) < CS_SPAWNED ) {
-		return; // not fully in game yet
-
+		return;
 	}
-	cmd = trap_Cmd_Argv( 0 );
 
-	if( Q_stricmp( cmd, "cvarinfo" ) ) { // skip cvarinfo cmds because they are automatic responses
+	const char *cmd = trap_Cmd_Argv( 0 );
+
+	// Skip cvarinfo cmds because they are automatic responses
+	if( Q_stricmp( cmd, "cvarinfo" ) != 0 ) {
 		G_Client_UpdateActivity( ent->r.client ); // activity detected
-
 	}
-	for( i = 0; i < MAX_GAMECOMMANDS; i++ ) {
-		if( !g_Commands[i].name[0] ) {
-			break;
-		}
 
-		if( !Q_stricmp( g_Commands[i].name, cmd ) ) {
-			if( g_Commands[i].func ) {
-				g_Commands[i].func( ent );
-			} else {
-				GT_asCallGameCommand( ent->r.client, cmd, trap_Cmd_Args(), trap_Cmd_Argc() - 1 );
-			}
-			return;
-		}
+	if( Super::Handle( cmd, ent ) ) {
+		return;
 	}
 
 	G_PrintMsg( ent, "Bad user command: %s\n", cmd );
 }
+
+void ClientCommandsHandler::AddScriptCommand( const char *name ) {
+	Add( new ScriptCommandCallback( wsw::HashedStringRef::DeepCopyOf( name ) ) );
+}
+
+bool ClientCommandsHandler::ScriptCommandCallback::operator()( edict_t *arg ) {
+	return GT_asCallGameCommand( arg->r.client, name.Data(), trap_Cmd_Args(), trap_Cmd_Argc() - 1 );
+}
+

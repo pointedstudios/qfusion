@@ -7,29 +7,26 @@
 
 #include "MovementPredictionContext.h"
 
-#include "VisibleNextReachCache.h"
-
 #include "LandOnSavedAreasAction.h"
 #include "RidePlatformAction.h"
 #include "BunnyToStairsOrRampExitAction.h"
 #include "BunnyInterpolatingReachChainAction.h"
 #include "BunnyStraighteningReachChainAction.h"
-#include "BunnyToBestShortcutAreaAction.h"
 #include "BunnyToBestClusterPointAction.h"
-#include "BunnyInVelocityDirectionAction.h"
+#include "BunnyToBestNavMeshPointAction.h"
 #include "CampASpotAction.h"
 #include "CombatDodgeToTargetAction.h"
 #include "FallbackMovementAction.h"
 #include "WalkOrSlideInterpolatingAction.h"
 #include "WeaponJumpActions.h"
 
-#include "FallDownFallback.h"
-#include "JumpOverBarrierFallback.h"
-#include "JumpToSpotFallback.h"
-#include "UseWalkableNodeFallback.h"
-#include "UseWalkableTriggerFallback.h"
-#include "UseStairsExitFallback.h"
-#include "UseRampExitFallback.h"
+#include "FallDownScript.h"
+#include "JumpOverBarrierScript.h"
+#include "JumpToSpotScript.h"
+#include "UseWalkableNodeScript.h"
+#include "UseWalkableTriggerScript.h"
+#include "UseStairsExitScript.h"
+#include "UseRampExitScript.h"
 
 class Bot;
 
@@ -42,7 +39,7 @@ class alignas( 4 )RateLimiter {
 	int value;
 
 	int GetNewValue( int64_t millisNow ) const {
-		int64_t diff = level.time - refilledAt;
+		int64_t diff = millisNow - refilledAt;
 		auto tokensToAdd = (int)(diff * refillRatePerMillis);
 		if( tokensToAdd <= 0 ) {
 			return value;
@@ -76,10 +73,14 @@ public:
 		, refillRatePerMillis( actionsPerSecond / 1000.0f )
 		, intervalMillis( (unsigned)( 1000.0f / actionsPerSecond ) )
 		, size( actionsPerSecond )
-		, value( 0 ) {}
+		, value( 1 ) {
+		// Note: initializing the value by 1 is important.
+		// Otherwise the first TryAcquire() attempt fails.
+		// This algorithm converges to theoretical values well according to tests.
+	}
 
-	bool TryAcquire() {
-		Refill( level.time );
+	bool TryAcquire( int64_t levelTime ) {
+		Refill( levelTime );
 		value -= 1;
 		return value >= 0;
 	}
@@ -101,22 +102,23 @@ class BotMovementModule {
 	friend class GenericRunBunnyingAction;
 	friend class BunnyToStairsOrRampExitAction;
 	friend class BunnyStraighteningReachChainAction;
-	friend class BunnyToBestShortcutAreaAction;
 	friend class BunnyToBestFloorClusterPointAction;
 	friend class BunnyInterpolatingChainAtStartAction;
-	friend class BunnyInVelocityDirectionAction;
 	friend class BunnyInterpolatingReachChainAction;
+	friend class BunnyToBestNavMeshPointAction;
 	friend class WalkOrSlideInterpolatingReachChainAction;
 	friend class CombatDodgeSemiRandomlyToTargetAction;
 	friend class ScheduleWeaponJumpAction;
+	friend class TryTriggerWeaponJumpAction;
+	friend class CorrectWeaponJumpAction;
 
-	friend class GenericGroundMovementFallback;
-	friend class UseWalkableNodeFallback;
-	friend class UseRampExitFallback;
-	friend class UseStairsExitFallback;
-	friend class UseWalkableTriggerFallback;
-	friend class FallDownFallback;
-	friend class JumpOverBarrierFallback;
+	friend class GenericGroundMovementScript;
+	friend class UseWalkableNodeScript;
+	friend class UseRampExitScript;
+	friend class UseStairsExitScript;
+	friend class UseWalkableTriggerScript;
+	friend class FallDownScript;
+	friend class JumpOverBarrierScript;
 
 	Bot *const bot;
 
@@ -128,8 +130,8 @@ class BotMovementModule {
 	// (consequential attempts are allowed but no more than several frames,
 	// otherwise a bot might loop attempts forever)
 	RateLimiter weaponJumpAttemptsRateLimiter;
-
-	VisibleNextReachCache visibleNextReachCache;
+	// Is not for rate limiting but for preventing instant weapon switch for shooting after a failed attempt
+	Int64Align4 lastWeaponJumpTriggeringFailedAt { 0 };
 
 	// Must be initialized before any of movement actions constructors is called
 	StaticVector<BaseMovementAction *, 20> movementActions;
@@ -144,11 +146,10 @@ class BotMovementModule {
 	WalkCarefullyAction walkCarefullyAction;
 	BunnyToStairsOrRampExitAction bunnyToStairsOrRampExitAction;
 	BunnyStraighteningReachChainAction bunnyStraighteningReachChainAction;
-	BunnyToBestShortcutAreaAction bunnyToBestShortcutAreaAction;
 	BunnyToBestFloorClusterPointAction bunnyToBestFloorClusterPointAction;
 	BunnyInterpolatingChainAtStartAction bunnyInterpolatingChainAtStartAction;
-	BunnyInVelocityDirectionAction bunnyInVelocityDirectionAction;
 	BunnyInterpolatingReachChainAction bunnyInterpolatingReachChainAction;
+	BunnyToBestNavMeshPointAction bunnyToBestNavMeshPointAction;
 	WalkOrSlideInterpolatingReachChainAction walkOrSlideInterpolatingReachChainAction;
 	CombatDodgeSemiRandomlyToTargetAction combatDodgeSemiRandomlyToTargetAction;
 	ScheduleWeaponJumpAction scheduleWeaponJumpAction;
@@ -159,20 +160,20 @@ class BotMovementModule {
 
 	MovementPredictionContext predictionContext;
 
-	UseWalkableNodeFallback useWalkableNodeFallback;
-	UseRampExitFallback useRampExitFallback;
-	UseStairsExitFallback useStairsExitFallback;
-	UseWalkableTriggerFallback useWalkableTriggerFallback;
+	UseWalkableNodeScript useWalkableNodeScript;
+	UseRampExitScript useRampExitScript;
+	UseStairsExitScript useStairsExitScript;
+	UseWalkableTriggerScript useWalkableTriggerScript;
 
-	JumpToSpotFallback jumpToSpotFallback;
-	FallDownFallback fallDownFallback;
-	JumpOverBarrierFallback jumpOverBarrierFallback;
+	JumpToSpotScript jumpToSpotScript;
+	FallDownScript fallDownScript;
+	JumpOverBarrierScript jumpOverBarrierScript;
 
-	MovementFallback *activeMovementFallback;
+	MovementScript *activeMovementScript { nullptr };
 
-	int64_t nextRotateInputAttemptAt;
-	int64_t inputRotationBlockingTimer;
-	int64_t lastInputRotationFailureAt;
+	int64_t nextRotateInputAttemptAt { 0 };
+	int64_t inputRotationBlockingTimer { 0 };
+	int64_t lastInputRotationFailureAt { 0 };
 
 	void CheckGroundPlatform();
 
@@ -181,10 +182,14 @@ class BotMovementModule {
 	inline void TurnInputToSide( vec3_t sideDir, int sign, BotInput *input, MovementPredictionContext *context = nullptr );
 	inline bool TryRotateInput( BotInput *input, MovementPredictionContext *context = nullptr );
 	void CheckBlockingDueToInputRotation();
-public:
-	BotMovementModule( Bot *bot_ );
 
-	bool TestWhetherCanSafelyKeepHighSpeed( MovementPredictionContext *context );
+	void ResetFailedWeaponJumpAttempt( MovementPredictionContext *context ) {
+		assert( context->movementState->weaponJumpMovementState.IsActive() );
+		context->movementState->weaponJumpMovementState.Deactivate();
+		this->lastWeaponJumpTriggeringFailedAt = level.time;
+	}
+public:
+	explicit BotMovementModule( Bot *bot_ );
 
 	inline void OnInterceptedPredictedEvent( int ev, int parm ) {
 		predictionContext.OnInterceptedPredictedEvent( ev, parm );
@@ -222,14 +227,11 @@ public:
 		movementState.jumppadMovementState.Activate( jumppadEnt );
 	}
 
-	inline bool CanChangeWeapons() const {
-		auto &weaponJumpState = movementState.weaponJumpMovementState;
-		return !weaponJumpState.IsActive() || weaponJumpState.hasTriggeredWeaponJump;
-	}
+	bool CanChangeWeapons() const;
 
 	void Reset() {
 		movementState.Reset();
-		activeMovementFallback = nullptr;
+		activeMovementScript = nullptr;
 	}
 
 	bool CanInterruptMovement() const;

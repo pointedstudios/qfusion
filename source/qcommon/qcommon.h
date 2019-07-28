@@ -38,10 +38,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 //#define	PARANOID			// speed sapping error checking
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //============================================================================
 
 struct mempool_s;
@@ -275,7 +271,7 @@ Dynamic library loading
 #endif
 
 // qcommon/library.c
-typedef struct { const char *name; void **funcPointer; } dllfunc_t;
+typedef struct dllfunc_s { const char *name; void **funcPointer; } dllfunc_t;
 
 void Com_UnloadLibrary( void **lib );
 void *Com_LoadLibrary( const char *name, dllfunc_t *funcs ); // NULL-terminated array of functions
@@ -759,7 +755,10 @@ typedef struct mempool_s mempool_t;
 #define MEMPOOL_DB                  32
 #define MEMPOOL_ANGELSCRIPT         64
 #define MEMPOOL_CINMODULE           128
+
+#ifndef MEMPOOL_REFMODULE
 #define MEMPOOL_REFMODULE           256
+#endif
 
 void Memory_Init( void );
 void Memory_InitCommands( void );
@@ -878,12 +877,14 @@ CPU FEATURES
 
 // Query only features that seem to have some utility for the code base
 
-#define QF_CPU_FEATURE_SSE2    ( 0x1 )
-#define QF_CPU_FEATURE_SSE41   ( 0x2 )
-#define QF_CPU_FEATURE_SSE42   ( 0x4 )
-#define QF_CPU_FEATURE_AVX     ( 0x8 )
+#define Q_CPU_FEATURE_SSE2    ( 0x1u )
+#define Q_CPU_FEATURE_SSE41   ( 0x2u )
+#define Q_CPU_FEATURE_SSE42   ( 0x4u )
+#define Q_CPU_FEATURE_AVX     ( 0x8u )
 
-unsigned int COM_CPUFeatures( void );
+unsigned Sys_GetProcessorFeatures();
+
+bool Sys_GetNumberOfProcessors( unsigned *physical, unsigned *logical );
 
 /*
 ==============================================================
@@ -908,18 +909,6 @@ void SV_ShutdownGame( const char *finalmsg, bool reconnect );
 void SV_Frame( unsigned realMsec, unsigned gameMsec );
 bool SV_SendMessageToClient( struct client_s *client, msg_t *msg );
 void SV_ParseClientMessage( struct client_s *client, msg_t *msg );
-
-/*
-==============================================================
-
-WSW ANGEL SCRIPT SYSTEMS
-
-==============================================================
-*/
-
-void Com_ScriptModule_Init( void );
-void Com_ScriptModule_Shutdown( void );
-struct angelwrap_api_s *Com_asGetAngelExport( void );
 
 /*
 ==============================================================
@@ -975,9 +964,5 @@ void Com_Autoupdate_Init( void );
 void Com_Autoupdate_Run( bool checkOnly, void ( *newfiles_cb )( void ) );
 void Com_Autoupdate_Cancel( void );
 void Com_Autoupdate_Shutdown( void );
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // __QCOMMON_H

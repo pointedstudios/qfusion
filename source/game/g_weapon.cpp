@@ -274,9 +274,9 @@ static edict_t *W_Fire_LinearProjectile( edict_t *self, vec3_t start, vec3_t ang
 	projectile->timeStamp = level.time;
 	projectile->timeDelta = timeDelta;
 
-	projectile->projectileInfo.minDamage = min( minDamage, damage );
+	projectile->projectileInfo.minDamage = std::min( (float)minDamage, damage );
 	projectile->projectileInfo.maxDamage = damage;
-	projectile->projectileInfo.minKnockback = min( minKnockback, maxKnockback );
+	projectile->projectileInfo.minKnockback = std::min( minKnockback, maxKnockback );
 	projectile->projectileInfo.maxKnockback = maxKnockback;
 	projectile->projectileInfo.stun = stun;
 	projectile->projectileInfo.radius = radius;
@@ -288,6 +288,7 @@ static edict_t *W_Fire_LinearProjectile( edict_t *self, vec3_t start, vec3_t ang
 	VectorCopy( projectile->s.origin, projectile->s.linearMovementBegin );
 	VectorCopy( projectile->velocity, projectile->s.linearMovementVelocity );
 	projectile->s.linearMovementTimeStamp = game.serverTime;
+	projectile->s.linearMovementPrevServerTime = game.serverTime;
 	projectile->s.team = self->s.team;
 	projectile->s.modelindex2 = ( abs( timeDelta ) > 255 ) ? 255 : (unsigned int)abs( timeDelta );
 	return projectile;
@@ -336,9 +337,9 @@ static edict_t *W_Fire_TossProjectile( edict_t *self, vec3_t start, vec3_t angle
 	projectile->timeDelta = timeDelta;
 	projectile->s.team = self->s.team;
 
-	projectile->projectileInfo.minDamage = min( minDamage, damage );
+	projectile->projectileInfo.minDamage = std::min( (float)minDamage, damage );
 	projectile->projectileInfo.maxDamage = damage;
-	projectile->projectileInfo.minKnockback = min( minKnockback, maxKnockback );
+	projectile->projectileInfo.minKnockback = std::min( minKnockback, maxKnockback );
 	projectile->projectileInfo.maxKnockback = maxKnockback;
 	projectile->projectileInfo.stun = stun;
 	projectile->projectileInfo.radius = radius;
@@ -593,19 +594,15 @@ void W_Fire_Riotgun( edict_t *self, vec3_t start, vec3_t angles, int seed, int r
 /*
 * W_Grenade_ExplodeDir
 */
-static void W_Grenade_ExplodeDir( edict_t *ent, vec3_t normal ) {
+static void W_Grenade_ExplodeDir( edict_t *ent, vec3_t normal, edict_t *ignore ) {
 	vec3_t origin;
 	int radius;
 	edict_t *event;
 	vec3_t up = { 0, 0, 1 };
 	vec_t *dir = normal ? normal : up;
 
-	G_RadiusDamage( ent,
-					ent->r.owner,
-					NULL,
-					ent->enemy,
-					( ent->s.effects & EF_STRONG_WEAPON ) ? MOD_GRENADE_SPLASH_S : MOD_GRENADE_SPLASH_W
-					);
+	const int mod = ( ent->s.effects & EF_STRONG_WEAPON ) ? MOD_GRENADE_SPLASH_S : MOD_GRENADE_SPLASH_W;
+	G_RadiusDamage( ent, ent->r.owner, NULL, ignore, mod );
 
 	radius = ( ( ent->projectileInfo.radius * 1 / 8 ) > 127 ) ? 127 : ( ent->projectileInfo.radius * 1 / 8 );
 	VectorMA( ent->s.origin, -0.02, ent->velocity, origin );
@@ -620,7 +617,11 @@ static void W_Grenade_ExplodeDir( edict_t *ent, vec3_t normal ) {
 * W_Grenade_Explode
 */
 static void W_Grenade_Explode( edict_t *ent ) {
-	W_Grenade_ExplodeDir( ent, NULL );
+	W_Grenade_ExplodeDir( ent, NULL, NULL );
+}
+
+void W_Detonate_Grenade( edict_t *ent, edict_t *ignore ) {
+	W_Grenade_ExplodeDir( ent, NULL, ignore );
 }
 
 /*
@@ -641,9 +642,28 @@ static void W_Touch_Grenade( edict_t *ent, edict_t *other, cplane_t *plane, int 
 	}
 
 	// don't explode on doors and plats that take damage
-	if( !other->takedamage || ISBRUSHMODEL( other->s.modelindex ) ) {
-		G_AddEvent( ent, EV_GRENADE_BOUNCE, ( ent->s.effects & EF_STRONG_WEAPON ) ? FIRE_MODE_STRONG : FIRE_MODE_WEAK, true );
-		return;
+	// except for doors and plats that take damage in race
+	if( !other->takedamage || ( !GS_RaceGametype() && ISBRUSHMODEL( other->s.modelindex ) ) ) {
+		// race - make grenades bounce twice
+		if( GS_RaceGametype() ) {
+			if( ent->s.effects & EF_STRONG_WEAPON ) {
+				ent->health -= 1;
+			}
+			if( !( ent->s.effects & EF_STRONG_WEAPON ) || ( ( VectorLength( ent->velocity ) && Q_rint( ent->health ) > 0 ) || ent->timeStamp + 350 > level.time ) ) {
+				// kill some velocity on each bounce
+				float friction = 0.85;
+				gs_weapon_definition_t *weapondef = GS_GetWeaponDef( WEAP_GRENADELAUNCHER );
+				if( weapondef ) {
+					friction = bound( 0, weapondef->firedef.friction, 2 );
+				}
+				VectorScale( ent->velocity, friction, ent->velocity );
+				G_AddEvent( ent, EV_GRENADE_BOUNCE, ( ent->s.effects & EF_STRONG_WEAPON ) ? FIRE_MODE_STRONG : FIRE_MODE_WEAK, true );
+				return;
+			}
+		} else {
+			G_AddEvent( ent, EV_GRENADE_BOUNCE, ( ent->s.effects & EF_STRONG_WEAPON ) ? FIRE_MODE_STRONG : FIRE_MODE_WEAK, true );
+			return;
+		}
 	}
 
 	if( other->takedamage ) {
@@ -669,7 +689,7 @@ static void W_Touch_Grenade( edict_t *ent, edict_t *other, cplane_t *plane, int 
 	}
 
 	ent->enemy = other;
-	W_Grenade_ExplodeDir( ent, plane ? plane->normal : NULL );
+	W_Grenade_ExplodeDir( ent, plane ? plane->normal : NULL, nullptr );
 }
 
 /*
@@ -698,10 +718,20 @@ edict_t *W_Fire_Grenade( edict_t *self, vec3_t start, vec3_t angles, int speed, 
 	grenade->think = W_Grenade_Explode;
 	grenade->classname = "grenade";
 	grenade->enemy = NULL;
+	if( GS_RaceGametype() ) {
+		gs_weapon_definition_t *weapondef = GS_GetWeaponDef( WEAP_GRENADELAUNCHER );
+		if( weapondef->firedef.gravity ) {
+			grenade->gravity = weapondef->firedef.gravity;
+		}
+	}
 
 	if( mod == MOD_GRENADE_S ) {
 		grenade->s.modelindex = trap_ModelIndex( PATH_GRENADE_STRONG_MODEL );
 		grenade->s.effects |= EF_STRONG_WEAPON;
+		if( GS_RaceGametype() ) {
+			// bounce count
+			grenade->health = 2;
+		}
 	} else {
 		grenade->s.modelindex = trap_ModelIndex( PATH_GRENADE_WEAK_MODEL );
 		grenade->s.effects &= ~EF_STRONG_WEAPON;
@@ -716,7 +746,6 @@ edict_t *W_Fire_Grenade( edict_t *self, vec3_t start, vec3_t angles, int speed, 
 * W_Touch_Rocket
 */
 static void W_Touch_Rocket( edict_t *ent, edict_t *other, cplane_t *plane, int surfFlags ) {
-	int mod_splash;
 	vec3_t dir;
 	int hitType;
 
@@ -751,13 +780,12 @@ static void W_Touch_Rocket( edict_t *ent, edict_t *other, cplane_t *plane, int s
 		G_Damage( other, ent, ent->r.owner, dir, ent->velocity, ent->s.origin, directHitDamage, ent->projectileInfo.maxKnockback, ent->projectileInfo.stun, 0, ent->style );
 	}
 
-	if( ent->s.effects & EF_STRONG_WEAPON ) {
-		mod_splash = MOD_ROCKET_SPLASH_S;
-	} else {
-		mod_splash = MOD_ROCKET_SPLASH_W;
-	}
+	W_Detonate_Rocket( ent, other, plane, surfFlags );
+}
 
-	G_RadiusDamage( ent, ent->r.owner, plane, other, mod_splash );
+void W_Detonate_Rocket( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags ) {
+	int mod = ( ent->s.effects & EF_STRONG_WEAPON ) ? MOD_ROCKET_SPLASH_S : MOD_ROCKET_SPLASH_W;
+	G_RadiusDamage( ent, ent->r.owner, plane, ignore, mod );
 
 	// spawn the explosion
 	if( !( surfFlags & SURF_NOIMPACT ) ) {
@@ -779,6 +807,11 @@ static void W_Touch_Rocket( edict_t *ent, edict_t *other, cplane_t *plane, int s
 */
 edict_t *W_Fire_Rocket( edict_t *self, vec3_t start, vec3_t angles, int speed, float damage, int minKnockback, int maxKnockback, int stun, int minDamage, int radius, int timeout, int mod, int timeDelta ) {
 	edict_t *rocket;
+
+	// in race, rockets are slower in water
+	if( GS_RaceGametype() ) {
+		speed = self->waterlevel > 1 ? speed * 0.5 : speed;
+	}
 
 	if( GS_Instagib() ) {
 		damage = 9999;
@@ -812,6 +845,7 @@ static void W_Plasma_Explosion( edict_t *ent, edict_t *ignore, cplane_t *plane, 
 	event = G_SpawnEvent( EV_PLASMA_EXPLOSION, DirToByte( plane ? plane->normal : NULL ), ent->s.origin );
 	event->s.firemode = ( ent->s.effects & EF_STRONG_WEAPON ) ? FIRE_MODE_STRONG : FIRE_MODE_WEAK;
 	event->s.weapon = radius & 127;
+	event->s.ownerNum = ENTNUM( ent->r.owner ); // race related, shouldn't matter for basewsw
 
 	G_RadiusDamage( ent, ent->r.owner, plane, ignore, ent->style );
 
@@ -842,6 +876,13 @@ static void W_Touch_Plasma( edict_t *ent, edict_t *other, cplane_t *plane, int s
 			G_SplashFrac4D( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL, ent->timeDelta );
 		} else {
 			VectorNormalize2( ent->velocity, dir );
+		}
+
+		// race - hack for plasma shooters which shoot on buttons
+		if( GS_RaceGametype() && (surfFlags & SURF_NOIMPACT) ) {
+			G_Damage( other, ent, ent->r.owner, dir, ent->velocity, ent->s.origin, ent->projectileInfo.maxDamage, 0, 0, DAMAGE_NO_KNOCKBACK, ent->style );
+			G_FreeEdict( ent );
+			return;
 		}
 
 		G_Damage( other, ent, ent->r.owner, dir, ent->velocity, ent->s.origin, ent->projectileInfo.maxDamage, ent->projectileInfo.maxKnockback, ent->projectileInfo.stun, DAMAGE_KNOCKBACK_SOFT, ent->style );
@@ -989,6 +1030,7 @@ static void W_Touch_Bolt( edict_t *self, edict_t *other, cplane_t *plane, int su
 		event = G_SpawnEvent( EV_BOLT_EXPLOSION, DirToByte( plane ? plane->normal : NULL ), self->s.origin );
 		event->s.firemode = FIRE_MODE_WEAK;
 	}
+	event->s.ownerNum = ENTNUM( self->r.owner ); // race related, shouldn't matter for basewsw
 
 	if( missed && self->r.client ) {
 		G_AwardPlayerMissedElectrobolt( self->r.owner, MOD_ELECTROBOLT_W ); // hit something that isnt a player
@@ -1062,12 +1104,19 @@ void W_Fire_Electrobolt_Combined( edict_t *self, vec3_t start, vec3_t angles, fl
 			float frac, damage, knockback;
 
 			frac = DistanceFast( tr.endpos, start ) / (float)range;
-			clamp( frac, 0.0f, 1.0f );
+			Q_clamp( frac, 0.0f, 1.0f );
 
 			damage = maxdamage - ( ( maxdamage - mindamage ) * frac );
 			knockback = maxknockback - ( ( maxknockback - minknockback ) * frac );
 
 			G_Damage( hit, self, self, dir, dir, tr.endpos, damage, knockback, stun, dmgflags, mod );
+
+			if( GS_RaceGametype() ) {
+				// race - hit check for shootable buttons
+				if( hit->movetype == MOVETYPE_NONE || hit->movetype == MOVETYPE_PUSH ) {
+					break;
+				}
+			}
 
 			// spawn a impact event on each damaged ent
 			event = G_SpawnEvent( EV_BOLT_EXPLOSION, DirToByte( tr.plane.normal ), tr.endpos );
@@ -1174,13 +1223,20 @@ void W_Fire_Electrobolt_FullInstant( edict_t *self, vec3_t start, vec3_t angles,
 				frac = 0.0f;
 			} else {
 				frac = ( dist - FULL_DAMAGE_RANGE ) / (float)( minDamageRange - FULL_DAMAGE_RANGE );
-				clamp( frac, 0.0f, 1.0f );
+				Q_clamp( frac, 0.0f, 1.0f );
 			}
 
 			damage = maxdamage - ( ( maxdamage - mindamage ) * frac );
 			knockback = maxknockback - ( ( maxknockback - minknockback ) * frac );
 
 			G_Damage( hit, self, self, dir, dir, tr.endpos, damage, knockback, stun, dmgflags, mod );
+
+			if( GS_RaceGametype() ) {
+				// race - hit check for shootable buttons
+				if( hit->movetype == MOVETYPE_NONE || hit->movetype == MOVETYPE_PUSH ) {
+					break;
+				}
+			}
 
 			// spawn a impact event on each damaged ent
 			event = G_SpawnEvent( EV_BOLT_EXPLOSION, DirToByte( tr.plane.normal ), tr.endpos );
@@ -1350,7 +1406,13 @@ static void W_Touch_Wave( edict_t *ent, edict_t *other, cplane_t *plane, int sur
 		G_Damage( other, ent, ent->r.owner, dir, ent->velocity, ent->s.origin, ent->projectileInfo.maxDamage, ent->projectileInfo.maxKnockback, ent->projectileInfo.stun, 0, ent->style );
 	}
 
-	G_RadiusDamage( ent, ent->r.owner, plane, other, ( ent->style == MOD_SHOCKWAVE_S ) ? MOD_SHOCKWAVE_SPLASH_S : MOD_SHOCKWAVE_SPLASH_W );
+	W_Detonate_Wave( ent, other, plane, surfFlags );
+}
+
+void W_Detonate_Wave( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags ) {
+	int mod_splash = ( ent->style == MOD_SHOCKWAVE_S ) ? MOD_SHOCKWAVE_SPLASH_S : MOD_SHOCKWAVE_SPLASH_W;
+
+	G_RadiusDamage( ent, ent->r.owner, plane, ignore, mod_splash );
 
 	if( !( surfFlags & SURF_NOIMPACT ) ) {
 		edict_t *event;
@@ -1579,7 +1641,6 @@ static edict_t *_FindOrSpawnLaser( edict_t *owner, int entType, bool *newLaser )
 
 		laser->s.type = entType;
 		laser->s.ownerNum = ownerNum;
-		laser->movetype = MOVETYPE_NONE;
 		laser->r.solid = SOLID_NOT;
 		laser->s.modelindex = 255; // needs to have some value so it isn't filtered by the server culling
 		laser->r.svflags &= ~SVF_NOCLIENT;

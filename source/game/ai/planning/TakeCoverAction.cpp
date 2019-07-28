@@ -1,27 +1,27 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotTakeCoverActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void TakeCoverActionRecord::Activate() {
+	BotActionRecord::Activate();
 	// Since bot should be already close to the nav target, give (a defencive) aiming a higher priority
-	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
-	self->ai->botRef->SetNavTarget( &navTarget );
+	Self()->GetMiscTactics().PreferAttackRatherThanRun();
+	Self()->SetNavTarget( &navSpot );
 }
 
-void BotTakeCoverActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+void TakeCoverActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
+	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotTakeCoverActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiActionRecord::Status TakeCoverActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	static_assert( GOAL_PICKUP_ACTION_RADIUS > TACTICAL_SPOT_RADIUS, "" );
 
-	if( selectedEnemiesInstanceId != self->ai->botRef->GetSelectedEnemies().InstanceId() ) {
+	if( selectedEnemiesInstanceId != Self()->GetSelectedEnemies().InstanceId() ) {
 		Debug( "New enemies have been selected\n" );
 		return INVALID;
 	}
 
-	float distanceToActionNavTarget = ( navTarget.Origin() - self->s.origin ).SquaredLength();
+	float distanceToActionNavTarget = ( navSpot.Origin() - Self()->Origin() ).SquaredLength();
 	if( distanceToActionNavTarget > GOAL_PICKUP_ACTION_RADIUS ) {
 		Debug( "Bot is too far from nav target\n" );
 		return INVALID;
@@ -30,7 +30,7 @@ AiBaseActionRecord::Status BotTakeCoverActionRecord::CheckStatus( const WorldSta
 	return ( distanceToActionNavTarget < TACTICAL_SPOT_RADIUS ) ? COMPLETED : VALID;
 }
 
-PlannerNode *BotTakeCoverAction::TryApply( const WorldState &worldState ) {
+PlannerNode *TakeCoverAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}
@@ -53,7 +53,7 @@ PlannerNode *BotTakeCoverAction::TryApply( const WorldState &worldState ) {
 		AI_FailWith( "BotTakeCoverAction", "PendingOriginVar() is ignored in the given world state\n" );
 	}
 
-	constexpr float distanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	constexpr float distanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
 	if( ( worldState.PendingOriginVar().Value() - navTargetOrigin ).SquaredLength() > distanceError ) {
 		worldState.DebugPrint( "Given WS" );
 		AI_FailWith( "BotTakeCoverAction", "PendingOrigin and NavTargetOrigin differ in the given world state\n" );
@@ -65,8 +65,8 @@ PlannerNode *BotTakeCoverAction::TryApply( const WorldState &worldState ) {
 		return nullptr;
 	}
 
-	unsigned selectedEnemiesInstanceId = self->ai->botRef->GetSelectedEnemies().InstanceId();
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self, navTargetOrigin, selectedEnemiesInstanceId ) ) );
+	unsigned selectedEnemiesInstanceId = Self()->GetSelectedEnemies().InstanceId();
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self(), navTargetOrigin, selectedEnemiesInstanceId ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

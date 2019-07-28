@@ -19,23 +19,23 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // snd_local.h -- private OpenAL sound functions
 
-
+#ifndef SND_OPENAL_LOCAL_H
+#define SND_OPENAL_LOCAL_H
 
 //#define VORBISLIB_RUNTIME // enable this define for dynamic linked vorbis libraries
-
-// it's in qcommon.h too, but we don't include it for modules
-typedef struct { const char *name; void **funcPointer; } dllfunc_t;
 
 #include "../gameshared/q_arch.h"
 #include "../gameshared/q_math.h"
 #include "../gameshared/q_shared.h"
 #include "../gameshared/q_cvar.h"
-
+#include "../qcommon/qcommon.h"
 #include "../client/snd_public.h"
-#include "snd_syscalls.h"
 #include "snd_cmdque.h"
 
 #include "qal.h"
+
+#include <algorithm>
+#include <functional>
 
 #ifdef _WIN32
 #define ALDRIVER "OpenAL32.dll"
@@ -57,30 +57,21 @@ typedef struct { const char *name; void **funcPointer; } dllfunc_t;
 
 extern struct mempool_s *soundpool;
 
-#define S_MemAlloc( pool, size ) trap_MemAlloc( pool, size, __FILE__, __LINE__ )
-#define S_MemFree( mem ) trap_MemFree( mem, __FILE__, __LINE__ )
-#define S_MemAllocPool( name ) trap_MemAllocPool( name, __FILE__, __LINE__ )
-#define S_MemFreePool( pool ) trap_MemFreePool( pool, __FILE__, __LINE__ )
-#define S_MemEmptyPool( pool ) trap_MemEmptyPool( pool, __FILE__, __LINE__ )
+#define S_MemAlloc( pool, size ) _Mem_Alloc( pool, size, MEMPOOL_SOUND, 0, __FILE__, __LINE__ )
+#define S_MemFree( mem ) _Mem_Free( mem, MEMPOOL_SOUND, 0, __FILE__, __LINE__ )
+#define S_MemAllocPool( name ) _Mem_AllocPool( NULL, name, MEMPOOL_SOUND, __FILE__, __LINE__ )
+#define S_MemFreePool( pool ) _Mem_FreePool( pool, MEMPOOL_SOUND, 0, __FILE__, __LINE__ )
 
 #define S_Malloc( size ) S_MemAlloc( soundpool, size )
 #define S_Free( data ) S_MemFree( data )
 
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
-
 typedef struct sfx_s {
-	int id;
 	char filename[MAX_QPATH];
+	int64_t used;           // Time last used
+	int id;
 	int registration_sequence;
 	ALuint buffer;      // OpenAL buffer
-	bool inMemory;
-	bool isLocked;
-	int used;           // Time last used
+	ALuint stereoBuffer;
 	float qualityHint;  // Assumed to be in [0, 1] range for majority of sounds
 						// (but values exceeding this range are allowed),
 						// spammy sounds like ricochets, plasma explosions,
@@ -88,6 +79,8 @@ typedef struct sfx_s {
 						// Should not be treated as generic gameplay importance of the sound,
 						// but as a hint allowing lowering quality of sound processing for saving performance
 						// (the sound will remain playing but in low quality, without effects, etc).
+	bool inMemory;
+	bool isLocked;
 } sfx_t;
 
 extern cvar_t *s_volume;
@@ -104,8 +97,6 @@ extern cvar_t *s_hrtf;
 // Has effect only if environment effects are turned on
 extern cvar_t *s_realistic_obstruction;
 
-extern cvar_t *s_globalfocus;
-
 extern int s_attenuation_model;
 extern float s_attenuation_maxdistance;
 extern float s_attenuation_refdistance;
@@ -118,12 +109,6 @@ extern ALCcontext *alContext;
 #define SRCPRI_ONESHOT  2   // One-shot sounds
 #define SRCPRI_LOCAL    3   // Local sounds
 #define SRCPRI_STREAM   4   // Streams (music, cutscenes)
-
-/*
-* Exported functions
-*/
-int S_API( void );
-void S_Error( const char *format, ... );
 
 void S_FreeSounds( void );
 void S_StopAllSounds( bool stopMusic );
@@ -176,230 +161,15 @@ void S_InitBuffers( void );
 void S_ShutdownBuffers( void );
 void S_SoundList_f( void );
 void S_UseBuffer( sfx_t *sfx );
-ALuint S_GetALBuffer( const sfx_t *sfx );
 sfx_t *S_FindBuffer( const char *filename );
 void S_MarkBufferFree( sfx_t *sfx );
-sfx_t *S_FindFreeBuffer( void );
-void S_ForEachBuffer( void ( *callback )( sfx_t *sfx ) );
+
+// TODO: Should provide iterators instead
+void S_ForEachBuffer( const std::function<void( sfx_t *)> &callback );
+
 sfx_t *S_GetBufferById( int id );
 bool S_LoadBuffer( sfx_t *sfx );
 bool S_UnloadBuffer( sfx_t *sfx );
-
-struct src_s;
-
-class Effect {
-public:
-	virtual void BindOrUpdate( src_s *src ) = 0;
-
-	virtual void InterpolateProps( const Effect *oldOne, int timeDelta ) {};
-
-	virtual unsigned GetLingeringTimeout() const {
-		return 500;
-	};
-
-	virtual bool ShouldKeepLingering( float sourceQualityHint, int64_t millisNow ) const {
-		return sourceQualityHint > 0;
-	};
-
-	virtual void UpdatePanning( src_s *src, const vec3_t listenerOrigin, const mat3_t listenerAxes ) {}
-
-	virtual ~Effect() {}
-
-	template <typename T> static const T Cast( const Effect *effect ) {
-		// We might think of optimizing it in future, that's why the method is favourable over the direct cast
-		return dynamic_cast<T>( const_cast<Effect *>( effect ) );
-	}
-
-	void AdjustGain( src_s *src ) const;
-
-	// A timestamp of last props update
-	int64_t lastUpdateAt;
-	// An distance between emitter and listener at last props update
-	float distanceAtLastUpdate;
-protected:
-	ALint type;
-	Effect( ALint type_ ): lastUpdateAt( 0 ), distanceAtLastUpdate( 0.0f ), type( type_ ) {}
-
-	class Interpolator {
-		float newWeight, oldWeight;
-	public:
-		explicit Interpolator( int timeDelta ) {
-			assert( timeDelta >= 0 );
-			float frac = timeDelta / 175.0f;
-			if( frac <= 1.0f ) {
-				newWeight = 0.5f + 0.3f * frac;
-				oldWeight = 0.5f - 0.3f * frac;
-			} else {
-				newWeight = 1.0f;
-				oldWeight = 0.0f;
-			}
-		}
-
-		float operator()( float rawNewValue, float oldValue, float mins, float maxs ) const {
-			float result = newWeight * ( rawNewValue ) + oldWeight * ( oldValue );
-			clamp( result, mins, maxs );
-			return result;
-		}
-	};
-
-	void CheckCurrentlyBoundEffect( src_s *src );
-	virtual void IntiallySetupEffect( src_s *src );
-
-	virtual float GetMasterGain( src_s *src ) const;
-
-	void AttachEffect( src_s *src );
-};
-
-class UnderwaterFlangerEffect final: public Effect {
-	void IntiallySetupEffect( src_s *src ) override;
-	float GetMasterGain( src_s *src ) const override;
-public:
-	UnderwaterFlangerEffect(): Effect( AL_EFFECT_FLANGER ) {}
-
-	float directObstruction;
-	bool hasMediumTransition;
-
-	void BindOrUpdate( src_s *src ) override;
-	void InterpolateProps( const Effect *oldOne, int timeDelta ) override;
-
-	unsigned GetLingeringTimeout() const override {
-		return 500;
-	}
-
-	bool ShouldKeepLingering( float sourceQualityHint, int64_t millisNow ) const override {
-		return sourceQualityHint > 0;
-	}
-};
-
-class ReverbEffect: public Effect {
-	float GetMasterGain( struct src_s *src ) const final;
-protected:
-	void InterpolateCommonReverbProps( const Interpolator &interpolator, const ReverbEffect *that );
-public:
-	ReverbEffect( ALint type_ ): Effect( type_ ) {}
-
-	// A regular direct obstruction (same as for the flanger effect)
-	float directObstruction;
-
-	float density;              // [0.0 ... 1.0]    default 1.0
-	float diffusion;            // [0.0 ... 1.0]    default 1.0
-	float gain;                 // [0.0 ... 1.0]    default 0.32
-	float gainHf;               // [0.0 ... 1.0]    default 0.89
-	float decayTime;            // [0.1 ... 20.0]   default 1.49
-	float reflectionsGain;      // [0.0 ... 3.16]   default 0.05
-	float reflectionsDelay;     // [0.0 ... 0.3]    default 0.007
-	float lateReverbGain;       // [0.0 ... 10.0]   default 1.26
-	float lateReverbDelay;      // [0.0 ... 0.1]    default 0.011
-
-	// An intermediate of the reverb sampling algorithm, useful for gain adjustment
-	float secondaryRaysObstruction;
-
-	virtual void CopyReverbProps( const ReverbEffect *that ) {
-		// Avoid memcpy... This is not a POD type
-		density = that->density;
-		diffusion = that->diffusion;
-		gain = that->gain;
-		gainHf = that->gainHf;
-		decayTime = that->decayTime;
-		reflectionsGain = that->reflectionsGain;
-		reflectionsDelay = that->reflectionsDelay;
-		lateReverbGain = that->lateReverbGain;
-		lateReverbDelay = that->lateReverbDelay;
-		secondaryRaysObstruction = that->secondaryRaysObstruction;
-	}
-
-	unsigned GetLingeringTimeout() const override {
-		return (unsigned)( decayTime * 1000 + 50 );
-	}
-
-	bool ShouldKeepLingering( float sourceQualityHint, int64_t millisNow ) const override {
-		if( sourceQualityHint <= 0 ) {
-			return false;
-		}
-		if( millisNow - lastUpdateAt > 200 ) {
-			return false;
-		}
-		clamp_high( sourceQualityHint, 1.0f );
-		float factor = 0.5f * sourceQualityHint;
-		factor += 0.25f * ( ( 1.0f - directObstruction ) + ( 1.0f - secondaryRaysObstruction ) );
-		assert( factor >= 0.0f && factor <= 1.0f );
-		return distanceAtLastUpdate < 192.0f + 768.0f * factor;
-	}
-};
-
-class StandardReverbEffect final: public ReverbEffect {
-	friend class ReverbEffectSampler;
-public:
-	StandardReverbEffect(): ReverbEffect( AL_EFFECT_REVERB ) {}
-
-	void BindOrUpdate( struct src_s *src ) override;
-	void InterpolateProps( const Effect *oldOne, int timeDelta ) override;
-};
-
-class EaxReverbEffect final: public ReverbEffect {
-	friend class ReverbEffectSampler;
-
-	const float *MakeFakeSourceOrigin( struct src_s *src,
-									   const vec3_t listenerOrigin,
-									   const vec3_t avgReflectionDir,
-									   const vec3_t *reflectionDirs );
-
-	vec3_t tmpSourceOrigin { 0, 0, 0 };
-public:
-	EaxReverbEffect(): ReverbEffect( AL_EFFECT_EAXREVERB ) {}
-
-	float echoTime;   // [0.075 ... 0.25]  default 0.25
-	float echoDepth;  // [0.0   ... 1.0]   default 0.0
-
-	void BindOrUpdate( struct src_s *src ) override;
-	void InterpolateProps( const Effect *oldOne, int timeDelta ) override;
-
-	void CopyReverbProps( const ReverbEffect *that ) override;
-
-	virtual void UpdatePanning( src_s *src, const vec3_t listenerOrigin, const mat3_t listenerAxes ) override;
-};
-
-class ChorusEffect final: public Effect {
-public:
-	ChorusEffect(): Effect( AL_EFFECT_CHORUS ) {}
-
-	enum Waveform {
-		SIN = 0,
-		TRIANGLE = 1
-	};
-
-	Waveform waveform;
-	int phase;        // [-180 ... 180]     default 90
-	float rate;       // [0.0  ... 10.0]    default 1.1
-	float depth;      // [0.0  ... 1.0]     default 0.1
-	float feedback;   // [-1.0 ... 1.0]     default 0.25
-	float delay;      // [0.0  ... 0.016]   default 0.016
-
-	void BindOrUpdate( struct src_s *src ) override;
-};
-
-class DistortionEffect final: public Effect {
-public:
-	DistortionEffect(): Effect( AL_EFFECT_DISTORTION ) {}
-
-	float edge;   // [0.0  ... 1.0]  default 0.2
-	float gain;   // [0.01 ... 1.0]  default 0.05
-
-	void BindOrUpdate( struct src_s *src ) override;
-};
-
-class EchoEffect final: public Effect {
-public:
-	EchoEffect(): Effect( AL_EFFECT_ECHO ) {}
-
-	float delay;      // [0.0  ... 0.207]  default 0.1
-	float lrDelay;    // [0.0  ... 0.404]  default 0.1
-	float damping;    // [0.0  ... 0.99]   default 0.5
-	float feedback;   // [0.0  ... 1.0]    default 0.5
-	float spread;     // [-1.0 ... 1.0]    default -1.0
-
-	void BindOrUpdate( struct src_s *src ) override;
-};
 
 typedef struct {
 	float quality;
@@ -411,8 +181,10 @@ struct PanningUpdateState {
 	static constexpr auto MAX_POINTS = 80;
 	int64_t timeoutAt;
 	vec3_t reflectionPoints[MAX_POINTS];
-	unsigned numReflectionPoints;
+	unsigned numPassedSecondaryRays;
 };
+
+class Effect;
 
 typedef struct envUpdateState_s {
 	sfx_t *parent;
@@ -553,48 +325,91 @@ void S_StopAviDemo( void );
 
 //====================================================================
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 unsigned S_GetRawSamplesLength( void );
 unsigned S_GetPositionedRawSamplesLength( int entnum );
 
-/*
-* Exported functions
-*/
-bool SF_Init( void *hwnd, int maxEntities, bool verbose );
-void SF_Shutdown( bool verbose );
-void SF_EndRegistration( void );
-void SF_BeginRegistration( void );
-sfx_t *SF_RegisterSound( const char *name );
-void SF_StartBackgroundTrack( const char *intro, const char *loop, int mode );
 void SF_StopBackgroundTrack( void );
-void SF_LockBackgroundTrack( bool lock );
-void SF_StopAllSounds( bool clear, bool stopMusic );
 void SF_PrevBackgroundTrack( void );
 void SF_NextBackgroundTrack( void );
 void SF_PauseBackgroundTrack( void );
-void SF_Activate( bool active );
-void SF_BeginAviDemo( void );
-void SF_StopAviDemo( void );
-void SF_SetAttenuationModel( int model, float maxdistance, float refdistance );
-void SF_SetEntitySpatialization( int entnum, const vec3_t origin, const vec3_t velocity );
-void SF_SetAttenuationModel( int model, float maxdistance, float refdistance );
-void SF_StartFixedSound( sfx_t *sfx, const vec3_t origin, int channel, float fvol, float attenuation );
-void SF_StartRelativeSound( sfx_t *sfx, int entnum, int channel, float fvol, float attenuation );
-void SF_StartGlobalSound( sfx_t *sfx, int channel, float fvol );
-void SF_StartLocalSoundByName( const char *sound );
-void SF_StartLocalSound( sfx_t *sfx, float fvol );
-void SF_Clear( void );
-void SF_AddLoopSound( sfx_t *sfx, int entnum, float fvol, float attenuation );
-void SF_Update( const vec3_t origin, const vec3_t velocity, const mat3_t axis, bool avidump );
-void SF_RawSamples( unsigned int samples, unsigned int rate, unsigned short width,
-					unsigned short channels, const uint8_t *data, bool music );
-void SF_PositionedRawSamples( int entnum, float fvol, float attenuation,
-							  unsigned int samples, unsigned int rate,
-							  unsigned short width, unsigned short channels, const uint8_t *data );
 
-#ifdef __cplusplus
-}
+class ALSoundSystem : public SoundSystem {
+	friend class SoundSystem;
+
+	qbufPipe_s *pipe;
+	qthread_s *thread;
+	bool useVerboseShutdown { false };
+
+	template <typename> friend class SingletonHolder;
+
+	static ALSoundSystem *TryCreate( client_state_s *client, void *hWnd, bool verbose );
+
+	ALSoundSystem( client_state_s *client_, qbufPipe_s *pipe_, qthread_s *thread_ )
+		: SoundSystem( client_ ), pipe( pipe_ ), thread( thread_ ) {}
+
+	~ALSoundSystem() override;
+public:
+	void DeleteSelf( bool verbose ) override;
+
+	void PostInit() override;
+
+	void BeginRegistration() override;
+	void EndRegistration() override;
+
+	void StopAllSounds( bool clear, bool stopAllMusic ) override;
+
+	void Clear() override;
+	void Update( const float *origin, const float *velocity, const mat3_t axis, bool dumpAvi ) override;
+	void Activate( bool isActive ) override;
+
+	void SetEntitySpatialization( int entNum, const float *origin, const float *velocity ) override;
+
+	sfx_s *RegisterSound( const char *name ) override;
+	void StartFixedSound( sfx_s *sfx, const float *origin, int channel, float fvol, float attenuation ) override;
+	void StartRelativeSound( sfx_s *sfx, int entNum, int channel, float fvol, float attenuation ) override;
+	void StartGlobalSound( sfx_s *sfx, int channel, float fvol ) override;
+	void StartLocalSound( const char *name, float fvol ) override;
+	void StartLocalSound( sfx_s *sfx, float fvol ) override;
+	void AddLoopSound( sfx_s *sfx, int entNum, float fvol, int attenuation ) override;
+
+	void RawSamples( unsigned samples, unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data, bool music ) override;
+	void PositionedRawSamples( int entNum, float fvol, float attenuation, unsigned samples,
+							   unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data ) override;
+
+	unsigned GetRawSamplesLength() override;
+	unsigned GetPositionedRawSamplesLength( int entNum ) override;
+
+	void StartBackgroundTrack( const char *intro, const char *loop, int mode ) override;
+	void StopBackgroundTrack() override;
+	void LockBackgroundTrack( bool lock ) override;
+
+	void BeginAviDemo() override {}
+	void StopAviDemo() override {}
+
+	void ListSounds();
+	void ListDevices();
+
+	void PrevBackgroundTrack();
+	void NextBackgroundTrack();
+	void PauseBackgroundTrack();
+};
+
+// This stuff is used by the sound system implementation and is defined in the client code
+
+void S_Trace( trace_s *tr, const float *start, const float *end, const float *mins,
+			  const float *maxs, int mask, int topNodeHint = 0 );
+
+int S_PointContents( const float *p, int topNodeHint = 0 );
+int S_PointLeafNum( const float *p, int topNodeHint = 0 );
+
+int S_NumLeafs();
+
+const vec3_t *S_GetLeafBounds( int leafnum );
+bool S_LeafsInPVS( int leafNum1, int leafNum2 );
+
+int S_FindTopNodeForBox( const float *mins, const float *maxs );
+int S_FindTopNodeForSphere( const float *center, float radius );
+
+const char *S_GetConfigString( int index );
+
 #endif

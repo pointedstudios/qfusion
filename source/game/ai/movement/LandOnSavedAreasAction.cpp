@@ -504,9 +504,9 @@ void LandOnSavedAreasAction::CheckPredictionStepResults( Context *context ) {
 			currPoint.Z() += 1.0f;
 			// We have to check against entities in this case
 			trace_t trace;
-			edict_t *ignore = game.edicts + bot->EntNum();
-			float *mins = playerbox_stand_mins;
-			float *maxs = playerbox_stand_maxs;
+			const auto *ignore = game.edicts + bot->EntNum();
+			const float *mins = playerbox_stand_mins;
+			const float *maxs = playerbox_stand_maxs;
 			G_Trace( &trace, currPoint.Data(), mins, maxs, testedTargetPoint.Data(), ignore, MASK_PLAYERSOLID );
 			if( trace.fraction == 1.0f ) {
 				Debug( "A prediction step has lead to touching a ground in a short-range neighbour area of the target area\n" );

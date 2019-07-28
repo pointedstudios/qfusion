@@ -28,30 +28,30 @@ public:
 
 protected:
 	trace_t localTrace;
-	Vec3 prevOrigin;
+	Vec3 prevOrigin { 0, 0, 0 };
 
-	void ( *traceFunc )( trace_t *tr, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, edict_t *, int contentmask );
-	edict_t *ignore;
-	int contentMask;
+	void ( *traceFunc )( trace_t *, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, const edict_t *, int ) { nullptr };
+	edict_t *ignore { nullptr };
+	int contentMask { 0 };
 
-	const AiAasWorld *aasWorld;
+	const AiAasWorld *aasWorld { nullptr };
 
 	vec3_t mins, maxs;
-	unsigned stepMillis;
-	unsigned numSteps;
+	unsigned stepMillis { 128 };
+	unsigned numSteps { 8 };
 
-	int stopEventFlags;
+	int stopEventFlags { 0 };
 
-	int enterAreaNum;
-	int enterAreaContents;
-	int enterAreaFlags;
+	int enterAreaNum { 0 };
+	int enterAreaContents { 0 };
+	int enterAreaFlags { 0 };
 
-	int leaveAreaNum;
-	int leaveAreaContents;
-	int leaveAreaFlags;
+	int leaveAreaNum { 0 };
+	int leaveAreaContents { 0 };
+	int leaveAreaFlags { 0 };
 
-	int ignoreEntNum;
-	bool extrapolateLastStep;
+	int ignoreEntNum { 0 };
+	bool extrapolateLastStep { false };
 
 	int RunStep( const Vec3 &startOrigin, const Vec3 &startVelocity, Results *results );
 	int InspectAasWorldTrace( Results *results );
@@ -71,18 +71,8 @@ protected:
 		}
 	}
 public:
-	AiTrajectoryPredictor()
-		: prevOrigin( 0, 0, 0 ),
-		  traceFunc( nullptr ),
-		  ignore( nullptr ),
-		  contentMask( 0 ),
-		  aasWorld( nullptr ),
-		  stepMillis( 128 ), numSteps( 8 ),
-		  stopEventFlags( 0 ),
-		  enterAreaNum( 0 ), enterAreaContents( 0 ), enterAreaFlags( 0 ),
-		  leaveAreaNum( 0 ), leaveAreaContents( 0 ), leaveAreaFlags( 0 ),
-		  ignoreEntNum( 0 ),
-		  extrapolateLastStep( false ) {
+	AiTrajectoryPredictor() {
+		memset( &localTrace, 0, sizeof( localTrace ) );
 		VectorCopy( vec3_origin, mins );
 		VectorCopy( vec3_origin, maxs );
 	}

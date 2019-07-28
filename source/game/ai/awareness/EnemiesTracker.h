@@ -1,7 +1,7 @@
 #ifndef QFUSION_AI_BASE_ENEMY_POOL_H
 #define QFUSION_AI_BASE_ENEMY_POOL_H
 
-#include "../ai_frame_aware_updatable.h"
+#include "../AIComponent.h"
 #include "../static_deque.h"
 #include "../static_vector.h"
 #include "../vec3.h"
@@ -107,6 +107,16 @@ class TrackedEnemy {
 	friend class AiEnemiesTracker;
 	class AiEnemiesTracker *parent { nullptr };
 
+public:
+	enum class HitFlags: int {
+		NONE = 0,
+		RAIL = 1,
+		ROCKET = 2,
+		SHAFT = 4,
+		ALL = 7
+	};
+private:
+
 	// Intrusive list links (an instance can be linked to many lists at the same time)
 	struct Links {
 		TrackedEnemy *next, *prev;
@@ -139,25 +149,18 @@ class TrackedEnemy {
 	// Some intermediates that should be cached for consequent MightBlockArea() flags
 	mutable int64_t lookDirComputedAt;
 	mutable int64_t weaponHitFlagsComputedAt;
-	mutable int64_t boxLeafNumsComputedAt;
 
-	mutable int checkForWeaponHitFlags;
-	mutable int numBoxLeafNums;
+	mutable HitFlags checkForWeaponHitFlags;
 	mutable float checkForWeaponHitKillDamage;
 
 	mutable vec3_t lookDir;
-	// CM leaf nums computed for last seen origin
-	mutable int boxLeafNums[8];
 
 	TrackedEnemy *NextInTrackedList() { return listLinks[TRACKED_LIST_INDEX].next; }
 	TrackedEnemy *NextInActiveList() { return listLinks[ACTIVE_LIST_INDEX].next; }
 
 	inline bool IsInList( int listIndex ) const;
 
-	int GetCheckForWeaponHitFlags( float damageToKillTarget ) const;
-	int ComputeCheckForWeaponHitFlags( float damageToKillTarget ) const;
-	int GetBoxLeafNums( int **leafNums ) const;
-	bool IsAreaInPVS( int areaNum, const AiAasWorld *aasWorld ) const;
+	HitFlags ComputeCheckForWeaponHitFlags( float damageToKillTarget ) const;
 public:
 	const edict_t *ent;  // If null, the enemy slot is unused
 
@@ -217,7 +220,10 @@ public:
 	inline int WavesReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_SHOCKWAVE>(); }
 	inline int InstasReadyToFireCount() const { return AmmoReadyToFireCount<WEAP_INSTAGUN>(); }
 
+	bool IsShootableCurrWeapon( int weapon ) const;
 	bool IsShootableCurrOrPendingWeapon( int weapon ) const;
+
+	bool TriesToKeepUnderXhair( const float *origin ) const;
 
 	inline unsigned FireDelay() const {
 		return ent->r.client ? ent->r.client->ps.stats[STAT_WEAPON_TIME] : 0u;
@@ -236,7 +242,7 @@ public:
 
 	Vec3 LookDir() const;
 
-	bool MightBlockArea( float damageToKillTarget, int areaNum, int reachNum, const AiAasWorld *aasWorld ) const;
+	HitFlags GetCheckForWeaponHitFlags( float damageToKillTarget ) const;
 
 	inline Vec3 Angles() const { return Vec3( ent->s.angles ); }
 
@@ -244,16 +250,27 @@ public:
 		Int64Align4 timestamp;
 		int16_t packedOrigin[3];
 		int16_t packedVelocity[3];
+		int16_t angles[2];
 	public:
-		Snapshot( const vec3_t origin_, const vec3_t velocity_, int64_t timestamp_ ) {
-			this->timestamp = timestamp;
+		Snapshot( const vec3_t origin_, const vec3_t velocity_, const vec3_t angles_, int64_t timestamp_ ) {
+			this->timestamp = timestamp_;
 			SetPacked4uVec( origin_, this->packedOrigin );
 			SetPacked4uVec( velocity_, this->packedVelocity );
+			angles[0] = (int16_t)angles_[PITCH];
+			angles[1] = (int16_t)angles_[YAW];
 		}
 
 		int64_t Timestamp() const { return timestamp; }
 		Vec3 Origin() const { return GetUnpacked4uVec( packedOrigin ); }
 		Vec3 Velocity() const { return GetUnpacked4uVec( packedVelocity ); }
+
+		Vec3 Angles() const {
+			vec3_t result;
+			result[PITCH] = angles[0];
+			result[YAW] = angles[1];
+			result[ROLL] = 0;
+			return Vec3( result );
+		}
 	};
 
 	typedef StaticDeque<Snapshot, MAX_TRACKED_SNAPSHOTS> SnapshotsQueue;
@@ -319,7 +336,7 @@ public:
 	int64_t LastActivityAt() const { return std::max( lastDamageAt, lastTouchAt ); }
 };
 
-class AiEnemiesTracker : public AiFrameAwareUpdatable {
+class AiEnemiesTracker : public AiFrameAwareComponent {
 	friend class TrackedEnemy;
 	friend class BotAwarenessModule;
 	friend class AiSquad;
@@ -340,13 +357,13 @@ public:
 	static constexpr unsigned MAX_ACTIVE_ENEMIES = 3;
 
 private:
-	float avgSkill; // (0..1)
+	const float avgSkill; // (0..1)
 
 	// An i-th element corresponds to i-th entity
 	TrackedEnemy entityToEnemyTable[MAX_EDICTS];
 
 	// List heads for tracked and active enemies lists
-	TrackedEnemy *listHeads[2];
+	TrackedEnemy *listHeads[2] { nullptr, nullptr };
 
 	unsigned numTrackedEnemies;
 	const unsigned maxTrackedAttackers;
@@ -355,7 +372,7 @@ private:
 
 	const unsigned reactionTime;
 
-	int64_t prevThinkLevelTime;
+	int64_t prevThinkLevelTime { 0 };
 
 	StaticVector<AttackStats, MAX_TRACKED_ATTACKERS> attackers;
 	StaticVector<AttackStats, MAX_TRACKED_TARGETS> targets;
@@ -363,15 +380,40 @@ private:
 	void RemoveEnemy( TrackedEnemy *enemy );
 
 	void UpdateEnemyWeight( TrackedEnemy *enemy );
-	float ComputeRawEnemyWeight( const edict_t *enemy );
+
+	virtual float ComputeRawEnemyWeight( const edict_t *enemy );
+
+	/**
+	 * Modifies weight for an enemy that has been an attacker of the bot recently.
+	 * @param enemy an enemy underlying entity (for a newly added or updated enemy)
+	 * @param weightSoFar a weight of the enemy computed to the moment of this call
+	 * @return a modified value of the enemy weight (can't be less than the supplied one)
+	 */
+	virtual float ModifyWeightForAttacker( const edict_t *enemy, float weightSoFar );
+
+	/**
+	 * Modifies weight for an enemy that has been hit by the bot recently.
+	 * @param enemy an enemy underlying entity (for a newly added or updated enemy)
+	 * @param weightSoFar a weight of the enemy computed to the moment of this call
+	 * @return a modified value of the enemy weight (can't be less than the supplied one)
+	 */
+	virtual float ModifyWeightForHitTarget( const edict_t *enemy, float weightSoFar );
+
+	/**
+	 * Modifies weight for an enemy based on a "kill enemy/be killed by enemy" damage ratio
+	 * @param enemy an enemy underlying entity (for a newly added or updated enemy)
+	 * @param weightSoFar a weight of the enemy computed to the moment of this call
+	 * @return a modified value of the enemy weight (can't be less that the supplied one)
+	 */
+	virtual float ModifyWeightForDamageRatio( const edict_t *enemy, float weightSoFar );
 
 	// Returns attacker slot number
 	int EnqueueAttacker( const edict_t *attacker, int damage );
 
 	// Precache results of virtual Check* calls in these vars in PreThink()
-	bool hasQuad;
-	bool hasShell;
-	float damageToBeKilled;
+	bool hasQuad { false };
+	bool hasShell { false };
+	float damageToBeKilled { 0.0f };
 
 	enum {
 		TRACKED_LIST_INDEX = TrackedEnemy::TRACKED_LIST_INDEX,
@@ -463,8 +505,8 @@ protected:
 	TrackedEnemy *TrackedEnemiesHead() { return listHeads[TRACKED_LIST_INDEX]; }
 	TrackedEnemy *ActiveEnemiesHead() { return listHeads[ACTIVE_LIST_INDEX]; }
 public:
-	AiEnemiesTracker( float avgSkill_ );
-	virtual ~AiEnemiesTracker() {}
+	explicit AiEnemiesTracker( float avgSkill_ );
+	virtual ~AiEnemiesTracker() = default;
 
 	// If a weight is set > 0, this bot requires reinforcements
 	virtual void SetBotRoleWeight( const edict_t *bot, float weight ) = 0;

@@ -24,15 +24,31 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #ifndef __QAL_H__
 #define __QAL_H__
 
+// WARNING: this might go wrong if OPENAL_RUNTIME is supplied by a
+// build system and not defined in gameshared/q_arch.h, but let's
+// worry about that when this day will actually come.
+#ifdef OPENAL_SOFT_STATIC
+#undef OPENAL_RUNTIME
+#endif
+
 #ifdef OPENAL_RUNTIME
 #define AL_NO_PROTOTYPES
 #define ALC_NO_PROTOTYPES
 #endif
 
+// Remove DLLIMPORT linkage specifiers in this case
+#ifdef OPENAL_SOFT_STATIC
+#ifdef AL_API
+#error AL_API macro should be undefined to this moment
+#else
+#define AL_API
+#endif
+#endif
+
 #if defined ( __MACOSX__ )
 #include <OpenAL/al.h>
 #include <OpenAL/alc.h>
-#elif defined( __ANDROID__ )
+#elif defined( __ANDROID__ ) || defined( OPENAL_SOFT_STATIC )
 #include <AL/al.h>
 #include <AL/alc.h>
 #else
@@ -234,6 +250,7 @@ extern LPALCCAPTURESAMPLES qalcCaptureSamples;
 #define qalcCaptureStart alcCaptureStart
 #define qalcCaptureStop alcCaptureStop
 #define qalcCaptureSamples alcCaptureSamples
+
 #endif
 
 /* HRTF */
@@ -287,7 +304,7 @@ extern LPALEFFECTIV qalEffectiv;
 extern LPALEFFECTF qalEffectf;
 extern LPALEFFECTFV qalEffectfv;
 extern LPALGETEFFECTI qalGetEffecti;
-extern LPALGETEFFECTIV qalGetEffeciv;
+extern LPALGETEFFECTIV qalGetEffectiv;
 extern LPALGETEFFECTF qalGetEffectf;
 extern LPALGETEFFECTFV qalGetEffectfv;
 

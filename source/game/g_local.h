@@ -34,6 +34,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "../matchmaker/mm_rating.h"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdlib>
+#include <memory>
+#include <new>
+#include <utility>
+
 //==================================================================
 // round(x)==floor(x+0.5f)
 
@@ -138,11 +146,6 @@ typedef enum {
 typedef struct {
 	edict_t *edicts;        // [maxentities]
 	gclient_t *clients;     // [maxclients]
-
-	gclient_quit_t *quits;  // [dynamic] <-- MM
-	clientRating_t *ratings;    // list of ratings for current game and gametype <-- MM
-	linear_allocator_t *raceruns;   // raceRun_t <-- MM
-	bool discardMatchReport;
 
 	int protocol;
 	char demoExtension[MAX_QPATH];
@@ -348,6 +351,7 @@ extern cvar_t *g_maxtimeouts;
 
 extern cvar_t *g_self_knockback;
 extern cvar_t *g_knockback_scale;
+extern cvar_t *g_volatile_explosives;
 extern cvar_t *g_allow_stun;
 extern cvar_t *g_armor_degradation;
 extern cvar_t *g_armor_protection;
@@ -394,7 +398,7 @@ void G_Teams_UpdateMembersList( void );
 bool G_Teams_JoinAnyTeam( edict_t *ent, bool silent );
 void G_Teams_SetTeam( edict_t *ent, int team );
 
-void Cmd_Say_f( edict_t *ent, bool arg0, bool checkflood );
+void Cmd_Say_f( edict_t *ent, bool arg0 );
 void G_Say_Team( edict_t *who, const char *inmsg, bool checkflood );
 
 void G_Match_Ready( edict_t *ent );
@@ -557,13 +561,35 @@ extern const field_t fields[];
 // g_cmds.c
 //
 
-typedef void ( *gamecommandfunc_t )( edict_t * );
-
 char *G_StatsMessage( edict_t *ent );
-bool CheckFlood( edict_t *ent, bool teamonly );
-void G_InitGameCommands( void );
-void G_PrecacheGameCommands( void );
-void G_AddCommand( const char *name, gamecommandfunc_t cmdfunc );
+
+#include "../qcommon/CommandsHandler.h"
+
+class ClientCommandsHandler : public SingleArgCommandsHandler<edict_t *> {
+	using Super = SingleArgCommandsHandler<edict_t *>;
+
+	class ScriptCommandCallback : public Super::SingleArgCallback {
+	public:
+		ScriptCommandCallback( wsw::HashedStringRef &&name )
+			: SingleArgCallback( "script", std::move( name ) ) {}
+
+		bool operator()( edict_t *arg ) override;
+	};
+
+	bool AddOrReplace( GenericCommandCallback *callback ) override;
+	static bool IsWriteProtected( const wsw::StringView &name );
+public:
+	static void Init();
+	static void Shutdown();
+	static ClientCommandsHandler *Instance();
+
+	ClientCommandsHandler();
+
+	void PrecacheCommands();
+
+	void HandleClientCommand( edict_t *ent );
+	void AddScriptCommand( const char *name );
+};
 
 //
 // g_items.c
@@ -637,18 +663,55 @@ void G_CallDie( edict_t *ent, edict_t *inflictor, edict_t *attacker, int damage,
 int G_PlayerGender( edict_t *player );
 
 #ifndef _MSC_VER
-void G_PrintMsg( edict_t *ent, const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
-void G_PrintChasersf( edict_t *self, const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
-void G_ChatMsg( edict_t *ent, edict_t *who, bool teamonly, const char *format, ... ) __attribute__( ( format( printf, 4, 5 ) ) );
-void G_CenterPrintMsg( edict_t *ent, const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
-void G_CenterPrintFormatMsg( edict_t *ent, int numVargs, const char *format, ... ) __attribute__( ( format( printf, 3, 4 ) ) );
+void G_PrintMsg( const edict_t *ent, const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
+void G_PrintChasersf( const edict_t *self, const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
+void G_CenterPrintMsg( const edict_t *ent, const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
+void G_CenterPrintFormatMsg( const edict_t *ent, int numVargs, const char *format, ... ) __attribute__( ( format( printf, 3, 4 ) ) );
 #else
-void G_PrintMsg( edict_t *ent, _Printf_format_string_ const char *format, ... );
-void G_PrintChasersf( edict_t *self, _Printf_format_string_ const char *format, ... );
-void G_ChatMsg( edict_t *ent, edict_t *who, bool teamonly, _Printf_format_string_ const char *format, ... );
-void G_CenterPrintMsg( edict_t *ent, _Printf_format_string_ const char *format, ... );
-void G_CenterPrintFormatMsg( edict_t *ent, int numVargs, _Printf_format_string_ const char *format, ... );
+void G_PrintMsg( const edict_t *ent, _Printf_format_string_ const char *format, ... );
+void G_PrintChasersf( const edict_t *self, _Printf_format_string_ const char *format, ... );
+void G_CenterPrintMsg( const edict_t *ent, _Printf_format_string_ const char *format, ... );
+void G_CenterPrintFormatMsg( const edict_t *ent, int numVargs, _Printf_format_string_ const char *format, ... );
 #endif
+
+class ChatHandlersChain;
+
+class ChatPrintHelper {
+	enum { OFFSET = 10 };
+
+	const edict_t *const source;
+	char buffer[OFFSET + 1 + 1024];
+	int messageLength { 0 };
+	bool hasPrintedToServerConsole { false };
+	bool skipServerConsole { false };
+
+	void InitFromV( const char *format, va_list va );
+	void PrintToServerConsole( bool teamOnly );
+	inline void SetCommandPrefix( bool teamOnly );
+
+	void PrintTo( const edict_t *target, bool teamOnly );
+	void DispatchWithFilter( const ChatHandlersChain *filter, bool teamOnly );
+public:
+	ChatPrintHelper &operator=( const ChatPrintHelper & ) = delete;
+	ChatPrintHelper( const ChatPrintHelper & ) = delete;
+	ChatPrintHelper &operator=( ChatPrintHelper && ) = delete;
+	ChatPrintHelper( ChatPrintHelper && ) = delete;
+
+#ifndef _MSC_VER
+	ChatPrintHelper( const edict_t *source_, const char *format, ... ) __attribute__( ( format( printf, 3, 4 ) ) );
+	explicit ChatPrintHelper( const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
+#else
+	ChatPrintHelper( const edict_t *source_, _Printf_format_string_ const char *format, ... );
+	explicit ChatPrintHelper( _Printf_format_string_ const char *format, ... );
+#endif
+
+	void SkipServerConsole() { skipServerConsole = true; }
+
+	void PrintToChatOf( const edict_t *target ) { PrintTo( target, false ); }
+	void PrintToTeamChatOf( const edict_t *target ) { PrintTo( target, true ); }
+	void PrintToTeam( const ChatHandlersChain *filter = nullptr ) { DispatchWithFilter( filter, true ); }
+	void PrintToEverybody( const ChatHandlersChain *filter = nullptr ) { DispatchWithFilter( filter, false ); }
+};
 
 void G_UpdatePlayerMatchMsg( edict_t *ent, bool force = false );
 void G_UpdatePlayersMatchMsgs( void );
@@ -691,7 +754,7 @@ void G_AnnouncerSound( edict_t *targ, int soundindex, int team, bool queued, edi
 edict_t *G_PlayerForText( const char *text );
 
 void G_LoadFiredefsFromDisk( void );
-void G_PrecacheWeapondef( int weapon, firedef_t *firedef );
+void G_PrecacheWeapondef( int weapon );
 
 void G_MapLocations_Init( void );
 int G_RegisterMapLocationName( const char *name );
@@ -745,22 +808,23 @@ typedef struct link_s {
 	int entNum;
 } link_t;
 
-int G_PointContents( vec3_t p );
-void G_Trace( trace_t *tr, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, edict_t *passedict, int contentmask );
-int G_PointContents4D( vec3_t p, int timeDelta );
-void G_Trace4D( trace_t *tr, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, edict_t *passedict, int contentmask, int timeDelta );
+int G_PointContents( const vec3_t p );
+void G_Trace( trace_t *tr, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, const edict_t *passedict, int contentmask );
+int G_PointContents4D( const vec3_t p, int timeDelta );
+void G_Trace4D( trace_t *tr, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, const edict_t *passedict, int contentmask, int timeDelta );
 void GClip_BackUpCollisionFrame( void );
-int GClip_FindInRadius4D( vec3_t org, float rad, int *list, int maxcount, int timeDelta );
+int GClip_FindInRadius4D( const vec3_t org, float rad, int *list, int maxcount, int timeDelta );
 void G_SplashFrac4D( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac, int timeDelta );
+void RS_SplashFrac4D( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac, int timeDelta, float splashFrac ); // racesow
 void GClip_ClearWorld( void );
 void GClip_SetBrushModel( edict_t *ent, const char *name );
 void GClip_SetAreaPortalState( edict_t *ent, bool open );
 void GClip_LinkEntity( edict_t *ent );
 void GClip_UnlinkEntity( edict_t *ent );
 void GClip_TouchTriggers( edict_t *ent );
-void G_PMoveTouchTriggers( pmove_t *pm, vec3_t previous_origin );
+void G_PMoveTouchTriggers( pmove_t *pm, const vec3_t previous_origin );
 entity_state_t *G_GetEntityStateForDeltaTime( int entNum, int deltaTime );
-int GClip_FindInRadius( vec3_t org, float rad, int *list, int maxcount );
+int GClip_FindInRadius( const vec3_t org, float rad, int *list, int maxcount );
 
 // BoxEdicts() can return a list of either solid or trigger entities
 // FIXME: eliminate AREA_ distinction?
@@ -768,7 +832,7 @@ int GClip_FindInRadius( vec3_t org, float rad, int *list, int maxcount );
 #define AREA_SOLID      1
 #define AREA_TRIGGERS   2
 int GClip_AreaEdicts( const vec3_t mins, const vec3_t maxs, int *list, int maxcount, int areatype, int timeDelta );
-bool GClip_EntityContact( vec3_t mins, vec3_t maxs, edict_t *ent );
+bool GClip_EntityContact( const vec3_t mins, const vec3_t maxs, const edict_t *ent );
 
 //
 // g_combat.c
@@ -777,6 +841,7 @@ void G_Killed( edict_t *targ, edict_t *inflictor, edict_t *attacker, int damage,
 int G_ModToAmmo( int mod );
 bool CheckTeamDamage( edict_t *targ, edict_t *attacker );
 void G_SplashFrac( const vec3_t origin, const vec3_t mins, const vec3_t maxs, const vec3_t point, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac );
+void RS_SplashFrac( const vec3_t origin, const vec3_t mins, const vec3_t maxs, const vec3_t point, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac, float splashFrac );
 void G_Damage( edict_t *targ, edict_t *inflictor, edict_t *attacker, const vec3_t pushdir, const vec3_t dmgdir, const vec3_t point, float damage, float knockback, float stun, int dflags, int mod );
 void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, cplane_t *plane, edict_t *ignore, int mod );
 
@@ -837,6 +902,10 @@ edict_t *W_Fire_Lasergun( edict_t *self, vec3_t start, vec3_t angles, float dama
 edict_t *W_Fire_Lasergun_Weak( edict_t *self, vec3_t start, vec3_t end, float damage, int knockback, int stun, int timeout, int mod, int timeDelta );
 void W_Fire_Instagun( edict_t *self, vec3_t start, vec3_t angles, float damage, int knockback, int stun, int radius, int range, int mod, int timeDelta );
 
+void W_Detonate_Rocket( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags );
+void W_Detonate_Grenade( edict_t *self, edict_t *ignore );
+void W_Detonate_Wave( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags );
+
 bool Pickup_Weapon( edict_t *other, const gsitem_t *item, int flags, int ammo_count );
 edict_t *Drop_Weapon( edict_t *ent, const gsitem_t *item );
 void Use_Weapon( edict_t *ent, const gsitem_t *item );
@@ -869,7 +938,6 @@ void G_CheckClientRespawnClick( edict_t *ent );
 bool ClientConnect( edict_t *ent, char *userinfo, bool fakeClient );
 void ClientDisconnect( edict_t *ent, const char *reason );
 void ClientBegin( edict_t *ent );
-void ClientCommand( edict_t *ent );
 void G_PredictedEvent( int entNum, int ev, int parm );
 void G_TeleportPlayer( edict_t *player, edict_t *dest );
 bool G_PlayerCanTeleport( edict_t *player );
@@ -997,8 +1065,8 @@ const char *G_GetEntitySpawnKey( const char *key, edict_t *self );
 //
 // g_awards.c
 //
-void G_PlayerAward( edict_t *ent, const char *awardMsg );
-void G_PlayerMetaAward( edict_t *ent, const char *awardMsg );
+void G_PlayerAward( const edict_t *ent, const char *awardMsg );
+void G_PlayerMetaAward( const edict_t *ent, const char *awardMsg );
 void G_AwardPlayerHit( edict_t *targ, edict_t *attacker, int mod );
 void G_AwardPlayerMissedElectrobolt( edict_t *self, int mod );
 void G_AwardPlayerMissedLasergun( edict_t *self, int mod );
@@ -1262,7 +1330,6 @@ struct gclient_s {
 	int movestyle_latched;
 	bool isoperator;
 	int64_t queueTimeStamp;
-	int muted;     // & 1 = chat disabled, & 2 = vsay disabled
 
 	usercmd_t ucmd;
 	int timeDelta;              // time offset to adjust for shots collision (antilag)
@@ -1302,7 +1369,6 @@ struct gclient_s {
 		movestyle_latched = 0;
 		isoperator = false;
 		queueTimeStamp = 0;
-		muted = 0;
 
 		memset( &ucmd, 0, sizeof( ucmd ) );
 		timeDelta = 0;
@@ -1316,26 +1382,487 @@ struct gclient_s {
 	}
 };
 
-// quit or teamchange data for clients (stats)
-struct gclient_quit_s {
-	char netname[MAX_NAME_BYTES];
-	int team;
-	mm_uuid_t mm_session;
+namespace std {
+	template<typename F> class function;
+}
 
-	score_stats_t stats;
-	int64_t timePlayed;
-	bool final;         // is true, player was there in the end
-	struct gclient_quit_s *next;
+class StatsowFacade {
+	friend class ChatHandlersChain;
+	friend class RespectHandler;
+	friend class RunStatusQuery;
 
-	gclient_quit_s() {
-		netname[0] = '\0';
-		team = 0;
-		mm_session = Uuid_ZeroUuid();
+	struct RespectStats : public GVariousStats {
+		RespectStats(): GVariousStats( 31 ) {}
 
-		timePlayed = 0;
-		final = false;
-		next = nullptr;
+		bool hasIgnoredCodex { false };
+		bool hasViolatedCodex { false };
+	};
+
+	struct ClientEntry {
+		ClientEntry *next { nullptr };
+		score_stats_t stats;
+		char netname[MAX_NAME_BYTES];
+		mm_uuid_t mm_session { Uuid_ZeroUuid() };
+		int64_t timePlayed { 0 };
+		int team { 0 };
+		bool final { false };
+
+		RespectStats respectStats;
+
+		ClientEntry() {
+			netname[0] = '\0';
+		}
+
+		void WriteToReport( class JsonWriter &writer, bool teamGame, const char **weaponNames );
+		void AddAwards( class JsonWriter &writer );
+		void AddWeapons( class JsonWriter &writer, const char **weaponNames );
+	};
+
+	ClientEntry *clientEntriesHead { nullptr };
+	clientRating_t *ratingsHead { nullptr };
+
+	RunStatusQuery *runQueriesHead { nullptr };
+
+	StatsSequence<LoggedFrag> fragsSequence;
+
+	struct PlayTimeEntry {
+		mm_uuid_t clientSessionId;
+		int64_t timeToAdd { 0 };
+
+		explicit PlayTimeEntry( const mm_uuid_t &id_ ) : clientSessionId( id_ ) {}
+	};
+
+	StatsSequence<PlayTimeEntry> bufferedPlayTimes;
+	int64_t lastPlayTimesFlushAt { 0 };
+
+	bool isDiscarded { false };
+
+	void AddPlayerReport( edict_t *ent, bool final );
+
+	void AddToExistingEntry( edict_t *ent, bool final, ClientEntry *e );
+	void MergeAwards( StatsSequence<LoggedAward> &to, StatsSequence<LoggedAward> &&from );
+
+	ClientEntry *FindEntryById( const mm_uuid_t &playerSessionId );
+	RespectStats *FindRespectStatsById( const mm_uuid_t &playerSessionId );
+
+	ClientEntry *NewPlayerEntry( edict_t *ent, bool final );
+
+	void SendMatchStartedReport() {
+		SendGenericMatchStateEvent( "started" );
 	}
+
+	void SendMatchAbortedReport() {
+		SendGenericMatchStateEvent( "aborted" );
+	}
+
+	void SendGenericMatchStateEvent( const char *event );
+
+	void ValidateRaceRun( const char *tag, const edict_t *owner );
+
+	void DeleteRunStatusQuery( RunStatusQuery *query );
+
+	RunStatusQuery *AddRunStatusQuery( const mm_uuid_t &runId );
+
+	PlayTimeEntry *FindPlayTimeEntry( const mm_uuid_t &clientSessionId );
+
+	void FlushRacePlayTimes();
+
+	static mm_uuid_t SessionOf( const edict_t *ent );
+public:
+	static void Init();
+	static void Shutdown();
+
+	static StatsowFacade *Instance();
+
+	bool IsValid() const;
+
+	void Frame();
+
+	~StatsowFacade();
+
+	void ClearEntries();
+
+	RaceRun *NewRaceRun( const edict_t *owner, int numSectors );
+	void SetSectorTime( edict_t *owner, int sector, uint32_t time );
+	RunStatusQuery *CompleteRun( edict_t *owner, uint32_t finalTime, const char *runTag = nullptr );
+
+	void WriteHeaderFields( class JsonWriter &writer, int teamGame );
+
+	RunStatusQuery *SendRaceRunReport( RaceRun *raceRun, const char *runTag = nullptr );
+
+	void AddToRacePlayTime( const gclient_t *client, int64_t timeToAdd );
+
+	void SendMatchFinishedReport();
+
+	void SendFinalReport();
+
+	void AddAward( const edict_t *ent, const char *awardMsg );
+	void AddMetaAward( const edict_t *ent, const char *awardMsg );
+	void AddFrag( const edict_t *attacker, const edict_t *victim, int mod );
+
+	void OnClientDisconnected( edict_t *ent );
+	void OnClientJoinedTeam( edict_t *ent, int newTeam );
+	void OnMatchStateLaunched( int oldState, int newState );
+
+	void UpdateAverageRating();
+
+	void TransferRatings();
+	clientRating_t *AddDefaultRating( edict_t *ent, const char *gametype );
+	clientRating_t *AddRating( edict_t *ent, const char *gametype, float rating, float deviation );
+
+	void TryUpdatingGametypeRating( const gclient_t *client,
+									const clientRating_t *addedRating,
+									const char *addedForGametype );
+
+	void RemoveRating( edict_t *ent );
+
+	bool IsMatchReportDiscarded() const {
+		return !IsValid();
+	}
+
+	void OnClientHadPlaytime( const gclient_t *client );
+};
+
+/**
+ * A common supertype for chat message handlers.
+ * Could pass a message to another filter, reject it or print it on its own.
+ */
+class ChatHandler {
+protected:
+	virtual ~ChatHandler() = default;
+
+	/**
+	 * Should reset the held internal state for a new match
+	 */
+	virtual void Reset() = 0;
+
+	/**
+	 * Should reset the held internal state for a client
+	 */
+	virtual void ResetForClient( int clientNum ) = 0;
+
+	/**
+	 * Should "handle" the message appropriately.
+	 * @param ent a message author
+	 * @param message a message
+	 * @return true if the message has been handled and its processing should be interrupted.
+	 */
+	virtual bool HandleMessage( const edict_t *ent, const char *message ) = 0;
+};
+
+/**
+ * A {@code ChatHandler} that allows public messages only from
+ * authenticated players during a match (if a corresponding server var is set).
+ */
+class ChatAuthFilter final : public ChatHandler {
+	friend class ChatHandlersChain;
+
+	bool authOnly { false };
+
+	ChatAuthFilter() {
+		Reset();
+	}
+
+	void ResetForClient( int ) override {}
+
+	void Reset() override;
+
+	bool HandleMessage( const edict_t *ent, const char * ) override;
+};
+
+/**
+ * A {@code ChatHandler} that allows to mute/unmute public messages of a player during match time.
+ */
+class MuteFilter final : public ChatHandler {
+	friend class ChatHandlersChain;
+
+	bool muted[MAX_CLIENTS];
+
+	MuteFilter() {
+		Reset();
+	}
+
+	inline void Mute( const edict_t *ent );
+	inline void Unmute( const edict_t *ent );
+
+	void ResetForClient( int clientNum ) override {
+		muted[clientNum] = false;
+	}
+
+	void Reset() override {
+		memset( muted, 0, sizeof( muted ) );
+	}
+
+	bool HandleMessage( const edict_t *ent, const char * ) override;
+};
+
+/**
+ * A {@code ChatHandler} that allows to throttle down flux of messages from a player.
+ * This filter could serve for throttling team messages of a player as well.
+ */
+class FloodFilter final : public ChatHandler {
+	friend class ChatHandlersChain;
+
+	bool publicTimeoutAt[MAX_CLIENTS];
+	bool teamTimeoutAt[MAX_CLIENTS];
+
+	FloodFilter() {
+		Reset();
+	}
+
+	void ResetForClient( int clientNum ) override {
+		publicTimeoutAt[clientNum] = 0;
+		teamTimeoutAt[clientNum] = 0;
+	}
+
+	void Reset() override {
+		memset( publicTimeoutAt, 0, sizeof( publicTimeoutAt ) );
+		memset( teamTimeoutAt, 0, sizeof( teamTimeoutAt ) );
+	}
+
+	bool DetectFlood( const edict_t *ent, bool team );
+
+	bool HandleMessage( const edict_t *ent, const char *message ) override {
+		return DetectFlood( ent, false );
+	}
+};
+
+/**
+ * A {@code ChatHandler} that analyzes chat messages of a player.
+ * Messages are never rejected by this handler.
+ * Some information related to the honor of Respect and Sportsmanship Codex
+ * is extracted from messages and transmitted to the {@code StatsowFacade}.
+ */
+class RespectHandler final : public ChatHandler {
+	friend class ChatHandlersChain;
+	friend class StatsowFacade;
+	friend class RespectTokensRegistry;
+
+	enum { NUM_TOKENS = 10 };
+
+	struct ClientEntry {
+		int64_t warnedAt;
+		int64_t firstJoinedGameAt;
+		int64_t firstSaidAt[NUM_TOKENS];
+		int64_t lastSaidAt[NUM_TOKENS];
+		const edict_t *ent { nullptr };
+		int numSaidTokens[NUM_TOKENS];
+		bool saidBefore;
+		bool saidAfter;
+		bool hasTakenCountdownHint;
+		bool hasTakenStartHint;
+		bool hasTakenLastStartHint;
+		bool hasTakenFinalHint;
+		bool hasIgnoredCodex;
+		bool hasViolatedCodex;
+
+		static char hintBuffer[64];
+
+		ClientEntry() {
+			Reset();
+		}
+
+		void Reset();
+
+		bool HandleMessage( const char *message );
+
+		/**
+		 * Scans the message for respect tokens.
+		 * Adds found tokens to token counters after a successful scan.
+		 * @param message a message to scan
+		 * @return true if only respect tokens are met (or a trimmed string is empty)
+		 */
+		bool CheckForTokens( const char *message );
+
+		/**
+		 * Checks actions necessary to honor Respect and Sportsmanship Codex for a client every frame
+		 */
+		void CheckBehaviour( const int64_t matchStartTime );
+
+#ifndef _MSC_VER
+		void PrintToClientScreen( unsigned timeout, const char *format, ... ) __attribute__( ( format( printf, 3, 4 ) ) );
+#else
+		void PrintToClientScreen( unsigned timeout, _Printf_format_string_ const char *format, ... );
+#endif
+		void ShowRespectMenuAtClient( unsigned timeout, int tokenNum );
+
+		static const char *MakeHintString( int tokenNum );
+
+		void AnnounceMisconductBehaviour( const char *action );
+
+		void AnnounceFairPlay();
+
+		/**
+		 * Adds accumulated data to reported stats.
+		 * Handles respect violation states appropriately.
+		 * @param reportedStats respect stats that are finally reported to Statsow
+		 */
+		void AddToReportStats( StatsowFacade::RespectStats *reportedStats );
+
+		void OnClientDisconnected();
+		void OnClientJoinedTeam( int newTeam );
+	};
+
+	ClientEntry entries[MAX_CLIENTS];
+
+	int64_t matchStartedAt { -1 };
+	int64_t lastFrameMatchState { -1 };
+
+	RespectHandler();
+
+	void ResetForClient( int clientNum ) override {
+		entries[clientNum].Reset();
+	}
+
+	void Reset() override;
+
+	bool SkipStatsForClient( const edict_t *ent ) const;
+	bool SkipStatsForClient( int playerNum ) const;
+
+	bool HandleMessage( const edict_t *ent, const char *message ) override;
+
+	void Frame();
+
+	void AddToReportStats( const edict_t *ent, StatsowFacade::RespectStats *reportedStats );
+
+	void OnClientDisconnected( const edict_t *ent );
+	void OnClientJoinedTeam( const edict_t *ent, int newTeam );
+};
+
+class ChatHandlersChain;
+
+class IgnoreFilter {
+	struct ClientEntry {
+		static_assert( MAX_CLIENTS <= 64, "" );
+		uint64_t ignoredClientsMask;
+		bool ignoresEverybody;
+		bool ignoresNotTeammates;
+
+		ClientEntry() {
+			Reset();
+		}
+
+		void Reset() {
+			ignoredClientsMask = 0;
+			ignoresEverybody = false;
+			ignoresNotTeammates = false;
+		}
+
+		void SetClientBit( int clientNum, bool ignore ) {
+			assert( (unsigned)clientNum < 64u );
+			uint64_t bit = ( ( (uint64_t)1 ) << clientNum );
+			if( ignore ) {
+				ignoredClientsMask |= bit;
+			} else {
+				ignoredClientsMask &= ~bit;
+			}
+		}
+
+		bool GetClientBit( int clientNum ) const {
+			assert( (unsigned)clientNum < 64u );
+			return ( ignoredClientsMask & ( ( (uint64_t)1 ) << clientNum ) ) != 0;
+		}
+	};
+
+	ClientEntry entries[MAX_CLIENTS];
+
+	void SendChangeFilterVarCommand( const edict_t *ent );
+	void PrintIgnoreCommandUsage( const edict_t *ent, bool ignore );
+public:
+	void HandleIgnoreCommand( const edict_t *ent, bool ignore );
+	void HandleIgnoreListCommand( const edict_t *ent );
+
+	void Reset();
+
+	void ResetForClient( int clientNum ) {
+		entries[clientNum].Reset();
+	}
+
+	bool Ignores( const edict_t *target, const edict_t *source ) const;
+	void NotifyOfIgnoredMessage( const edict_t *target, const edict_t *source ) const;
+
+	void OnUserInfoChanged( const edict_t *user );
+};
+
+/**
+ * A container for all registered {@code ChatHandler} instances
+ * that has a {@code ChatHandler} interface itself and acts as a facade
+ * for the chat filtering subsystem applying filters in desired order.
+ */
+class ChatHandlersChain final : public ChatHandler {
+	template <typename T> friend class SingletonHolder;
+
+	friend class StatsowFacade;
+
+	ChatAuthFilter authFilter;
+	MuteFilter muteFilter;
+	FloodFilter floodFilter;
+	RespectHandler respectHandler;
+	IgnoreFilter ignoreFilter;
+
+	ChatHandlersChain() {
+		Reset();
+	}
+
+	void Reset() override;
+public:
+	bool HandleMessage( const edict_t *ent, const char *message ) override;
+
+	void ResetForClient( int clientNum ) override;
+
+	static void Init();
+	static void Shutdown();
+	static ChatHandlersChain *Instance();
+
+	void Mute( const edict_t *ent ) {
+		return muteFilter.Mute( ent );
+	}
+	void Unmute( const edict_t *ent ) {
+		return muteFilter.Unmute( ent );
+	}
+	bool DetectFlood( const edict_t *ent, bool team ) {
+		return floodFilter.DetectFlood( ent, team );
+	}
+	bool SkipStatsForClient( const edict_t *ent ) const {
+		return respectHandler.SkipStatsForClient( ent );
+	}
+
+	void OnClientDisconnected( const edict_t *ent ) {
+		respectHandler.OnClientDisconnected( ent );
+	}
+	void OnClientJoinedTeam( const edict_t *ent, int newTeam ) {
+		respectHandler.OnClientJoinedTeam( ent, newTeam );
+	}
+
+	void AddToReportStats( const edict_t *ent, StatsowFacade::RespectStats *reportedStats ) {
+		respectHandler.AddToReportStats( ent, reportedStats );
+	}
+
+	bool Ignores( const edict_t *target, const edict_t *source ) const {
+		return ignoreFilter.Ignores( target, source );
+	}
+
+	void NotifyOfIgnoredMessage( const edict_t *target, const edict_t *source ) const {
+		ignoreFilter.NotifyOfIgnoredMessage( target, source );
+	}
+
+	static void HandleIgnoreCommand( edict_t *ent ) {
+		Instance()->ignoreFilter.HandleIgnoreCommand( ent, true );
+	}
+
+	static void HandleUnignoreCommand( edict_t *ent ) {
+		Instance()->ignoreFilter.HandleIgnoreCommand( ent, false );
+	}
+
+	static void HandleIgnoreListCommand( edict_t *ent ) {
+		Instance()->ignoreFilter.HandleIgnoreListCommand( ent );
+	}
+
+	void OnUserInfoChanged( const edict_t *ent ) {
+		ignoreFilter.OnUserInfoChanged( ent );
+	}
+
+	void Frame();
 };
 
 typedef struct snap_edict_s {
@@ -1456,6 +1983,7 @@ struct edict_s {
 
 	int viewheight;				// height above origin where eyesight is determined
 	int takedamage;
+	int floodnum;
 	
 	const char *sounds;         // make this a spawntemp var?
 	int count;
@@ -1523,26 +2051,49 @@ static inline int PLAYERNUM( const gclient_t *x ) { return x - game.clients; }
 
 static inline edict_t *PLAYERENT( int x ) { return game.edicts + x + 1; }
 
-// matchmaker
-
-void G_AddPlayerReport( edict_t *ent, bool final );
-void G_Match_SendReport( void );
-
-void G_Match_AddAward( edict_t *ent, const char *awardMsg );
-void G_Match_AddFrag( edict_t *attacker, edict_t *victim, int mod );
-
-void G_TransferRatings( void );
-clientRating_t *G_AddDefaultRating( edict_t *ent, const char *gametype );
-clientRating_t *G_AddRating( edict_t *ent, const char *gametype, float rating, float deviation );
-void G_RemoveRating( edict_t *ent );
-void G_ListRatings_f( void );
-
-void G_AddRaceRecords( edict_t *ent, int numSectors, unsigned int *records );
-int64_t G_GetRaceRecord( edict_t *ent, int sector );
-raceRun_t *G_NewRaceRun( edict_t *ent, int numSectors );
-void G_SetRaceTime( edict_t *ent, int sector, int64_t time );
-void G_ListRaces_f( void );
-
 // web
 http_response_code_t G_WebRequest( http_query_method_t method, const char *resource,
 								   const char *query_string, char **content, size_t *content_length );
+
+inline void MuteFilter::Mute( const edict_t *ent ) {
+	muted[ENTNUM( ent ) - 1] = true;
+}
+
+inline void MuteFilter::Unmute( const edict_t *ent ) {
+	muted[ENTNUM( ent ) - 1] = false;
+}
+
+inline bool MuteFilter::HandleMessage( const edict_t *ent, const char * ) {
+	return muted[ENTNUM( ent ) - 1];
+}
+
+inline bool RespectHandler::SkipStatsForClient( const edict_t *ent ) const {
+	const auto &entry = entries[ENTNUM( ent ) - 1];
+	return entry.hasViolatedCodex || entry.hasIgnoredCodex;
+}
+
+inline void RespectHandler::AddToReportStats( const edict_t *ent, StatsowFacade::RespectStats *reported ) {
+	entries[ENTNUM( ent ) - 1].AddToReportStats( reported );
+}
+
+inline void RespectHandler::OnClientDisconnected( const edict_t *ent ) {
+	entries[ENTNUM( ent ) - 1].OnClientDisconnected();
+}
+
+inline void RespectHandler::OnClientJoinedTeam( const edict_t *ent, int newTeam ) {
+	entries[ENTNUM( ent ) - 1].OnClientJoinedTeam( newTeam );
+}
+
+inline bool IgnoreFilter::Ignores( const edict_t *target, const edict_t *source ) const {
+	if( target == source ) {
+		return false;
+	}
+	const ClientEntry &e = entries[PLAYERNUM( target )];
+	if( e.ignoresEverybody ) {
+		return true;
+	}
+	if( e.ignoresNotTeammates && ( target->s.team != source->s.team ) ) {
+		return true;
+	}
+	return e.GetClientBit( PLAYERNUM( source ) );
+}

@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // cg_effects.c -- entity effects parsing and management
 
 #include "cg_local.h"
+#include "../ref_gl/r_frontend.h"
 
 /*
 ==============================================================
@@ -99,71 +100,7 @@ void CG_AddLightStyles( void ) {
 	cg_lightStyle_t *ls;
 
 	for( i = 0, ls = cg_lightStyle; i < MAX_LIGHTSTYLES; i++, ls++ )
-		trap_R_AddLightStyleToScene( i, ls->value[0], ls->value[1], ls->value[2] );
-}
-
-/*
-==============================================================
-
-DLIGHT MANAGEMENT
-
-==============================================================
-*/
-
-typedef struct cdlight_s
-{
-	vec3_t color;
-	vec3_t origin;
-	float radius;
-} cdlight_t;
-
-static cdlight_t cg_dlights[MAX_DLIGHTS];
-static int cg_numDlights;
-
-/*
-* CG_ClearDlights
-*/
-static void CG_ClearDlights( void ) {
-	memset( cg_dlights, 0, sizeof( cg_dlights ) );
-	cg_numDlights = 0;
-}
-
-/*
-* CG_AllocDlight
-*/
-static void CG_AllocDlight( vec3_t origin, float radius, float r, float g, float b ) {
-	cdlight_t *dl;
-
-	if( radius <= 0 ) {
-		return;
-	}
-	if( cg_numDlights == MAX_DLIGHTS ) {
-		return;
-	}
-
-	dl = &cg_dlights[cg_numDlights++];
-	dl->radius = radius;
-	VectorCopy( origin, dl->origin );
-	dl->color[0] = r;
-	dl->color[1] = g;
-	dl->color[2] = b;
-}
-
-void CG_AddLightToScene( vec3_t org, float radius, float r, float g, float b ) {
-	CG_AllocDlight( org, radius, r, g, b );
-}
-
-/*
-* CG_AddDlights
-*/
-void CG_AddDlights( void ) {
-	int i;
-	cdlight_t *dl;
-
-	for( i = 0, dl = cg_dlights; i < cg_numDlights; i++, dl++ )
-		trap_R_AddLightToScene( dl->origin, dl->radius, dl->color[0], dl->color[1], dl->color[2] );
-
-	cg_numDlights = 0;
+		RF_AddLightStyleToScene( i, ls->value[0], ls->value[1], ls->value[2] );
 }
 
 /*
@@ -221,7 +158,7 @@ static void CG_AddBlobShadow( vec3_t origin, vec3_t dir, float orient, float rad
 	RotatePointAroundVector( axis[2], axis[0], axis[1], orient );
 	CrossProduct( axis[0], axis[2], axis[1] );
 
-	numfragments = trap_R_GetClippedFragments( origin, radius, axis, // clip it
+	numfragments = R_GetClippedFragments( origin, radius, axis, // clip it
 											   MAX_BLOBSHADOW_VERTS, verts, MAX_BLOBSHADOW_FRAGMENTS, fragments );
 
 	// no valid fragments
@@ -299,7 +236,7 @@ static void CG_AddBlobShadow( vec3_t origin, vec3_t dir, float orient, float rad
 			*( int * )poly.colors[j] = c;
 		}
 
-		trap_R_AddPolyToScene( &poly );
+		RF_AddPolyToScene( &poly );
 	}
 }
 
@@ -370,7 +307,7 @@ void CG_AddShadeBoxes( void ) {
 
 	for( i = 0, sb = cg_shadeBoxes; i < cg_numShadeBoxes; i++, sb++ ) {
 		VectorClear( lightdir );
-		trap_R_LightForOrigin( sb->origin, lightdir, NULL, NULL, RadiusFromBounds( sb->mins, sb->maxs ) );
+		RF_LightForOrigin( sb->origin, lightdir, NULL, NULL, RadiusFromBounds( sb->mins, sb->maxs ) );
 
 		// move the point we will project close to the bottom of the bbox (so shadow doesn't dance much to the sides)
 		VectorSet( sborigin, sb->origin[0], sb->origin[1], sb->origin[2] + sb->mins[2] + 8 );
@@ -446,7 +383,7 @@ void CG_AddFragmentedDecal( vec3_t origin, vec3_t dir, float orient, float radiu
 	RotatePointAroundVector( axis[2], axis[0], axis[1], orient );
 	CrossProduct( axis[0], axis[2], axis[1] );
 
-	numfragments = trap_R_GetClippedFragments( origin, radius, axis, // clip it
+	numfragments = R_GetClippedFragments( origin, radius, axis, // clip it
 											   MAX_BLOBSHADOW_VERTS, verts, MAX_TEMPDECAL_FRAGMENTS, fragments );
 
 	// no valid fragments
@@ -524,7 +461,7 @@ void CG_AddFragmentedDecal( vec3_t origin, vec3_t dir, float orient, float radiu
 			*( int * )poly.colors[j] = c;
 		}
 
-		trap_R_AddPolyToScene( &poly );
+		RF_AddPolyToScene( &poly );
 	}
 }
 
@@ -611,7 +548,7 @@ void CG_ParticleEffect( const vec3_t org, const vec3_t dir, float r, float g, fl
 	}
 
 	// Check for the default argument value
-	if( isnan( gravity ) ) {
+	if( std::isnan( gravity ) ) {
 		gravity = -PARTICLE_GRAVITY;
 	}
 
@@ -646,7 +583,7 @@ void CG_ParticleEffect2( const vec3_t org, const vec3_t dir, float r, float g, f
 	}
 
 	// Check for the default argument value
-	if( isnan( gravity ) ) {
+	if( std::isnan( gravity ) ) {
 		gravity = -PARTICLE_GRAVITY;
 	}
 
@@ -681,7 +618,7 @@ void CG_ParticleExplosionEffect( const vec3_t org, const vec3_t dir, float r, fl
 	}
 
 	// Check for the default argument value
-	if( isnan( gravity ) ) {
+	if( std::isnan( gravity ) ) {
 		gravity = -PARTICLE_GRAVITY;
 	}
 
@@ -1053,7 +990,7 @@ void CG_AddParticles( void ) {
 		p->poly.fognum = p->fog ? 0 : -1;
 		p->poly.shader = ( p->shader == NULL ) ? CG_MediaShader( cgs.media.shaderParticle ) : p->shader;
 
-		trap_R_AddPolyToScene( &p->poly );
+		RF_AddPolyToScene( &p->poly );
 	}
 
 	i = 0;
@@ -1078,6 +1015,5 @@ void CG_AddParticles( void ) {
 void CG_ClearEffects( void ) {
 	CG_ClearFragmentedDecals();
 	CG_ClearParticles();
-	CG_ClearDlights();
 	CG_ClearShadeBoxes();
 }

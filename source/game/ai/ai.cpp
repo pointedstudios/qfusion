@@ -1,18 +1,23 @@
 #include "bot.h"
-#include "ai_shutdown_hooks_holder.h"
 #include "ai_manager.h"
+#include "ai_ground_trace_cache.h"
 #include "navigation/NavMeshManager.h"
 #include "teamplay/ObjectiveBasedTeam.h"
 #include "combat/TacticalSpotsRegistry.h"
 
 const cvar_t *ai_evolution;
-const cvar_t *ai_debug_output;
+const cvar_t *ai_debugOutput;
+const cvar_t *ai_shareRoutingCache;
 
 ai_weapon_aim_type BuiltinWeaponAimType( int builtinWeapon, int fireMode ) {
 	assert( fireMode == FIRE_MODE_STRONG || fireMode == FIRE_MODE_WEAK );
 	switch( builtinWeapon ) {
 		case WEAP_GUNBLADE:
+			// This is not logically correct but produces better behaviour
+			// than using AI_WEAPON_AIM_TYPE_PREDICTION_EXPLOSIVE.
+			// Otherwise bots carrying only GB are an easy prey losing many chances for attacking.
 			// TODO: Introduce "melee" aim type for GB blade attack
+			return AI_WEAPON_AIM_TYPE_PREDICTION;
 		case WEAP_ROCKETLAUNCHER:
 			return AI_WEAPON_AIM_TYPE_PREDICTION_EXPLOSIVE;
 		case WEAP_GRENADELAUNCHER:
@@ -100,7 +105,7 @@ void AI_Debug( const char *nick, const char *format, ... ) {
 }
 
 void AI_Debugv( const char *nick, const char *format, va_list va ) {
-	if( !ai_debug_output->integer ) {
+	if( !ai_debugOutput->integer ) {
 		return;
 	}
 
@@ -150,37 +155,6 @@ void AITools_DrawColorLine( const vec3_t origin, const vec3_t dest, int color, i
 	GClip_LinkEntity( event );
 }
 
-// Almost same as COM_HashKey() but returns length too and does not perform division by hash size
-void GetHashAndLength( const char *str, unsigned *hash, unsigned *length ) {
-	unsigned i = 0;
-	unsigned v = 0;
-
-	for(; str[i]; i++ ) {
-		unsigned c = ( (unsigned char *)str )[i];
-		if( c == '\\' ) {
-			c = '/';
-		}
-		v = ( v + i ) * 37 + tolower( c ); // case insensitivity
-	}
-
-	*hash = v;
-	*length = i;
-}
-
-// A "dual" version of the function GetHashAndLength():
-// accepts the known length instead of computing it and computes a hash for the substring defined by the length.
-unsigned GetHashForLength( const char *str, unsigned length ) {
-	unsigned v = 0;
-	for( unsigned i = 0; i < length; i++ ) {
-		unsigned c = ( (unsigned char *)str )[i];
-		if( c == '\\' ) {
-			c = '/';
-		}
-		v = ( v + i ) * 37 + tolower( c ); // case insensitivity
-	}
-	return v;
-}
-
 static StaticVector<int, 16> hubAreas;
 
 //==========================================
@@ -189,24 +163,26 @@ static StaticVector<int, 16> hubAreas;
 //==========================================
 void AI_InitLevel( void ) {
 	ai_evolution = trap_Cvar_Get( "ai_evolution", "0", CVAR_ARCHIVE );
-	ai_debug_output = trap_Cvar_Get( "ai_debug_output", "0", CVAR_ARCHIVE );
+	ai_debugOutput = trap_Cvar_Get( "ai_debugOutput", "0", CVAR_ARCHIVE );
+	// We think values for this var should not be archived
+	ai_shareRoutingCache = trap_Cvar_Get( "ai_shareRoutingCache", "1", 0 );
 
 	AiAasWorld::Init( level.mapname );
 	AiAasRouteCache::Init( *AiAasWorld::Instance() );
 	AiNavMeshManager::Init( level.mapname );
 	TacticalSpotsRegistry::Init( level.mapname );
+	AiGroundTraceCache::Init();
+	HazardsSelectorCache::Init();
 
 	AiManager::Init( g_gametype->string, level.mapname );
 
-	NavEntitiesRegistry::Instance()->Init();
+	NavEntitiesRegistry::Init();
 }
 
 void AI_Shutdown( void ) {
 	hubAreas.clear();
 
 	AI_AfterLevelScriptShutdown();
-
-	AiShutdownHooksHolder::Instance()->InvokeHooks();
 }
 
 void AI_BeforeLevelLevelScriptShutdown() {
@@ -221,6 +197,9 @@ void AI_AfterLevelScriptShutdown() {
 		AiManager::Shutdown();
 	}
 
+	NavEntitiesRegistry::Shutdown();
+	HazardsSelectorCache::Shutdown();
+	AiGroundTraceCache::Shutdown();
 	TacticalSpotsRegistry::Shutdown();
 	AiNavMeshManager::Shutdown();
 	AiAasRouteCache::Shutdown();
@@ -345,16 +324,21 @@ void AI_AddNavEntity( edict_t *ent, ai_nav_entity_flags flags ) {
 }
 
 void AI_RemoveNavEntity( edict_t *ent ) {
-	NavEntity *navEntity = NavEntitiesRegistry::Instance()->NavEntityForEntity( ent );
+	auto *const navEntitiesRegistry = NavEntitiesRegistry::Instance();
+	if( !navEntitiesRegistry ) {
+		return;
+	}
+
+	NavEntity *const navEntity = navEntitiesRegistry->NavEntityForEntity( ent );
 	// (An nav. item absence is not an error, this function is called for each entity in game)
 	if( !navEntity ) {
 		return;
 	}
 
-	if( AiManager::Instance() ) {
-		AiManager::Instance()->NavEntityReachedBy( navEntity, nullptr );
+	if( auto *const aiManager = AiManager::Instance() ) {
+		aiManager->NavEntityReachedBy( navEntity, nullptr );
 	}
-	NavEntitiesRegistry::Instance()->RemoveNavEntity( navEntity );
+	navEntitiesRegistry->RemoveNavEntity( navEntity );
 }
 
 void AI_NavEntityReached( edict_t *ent ) {
@@ -377,33 +361,6 @@ void G_FreeAI( edict_t *ent ) {
 
 	G_Free( ent->ai );
 	ent->ai = nullptr;
-}
-
-void G_SpawnAI( edict_t *ent, float skillLevel ) {
-	if( ent->ai ) {
-		AI_FailWith( "G_SpawnAI()", "Entity AI has been already initialized\n" );
-	}
-
-	if( !( ent->r.svflags & SVF_FAKECLIENT ) ) {
-		AI_FailWith( "G_SpawnAI()", "Only fake clients are supported\n" );
-	}
-
-	size_t memSize = sizeof( ai_handle_t ) + sizeof( Bot );
-	size_t alignmentBytes = 0;
-	if( sizeof( ai_handle_t ) % 16 ) {
-		alignmentBytes = 16 - sizeof( ai_handle_t ) % 16;
-	}
-	memSize += alignmentBytes;
-
-	char *mem = (char *)G_Malloc( memSize );
-	ent->ai = (ai_handle_t *)mem;
-	ent->ai->type = AI_ISBOT;
-
-	char *botMem = mem + sizeof( ai_handle_t ) + alignmentBytes;
-	ent->ai->botRef = new(botMem) Bot( ent, skillLevel );
-	ent->ai->aiRef = ent->ai->botRef;
-
-	AiManager::Instance()->LinkAi( ent->ai );
 }
 
 //==========================================
@@ -447,6 +404,10 @@ void AI_Think( edict_t *self ) {
 
 void AI_RegisterEvent( edict_t *ent, int event, int parm ) {
 	AiManager::Instance()->RegisterEvent( ent, event, parm );
+}
+
+bool AI_CanSpawnBots() {
+	return AiAasWorld::Instance()->IsLoaded();
 }
 
 void AI_SpawnBot( const char *team ) {

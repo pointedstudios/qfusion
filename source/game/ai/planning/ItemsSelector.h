@@ -5,8 +5,7 @@
 #include "GoalEntities.h"
 #include "../static_vector.h"
 
-class SelectedNavEntity
-{
+class SelectedNavEntity {
 	friend class Bot;
 	friend class BotItemsSelector;
 	friend class AiSquad;
@@ -17,17 +16,17 @@ class SelectedNavEntity
 	int64_t selectedAt;
 	int64_t timeoutAt;
 
-	inline SelectedNavEntity( const NavEntity *navEntity_,
-							  float cost_,
-							  float pickupGoalWeight_,
-							  int64_t timeoutAt_ )
-		: navEntity( navEntity_ ),
-		cost( cost_ ),
-		pickupGoalWeight( pickupGoalWeight_ ),
-		selectedAt( level.time ),
-		timeoutAt( timeoutAt_ ) {}
+	SelectedNavEntity( const NavEntity *navEntity_,
+					   float cost_,
+					   float pickupGoalWeight_,
+					   int64_t timeoutAt_ )
+		: navEntity( navEntity_ )
+		, cost( cost_ )
+		, pickupGoalWeight( pickupGoalWeight_ )
+		, selectedAt( level.time )
+		, timeoutAt( timeoutAt_ ) {}
 
-	inline void CheckValid( const char *message = nullptr ) const {
+	void CheckValid( const char *message = nullptr ) const {
 		if( !IsValid() ) {
 			if( message ) {
 				AI_FailWith( "SelectedNavEntity::CheckValid()", "%s\n", message );
@@ -38,30 +37,33 @@ class SelectedNavEntity
 	}
 
 public:
-	inline bool IsEmpty() const { return navEntity == nullptr; }
+	bool IsEmpty() const { return navEntity == nullptr; }
 	// Empty one is considered valid (until it times out)
-	inline bool IsValid() const { return timeoutAt > level.time; }
-	inline void InvalidateNextFrame() {
+	bool IsValid() const { return timeoutAt > level.time; }
+
+	void InvalidateNextFrame() {
 		timeoutAt = level.time + 1;
 	}
+
 	// Avoid class/method name clash by using Get prefix
-	inline const NavEntity *GetNavEntity() const {
+	const NavEntity *GetNavEntity() const {
 		CheckValid();
 		return navEntity;
 	}
-	inline float GetCost() const {
+
+	float GetCost() const {
 		CheckValid();
 		return cost;
 	}
-	inline float PickupGoalWeight() const {
+
+	float PickupGoalWeight() const {
 		CheckValid();
 		return pickupGoalWeight;
 	}
 };
 
-class BotItemsSelector
-{
-	edict_t *self;
+class BotItemsSelector {
+	const Bot *const bot;
 
 	int64_t disabledForSelectionUntil[MAX_EDICTS];
 
@@ -71,7 +73,7 @@ class BotItemsSelector
 	// For each item contains a goal weight that would a corresponding AI pickup goal have.
 	float internalPickupGoalWeights[MAX_EDICTS];
 
-	inline float GetEntityWeight( int entNum ) {
+	float GetEntityWeight( int entNum ) const {
 		float overriddenEntityWeight = overriddenEntityWeights[entNum];
 		if( overriddenEntityWeight != 0 ) {
 			return overriddenEntityWeight;
@@ -79,26 +81,17 @@ class BotItemsSelector
 		return internalEntityWeights[entNum];
 	}
 
-	inline float GetGoalWeight( int entNum ) {
+	float GetGoalWeight( int entNum ) const {
 		float overriddenEntityWeight = overriddenEntityWeights[entNum];
 		// Make goal weight based on overridden entity weight
 		if( overriddenEntityWeight != 0 ) {
-			float goalWeight = BoundedFraction( overriddenEntityWeight, 10.0f );
-			if( goalWeight > 0 ) {
-				goalWeight = 1.0f / Q_RSqrt( goalWeight );
-			}
 			// High weight items would have 2.0f goal weight
-			goalWeight *= 2.0f;
-			return goalWeight;
+			return 2.0f * Q_Sqrt( std::max( overriddenEntityWeight, 10.0f ) * Q_Rcp( 10.0f ) );
 		}
 		return internalPickupGoalWeights[entNum];
 	}
 
-	inline const int *Inventory() const { return self->r.client->ps.inventory; }
-
 	void UpdateInternalItemAndGoalWeights();
-
-	const edict_t *GetSpotEntityAndWeight( float *weight ) const;
 
 	struct ItemAndGoalWeights {
 		float itemWeight;
@@ -108,41 +101,48 @@ class BotItemsSelector
 			: itemWeight( itemWeight_ ), goalWeight( goalWeight_ ) {}
 	};
 
-	ItemAndGoalWeights ComputeItemWeights( const gsitem_t *item, bool onlyGotGB ) const;
-	ItemAndGoalWeights ComputeWeaponWeights( const gsitem_t *item, bool onlyGotGB ) const;
+	ItemAndGoalWeights ComputeItemWeights( const gsitem_t *item ) const;
+	ItemAndGoalWeights ComputeWeaponWeights( const gsitem_t *item ) const;
 	ItemAndGoalWeights ComputeAmmoWeights( const gsitem_t *item ) const;
 	ItemAndGoalWeights ComputeArmorWeights( const gsitem_t *item ) const;
 	ItemAndGoalWeights ComputeHealthWeights( const gsitem_t *item ) const;
 	ItemAndGoalWeights ComputePowerupWeights( const gsitem_t *item ) const;
 
-	inline void Debug( const char *format, ... ) {
-		va_list va;
-		va_start( va, format );
-		AI_Debugv( self->r.client->netname, format, va );
-		va_end( va );
+#ifndef _MSC_VER
+	void Debug( const char *format, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
+#else
+	void Debug( _Printf_format_string_ const char *format, ... );
+#endif
+
+	SelectedNavEntity SelectEmpty() {
+		return SelectedNavEntity( nullptr, std::numeric_limits<float>::max(), 0.0f, level.time + 200 );
+	}
+
+	SelectedNavEntity Select( const NavEntity *navEntity, float cost, unsigned timeout ) {
+		return SelectedNavEntity( navEntity, cost, GetGoalWeight( navEntity->Id() ), level.time + timeout );
 	}
 
 	bool IsShortRangeReachable( const NavEntity *navEntity, const int *fromAreaNums, int numFromAreas ) const;
 public:
-	inline BotItemsSelector( edict_t *self_ ) : self( self_ ) {
+	explicit BotItemsSelector( const Bot *bot_ ) : bot( bot_ ) {
 		// We zero only this array as its content does not get cleared in SuggestGoalEntity() calls
 		memset( disabledForSelectionUntil, 0, sizeof( disabledForSelectionUntil ) );
 	}
 
-	inline void ClearOverriddenEntityWeights() {
+	void ClearOverriddenEntityWeights() {
 		memset( overriddenEntityWeights, 0, sizeof( overriddenEntityWeights ) );
 	}
 
 	// This weight overrides internal one computed by this brain itself.
-	inline void OverrideEntityWeight( const edict_t *ent, float weight ) {
+	void OverrideEntityWeight( const edict_t *ent, float weight ) {
 		overriddenEntityWeights[ENTNUM( const_cast<edict_t*>( ent ) )] = weight;
 	}
 
-	inline void MarkAsDisabled( const NavEntity &navEntity, unsigned millis ) {
+	void MarkAsDisabled( const NavEntity &navEntity, unsigned millis ) {
 		disabledForSelectionUntil[navEntity.Id()] = level.time + millis;
 	}
 
-	inline bool IsTopTierItem( const NavTarget *navTarget ) const {
+	bool IsTopTierItem( const NavTarget *navTarget ) const {
 		return navTarget && navTarget->IsTopTierItem( overriddenEntityWeights );
 	}
 

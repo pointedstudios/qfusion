@@ -1,20 +1,21 @@
 #ifndef QFUSION_BUNNYTOSTAIRSORRAMPEXITACTION_H
 #define QFUSION_BUNNYTOSTAIRSORRAMPEXITACTION_H
 
-#include "GenericBunnyingAction.h"
+#include "BunnyHopAction.h"
 
-class BunnyToStairsOrRampExitAction: public GenericRunBunnyingAction {
+class BunnyToStairsOrRampExitAction: public BunnyHopAction {
 	float *intendedLookDir { nullptr };
 	Vec3 lookDirStorage { vec3_origin };
 	int targetFloorCluster { 0 };
 
 	bool TryFindAndSaveLookDir( MovementPredictionContext *context );
-	void TrySaveStairsExitFloorCluster( MovementPredictionContext *context, int exitAreaNum );
+	void TrySaveExitFloorCluster( MovementPredictionContext *context, int exitAreaNum );
 public:
-	DECLARE_BUNNYING_MOVEMENT_ACTION_CONSTRUCTOR( BunnyToStairsOrRampExitAction, COLOR_RGB( 0, 255, 255 ) ) {}
+	explicit BunnyToStairsOrRampExitAction( BotMovementModule *module_ ):
+		BunnyHopAction( module_, "BunnyToStairsOrRampExitAction", COLOR_RGB( 0, 255, 255 ) ) {}
 
 	void BeforePlanning() override {
-		GenericRunBunnyingAction::BeforePlanning();
+		BunnyHopAction::BeforePlanning();
 		targetFloorCluster = 0;
 		intendedLookDir = nullptr;
 	}

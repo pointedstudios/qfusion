@@ -3,10 +3,6 @@
 
 // net.h -- quake's interface to the networking layer
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define PACKET_HEADER           10          // two ints, and a short
 
 #define MAX_RELIABLE_COMMANDS   64          // max string commands buffered for restransmit
@@ -136,9 +132,5 @@ bool    NET_IsLocalAddress( const netadr_t *address );
 bool    NET_IsAnyAddress( const netadr_t *address );
 void    NET_InitAddress( netadr_t *address, netadrtype_t type );
 void    NET_BroadcastAddress( netadr_t *address, int port );
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

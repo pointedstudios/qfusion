@@ -30,14 +30,6 @@ in NO WAY supported by Steve Yeager.
 #include "../g_local.h"
 #include "../../gameshared/q_collision.h"
 
-#ifdef max
-#undef max
-#endif
-
-#ifdef min
-#undef min
-#endif
-
 // First try to include <math.h> for M_* defines
 #ifndef __USE_MATH_DEFINES
 #define __USE_MATH_DEFINES 1
@@ -98,7 +90,7 @@ void *GENERIC_asInstantiateAction( void *factoryObject, edict_t *owner, class Bo
 void GENERIC_asActivateScriptActionRecord( void *scriptObject );
 void GENERIC_asDeactivateScriptActionRecord( void *scriptObject );
 void GENERIC_asDeleteScriptActionRecord( void *scriptObject );
-int GENERIC_asCheckScriptActionRecordStatus( void *scriptObject, const class WorldState &currWorldState );
+int GENERIC_asUpdateScriptActionRecordStatus( void *scriptObject, const class WorldState &currWorldState );
 void *GENERIC_asTryApplyScriptAction( void *scriptObject, const class WorldState &worldState );
 float GENERIC_asGetScriptGoalWeight( void *scriptObject, const class WorldState &currWorldState );
 void GENERIC_asGetScriptGoalDesiredWorldState( void *scriptObject, class WorldState *worldState );
@@ -143,14 +135,16 @@ bool GT_asFireScriptWeapon( gclient_t *client, int scriptWeaponNum );
 #include "vec3.h"
 
 typedef struct ai_handle_s {
-	ai_type type;
+	// Links for generic Link()/Unlink() utilities
+	ai_handle_t *prev[1], *next[1];
 
-	int asFactored, asRefCount;
-
-	ai_handle_t *prev, *next;
+	ai_handle_t *Next() { return next[0]; }
+	const ai_handle_t *Next() const { return next[0]; }
 
 	class Ai * aiRef;
 	class Bot * botRef;
+
+	ai_type type;
 } ai_handle_t;
 
 #ifndef _MSC_VER
@@ -166,12 +160,12 @@ __declspec( noreturn ) void AI_FailWithv( const char *tag, const char *format, v
 #endif
 
 inline float Clamp( float value ) {
-	clamp( value, 0.0f, 1.0f );
+	Q_clamp( value, 0.0f, 1.0f );
 	return value;
 }
 
 inline float Clamp( float value, float minValue, float maxValue ) {
-	clamp( value, minValue, maxValue );
+	Q_clamp( value, minValue, maxValue );
 	return value;
 }
 
@@ -234,12 +228,9 @@ void Use_Plat( edict_t *ent, edict_t *other, edict_t *activator );
 void AITools_DrawLine( const vec3_t origin, const vec3_t dest );
 void AITools_DrawColorLine( const vec3_t origin, const vec3_t dest, int color, int parm );
 
-void GetHashAndLength( const char *str, unsigned *hash, unsigned *length );
-unsigned GetHashForLength( const char *str, unsigned length );
-
 // A cheaper version of G_Trace() that does not check against entities
 inline void StaticWorldTrace( trace_t *trace, const vec3_t from, const vec3_t to, int contentsMask,
-							  const vec3_t mins = vec3_origin, const vec3_t maxs = vec3_origin ) {
+							  const vec3_t mins = vec3_origin, const vec3_t maxs = vec3_origin, int topNodeHint = 0 ) {
 	assert( from );
 	float *from_ = const_cast<float *>( from );
 	assert( to );
@@ -248,7 +239,7 @@ inline void StaticWorldTrace( trace_t *trace, const vec3_t from, const vec3_t to
 	float *mins_ = const_cast<float *>( mins );
 	assert( maxs );
 	float *maxs_ = const_cast<float *>( maxs );
-	trap_CM_TransformedBoxTrace( trace, from_, to_, mins_, maxs_, nullptr, contentsMask, nullptr, nullptr );
+	trap_CM_TransformedBoxTrace( trace, from_, to_, mins_, maxs_, nullptr, contentsMask, nullptr, nullptr, topNodeHint );
 }
 
 // This shorthand is for backward compatibility and some degree of convenience
@@ -288,6 +279,7 @@ public:
 	}
 	const T *begin() const { return begin_; }
 	const T *end() const { return end_; }
+	const size_t size() const { return (size_t)( end_ - begin_ ); }
 };
 
 // This is a compact storage for 64-bit values.
@@ -313,6 +305,31 @@ public:
 	Int64Align4() {}
 
 	Int64Align4( int64_t value ) {
+		SetParts( value );
+	}
+};
+
+class alignas( 2 )Int32Align2 {
+	uint16_t parts[2];
+
+	inline void SetParts( int32_t value ) {
+		uint32_t u = (uint32_t)value;
+		parts[0] = (uint16_t)( ( u >> 16u ) & 0xFFFFu );
+		parts[1] = (uint16_t)( u & 0xFFFFu );
+	}
+public:
+	operator int32_t() const {
+		return (int32_t)( ( (uint32_t)parts[0] ) << 16u | parts[1] );
+	}
+
+	Int32Align2 operator=( int32_t value ) {
+		SetParts( value );
+		return *this;
+	}
+
+	Int32Align2() {}
+
+	Int32Align2( int32_t value ) {
 		SetParts( value );
 	}
 };
@@ -344,6 +361,7 @@ public:
 };
 
 extern const cvar_t *ai_evolution;
-extern const cvar_t *ai_debug_output;
+extern const cvar_t *ai_debugOutput;
+extern const cvar_t *ai_shareRoutingCache;
 
 #endif

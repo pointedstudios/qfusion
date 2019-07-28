@@ -1,7 +1,6 @@
 #include "HazardsDetector.h"
 #include "EntitiesPvsCache.h"
-
-
+#include "../bot.h"
 
 void HazardsDetector::Clear() {
 	maybeDangerousRockets.clear();
@@ -76,6 +75,7 @@ void HazardsDetector::Exec() {
 	// (no entity has been rejected due to limit/capacity overflow)
 	// filter other visible entities of the same kind.
 
+	const edict_t *self = game.edicts + bot->EntNum();
 	if( VisCheckRawEnts( maybeDangerousRockets, dangerousRockets, self, 12, isGenInPvs, isGenVisible ) ) {
 		VisCheckRawEnts( maybeVisibleOtherRockets, visibleOtherRockets, self, 6, isGenInPvs, isGenVisible );
 	}
@@ -102,6 +102,7 @@ inline void HazardsDetector::TryAddEntity( const edict_t *ent,
 										   EntsAndDistancesVector &otherEntities ) {
 	assert( ent->s.type != ET_GRENADE );
 
+	const edict_t *self = game.edicts + bot->EntNum();
 	if( ent->s.ownerNum == ENTNUM( self ) ) {
 		return;
 	}
@@ -125,6 +126,7 @@ inline void HazardsDetector::TryAddGrenade( const edict_t *ent,
 											EntsAndDistancesVector &otherEntities ) {
 	assert( ent->s.type == ET_GRENADE );
 
+	const edict_t *self = game.edicts + bot->EntNum();
 	if( ent->s.ownerNum == ENTNUM( self ) ) {
 		if( !g_allow_selfdamage->integer ) {
 			return;

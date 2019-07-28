@@ -56,16 +56,21 @@ void DoRespawn( edict_t *ent ) {
 	G_AddEvent( ent, EV_ITEM_RESPAWN, ent->item ? ent->item->tag : 0, true );
 
 	// powerups announce their presence with a global sound
-	if( ent->item && ( ent->item->type & IT_POWERUP ) ) {
-		if( ent->item->tag == POWERUP_QUAD ) {
-			G_GlobalSound( CHAN_AUTO, trap_SoundIndex( S_ITEM_QUAD_RESPAWN ) );
-		}
-		if( ent->item->tag == POWERUP_SHELL ) {
-			G_GlobalSound( CHAN_AUTO, trap_SoundIndex( S_ITEM_WARSHELL_RESPAWN ) );
-		}
-		if( ent->item->tag == POWERUP_REGEN ) {
-			G_GlobalSound( CHAN_AUTO, trap_SoundIndex( S_ITEM_REGEN_RESPAWN ) );
-		}
+	if( !ent->item || !( ent->item->type & IT_POWERUP ) ) {
+		return;
+	}
+
+	int soundIndex = 0;
+	if( ent->item->tag == POWERUP_QUAD ) {
+		soundIndex = trap_SoundIndex( S_ITEM_QUAD_RESPAWN );
+	} else if( ent->item->tag == POWERUP_SHELL ) {
+		soundIndex = trap_SoundIndex( S_ITEM_WARSHELL_RESPAWN );
+	} else if( ent->item->tag == POWERUP_REGEN ) {
+		soundIndex = trap_SoundIndex( S_ITEM_REGEN_RESPAWN );
+	}
+
+	if( soundIndex ) {
+		G_PositionedSound( ent->s.origin, CHAN_AUTO, soundIndex, ATTN_DISTANT );
 	}
 }
 
@@ -331,13 +336,13 @@ bool Add_Armor( edict_t *other, const gsitem_t *item, bool pick_it ) {
 	if( GS_Armor_TagForCount( client->resp.armor ) == ARMOR_NONE ) {
 		maxarmorcount = pickupitem_maxcount;
 	} else {
-		maxarmorcount = max( GS_Armor_MaxCountForTag( GS_Armor_TagForCount( client->resp.armor ) ), pickupitem_maxcount );
+		maxarmorcount = std::max( (float)GS_Armor_MaxCountForTag( GS_Armor_TagForCount( client->resp.armor ) ), pickupitem_maxcount );
 	}
 
 	if( !pickupitem_maxcount ) {
 		newarmorcount = client->resp.armor + GS_Armor_PickupCountForTag( item->tag );
 	} else {
-		newarmorcount = min( client->resp.armor + GS_Armor_PickupCountForTag( item->tag ), maxarmorcount );
+		newarmorcount = std::min( client->resp.armor + GS_Armor_PickupCountForTag( item->tag ), maxarmorcount );
 	}
 
 	// it can't be picked up if it doesn't add any armor
@@ -1073,8 +1078,7 @@ void G_PrecacheItems( void ) {
 		trap_ConfigString( CS_ITEMS + i, item->name );
 
 		if( item->type & IT_WEAPON && GS_GetWeaponDef( item->tag ) ) {
-			G_PrecacheWeapondef( i, &GS_GetWeaponDef( item->tag )->firedef );
-			G_PrecacheWeapondef( i, &GS_GetWeaponDef( item->tag )->firedef_weak );
+			G_PrecacheWeapondef( i );
 		}
 	}
 

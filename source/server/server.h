@@ -19,9 +19,19 @@
  */
 // server.h
 
+#ifndef QFUSION_SERVER_H
+#define QFUSION_SERVER_H
+
 #include "../qcommon/qcommon.h"
 #include "../game/g_public.h"
 #include "../matchmaker/mm_rating.h"
+
+#include <algorithm>
+#include <cstdlib>
+#include <cmath>
+#include <memory>
+#include <new>
+#include <utility>
 
 //=============================================================================
 
@@ -355,10 +365,6 @@ extern cvar_t *sv_defaultmap;
 
 extern cvar_t *sv_demodir;
 
-extern cvar_t *sv_mm_authkey;
-extern cvar_t *sv_mm_loginonly;
-extern cvar_t *sv_mm_debug_reportbots;
-
 extern cvar_t *sv_snap_aggressive_sound_culling;
 extern cvar_t *sv_snap_raycast_players_culling;
 // "fov" sounds more clear than "view dir" though its not very accurate
@@ -388,7 +394,7 @@ void SV_MasterHeartbeat( void );
 void SV_MasterSendQuit( void );
 
 void SVC_MasterInfoResponse( const socket_t *socket, const netadr_t *address );
-int SVC_FakeConnect( char *fakeUserinfo, char *fakeSocketType, const char *fakeIP );
+int SVC_FakeConnect( const char *fakeUserinfo, const char *fakeSocketType, const char *fakeIP );
 
 void SV_UpdateActivity( void );
 
@@ -448,7 +454,11 @@ typedef struct {
 void SV_FlushRedirect( int sv_redirected, const char *outputbuf, const void *extra );
 void SV_SendClientMessages( void );
 
-void SV_Multicast( vec3_t origin, multicast_t to );
+/**
+ * Just a workaround to prevent inclusion of tables headers in other parts of server code than {@code sv_main.cpp}.
+ * @param cms a CM for a newly loaded map
+ */
+void SV_SetupSnapTables( cmodel_state_t *cms );
 
 #ifndef _MSC_VER
 void SV_BroadcastCommand( const char *format, ... ) __attribute__( ( format( printf, 1, 2 ) ) );
@@ -521,26 +531,6 @@ void SV_MOTD_Update( void );
 void SV_MOTD_Get_f( client_t *client );
 
 //
-// sv_mm.c
-//
-void SV_MM_Init( void );
-void SV_MM_Shutdown( bool logout );
-void SV_MM_Frame( void );
-bool SV_MM_Initialized( void );
-
-mm_uuid_t SV_MM_ClientConnect( client_t *client, const netadr_t *address, char *userinfo, mm_uuid_t ticket, mm_uuid_t session );
-void SV_MM_ClientDisconnect( client_t *client );
-
-int SV_MM_GenerateLocalSession( void );
-
-// match report
-#include "../matchmaker/mm_common.h"
-struct stat_query_s *SV_MM_CreateQuery( const char *iface, const char *url, bool get );
-void SV_MM_SendQuery( stat_query_t *query );
-void SV_MM_GameState( bool state );
-void SV_MM_GetMatchUUID( void ( *callback_fn )( const char *uuid ) );
-
-//
 // sv_web.c
 //
 typedef http_response_code_t ( *http_game_query_cb )( http_query_method_t method, const char *resource,
@@ -553,3 +543,5 @@ const char *SV_Web_UpstreamBaseUrl( void );
 bool SV_Web_AddGameClient( const char *session, int clientNum, const netadr_t *netAdr );
 void SV_Web_RemoveGameClient( const char *session );
 void SV_Web_GameFrame( http_game_query_cb cb );
+
+#endif

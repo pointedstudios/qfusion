@@ -2,68 +2,95 @@
 #define QFUSION_SELECTEDENEMIES_H
 
 #include "EnemiesTracker.h"
+#include "../Selection.h"
 
-class SelectedEnemies {
+class SelectedEnemies: public Selection {
 	friend class Bot;
-	friend class BotThreatTracker;
-
-	const edict_t *self;
-
-	const TrackedEnemy *primaryEnemy { nullptr };
 
 	static const auto MAX_ACTIVE_ENEMIES = AiEnemiesTracker::MAX_ACTIVE_ENEMIES;
+	// Selected active enemies are kept in array for these reasons:
+	// 1) Being stable relatively to unlinking by the supplying tracker
+	// 2) Being able to address precached data by enemy index
+	StaticVector<const TrackedEnemy *, MAX_ACTIVE_ENEMIES> enemies;
 
-	StaticVector<const TrackedEnemy *, MAX_ACTIVE_ENEMIES> activeEnemies;
-	mutable int64_t threatFactorsComputedAt[MAX_ACTIVE_ENEMIES];
-	mutable int64_t canEnemyHitComputedAt[MAX_ACTIVE_ENEMIES];
-	mutable int64_t maxThreatFactorComputedAt { 0 };
-	mutable int64_t canEnemiesHitComputedAt { 0 };
-	mutable int64_t botViewDirDotToEnemyDirComputedAt { 0 };
-	mutable int64_t enemyViewDirDotToBotDirComputedAt { 0 };
-	mutable int64_t aboutToHitEBorIGComputedAt { 0 };
-	mutable int64_t aboutToHitLGorPGComputedAt { 0 };
-	mutable int64_t aboutToHitRLorSWComputedAt { 0 };
-	mutable int64_t arePotentiallyHittableComputedAt { 0 };
-	mutable float threatFactors[MAX_ACTIVE_ENEMIES];
-	mutable float botViewDirDotToEnemyDir[MAX_ACTIVE_ENEMIES];
-	mutable float enemyViewDirDotToBotDir[MAX_ACTIVE_ENEMIES];
-	mutable bool canEnemyHit[MAX_ACTIVE_ENEMIES];
-	mutable bool canEnemiesHit { false };
-	mutable bool aboutToHitEBorIG { false };
-	mutable bool aboutToHitLGorPG { false };
-	mutable bool aboutToHitRLorSW { false };
-	mutable bool arePotentiallyHittable { false };
-
+	const Bot *const bot;
 	int64_t timeoutAt { 0 };
 	unsigned instanceId { 0 };
-	mutable float maxThreatFactor { 0.0f };
 
-	inline void CheckValid( const char *function ) const {
-#ifdef _DEBUG
-		if( !AreValid() ) {
-			AI_FailWith( "SelectedEnemies", "::%s(): Selected enemies are invalid\n", function );
+	struct alignas( 4 ) FrameCachedFloat {
+		mutable Int64Align4 computedAt { -1 };
+		mutable float value { std::numeric_limits<float>::infinity() };
+
+		operator const float() const {
+			assert( computedAt == level.time );
+			return value;
 		}
+
+		void Invalidate() { computedAt = -1; }
+	};
+
+	struct alignas( 4 ) FrameCachedBool {
+		mutable Int64Align4 computedAt { -1 };
+		mutable bool value { false };
+
+		operator const bool() const {
+			assert( computedAt == level.time );
+			return value;
+		}
+
+		void Invalidate() { computedAt = -1; }
+	};
+
+	struct alignas( 4 ) FrameCachedFloatArray {
+		mutable Int64Align4 computedAt { -1 };
+		mutable float values[MAX_ACTIVE_ENEMIES];
+
+		operator const float *() const {
+			assert( computedAt == level.time );
+			return values;
+		}
+
+		void Invalidate() { computedAt = -1; }
+	};
+
+	// Values are cached independently for every enemy
+	mutable FrameCachedFloat threatFactors[MAX_ACTIVE_ENEMIES];
+	mutable FrameCachedBool canEnemyHit[MAX_ACTIVE_ENEMIES];
+
+	mutable FrameCachedFloat maxThreatFactor;
+	mutable FrameCachedBool canEnemiesHit;
+	mutable FrameCachedBool couldHitIfTurns;
+	mutable FrameCachedFloatArray botViewDirDotToEnemyDir;
+	mutable FrameCachedFloatArray enemyViewDirDotToBotDir;
+	mutable FrameCachedBool aboutToHitEBorIG;
+	mutable FrameCachedBool aboutToHitLGorPG;
+	mutable FrameCachedBool aboutToHitRLorSW;
+	mutable FrameCachedBool arePotentiallyHittable;
+
+	void CheckValid( const char *function ) const {
+#ifdef _DEBUG
+		if( AreValid() ) {
+			return;
+		}
+
+		char tag[64];
+		AI_FailWith( va_r( tag, sizeof( tag ), "SelectedEnemies::%s()", tag ), "Selected enemies are invalid\n" );
 #endif
 	}
 
-	explicit SelectedEnemies( const edict_t *self_ ) : self( self_ ) {
-		memset( threatFactorsComputedAt, 0, sizeof( threatFactorsComputedAt ) );
-		memset( threatFactors, 0, sizeof( threatFactors ) );
-		memset( canEnemyHitComputedAt, 0, sizeof( canEnemyHitComputedAt ) );
-		memset( canEnemyHit, 0, sizeof( canEnemyHit ) );
-	}
+	explicit SelectedEnemies( const Bot *bot_ ) : bot( bot_ ) {}
 
 	bool TestAboutToHitEBorIG( int64_t levelTime ) const;
 	bool TestAboutToHitLGorPG( int64_t levelTime ) const;
 	bool TestAboutToHitRLorSW( int64_t levelTime ) const;
 
-	bool AreAboutToHit( int64_t *computedAt, bool *value, bool ( SelectedEnemies::*testHit )( int64_t ) const ) const {
+	bool AreAboutToHit( FrameCachedBool *value, bool ( SelectedEnemies::*testHit )( int64_t ) const ) const {
 		auto levelTime = level.time;
-		if( levelTime != *computedAt ) {
-			*value = ( this->*testHit )( levelTime );
-			*computedAt = levelTime;
+		if( levelTime != value->computedAt ) {
+			value->value = ( this->*testHit )( levelTime );
+			value->computedAt = levelTime;
 		}
-		return *value;
+		return value->value;
 	}
 
 	const float *GetBotViewDirDotToEnemyDirValues() const;
@@ -71,53 +98,41 @@ class SelectedEnemies {
 public:
 	bool AreValid() const;
 
-	inline void Invalidate() {
-		timeoutAt = 0;
-		maxThreatFactorComputedAt = 0;
-		canEnemiesHitComputedAt = 0;
-		memset( threatFactorsComputedAt, 0, sizeof( threatFactorsComputedAt ) );
-		memset( canEnemyHitComputedAt, 0, sizeof( canEnemyHitComputedAt ) );
-		primaryEnemy = nullptr;
-		activeEnemies.clear();
-	}
+	bool ValidAsSelection() const override { return AreValid(); }
 
-	void Set( const TrackedEnemy *primaryEnemy_,
-			  unsigned timeoutPeriod,
-			  const TrackedEnemy **activeEnemiesBegin,
-			  const TrackedEnemy **activeEnemiesEnd );
+	void Invalidate();
 
-	void Set( const TrackedEnemy *primaryEnemy_,
-			  unsigned timeoutPeriod,
-			  const TrackedEnemy *firstActiveEnemy );
+	void SetToListOfActive( const TrackedEnemy *listHead, unsigned timeout );
+	void SetToLostOrHidden( const TrackedEnemy *enemy, unsigned timeout );
 
-	inline unsigned InstanceId() const { return instanceId; }
+	unsigned InstanceId() const override { return instanceId; }
 
 	bool IsPrimaryEnemy( const edict_t *ent ) const {
-		return primaryEnemy && primaryEnemy->ent == ent;
+		return !enemies.empty() && enemies.front()->ent == ent;
 	}
 
 	bool IsPrimaryEnemy( const TrackedEnemy *enemy ) const {
-		return primaryEnemy && primaryEnemy == enemy;
+		return !enemies.empty() && enemies.front() == enemy;
 	}
 
 	Vec3 LastSeenOrigin() const {
-		CheckValid( __FUNCTION__ );
-		return primaryEnemy->LastSeenOrigin();
+		CheckValid( "LastSeenOrigin" );
+		return enemies.front()->LastSeenOrigin();
 	}
 
 	Vec3 ActualOrigin() const {
-		CheckValid( __FUNCTION__ );
-		return Vec3( primaryEnemy->ent->s.origin );
+		CheckValid( "ActualOrigin" );
+		return Vec3( enemies.front()->ent->s.origin );
 	}
 
 	Vec3 LastSeenVelocity() const {
-		CheckValid( __FUNCTION__ );
-		return primaryEnemy->LastSeenVelocity();
+		CheckValid( "LastSeenVelocity" );
+		return enemies.front()->LastSeenVelocity();
 	}
 
-	unsigned LastSeenAt() const {
-		CheckValid( __FUNCTION__ );
-		return primaryEnemy->LastSeenAt();
+	int64_t LastSeenAt() const {
+		CheckValid( "LastSeenAt" );
+		return enemies.front()->LastSeenAt();
 	}
 
 	Vec3 ClosestEnemyOrigin( const Vec3 &relativelyTo ) const {
@@ -128,65 +143,55 @@ public:
 
 	typedef TrackedEnemy::SnapshotsQueue SnapshotsQueue;
 	const SnapshotsQueue &LastSeenSnapshots() const {
-		CheckValid( __FUNCTION__ );
-		return primaryEnemy->lastSeenSnapshots;
+		CheckValid( "LastSeenSnapshots" );
+		return enemies.front()->lastSeenSnapshots;
 	}
 
 	Vec3 ActualVelocity() const {
-		CheckValid( __FUNCTION__ );
-		return Vec3( primaryEnemy->ent->velocity );
+		CheckValid( "ActualVelocity" );
+		return Vec3( enemies.front()->ent->velocity );
 	}
 
 	Vec3 Mins() const {
-		CheckValid( __FUNCTION__ );
-		return Vec3( primaryEnemy->ent->r.mins );
+		CheckValid( "Mins" );
+		return Vec3( enemies.front()->ent->r.mins );
 	}
 
 	Vec3 Maxs() const {
-		CheckValid( __FUNCTION__ );
-		return Vec3( primaryEnemy->ent->r.maxs );
+		CheckValid( "Maxs" );
+		return Vec3( enemies.front()->ent->r.maxs );
 	}
 
-	Vec3 LookDir() const {
-		CheckValid( __FUNCTION__ );
-		vec3_t lookDir;
-		AngleVectors( primaryEnemy->ent->s.angles, lookDir, nullptr, nullptr );
-		return Vec3( lookDir );
-	}
+	Vec3 LookDir() const;
 
 	Vec3 EnemyAngles() const {
-		CheckValid( __FUNCTION__ );
-		return Vec3( primaryEnemy->ent->s.angles );
+		CheckValid( "EnemyAngles" );
+		return Vec3( enemies.front()->ent->s.angles );
 	}
 
 	float DamageToKill() const;
 
-	int PendingWeapon() const {
-		if( primaryEnemy && primaryEnemy->ent && primaryEnemy->ent->r.client ) {
-			return primaryEnemy->ent->r.client->ps.stats[STAT_PENDING_WEAPON];
-		}
-		return -1;
-	}
+	int PendingWeapon() const;
 
 	unsigned FireDelay() const;
 
-	inline bool IsStaticSpot() const {
+	bool IsStaticSpot() const {
 		return Ent()->r.client == nullptr;
 	}
 
-	inline const edict_t *Ent() const {
-		CheckValid( __FUNCTION__ );
-		return primaryEnemy->ent;
+	const edict_t *Ent() const {
+		CheckValid( "Ent" );
+		return enemies.front()->ent;
 	}
 
-	inline const edict_t *TraceKey() const {
-		CheckValid( __FUNCTION__ );
-		return primaryEnemy->ent;
+	const edict_t *TraceKey() const {
+		CheckValid( "TraceKey" );
+		return enemies.front()->ent;
 	}
 
-	inline const bool OnGround() const {
-		CheckValid( __FUNCTION__ );
-		return primaryEnemy->ent->groundentity != nullptr;
+	bool OnGround() const {
+		CheckValid( "OnGround" );
+		return enemies.front()->ent->groundentity != nullptr;
 	}
 
 	bool HaveQuad() const;
@@ -196,24 +201,27 @@ public:
 
 	float MaxDotProductOfBotViewAndDirToEnemy() const {
 		auto *dots = GetBotViewDirDotToEnemyDirValues();
-		return *std::max_element( dots, dots + activeEnemies.size() );
+		return *std::max_element( dots, dots + enemies.size() );
 	}
 
 	float MaxDotProductOfEnemyViewAndDirToBot() const {
 		auto *dots = GetEnemyViewDirDotToBotDirValues();
-		return *std::max_element( dots, dots + activeEnemies.size() );
+		return *std::max_element( dots, dots + enemies.size() );
 	}
 
 	// Checks whether a bot can potentially hit enemies from its origin if it adjusts view angles properly
 	bool ArePotentiallyHittable() const;
 
 	typedef const TrackedEnemy **EnemiesIterator;
-	inline EnemiesIterator begin() const { return (EnemiesIterator)activeEnemies.cbegin(); }
-	inline EnemiesIterator end() const { return (EnemiesIterator)activeEnemies.cend(); }
+	inline EnemiesIterator begin() const { return (EnemiesIterator)enemies.cbegin(); }
+	inline EnemiesIterator end() const { return (EnemiesIterator)enemies.cend(); }
 
 	bool CanHit() const;
-	bool GetCanHit( int enemyNum, float viewDot ) const;
-	bool TestCanHit( const edict_t *enemy, float viewDot ) const;
+	bool GetCanHit( unsigned enemyNum, float viewDot ) const;
+	bool TestCanHit( const edict_t *attacker, const edict_t *victim, float viewDot ) const;
+
+	bool CanBeHit() const;
+	bool CouldBeHitIfBotTurns() const;
 
 	bool HaveGoodSniperRangeWeapons() const;
 	bool HaveGoodFarRangeWeapons() const;
@@ -221,24 +229,26 @@ public:
 	bool HaveGoodCloseRangeWeapons() const;
 
 	bool AreAboutToHitEBorIG() const {
-		return AreAboutToHit( &aboutToHitEBorIGComputedAt, &aboutToHitEBorIG, &SelectedEnemies::TestAboutToHitEBorIG );
+		return AreAboutToHit( &aboutToHitEBorIG, &SelectedEnemies::TestAboutToHitEBorIG );
 	}
+
 	bool AreAboutToHitRLorSW() const {
-		return AreAboutToHit( &aboutToHitRLorSWComputedAt, &aboutToHitRLorSW, &SelectedEnemies::TestAboutToHitRLorSW );
+		return AreAboutToHit( &aboutToHitRLorSW, &SelectedEnemies::TestAboutToHitRLorSW );
 	}
+
 	bool AreAboutToHitLGorPG() const {
-		return AreAboutToHit( &aboutToHitLGorPGComputedAt, &aboutToHitLGorPG, &SelectedEnemies::TestAboutToHitLGorPG );
+		return AreAboutToHit( &aboutToHitLGorPG, &SelectedEnemies::TestAboutToHitLGorPG );
 	}
 
 	bool AreThreatening() const {
-		CheckValid( __FUNCTION__ );
+		CheckValid( "AreThreatening" );
 		return MaxThreatFactor() > 0.9f;
 	}
 
 	float MaxThreatFactor() const;
-	float GetThreatFactor( int enemyNum ) const;
-	float ComputeThreatFactor( int enemyNum ) const;
-	float ComputeThreatFactor( const edict_t *ent, int enemyNum = -1 ) const;
+	float GetThreatFactor( unsigned enemyNum ) const;
+	float ComputeThreatFactor( unsigned enemyNum ) const;
+	float ComputeThreatFactor( const edict_t *ent, unsigned *enemyNum = nullptr ) const;
 };
 
 #endif

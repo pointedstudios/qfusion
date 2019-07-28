@@ -21,10 +21,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef GAME_QARCH_H
 #define GAME_QARCH_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // global preprocessor defines
 #include "config.h"
 
@@ -49,20 +45,7 @@ extern "C" {
 #define __STDC_FORMAT_MACROS 1
 #endif
 #include <inttypes.h>
-
-
-#ifdef __cplusplus
-};
-#endif
-
-#ifdef __cplusplus
 #include <type_traits>
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 
 //==============================================
 
@@ -566,9 +549,6 @@ typedef int socket_handle_t;
 
 #ifndef NULL
 #define NULL ( (void *)0 )
-#endif
-#ifdef __cplusplus
-};
 #endif
 
 #endif // GAME_QARCH_H

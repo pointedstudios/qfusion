@@ -1,63 +1,88 @@
 #ifndef QFUSION_REACHCHAININTERPOLATOR_H
 #define QFUSION_REACHCHAININTERPOLATOR_H
 
-#include "../ai_local.h"
+#include "MovementLocal.h"
 
 class MovementPredictionContext;
 
-struct ReachChainInterpolator {
+class ReachChainInterpolator final : public ReachChainWalker {
+	friend class BunnyInterpolatingChainAtStartAction;
+	friend class BunnyInterpolatingReachChainAction;
+
+	MovementPredictionContext *const context;
+	const Hazard *hazardToEvade { nullptr };
+	AiAasWorld *const aasWorld;
+	const aas_area_t *const aasAreas;
+	const uint16_t *const aasFloorClustserNums;
+	const aas_reachability_t *singleFarReach { nullptr };
+	int startGroundedAreaNum { 0 };
+	int startFloorClusterNum { 0 };
+	bool endsInNavTargetArea { false };
+
 	// These immediates are saved as they might be useful
 	StaticVector<Vec3, 64> dirs;
 	StaticVector<int, 64> dirsAreas;
 
-	Vec3 intendedLookDir;
-	// Continue interpolating while a next reach has these travel types
-	const int *compatibleReachTypes;
-	int numCompatibleReachTypes;
-	// Stop interpolating on these reach types but include a reach start in interpolation
-	const int *allowedEndReachTypes;
-	int numAllowedEndReachTypes;
+	Vec3 intendedLookDir { 0, 0, 0 };
+
+	/**
+	 * Continue interpolating while a next reach has these travel types
+	 */
+	uint32_t compatibleReachTravelTypesMask;
+	/**
+	 * Stop interpolating on these reach types but include a reach start in interpolation
+	 */
+	uint32_t allowedReachTravelTypesMask;
+
 	// Note: Ignored when there is only a single far reach.
 	float stopAtDistance;
 
-	inline ReachChainInterpolator()
-		: intendedLookDir( 0, 0, 0 )
-		, compatibleReachTypes( nullptr )
-		, numCompatibleReachTypes( 0 )
-		, allowedEndReachTypes( nullptr )
-		, numAllowedEndReachTypes( 0 )
-		, stopAtDistance( 256 )
-	{}
-
-	inline void SetCompatibleReachTypes( const int *reachTravelTypes, int numTravelTypes ) {
-		this->compatibleReachTypes = reachTravelTypes;
-		this->numCompatibleReachTypes = numTravelTypes;
-	}
-
-	inline void SetAllowedEndReachTypes( const int *reachTravelTypes, int numTravelTypes ) {
-		this->allowedEndReachTypes = reachTravelTypes;
-		this->numAllowedEndReachTypes = numTravelTypes;
-	}
-
-	inline bool IsCompatibleReachType( int reachTravelType ) const {
+	bool IsCompatibleReachType( int reachTravelType ) const {
 		assert( ( reachTravelType & TRAVELTYPE_MASK ) == reachTravelType );
-		const int *end = compatibleReachTypes + numCompatibleReachTypes;
-		return std::find( compatibleReachTypes, end, reachTravelType ) != end;
+		assert( (unsigned)reachTravelType < 32 );
+		return (bool)( compatibleReachTravelTypesMask & ( 1u << reachTravelType ) );
 	}
 
-	inline bool IsAllowedEndReachType( int reachTravelType ) const {
+	bool IsAllowedEndReachType( int reachTravelType ) const {
 		assert( ( reachTravelType & TRAVELTYPE_MASK ) == reachTravelType );
-		const int *end = allowedEndReachTypes + numAllowedEndReachTypes;
-		return std::find( allowedEndReachTypes, end, reachTravelType ) != end;
+		assert( (unsigned)reachTravelType < 32 );
+		return (bool)( allowedReachTravelTypesMask & ( 1u << reachTravelType ) );
 	}
 
-	bool TrySetDirToRegionExitArea( MovementPredictionContext *context,
-									const aas_area_t &area,
-									float distanceThreshold = 64.0f );
+	bool Accept( int reachNum, const aas_reachability_t &reach, int travelTime ) override;
 
-	bool Exec( MovementPredictionContext *context );
+	bool TrySettingDirToRegionExitArea( int exitAreaNum );
+public:
+	ReachChainInterpolator( const Bot *bot_,
+							MovementPredictionContext *context_,
+							uint32_t compatibleReachTravelTypesMask_,
+							uint32_t allowedReachTravelTypesMask_,
+							float stopAtDistance_ )
+		: ReachChainWalker( context_->RouteCache() )
+		, context( context_ )
+		, aasWorld( AiAasWorld::Instance() )
+		, aasAreas( aasWorld->Areas() )
+		, aasFloorClustserNums( aasWorld->AreaFloorClusterNums() )
+		, compatibleReachTravelTypesMask( compatibleReachTravelTypesMask_ )
+		, allowedReachTravelTypesMask( allowedReachTravelTypesMask_ )
+		, stopAtDistance( stopAtDistance_ ) {
+		SetAreaNums( context_->movementState->entityPhysicsState, context_->NavTargetAasAreaNum() );
 
-	inline const Vec3 &Result() const { return intendedLookDir; }
+		if( bot_->ShouldRushHeadless() ) {
+			return;
+		}
+
+		hazardToEvade = bot_->PrimaryHazard();
+		if( hazardToEvade && !hazardToEvade->SupportsImpactTests() ) {
+			hazardToEvade = nullptr;
+		}
+	}
+
+	bool Exec() override;
+
+	const Vec3 &Result() const { return intendedLookDir; }
+
+	int SuggestStopAtAreaNum() const;
 };
 
 #endif //QFUSION_REACHCHAININTERPOLATOR_H

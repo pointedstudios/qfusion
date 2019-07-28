@@ -1,23 +1,23 @@
 #include "ai_base_ai.h"
-#include "planning/BasePlanner.h"
+#include "planning/Planner.h"
 #include "ai_ground_trace_cache.h"
 
-Ai::Ai( edict_t *self_
-	  , BasePlanner *planner_
-	  , AiAasRouteCache *routeCache_
-	  , AiEntityPhysicsState *entityPhysicsState_
-	  , int allowedAasTravelFlags_
-	  , int preferredAasTravelFlags_
-	  , float yawSpeed
-	  , float pitchSpeed )
+Ai::Ai( edict_t *self_,
+		AiPlanner *planner_,
+		AiAasRouteCache *routeCache_,
+		AiEntityPhysicsState *entityPhysicsState_,
+		int allowedAasTravelFlags_,
+		int preferredAasTravelFlags_,
+		float yawSpeed,
+		float pitchSpeed )
 	: self( self_ )
-	, basePlanner( planner_ )
+	, planner( planner_ )
 	, routeCache( routeCache_ )
 	, aasWorld( AiAasWorld::Instance() )
 	, entityPhysicsState( entityPhysicsState_ )
 	, travelFlagsRange( travelFlags, 2 )
 	, blockedTimeoutAt( level.time + 15000 )
-	, localNavTargetStorage( NavTarget::Dummy() ) {
+	, localNavSpotStorage( NavSpot::Dummy() ) {
 	travelFlags[0] = preferredAasTravelFlags_;
 	travelFlags[1] = allowedAasTravelFlags_;
 	angularViewSpeed[YAW] = yawSpeed;
@@ -33,7 +33,7 @@ Ai::Ai( edict_t *self_
 void Ai::SetFrameAffinity( unsigned modulo, unsigned offset ) {
 	frameAffinityModulo = modulo;
 	frameAffinityOffset = offset;
-	basePlanner->SetFrameAffinity( modulo, offset );
+	planner->SetFrameAffinity( modulo, offset );
 }
 
 void Ai::ResetNavigation() {
@@ -50,45 +50,6 @@ void Ai::SetAttitude( const edict_t *ent, int attitude_ ) {
 	}
 }
 
-void Ai::UpdateReachChain( const ReachChainVector &oldReachChain,
-						   ReachChainVector *currReachChain,
-						   const AiEntityPhysicsState &state ) const {
-	currReachChain->clear();
-	if( !navTarget ) {
-		return;
-	}
-
-	const aas_reachability_t *reachabilities = AiAasWorld::Instance()->Reachabilities();
-	const int goalAreaNum = NavTargetAasAreaNum();
-	// First skip reaches to reached area
-	unsigned i = 0;
-	for( i = 0; i < oldReachChain.size(); ++i ) {
-		if( reachabilities[oldReachChain[i].ReachNum()].areanum == state.CurrAasAreaNum() ) {
-			break;
-		}
-	}
-	// Copy remaining reachabilities
-	for( unsigned j = i + 1; j < oldReachChain.size(); ++j )
-		currReachChain->push_back( oldReachChain[j] );
-
-	int areaNum;
-	if( currReachChain->empty() ) {
-		areaNum = state.currAasAreaNum;
-	} else {
-		areaNum = reachabilities[currReachChain->back().ReachNum()].areanum;
-	}
-
-	int reachNum, travelTime;
-	while( areaNum != goalAreaNum && currReachChain->size() != currReachChain->capacity() ) {
-		// We hope we'll be pushed in some other area during movement, and goal area will become reachable. Leave as is.
-		if( !( travelTime = routeCache->PreferredRouteToGoalArea( areaNum, goalAreaNum, &reachNum ) ) ) {
-			break;
-		}
-		areaNum = reachabilities[reachNum].areanum;
-		currReachChain->emplace_back( ReachAndTravelTime( reachNum, (short)travelTime ) );
-	}
-}
-
 int Ai::CheckTravelTimeMillis( const Vec3& from, const Vec3 &to, bool allowUnreachable ) {
 
 	// We try to use the same checks the TacticalSpotsRegistry performs to find spots.
@@ -96,7 +57,7 @@ int Ai::CheckTravelTimeMillis( const Vec3& from, const Vec3 &to, bool allowUnrea
 	// because a reachability must have been checked by the spots registry first in a few preceeding calls.
 
 	int fromAreaNum;
-	constexpr float squareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	constexpr float squareDistanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
 	if( ( from - self->s.origin ).SquaredLength() < squareDistanceError ) {
 		fromAreaNum = aasWorld->FindAreaNum( self );
 	} else {
@@ -217,14 +178,14 @@ bool Ai::MayNotBeFeasibleEnemy( const edict_t *ent ) const {
 
 void Ai::Frame() {
 	// Call super method first
-	AiFrameAwareUpdatable::Frame();
+	AiFrameAwareComponent::Frame();
 
 	if( !G_ISGHOSTING( self ) ) {
 		entityPhysicsState->UpdateFromEntity( self );
 	}
 
 	// Call planner Update() (Frame() and, maybe Think())
-	basePlanner->Update();
+	planner->Update();
 
 	if( level.spawnedTimeStamp + 5000 > game.realtime || !level.canSpawnEntities ) {
 		self->nextThink = level.time + game.snapFrameTime;

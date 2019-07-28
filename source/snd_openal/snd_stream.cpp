@@ -290,7 +290,7 @@ void S_PositionedRawSamples( int entnum, float fvol, float attenuation,
 /*
 * S_GetRawSamplesLength
 */
-extern "C" unsigned S_GetRawSamplesLength( void ) {
+unsigned S_GetRawSamplesLength( void ) {
 	rawsrc_t *rs;
 
 	rs = find_rawsound( RAW_SOUND_ENTNUM );
@@ -303,7 +303,7 @@ extern "C" unsigned S_GetRawSamplesLength( void ) {
 /*
 * S_GetPositionedRawSamplesLength
 */
-extern "C" unsigned S_GetPositionedRawSamplesLength( int entnum ) {
+unsigned S_GetPositionedRawSamplesLength( int entnum ) {
 	rawsrc_t *rs;
 
 	if( entnum < 0 ) {

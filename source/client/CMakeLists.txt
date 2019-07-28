@@ -1,6 +1,8 @@
 project(${QFUSION_CLIENT_NAME})
 
-include_directories(${ZLIB_INCLUDE_DIR} ${CURL_INCLUDE_DIR})
+include_directories(${ZLIB_INCLUDE_DIR} ${CURL_INCLUDE_DIR} ${JPEG_INCLUDE_DIR} ${PNG_INCLUDE_DIR})
+include_directories(${OGG_INCLUDE_DIR} ${VORBIS_INCLUDE_DIR} ${THEORA_INCLUDE_DIR})
+include_directories(${FREETYPE_INCLUDE_DIRS})
 
 if (USE_SDL2 OR (${CMAKE_SYSTEM_NAME} MATCHES "Linux"))
     include_directories(${SDL2_INCLUDE_DIR})
@@ -34,15 +36,96 @@ file(GLOB CLIENT_HEADERS
 )
 
 file(GLOB CLIENT_COMMON_SOURCES
-    "../qcommon/*.c"
 	"../qcommon/*.cpp"
-    "../server/*.c"
-    "*.c"
-    "../gameshared/q_*.c"
+	"../qcommon/patch.c"
+	"../qcommon/bsp.c"
+    "../server/*.cpp"
+    "*.cpp"
+    "../gameshared/q_*.cpp"
     "../qalgo/*.c"
-    "../matchmaker/*.c"
-	"libmumblelink/*.c"
+    "../matchmaker/*.cpp"
+    # We have to include this for linking with shared MM facilities.
+    # This also is required to run listen servers (do we allow ranked listen servers?)
+    # Unused stuff should get stripped anyway.
+    "../../third-party/sqlite-amalgamation/sqlite3.c"
 )
+
+file(GLOB REF_GL_HEADERS
+		"../ref_gl/*.h"
+		"../gameshared/q_*.h"
+		"../gameshared/anorms.h"
+		"../gameshared/config.h"
+		"../qcommon/bsp.h"
+		"../qcommon/patch.h"
+		"../qcommon/iqm.h"
+		"../qcommon/qfiles.h"
+		"../qalgo/*.h"
+		)
+
+file(GLOB REF_GL_COMMON_SOURCES
+		"../ref_gl/*.cpp"
+		"../gameshared/q_*.cpp"
+		"../qalgo/*.cpp"
+		"../qcommon/bsp.cpp"
+		"../qcommon/patch.cpp"
+		)
+
+if (USE_SDL2)
+	file(GLOB REF_GL_PLATFORM_SOURCES
+			"../sdl/sdl_glw.cpp"
+			"../sdl/sdl_qgl.cpp"
+			)
+
+	set(REF_GL_PLATFORM_LIBRARIES ${SDL2_LIBRARY})
+else()
+	if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+		file(GLOB REF_GL_PLATFORM_SOURCES
+				"../win32/win_glw.cpp"
+				"../win32/win_qgl.cpp"
+				)
+
+		set(REF_GL_PLATFORM_LIBRARIES "")
+	endif()
+
+	if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+		file(GLOB REF_GL_PLATFORM_SOURCES
+				"../unix/unix_glw.cpp"
+				"../unix/unix_qgl.cpp"
+				)
+
+		set(REF_GL_PLATFORM_LIBRARIES "X11" "Xext" "Xinerama" "Xrandr" "Xxf86vm" "m")
+	endif()
+endif()
+
+file(GLOB CIN_HEADERS
+		"../cin/*.h"
+		"../gameshared/q_*.h"
+		)
+
+file(GLOB CIN_SOURCES
+		"../cin/*.cpp"
+		"../gameshared/q_*.c"
+		)
+
+file(GLOB FTLIB_HEADERS
+		"../ftlib/*.h"
+		"../gameshared/q_*.h"
+		)
+
+file(GLOB FTLIB_SOURCES
+		"../ftlib/*.cpp"
+		"../gameshared/q_*.c"
+		)
+
+file(GLOB CGAME_HEADES
+		"../cgame/*.h"
+		"../gameshared/*.h"
+		)
+
+file(GLOB CGAME_SOURCES
+		"../cgame/*.cpp"
+		"../gameshared/*.cpp"
+		)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 	file(GLOB CLIENT_PLATFORM_HEADERS
@@ -54,48 +137,48 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 
     if (USE_SDL2)
         file(GLOB CLIENT_PLATFORM_SOURCES
-            "../win32/win_fs.c"
-            "../win32/win_net.c"
-            "../win32/win_sys.c"
-            "../win32/win_console.c"
-            "../win32/win_threads.c"
-            "../null/sys_vfs_null.c"
+            "../win32/win_fs.cpp"
+            "../win32/win_net.cpp"
+            "../win32/win_sys.cpp"
+            "../win32/win_console.cpp"
+            "../win32/win_threads.cpp"
+            "../null/sys_vfs_null.cpp"
 
-            "../sdl/sdl_input.c"
-            "../sdl/sdl_input_joy.c"
-            "../sdl/sdl_input_win.c"
-            "../sdl/sdl_vid.c"
-            "../sdl/sdl_sys.c"
-            "../sdl/sdl_clipboard.c"
-            "../sdl/sdl_time.c"
-            "../sdl/sdl_lib.c"
-            "../sdl/sdl_client.c"
+            "../sdl/sdl_input.cpp"
+            "../sdl/sdl_input_joy.cpp"
+            "../sdl/sdl_input_win.cpp"
+            "../sdl/sdl_vid.cpp"
+            "../sdl/sdl_sys.cpp"
+            "../sdl/sdl_clipboard.cpp"
+            "../sdl/sdl_time.cpp"
+            "../sdl/sdl_lib.cpp"
+            "../sdl/sdl_client.cpp"
 
             "../win32/qfusion.rc"
         )
 
-        set(CLIENT_PLATFORM_LIBRARIES ${SDL2_LIBRARY} ${SDL2MAIN_LIBRARY} "ws2_32.lib" "winmm.lib")
+        set(CLIENT_PLATFORM_LIBRARIES ${SDL2_LIBRARY} ${SDL2MAIN_LIBRARY} "ws2_32.lib" "winmm.lib" "Ole32.lib")
     else()
         file(GLOB CLIENT_PLATFORM_SOURCES
-            "../win32/win_fs.c"
-            "../win32/win_lib.c"
-            "../win32/win_net.c"
-            "../win32/win_sys.c"
-            "../win32/win_console.c"
-            "../win32/win_clipboard.c"
-            "../win32/win_time.c"
-            "../win32/win_threads.c"
-            "../null/sys_vfs_null.c"
+            "../win32/win_fs.cpp"
+            "../win32/win_lib.cpp"
+            "../win32/win_net.cpp"
+            "../win32/win_sys.cpp"
+            "../win32/win_console.cpp"
+            "../win32/win_clipboard.cpp"
+            "../win32/win_time.cpp"
+            "../win32/win_threads.cpp"
+            "../null/sys_vfs_null.cpp"
 
-            "../win32/win_client.c"
-            "../win32/win_input.c"
-            "../win32/win_vid.c"
-            "../win32/conproc.c"
+            "../win32/win_client.cpp"
+            "../win32/win_input.cpp"
+            "../win32/win_vid.cpp"
+            "../win32/conproc.cpp"
 
             "../win32/qfusion.rc"
         )
 
-        set(CLIENT_PLATFORM_LIBRARIES "ws2_32.lib" "winmm.lib")
+        set(CLIENT_PLATFORM_LIBRARIES "ws2_32.lib" "winmm.lib" "Ole32.lib")
     endif()
 
     set(CLIENT_BINARY_TYPE WIN32)
@@ -107,22 +190,22 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 	set(CLIENT_PLATFORM_HEADERS "")
 	
     file(GLOB CLIENT_PLATFORM_SOURCES
-        "../unix/unix_fs.c"
-        "../unix/unix_net.c"
-        "../unix/unix_sys.c"
-        "../unix/unix_console.c"
-        "../unix/unix_threads.c"
-        "../null/sys_vfs_null.c"
+        "../unix/unix_fs.cpp"
+        "../unix/unix_net.cpp"
+        "../unix/unix_sys.cpp"
+        "../unix/unix_console.cpp"
+        "../unix/unix_threads.cpp"
+        "../null/sys_vfs_null.cpp"
 
-        "../sdl/sdl_input.c"
-        "../sdl/sdl_input_joy.c"
+        "../sdl/sdl_input.cpp"
+        "../sdl/sdl_input_joy.cpp"
         "../sdl/sdl_input_osx.m"
-        "../sdl/sdl_vid.c"
-        "../sdl/sdl_sys.c"
-        "../sdl/sdl_clipboard.c"
-        "../sdl/sdl_time.c"
-        "../sdl/sdl_lib.c"
-        "../sdl/sdl_client.c"
+        "../sdl/sdl_vid.cpp"
+        "../sdl/sdl_sys.cpp"
+        "../sdl/sdl_clipboard.cpp"
+        "../sdl/sdl_time.cpp"
+        "../sdl/sdl_lib.cpp"
+        "../sdl/sdl_client.cpp"
 
         "../mac/mac_sys.m"
         "${QFUSION_MAC_INFO_PLIST}"
@@ -148,46 +231,46 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 
     if (USE_SDL2)
         file(GLOB CLIENT_PLATFORM_SOURCES
-            "../unix/unix_fs.c"
-            "../unix/unix_net.c"
-            "../unix/unix_sys.c"
-            "../unix/unix_console.c"
-            "../unix/unix_threads.c"
-            "../null/sys_vfs_null.c"
+            "../unix/unix_fs.cpp"
+            "../unix/unix_net.cpp"
+            "../unix/unix_sys.cpp"
+            "../unix/unix_console.cpp"
+            "../unix/unix_threads.cpp"
+            "../null/sys_vfs_null.cpp"
 
-            "../sdl/sdl_input.c"
-            "../sdl/sdl_input_joy.c"
-            "../sdl/sdl_input_unix.c"
-            "../sdl/sdl_vid.c"
-            "../sdl/sdl_sys.c"
-            "../sdl/sdl_clipboard.c"
-            "../sdl/sdl_time.c"
-            "../sdl/sdl_lib.c"
-            "../sdl/sdl_client.c"
+            "../sdl/sdl_input.cpp"
+            "../sdl/sdl_input_joy.cpp"
+            "../sdl/sdl_input_unix.cpp"
+            "../sdl/sdl_vid.cpp"
+            "../sdl/sdl_sys.cpp"
+            "../sdl/sdl_clipboard.cpp"
+            "../sdl/sdl_time.cpp"
+            "../sdl/sdl_lib.cpp"
+            "../sdl/sdl_client.cpp"
         )
 
-        set(CLIENT_PLATFORM_LIBRARIES ${SDL2_LIBRARY} "pthread" "m" "dl" "rt")
+        set(CLIENT_PLATFORM_LIBRARIES ${SDL2_LIBRARY} "pthread" "m" "dl" "rt" "uuid")
     else()
         file(GLOB CLIENT_PLATFORM_SOURCES
-            "../unix/unix_fs.c"
-            "../unix/unix_lib.c"
-            "../unix/unix_net.c"
-            "../unix/unix_sys.c"
-            "../unix/unix_console.c"
-            "../unix/unix_clipboard.c"
-            "../unix/unix_time.c"
-            "../unix/unix_threads.c"
-            "../null/sys_vfs_null.c"
+            "../unix/unix_fs.cpp"
+            "../unix/unix_lib.cpp"
+            "../unix/unix_net.cpp"
+            "../unix/unix_sys.cpp"
+            "../unix/unix_console.cpp"
+            "../unix/unix_clipboard.cpp"
+            "../unix/unix_time.cpp"
+            "../unix/unix_threads.cpp"
+            "../null/sys_vfs_null.cpp"
 
             "../unix/keysym2ucs.c"
-            "../unix/unix_client.c"
-            "../unix/unix_input.c"
-            "../unix/unix_vid.c"
+            "../unix/unix_client.cpp"
+            "../unix/unix_input.cpp"
+            "../unix/unix_vid.cpp"
 
-            "../sdl/sdl_input_joy.c"
+            "../sdl/sdl_input_joy.cpp"
         )
     
-        set(CLIENT_PLATFORM_LIBRARIES ${SDL2_LIBRARY} "pthread" "dl" "m" "X11" "Xi" "Xext" "Xrandr" "rt")
+        set(CLIENT_PLATFORM_LIBRARIES ${SDL2_LIBRARY} "pthread" "dl" "m" "X11" "Xi" "Xext" "Xrandr" "rt" "uuid")
     endif()
     set(CLIENT_BINARY_TYPE "")
 
@@ -196,12 +279,14 @@ endif()
 
 if (MSVC)
 	set_source_files_properties("../qcommon/cm_trace_sse42.cpp" PROPERTIES COMPILE_FLAGS "/arch:AVX")
+	set_source_files_properties("../../third-party/sqlite-amalgamation/sqlite3.c" PROPERTIES COMPILE_FLAGS "/fp:precise")
 else()
 	set_source_files_properties("../qcommon/cm_trace_sse42.cpp" PROPERTIES COMPILE_FLAGS "-msse4.2")
+	set_source_files_properties("../../third-party/sqlite-amalgamation/sqlite3.c" PROPERTIES COMPILE_FLAGS "-fno-fast-math")
 endif()
 
-add_executable(${QFUSION_CLIENT_NAME} ${CLIENT_BINARY_TYPE} ${CLIENT_HEADERS} ${CLIENT_PLATFORM_HEADERS} ${CLIENT_COMMON_SOURCES} ${CLIENT_PLATFORM_SOURCES} ${BUNDLE_RESOURCES})
-add_dependencies(${QFUSION_CLIENT_NAME} angelwrap cgame cin ftlib game ref_gl snd_openal snd_qf steamlib ui)
+add_executable(${QFUSION_CLIENT_NAME} ${CLIENT_BINARY_TYPE} ${CLIENT_HEADERS} ${CLIENT_PLATFORM_HEADERS} ${CLIENT_COMMON_SOURCES} ${CLIENT_PLATFORM_SOURCES} ${REF_GL_HEADERS} ${REF_GL_COMMON_SOURCES} ${REF_GL_PLATFORM_SOURCES} ${FTLIB_SOURCES} ${CIN_SOURCES} ${CGAME_HEADERS} ${CGAME_SOURCES} ${BUNDLE_RESOURCES})
+add_dependencies(${QFUSION_CLIENT_NAME} angelwrap game snd_openal_soft ui_cef)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set_target_properties(${QFUSION_CLIENT_NAME} PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${QFUSION_MAC_INFO_PLIST})
@@ -223,5 +308,5 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     add_custom_command(TARGET ${QFUSION_CLIENT_NAME} POST_BUILD COMMAND ${COPY_DYLIBS})
 endif()
 
-target_link_libraries(${QFUSION_CLIENT_NAME} PRIVATE ${CURL_LIBRARY} ${ZLIB_LIBRARY} ${CLIENT_PLATFORM_LIBRARIES})
+target_link_libraries(${QFUSION_CLIENT_NAME} PRIVATE ${CURL_LIBRARY} ${ZLIB_LIBRARY} ${JPEG_LIBRARIES} ${PNG_LIBRARIES} ${REF_GL_PLATFORM_LIBRARIES} ${OGG_LIBRARY} ${VORBIS_LIBRARIES} ${THEORA_LIBRARY} ${FREETYPE_LIBRARIES} ${CLIENT_PLATFORM_LIBRARIES} snd_openal_soft)
 qf_set_output_dir(${QFUSION_CLIENT_NAME} "")

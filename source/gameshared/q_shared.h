@@ -23,10 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "q_arch.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //==============================================
 
 #if !defined ( ENDIAN_LITTLE ) && !defined ( ENDIAN_BIG )
@@ -323,27 +319,6 @@ extern const size_t NUM_SOUND_EXTENSIONS;
 extern const char *IMAGE_EXTENSIONS[];
 extern const size_t NUM_IMAGE_EXTENSIONS;
 
-//============================================
-// memory utilities
-//============================================
-
-typedef struct block_allocator_s block_allocator_t;
-typedef struct linear_allocator_s linear_allocator_t;
-
-typedef void *( *alloc_function_t )( size_t, const char*, int );
-typedef void ( *free_function_t )( void *ptr, const char*, int );
-
-// Block Allocator
-block_allocator_t * BlockAllocator( size_t elemSize, size_t blockSize, alloc_function_t alloc_function, free_function_t free_function );
-void BlockAllocator_Free( block_allocator_t *ba );
-void *BA_Alloc( block_allocator_t *ba );
-
-linear_allocator_t * LinearAllocator( size_t elemSize, size_t preAllocate, alloc_function_t alloc_function, free_function_t free_function );
-void LinearAllocator_Free( linear_allocator_t *la );
-void *LA_Alloc( linear_allocator_t *la );
-void *LA_Pointer( linear_allocator_t *la, size_t index );
-size_t LA_Size( linear_allocator_t *la );
-
 //==============================================================
 //
 //SYSTEM SPECIFIC
@@ -462,9 +437,5 @@ typedef enum {
 	IN_DEVICE_TOUCHSCREEN   = 1 << 3,
 	IN_DEVICE_SOFTKEYBOARD  = 1 << 4
 } in_devicemask_t;
-
-#ifdef __cplusplus
-};
-#endif
 
 #endif

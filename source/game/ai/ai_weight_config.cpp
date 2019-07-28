@@ -1,7 +1,7 @@
 #include "ai_weight_config.h"
 
 template <typename T>
-inline void AiBaseWeightConfigVarGroup::LinkItem( T *item, T **linkedItemsHead, T ***hashBins, unsigned *numItems ) {
+inline void AiWeightConfigVarGroup::LinkItem( T *item, T **linkedItemsHead, T ***hashBins, unsigned *numItems ) {
 	item->nextSibling = ( *linkedItemsHead );
 	( *linkedItemsHead ) = item;
 
@@ -24,21 +24,21 @@ inline void AiBaseWeightConfigVarGroup::LinkItem( T *item, T **linkedItemsHead, 
 }
 
 template <typename T>
-inline void AiBaseWeightConfigVarGroup::AddItemToHashBin( T *item, T ***hashBins ) {
+inline void AiWeightConfigVarGroup::AddItemToHashBin( T *item, T ***hashBins ) {
 	unsigned binIndex = item->nameHash % NUM_HASH_BINS;
 	item->nextInHashBin = ( *hashBins )[binIndex];
 	( *hashBins )[binIndex] = item;
 }
 
-void AiBaseWeightConfigVarGroup::LinkGroup( AiBaseWeightConfigVarGroup *childGroup ) {
+void AiWeightConfigVarGroup::LinkGroup( AiWeightConfigVarGroup *childGroup ) {
 	LinkItem( childGroup, &childGroupsHead, &groupsHashBins, &numChildGroups );
 }
 
-void AiBaseWeightConfigVarGroup::LinkVar( AiBaseWeightConfigVar *childVar ) {
+void AiWeightConfigVarGroup::LinkVar( AiWeightConfigVar *childVar ) {
 	LinkItem( childVar, &childVarsHead, &varsHashBins, &numChildVars );
 }
 
-AiBaseWeightConfigVarGroup::~AiBaseWeightConfigVarGroup() {
+AiWeightConfigVarGroup::~AiWeightConfigVarGroup() {
 	// These loops are written to avoid an access to free-ed memory even if its harmless but can trigger an analyzer
 
 	auto *scriptVar = allocatedVarsHead;
@@ -68,23 +68,24 @@ AiBaseWeightConfigVarGroup::~AiBaseWeightConfigVarGroup() {
 }
 
 template <typename T>
-inline void AiBaseWeightConfigVarGroup::AddScriptItem( const char *name_, void *scriptObject, T **allocatedItemsHead ) {
+inline void AiWeightConfigVarGroup::AddScriptItem( const char *name_, void *scriptObject, T **allocatedItemsHead ) {
 	T *scriptItem = new( G_Malloc( sizeof( T ) ) )T( this, name_, scriptObject );
 	scriptItem->nextAllocated = ( *allocatedItemsHead );
 	( *allocatedItemsHead ) = scriptItem;
 }
 
-void AiBaseWeightConfigVarGroup::AddScriptGroup( const char *name_, void *scriptObject ) {
+void AiWeightConfigVarGroup::AddScriptGroup( const char *name_, void *scriptObject ) {
 	AddScriptItem<AiScriptWeightConfigVarGroup>( name_, scriptObject, &allocatedGroupsHead );
 }
 
-void AiBaseWeightConfigVarGroup::AddScriptVar( const char *name_, void *scriptObject_ ) {
+void AiWeightConfigVarGroup::AddScriptVar( const char *name_, void *scriptObject_ ) {
 	AddScriptItem<AiScriptWeightConfigVar>( name_, scriptObject_, &allocatedVarsHead );
 }
 
 template <typename T>
-inline T *AiBaseWeightConfigVarGroup::GetItemByName( const char *name_, unsigned nameHash_,
-													 T *childItemsHead, T **hashBins, unsigned numItems ) {
+T *AiWeightConfigVarGroup::GetItemByName( const char *name_, unsigned nameHash_,
+										  T *childItemsHead,
+										  T **hashBins, unsigned numItems ) {
 	// We do not check name length to cut off string comparison.
 	// However situations when name hash match and length does not should be extremely rare,
 	// so adding an extra nameLength argument to this call would be silly for only such rare case.
@@ -113,9 +114,8 @@ inline T *AiBaseWeightConfigVarGroup::GetItemByName( const char *name_, unsigned
 		return nullptr;
 	}
 
-	unsigned dummy;
 	if( !nameHash_ ) {
-		GetHashAndLength( name_, &nameHash_, &dummy );
+		std::tie( nameHash_, std::ignore ) = GetHashAndLength( name_ );
 	}
 
 	unsigned binIndex = nameHash_ % NUM_HASH_BINS;
@@ -132,17 +132,17 @@ inline T *AiBaseWeightConfigVarGroup::GetItemByName( const char *name_, unsigned
 	return nullptr;
 }
 
-AiBaseWeightConfigVarGroup *AiBaseWeightConfigVarGroup::GetGroupByName( const char *name_, unsigned int nameHash_ ) {
+AiWeightConfigVarGroup *AiWeightConfigVarGroup::GetGroupByName( const char *name_, unsigned int nameHash_ ) {
 	return GetItemByName( name_, nameHash_, childGroupsHead, groupsHashBins, numChildGroups );
 }
 
-AiBaseWeightConfigVar *AiBaseWeightConfigVarGroup::GetVarByName( const char *name_, unsigned nameHash_ ) {
+AiWeightConfigVar *AiWeightConfigVarGroup::GetVarByName( const char *name_, unsigned nameHash_ ) {
 	return GetItemByName( name_, nameHash_, childVarsHead, varsHashBins, numChildVars );
 }
 
 template <typename T>
-inline T *AiBaseWeightConfigVarGroup::GetItemByPath( const char *path,
-													 T *( AiBaseWeightConfigVarGroup::*getByNameMethod )( const char *, unsigned ) ) {
+T *AiWeightConfigVarGroup::GetItemByPath( const char *path,
+										  T *( AiWeightConfigVarGroup::*getByNameMethod )( const char *, unsigned ) ) {
 	const char *nextSeparator = strchr( path, '/' );
 	if( !nextSeparator ) {
 		return ( this->*getByNameMethod )( path, 0 );
@@ -173,23 +173,25 @@ inline T *AiBaseWeightConfigVarGroup::GetItemByPath( const char *path,
 	return nullptr;
 }
 
-AiBaseWeightConfigVarGroup *AiBaseWeightConfigVarGroup::GetGroupByPath( const char *path ) {
-	return GetItemByPath<AiBaseWeightConfigVarGroup>( path, &AiBaseWeightConfigVarGroup::GetGroupByName );
+AiWeightConfigVarGroup *AiWeightConfigVarGroup::GetGroupByPath( const char *path ) {
+	return GetItemByPath<AiWeightConfigVarGroup>( path, &AiWeightConfigVarGroup::GetGroupByName );
 }
 
-AiBaseWeightConfigVar *AiBaseWeightConfigVarGroup::GetVarByPath( const char *path ) {
-	return GetItemByPath<AiBaseWeightConfigVar>( path, &AiBaseWeightConfigVarGroup::GetVarByName );
+AiWeightConfigVar *AiWeightConfigVarGroup::GetVarByPath( const char *path ) {
+	return GetItemByPath<AiWeightConfigVar>( path, &AiWeightConfigVarGroup::GetVarByName );
 }
 
-void AiBaseWeightConfigVarGroup::ResetToDefaultValues() {
-	for( auto *childGroup = childGroupsHead; childGroup; childGroup = childGroup->nextSibling )
+void AiWeightConfigVarGroup::ResetToDefaultValues() {
+	for( auto *childGroup = childGroupsHead; childGroup; childGroup = childGroup->nextSibling ) {
 		childGroup->ResetToDefaultValues();
+	}
 
-	for( auto *childVar = childVarsHead; childVar; childVar = childVar->nextSibling )
+	for( auto *childVar = childVarsHead; childVar; childVar = childVar->nextSibling ) {
 		childVar->ResetToDefaultValues();
+	}
 }
 
-void AiBaseWeightConfigVarGroup::CheckTouched( const char *parentName ) {
+void AiWeightConfigVarGroup::CheckTouched( const char *parentName ) {
 	if( !isTouched ) {
 		if( parentName ) {
 			G_Printf( S_COLOR_YELLOW "WARNING: Group %s in group %s has not been touched\n", name, parentName );
@@ -199,30 +201,34 @@ void AiBaseWeightConfigVarGroup::CheckTouched( const char *parentName ) {
 	}
 	isTouched = false;
 
-	for( auto *childGroup = childGroupsHead; childGroup; childGroup = childGroup->nextSibling )
+	for( auto *childGroup = childGroupsHead; childGroup; childGroup = childGroup->nextSibling ) {
 		childGroup->CheckTouched( this->name );
-
-	for( auto *childVar = childVarsHead; childVar; childVar = childVar->nextSibling )
-		childVar->CheckTouched( this->name );
-}
-
-void AiBaseWeightConfigVarGroup::Touch( const char *parentName ) {
-	if( isTouched ) {
-		if( parentName ) {
-			G_Printf( S_COLOR_YELLOW "WARNING: Group %s in group %s has been already touched\n", name, parentName );
-		} else {
-			G_Printf( S_COLOR_YELLOW "WARNING: Group %s has been already touched\n", name );
-		}
 	}
-	isTouched = true;
+
+	for( auto *childVar = childVarsHead; childVar; childVar = childVar->nextSibling ) {
+		childVar->CheckTouched( this->name );
+	}
 }
 
-void AiBaseWeightConfigVarGroup::CopyValues( const AiBaseWeightConfigVarGroup &that ) {
-	auto groupsIterator = ZipItemChains( this->childGroupsHead, that.childGroupsHead, "Copying groups" );
-	for(; groupsIterator.HasNext(); groupsIterator.Next() )
-		groupsIterator.First()->CopyValues( *groupsIterator.Second() );
+void AiWeightConfigVarGroup::Touch( const char *parentName ) {
+	if( !isTouched ) {
+		isTouched = true;
+		return;
+	}
+	if( parentName ) {
+		G_Printf( S_COLOR_YELLOW "WARNING: Group %s in group %s has been already touched\n", name, parentName );
+	} else {
+		G_Printf( S_COLOR_YELLOW "WARNING: Group %s has been already touched\n", name );
+	}
+}
 
-	auto varsIterator = ZipItemChains( this->childVarsHead, that.childVarsHead, "Copying vars" );
+void AiWeightConfigVarGroup::CopyValues( const AiWeightConfigVarGroup &that ) {
+	auto groupsIterator( ZipItemChains( this->childGroupsHead, that.childGroupsHead, "Copying groups" ) );
+	for(; groupsIterator.HasNext(); groupsIterator.Next() ) {
+		groupsIterator.First()->CopyValues( *groupsIterator.Second());
+	}
+
+	auto varsIterator( ZipItemChains( this->childVarsHead, that.childVarsHead, "Copying vars" ) );
 	for(; varsIterator.HasNext(); varsIterator.Next() ) {
 		float value, minValue, maxValue, defaultValue;
 		varsIterator.Second()->GetValueProps( &value, &minValue, &maxValue, &defaultValue );
@@ -230,24 +236,26 @@ void AiBaseWeightConfigVarGroup::CopyValues( const AiBaseWeightConfigVarGroup &t
 	}
 }
 
-bool AiBaseWeightConfigVarGroup::operator==( const AiBaseWeightConfigVarGroup &that ) const {
+bool AiWeightConfigVarGroup::operator==( const AiWeightConfigVarGroup &that ) const {
 	// WARNING! Compare values, not pointers! That's why it's shown explicitly.
-	auto groupsIterator = ZipItemChains( this->childGroupsHead, that.childGroupsHead, "Comparing groups" );
-	for(; groupsIterator.HasNext(); groupsIterator.Next() )
+	auto groupsIterator( ZipItemChains( this->childGroupsHead, that.childGroupsHead, "Comparing groups" ) );
+	for(; groupsIterator.HasNext(); groupsIterator.Next() ) {
 		if( groupsIterator.First()->operator!=( *groupsIterator.Second() ) ) {
 			return false;
 		}
+	}
 
-	auto varsIterator = ZipItemChains( this->childVarsHead, that.childVarsHead, "Comparing vars" );
-	for(; varsIterator.HasNext(); varsIterator.Next() )
+	auto varsIterator( ZipItemChains( this->childVarsHead, that.childVarsHead, "Comparing vars" ) );
+	for(; varsIterator.HasNext(); varsIterator.Next() ) {
 		if( varsIterator.First()->operator!=( *varsIterator.Second() ) ) {
 			return false;
 		}
+	}
 
 	return true;
 }
 
-bool AiBaseWeightConfigVarGroup::Parse( const char *data, const char **restOfTheData ) {
+bool AiWeightConfigVarGroup::Parse( const char *data, const char **restOfTheData ) {
 	int status = 0;
 	do {
 		status = ParseNextEntry( data, restOfTheData );
@@ -306,7 +314,7 @@ static bool BasicStrtof( const char *str, float *result ) {
 	return true;
 }
 
-int AiBaseWeightConfigVarGroup::ParseNextEntry( const char *data, const char **nextData ) {
+int AiWeightConfigVarGroup::ParseNextEntry( const char *data, const char **nextData ) {
 	char firstToken[MAX_TOKEN_CHARS];
 	COM_Parse_r( firstToken, MAX_TOKEN_CHARS, &data );
 	if( !Q_stricmp( firstToken, "}" ) ) {
@@ -321,7 +329,7 @@ int AiBaseWeightConfigVarGroup::ParseNextEntry( const char *data, const char **n
 	// If a group start can be matched
 	if( !Q_stricmp( token, "{" ) ) {
 		// If such group is registered, let it parse itself
-		if( AiBaseWeightConfigVarGroup *group = GetGroupByName( firstToken ) ) {
+		if( AiWeightConfigVarGroup *group = GetGroupByName( firstToken ) ) {
 			if( !group->Parse( data, nextData ) ) {
 				return -1;
 			} else {
@@ -334,7 +342,7 @@ int AiBaseWeightConfigVarGroup::ParseNextEntry( const char *data, const char **n
 		return 1;
 	}
 
-	if( AiBaseWeightConfigVar *var = GetVarByName( firstToken ) ) {
+	if( AiWeightConfigVar *var = GetVarByName( firstToken ) ) {
 		float value;
 		if( !BasicStrtof( token, &value ) ) {
 			G_Printf( S_COLOR_RED "%s: Expected a floating-point numeric value for the `%s` var\n", function, firstToken );
@@ -366,7 +374,7 @@ int AiBaseWeightConfigVarGroup::ParseNextEntry( const char *data, const char **n
 	}                                                  \
 	while( 0 )
 
-bool AiBaseWeightConfigVarGroup::Write( int fileHandle, int depth ) const {
+bool AiWeightConfigVarGroup::Write( int fileHandle, int depth ) const {
 	WRITE_INDENTS( depth );
 	CHECK_WRITE( this->name );
 	CHECK_WRITE( "\r\n" );
@@ -409,16 +417,16 @@ inline const char *AiWeightConfig::SkipRootInPath( const char *path ) const {
 	return nextSeparator;
 }
 
-AiBaseWeightConfigVarGroup *AiWeightConfig::GetGroupByPath( const char *path ) {
+AiWeightConfigVarGroup *AiWeightConfig::GetGroupByPath( const char *path ) {
 	if( const char *pathAfterRoot = SkipRootInPath( path ) ) {
-		return AiBaseWeightConfigVarGroup::GetGroupByPath( pathAfterRoot );
+		return AiWeightConfigVarGroup::GetGroupByPath( pathAfterRoot );
 	}
 	return nullptr;
 }
 
-AiBaseWeightConfigVar *AiWeightConfig::GetVarByPath( const char *path ) {
+AiWeightConfigVar *AiWeightConfig::GetVarByPath( const char *path ) {
 	if( const char *pathAfterRoot = SkipRootInPath( path ) ) {
-		return AiBaseWeightConfigVarGroup::GetVarByPath( pathAfterRoot );
+		return AiWeightConfigVarGroup::GetVarByPath( pathAfterRoot );
 	}
 	return nullptr;
 }
@@ -437,7 +445,7 @@ bool AiWeightConfig::LoadFromData( const char *data ) {
 	}
 
 	const char *restOfTheData;
-	if( !AiBaseWeightConfigVarGroup::Parse( data, &restOfTheData ) ) {
+	if( !AiWeightConfigVarGroup::Parse( data, &restOfTheData ) ) {
 		return false;
 	}
 
@@ -464,12 +472,12 @@ bool AiWeightConfig::Load( const char *filename ) {
 	}
 
 	// Ensure that the buffer is zero-terminated
-	char *buffer = (char *)G_LevelMalloc( (unsigned)fileSize + 1 );
+	char *buffer = (char *)G_Malloc( (unsigned)fileSize + 1 );
 	buffer[fileSize] = 0;
 
 	int bytesRead = trap_FS_Read( buffer, (unsigned)fileSize, fileHandle );
 	if( bytesRead != fileSize ) {
-		G_LevelFree( buffer );
+		G_Free( buffer );
 		trap_FS_FCloseFile( fileHandle );
 		const char *format = S_COLOR_RED "AIWeightConfig()::Load(): only %d/%d bytes of file %s can be read\n";
 		G_Printf( format, bytesRead, fileSize, filename );
@@ -477,7 +485,7 @@ bool AiWeightConfig::Load( const char *filename ) {
 	}
 
 	bool result = LoadFromData( buffer );
-	G_LevelFree( buffer );
+	G_Free( buffer );
 	trap_FS_FCloseFile( fileHandle );
 	return result;
 }

@@ -24,12 +24,14 @@ class BufferBuilder {
 			// Allocate the chunk along with its data in the single block of memory
 			static_assert( sizeof( Chunk ) % 8 == 0, "" );
 			static_assert( alignof( Chunk ) % 8 == 0, "" );
-			auto *mem = (uint8_t *)malloc( sizeof( Chunk ) + sizeof( T ) * chunkSize );
+			auto *mem = (uint8_t *)G_Malloc( sizeof( Chunk ) + sizeof( T ) * chunkSize );
 			return new( mem )Chunk( (T *)( mem + sizeof( Chunk ) ), chunkSize );
 		}
 
 		static void Delete( Chunk *chunk ) {
-			free( chunk );
+			if( chunk ) {
+				G_Free( chunk );
+			}
 		}
 
 		bool IsFull() const {
@@ -104,7 +106,7 @@ void BufferBuilder<T>::Add( const T &elem ) {
 
 template<typename T>
 T *BufferBuilder<T>::FlattenResult() const {
-	auto *result = (T *)G_LevelMalloc( sizeof( T ) * size );
+	auto *result = (T *)G_Malloc( sizeof( T ) * size );
 	auto *resultPtr = result;
 
 	for( const Chunk *chunk = first; chunk; chunk = chunk->next ) {

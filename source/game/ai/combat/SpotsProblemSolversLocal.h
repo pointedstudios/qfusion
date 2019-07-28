@@ -3,7 +3,30 @@
 
 #include "TacticalSpotsProblemSolver.h"
 
+// For macOS Clang
+#include <cmath>
+#include <cstdlib>
+
 typedef TacticalSpotsProblemSolver::SpotsAndScoreVector SpotsAndScoreVector;
+typedef TacticalSpotsProblemSolver::OriginAndScoreVector OriginAndScoreVector;
+
+/**
+ * A helper for selection of an origin of spot-like things.
+ * @note can be implemented as {@code TacticalSpotsProblemSolver} member
+ * but using a global function requires less clutter.
+ */
+template <typename SpotLike>
+inline const float *SpotOriginOf( const SpotLike &spotLike ) = delete;
+
+template <>
+inline const float *SpotOriginOf( const TacticalSpotsProblemSolver::SpotAndScore &spotLike ) {
+	return TacticalSpotsRegistry::Instance()->Spots()[spotLike.spotNum].origin;
+}
+
+template <>
+inline const float *SpotOriginOf( const TacticalSpotsProblemSolver::OriginAndScore &spotLike ) {
+	return spotLike.origin.Data();
+}
 
 inline float ComputeDistanceFactor( float distance, float weightFalloffDistanceRatio, float searchRadius ) {
 	float weightFalloffRadius = weightFalloffDistanceRatio * searchRadius;
@@ -21,7 +44,7 @@ inline float ComputeDistanceFactor( const vec3_t v1,
 	float squareDistance = DistanceSquared( v1, v2 );
 	float distance = 1.0f;
 	if( squareDistance >= 1.0f ) {
-		distance = 1.0f / Q_RSqrt( squareDistance );
+		distance = SQRTFAST( squareDistance );
 	}
 
 	return ComputeDistanceFactor( distance, weightFalloffDistanceRatio, searchRadius );
@@ -30,7 +53,7 @@ inline float ComputeDistanceFactor( const vec3_t v1,
 // Units of travelTime and maxFeasibleTravelTime must match!
 inline float ComputeTravelTimeFactor( int travelTime, float maxFeasibleTravelTime ) {
 	float factor = 1.0f - BoundedFraction( travelTime, maxFeasibleTravelTime );
-	return 1.0f / Q_RSqrt( 0.0001f + factor );
+	return SQRTFAST( 0.0001f + factor );
 }
 
 inline float ApplyFactor( float value, float factor, float factorInfluence ) {

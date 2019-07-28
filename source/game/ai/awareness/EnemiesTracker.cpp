@@ -50,11 +50,9 @@ void TrackedEnemy::Clear() {
 	lastSeenSnapshots.clear();
 	lastSeenAt = 0;
 
-	checkForWeaponHitFlags = 0;
+	checkForWeaponHitFlags = HitFlags::NONE;
 	checkForWeaponHitKillDamage = 0.0f;
-	numBoxLeafNums = 0;
 	lookDirComputedAt = 0;
-	boxLeafNumsComputedAt = 0;
 	weaponHitFlagsComputedAt = 0;
 
 	listLinks[TRACKED_LIST_INDEX].Clear();
@@ -73,7 +71,7 @@ void TrackedEnemy::OnViewed( const float *specifiedOrigin ) {
 	VectorCopy( ent->velocity, lastSeenVelocity.Data() );
 	lastSeenAt = level.time;
 	// Store in a queue then for history
-	lastSeenSnapshots.emplace_back( Snapshot( ent->s.origin, ent->velocity, level.time ) );
+	lastSeenSnapshots.emplace_back( Snapshot( ent->s.origin, ent->velocity, ent->s.angles, level.time ) );
 	assert( IsInTrackedList() );
 }
 
@@ -93,6 +91,28 @@ Vec3 TrackedEnemy::LookDir() const {
 	return Vec3( lookDir );
 }
 
+static inline bool HasAmmoForWeapon( const gclient_t *client, int weapon ) {
+	assert( weapon >= WEAP_NONE && weapon < WEAP_TOTAL );
+	const auto *inventory = client->ps.inventory;
+	constexpr int shifts[2] = { ( AMMO_GUNBLADE - WEAP_GUNBLADE ), ( AMMO_WEAK_GUNBLADE - WEAP_GUNBLADE ) };
+	static_assert( shifts[0] > 0 && shifts[1] > 0, "" );
+	return ( inventory[weapon + shifts[0]] | inventory[weapon + shifts[1]] ) != 0;
+}
+
+bool TrackedEnemy::IsShootableCurrWeapon( int weapon ) const {
+	const auto *client = ent->r.client;
+	if( !client ) {
+		return false;
+	}
+
+	const auto *playerStats = client->ps.stats;
+	if( playerStats[STAT_WEAPON] != weapon ) {
+		return false;
+	}
+
+	return HasAmmoForWeapon( client, weapon );
+}
+
 bool TrackedEnemy::IsShootableCurrOrPendingWeapon( int weapon ) const {
 	const auto *client = ent->r.client;
 	if( !client ) {
@@ -100,14 +120,63 @@ bool TrackedEnemy::IsShootableCurrOrPendingWeapon( int weapon ) const {
 	}
 
 	const auto *playerStats = client->ps.stats;
-	if( playerStats[STAT_WEAPON] != weapon && playerStats[STAT_PENDING_WEAPON] != weapon ) {
+	const bool isCurrentWeapon = playerStats[STAT_WEAPON] == weapon;
+	const bool isPendingWeapon = playerStats[STAT_PENDING_WEAPON] == weapon;
+	if( !( isCurrentWeapon | isPendingWeapon ) ) {
 		return false;
 	}
 
-	const auto *inventory = client->ps.inventory;
-	if( inventory[weapon] ) {
-		constexpr int shifts[2] = { ( AMMO_GUNBLADE - WEAP_GUNBLADE ), ( AMMO_WEAK_GUNBLADE - WEAP_GUNBLADE ) };
-		return inventory[weapon + shifts[0]] || inventory[weapon + shifts[1]];
+	return HasAmmoForWeapon( client, weapon );
+}
+
+bool TrackedEnemy::TriesToKeepUnderXhair( const float *origin ) const {
+	float lastDot = -1.0f - 0.01f;
+	float bestDot = -1.0f - 0.01f;
+	float prevDot = -1.0f - 0.01f;
+	const auto levelTime = level.time;
+	bool isMonotonicallyIncreasing = true;
+	for( const auto &snapshot: lastSeenSnapshots ) {
+		if( levelTime - snapshot.Timestamp() > 500 ) {
+			continue;
+		}
+
+		prevDot = lastDot;
+
+		Vec3 toOriginDir( snapshot.Origin() );
+		toOriginDir.Z() += playerbox_stand_viewheight;
+		toOriginDir -= origin;
+		float squareDistance = toOriginDir.SquaredLength();
+		if( squareDistance < 1 ) {
+			lastDot = bestDot = 1.0f;
+			continue;
+		}
+
+		toOriginDir *= -1.0f * Q_RSqrt( squareDistance );
+		vec3_t lookDir;
+		AngleVectors( snapshot.Angles().Data(), lookDir, nullptr, nullptr );
+
+		const float dot = toOriginDir.Dot( lookDir );
+		if( dot > bestDot ) {
+			// Return immediately in this case
+			if( dot > 0.995f ) {
+				return true;
+			}
+			bestDot = dot;
+		}
+		if( isMonotonicallyIncreasing ) {
+			if( dot <= lastDot ) {
+				isMonotonicallyIncreasing = false;
+			}
+		}
+		lastDot = dot;
+	}
+
+	if( lastDot > prevDot && lastDot > 0.99f ) {
+		return true;
+	}
+
+	if( isMonotonicallyIncreasing && bestDot > 0.95f ) {
+		return true;
 	}
 
 	return false;
@@ -115,7 +184,7 @@ bool TrackedEnemy::IsShootableCurrOrPendingWeapon( int weapon ) const {
 
 enum { RAIL = 1, SHAFT = 2, ROCKET = 4 };
 
-int TrackedEnemy::GetCheckForWeaponHitFlags( float damageToKillTarget ) const {
+TrackedEnemy::HitFlags TrackedEnemy::GetCheckForWeaponHitFlags( float damageToKillTarget ) const {
 	auto levelTime = level.time;
 
 	if( weaponHitFlagsComputedAt == levelTime && checkForWeaponHitKillDamage == damageToKillTarget ) {
@@ -128,150 +197,39 @@ int TrackedEnemy::GetCheckForWeaponHitFlags( float damageToKillTarget ) const {
 	return ( checkForWeaponHitFlags = ComputeCheckForWeaponHitFlags( damageToKillTarget ) );
 }
 
-int TrackedEnemy::ComputeCheckForWeaponHitFlags( float damageToKillTarget ) const {
+TrackedEnemy::HitFlags TrackedEnemy::ComputeCheckForWeaponHitFlags( float damageToKillTarget ) const {
 	if( !ent->r.client ) {
-		return 0;
+		return HitFlags::NONE;
 	}
 
 	int flags = 0;
 	if( damageToKillTarget < 150 ) {
 		if( RocketsReadyToFireCount() || WavesReadyToFireCount()) {
-			flags |= ROCKET;
+			flags |= (int)HitFlags::ROCKET;
 		}
 	}
 
 	if( InstasReadyToFireCount() ) {
-		flags |= RAIL;
+		flags |= (int)HitFlags::RAIL;
 	} else if( ( HasQuad() || damageToKillTarget < 140 ) && BoltsReadyToFireCount() ) {
-		flags |= RAIL;
+		flags |= (int)HitFlags::RAIL;
 	}
 
 	if( LasersReadyToFireCount() && damageToKillTarget < 80 ) {
-		flags |= SHAFT;
+		flags |= (int)HitFlags::SHAFT;
 	} else if( BulletsReadyToFireCount() && ( ( HasQuad() || damageToKillTarget < 30 ) ) ) {
-		flags |= SHAFT;
+		flags |= (int)HitFlags::SHAFT;
 	}
 
-	return flags;
-}
-
-bool TrackedEnemy::MightBlockArea( float damageToKillTarget, int areaNum, int reachNum, const AiAasWorld *aasWorld ) const {
-	assert( IsValid() );
-
-	int weaponHitFlags = GetCheckForWeaponHitFlags( damageToKillTarget );
-	const auto &reach = aasWorld->Reachabilities()[reachNum];
-	int travelType = reach.traveltype;
-	// Don't check for rail-like shots except the bot is vulnerable in air
-	if( travelType != TRAVEL_JUMPPAD && travelType != TRAVEL_JUMP && travelType != TRAVEL_STRAFEJUMP ) {
-		// If there is no falling or its insignificant
-		if( travelType != TRAVEL_WALKOFFLEDGE || DistanceSquared( reach.start, reach.end ) < 72 * 72 ) {
-			weaponHitFlags &= ~RAIL;
-		}
-	}
-
-	float baseRadius = 256.0f;
-	if( HasQuad() ) {
-		baseRadius = 768.0f;
-	}
-
-	const auto &area = aasWorld->Areas()[areaNum];
-	Vec3 enemyOrigin( LastSeenOrigin());
-	float squareDistance = enemyOrigin.DistanceTo( area.center );
-	if( squareDistance > baseRadius * baseRadius ) {
-		if( !weaponHitFlags ) {
-			return false;
-		}
-		if( !( weaponHitFlags & RAIL ) ) {
-			if( squareDistance > 1000 * 1000 ) {
-				return false;
-			}
-		}
-		if( weaponHitFlags == ROCKET ) {
-			if( enemyOrigin.Z() < area.mins[2] ) {
-				return false;
-			}
-		}
-
-		Vec3 toAreaDir( area.center );
-		toAreaDir -= enemyOrigin;
-		toAreaDir *= 1.0f / sqrtf( squareDistance );
-		float dot = toAreaDir.Dot( LookDir());
-		if( dot < 0.3f ) {
-			if( const auto *client = ent->r.client ) {
-				if( !client->ps.stats[PM_STAT_ZOOMTIME] ) {
-					return false;
-				}
-			}
-			if( squareDistance > 1500 * 1500 ) {
-				return false;
-			}
-		}
-		if( dot < 0 ) {
-			return false;
-		}
-	}
-
-	if( !IsAreaInPVS( areaNum, aasWorld ) ) {
-		return false;
-	}
-
-	trace_t trace;
-	SolidWorldTrace( &trace, area.center, enemyOrigin.Data() );
-	return trace.fraction == 1.0f;
-}
-
-int TrackedEnemy::GetBoxLeafNums( int **leafNums ) const {
-	auto levelTime = level.time;
-	if( boxLeafNumsComputedAt == levelTime ) {
-		*leafNums = boxLeafNums;
-		return numBoxLeafNums;
-	}
-
-	boxLeafNumsComputedAt = levelTime;
-
-	// We can't reuse entity leaf nums that were set on linking it to area grid since the origin differs
-	Vec3 enemyBoxMins( playerbox_stand_mins );
-	Vec3 enemyBoxMaxs( playerbox_stand_maxs );
-	Vec3 origin( LastSeenOrigin() );
-	enemyBoxMins += origin;
-	enemyBoxMaxs += origin;
-
-	int topNode;
-	numBoxLeafNums = trap_CM_BoxLeafnums( enemyBoxMins.Data(), enemyBoxMaxs.Data(), boxLeafNums, 8, &topNode );
-	clamp_high( numBoxLeafNums, 8 );
-
-	*leafNums = boxLeafNums;
-	return numBoxLeafNums;
-}
-
-bool TrackedEnemy::IsAreaInPVS( int areaNum, const AiAasWorld *aasWorld ) const {
-	const int *areaLeafNums = aasWorld->AreaMapLeafsList( areaNum ) + 1;
-
-	int *enemyLeafNums;
-	const int numEnemyLeafs = GetBoxLeafNums( &enemyLeafNums );
-
-	for( int i = 0; i < numEnemyLeafs; ++i ) {
-		for( int j = 0; j < areaLeafNums[-1]; ++j ) {
-			if( trap_CM_LeafsInPVS( enemyLeafNums[i], areaLeafNums[j] ) ) {
-				return true;
-			}
-		}
-	}
-
-	return false;
+	return (HitFlags)flags;
 }
 
 AiEnemiesTracker::AiEnemiesTracker( float avgSkill_ )
-	: avgSkill( avgSkill_ ),
-	numTrackedEnemies( 0 ),
-	maxTrackedAttackers( From1UpToMax( MAX_TRACKED_ATTACKERS, avgSkill_ ) ),
-	maxTrackedTargets( From1UpToMax( MAX_TRACKED_TARGETS, avgSkill_ ) ),
-	maxActiveEnemies( From1UpToMax( MAX_ACTIVE_ENEMIES, avgSkill_ ) ),
-	reactionTime( 320 - From0UpToMax( 300, avgSkill_ ) ),
-	prevThinkLevelTime( 0 ),
-	hasQuad( false ),
-	hasShell( false ),
-	damageToBeKilled( 0.0f ) {
+	: avgSkill( avgSkill_ )
+	, maxTrackedAttackers( From1UpToMax( MAX_TRACKED_ATTACKERS, avgSkill_ ) )
+	, maxTrackedTargets( From1UpToMax( MAX_TRACKED_TARGETS, avgSkill_ ) )
+	, maxActiveEnemies( From1UpToMax( MAX_ACTIVE_ENEMIES, avgSkill_ ) )
+	, reactionTime( 320 - From0UpToMax( 300, avgSkill_ ) ) {
 	// Initialize table slots
 	for( TrackedEnemy &enemy: entityToEnemyTable ) {
 		enemy.Clear();
@@ -279,11 +237,13 @@ AiEnemiesTracker::AiEnemiesTracker( float avgSkill_ )
 		enemy.entNum = (int)( &enemy - entityToEnemyTable );
 	}
 
-	for( unsigned i = 0; i < maxTrackedAttackers; ++i )
-		attackers.push_back( AttackStats() );
+	for( unsigned i = 0; i < maxTrackedAttackers; ++i ) {
+		new( attackers.unsafe_grow_back() )AttackStats();
+	}
 
-	for( unsigned i = 0; i < maxTrackedTargets; ++i )
-		targets.push_back( AttackStats() );
+	for( unsigned i = 0; i < maxTrackedTargets; ++i ) {
+		new( targets.unsafe_grow_back() )AttackStats();
+	}
 }
 
 void AiEnemiesTracker::Frame() {
@@ -363,6 +323,37 @@ void AiEnemiesTracker::Think() {
 	}
 }
 
+float AiEnemiesTracker::ModifyWeightForAttacker( const edict_t *enemy, float weightSoFar ) {
+	if( int64_t time = LastAttackedByTime( enemy ) ) {
+		// TODO: Add weight for poor attackers (by total damage / attack attempts ratio)
+		return weightSoFar + 1.5f * ( 1.0f - BoundedFraction( level.time - time, ATTACKER_TIMEOUT ) );
+	}
+	return weightSoFar;
+}
+
+float AiEnemiesTracker::ModifyWeightForHitTarget( const edict_t *enemy, float weightSoFar ) {
+	if( int64_t time = LastTargetTime( enemy ) ) {
+		// TODO: Add weight for targets that are well hit by bot
+		return weightSoFar + 1.5f * ( 1.0f - BoundedFraction( level.time - time, TARGET_TIMEOUT ) );
+	}
+	return weightSoFar;
+}
+
+float AiEnemiesTracker::ModifyWeightForDamageRatio( const edict_t *enemy, float weightSoFar ) {
+	constexpr float maxDamageToKill = 350.0f;
+
+	float damageToKill = DamageToKill( enemy );
+	if( hasQuad ) {
+		damageToKill /= 4;
+	}
+	if( ::HasShell( enemy ) ) {
+		damageToKill *= 4;
+	}
+
+	// abs(damageToBeKilled - damageToKill) / maxDamageToKill may be > 1
+	return weightSoFar + ( damageToBeKilled - damageToKill ) / maxDamageToKill;
+}
+
 float AiEnemiesTracker::ComputeRawEnemyWeight( const edict_t *enemy ) {
 	if( !enemy || G_ISGHOSTING( enemy ) ) {
 		return 0.0;
@@ -376,46 +367,17 @@ float AiEnemiesTracker::ComputeRawEnemyWeight( const edict_t *enemy ) {
 		}
 	}
 
-	if( int64_t time = LastAttackedByTime( enemy ) ) {
-		weight += 1.55f * ( 1.0f - BoundedFraction( level.time - time, ATTACKER_TIMEOUT ) );
-		// TODO: Add weight for poor attackers (by total damage / attack attepts ratio)
-	}
+	weight = ModifyWeightForAttacker( enemy, weight );
+	weight = ModifyWeightForHitTarget( enemy, weight );
 
-	if( int64_t time = LastTargetTime( enemy ) ) {
-		weight += 1.55f * ( 1.0f - BoundedFraction( level.time - time, TARGET_TIMEOUT ) );
-		// TODO: Add weight for targets that are well hit by bot
-	}
-
+	// Should we keep this hardcoded?
 	if( ::IsCarrier( enemy ) ) {
 		weight += 2.0f;
 	}
 
-	constexpr float maxDamageToKill = 350.0f;
-
-	float damageToKill = DamageToKill( enemy );
-	if( hasQuad ) {
-		damageToKill /= 4;
-	}
-	if( ::HasShell( enemy ) ) {
-		damageToKill *= 4;
-	}
-
-	// abs(damageToBeKilled - damageToKill) / maxDamageToKill may be > 1
-	weight += ( damageToBeKilled - damageToKill ) / maxDamageToKill;
-
-	if( weight > 0 ) {
-		if( hasQuad ) {
-			weight *= 1.5f;
-		}
-		if( hasShell ) {
-			weight += 0.5f;
-		}
-		if( hasQuad && hasShell ) {
-			weight *= 1.5f;
-		}
-	}
-
-	return std::min( std::max( 0.0f, weight ), MAX_ENEMY_WEIGHT );
+	weight = ModifyWeightForDamageRatio( enemy, weight );
+	Q_clamp( weight, 0.0f, MAX_ENEMY_WEIGHT );
+	return weight;
 }
 
 void AiEnemiesTracker::OnPain( const edict_t *bot, const edict_t *enemy, float kick, int damage ) {
@@ -447,28 +409,31 @@ void AiEnemiesTracker::OnPain( const edict_t *bot, const edict_t *enemy, float k
 }
 
 int64_t AiEnemiesTracker::LastAttackedByTime( const edict_t *ent ) const {
-	for( const AttackStats &attackStats: attackers )
+	for( const AttackStats &attackStats: attackers ) {
 		if( ent && attackStats.ent == ent ) {
 			return attackStats.LastActivityAt();
 		}
+	}
 
 	return 0;
 }
 
 int64_t AiEnemiesTracker::LastTargetTime( const edict_t *ent ) const {
-	for( const AttackStats &targetStats: targets )
+	for( const AttackStats &targetStats: targets ) {
 		if( ent && targetStats.ent == ent ) {
 			return targetStats.LastActivityAt();
 		}
+	}
 
 	return 0;
 }
 
 float AiEnemiesTracker::TotalDamageInflictedBy( const edict_t *ent ) const {
-	for( const AttackStats &attackStats: attackers )
+	for( const AttackStats &attackStats: attackers ) {
 		if( ent && attackStats.ent == ent ) {
 			return attackStats.totalDamage;
 		}
+	}
 
 	return 0;
 }
@@ -718,8 +683,9 @@ const TrackedEnemy *AiEnemiesTracker::ChooseLostOrHiddenEnemy( const edict_t *ch
 		float distanceFactor = 1.0f;
 		float squareDistance = botToSpotDirection.SquaredLength();
 		if( squareDistance > 1 ) {
-			float distance = 1.0f / Q_RSqrt( squareDistance );
-			botToSpotDirection *= 1.0f / distance;
+			float invDistance = Q_RSqrt( squareDistance );
+			float distance = squareDistance * invDistance;
+			botToSpotDirection *= invDistance;
 			directionFactor = 0.3f + 0.7f * botToSpotDirection.Dot( forward );
 			distanceFactor = 1.0f - 0.9f * BoundedFraction( distance, 2000.0f );
 		}

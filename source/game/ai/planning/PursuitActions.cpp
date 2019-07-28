@@ -1,7 +1,7 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-PlannerNode *BotStartLostEnemyPursuitAction::TryApply( const WorldState &worldState ) {
+PlannerNode *StartLostEnemyPursuitAction::TryApply( const WorldState &worldState ) {
 	if( worldState.IsReactingToEnemyLostVar().Ignore() ) {
 		Debug( "Is bot reacting to enemy lost is ignored in the given world state\n" );
 		return nullptr;
@@ -22,14 +22,24 @@ PlannerNode *BotStartLostEnemyPursuitAction::TryApply( const WorldState &worldSt
 		Debug( "Lost enemy origin is ignored in the given world state\n" );
 		return nullptr;
 	}
-	constexpr float distanceThreshold = 1.5f * GOAL_PICKUP_ACTION_RADIUS;
-	if( worldState.BotOriginVar().DistanceTo( worldState.LostEnemyLastSeenOriginVar() ) < distanceThreshold ) {
+
+	const float distanceToEnemy = worldState.BotOriginVar().DistanceTo( worldState.LostEnemyLastSeenOriginVar() );
+	if( distanceToEnemy < 1.5f * GOAL_PICKUP_ACTION_RADIUS ) {
 		Debug( "Bot is already close to the last seen enemy origin\n" );
 		return nullptr;
 	}
 
-	constexpr float squareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
-	if( ( worldState.BotOriginVar().Value() - self->s.origin ).SquaredLength() > squareDistanceError ) {
+	// Vary pursuit max distance threshold depending of offensiveness.
+	// Never pursue enemies farther than LG range (otherwise a poor bot behaviour is observed).
+	const auto lgRange = (float)GS_GetWeaponDef( WEAP_LASERGUN )->firedef.timeout;
+	const float maxDistanceThreshold = 96.0f + ( lgRange - 96.0f ) * Self()->GetEffectiveOffensiveness();
+	if( distanceToEnemy > maxDistanceThreshold ) {
+		Debug( "The enemy is way too far for pursuing it\n" );
+		return nullptr;
+	}
+
+	constexpr float squareDistanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	if( ( worldState.BotOriginVar().Value() - Self()->Origin() ).SquaredLength() > squareDistanceError ) {
 		Debug( "The action can be applied only to the current bot origin\n" );
 		return nullptr;
 	}
@@ -42,7 +52,7 @@ PlannerNode *BotStartLostEnemyPursuitAction::TryApply( const WorldState &worldSt
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self ) ) );
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -52,13 +62,13 @@ PlannerNode *BotStartLostEnemyPursuitAction::TryApply( const WorldState &worldSt
 	plannerNode.WorldState() = worldState;
 	plannerNode.WorldState().NavTargetOriginVar().SetValue( worldState.LostEnemyLastSeenOriginVar().Value() );
 	plannerNode.WorldState().NavTargetOriginVar().SetIgnore( false );
-	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, distanceThreshold );
+	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, maxDistanceThreshold );
 	plannerNode.WorldState().IsReactingToEnemyLostVar().SetValue( true ).SetIgnore( false );
 
 	return plannerNode.PrepareActionResult();
 }
 
-PlannerNode *BotStopLostEnemyPursuitAction::TryApply( const WorldState &worldState ) {
+PlannerNode *StopLostEnemyPursuitAction::TryApply( const WorldState &worldState ) {
 	if( worldState.IsReactingToEnemyLostVar().Ignore() ) {
 		Debug( "Is bot reacting to enemy lost is ignored in the given world state\n" );
 		return nullptr;
@@ -88,7 +98,7 @@ PlannerNode *BotStopLostEnemyPursuitAction::TryApply( const WorldState &worldSta
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self ) ) );
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

@@ -76,6 +76,7 @@ cvar_t *g_autorecord_maxdemos;
 
 cvar_t *g_self_knockback;
 cvar_t *g_knockback_scale;
+cvar_t *g_volatile_explosives;
 cvar_t *g_allow_stun;
 cvar_t *g_armor_degradation;
 cvar_t *g_armor_protection;
@@ -171,7 +172,7 @@ static void G_GS_Free( void *data ) {
 /*
 * G_GS_Trace - Used only for gameshared linking
 */
-static void G_GS_Trace( trace_t *tr, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, int ignore, int contentmask, int timeDelta ) {
+static void G_GS_Trace( trace_t *tr, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int ignore, int contentmask, int timeDelta ) {
 	edict_t *passent = NULL;
 	if( ignore >= 0 && ignore < MAX_EDICTS ) {
 		passent = &game.edicts[ignore];
@@ -267,6 +268,7 @@ void G_Init( unsigned int seed, unsigned int framemsec, int protocol, const char
 	g_shockwave_fly_knockback_scale = trap_Cvar_Get( "g_shockwave_fly_knockback_scale", "8.0", CVAR_DEVELOPER );
 	g_self_knockback = trap_Cvar_Get( "g_self_knockback", "1.18", CVAR_DEVELOPER );
 	g_knockback_scale = trap_Cvar_Get( "g_knockback_scale", "1.0", CVAR_ARCHIVE );
+	g_volatile_explosives = trap_Cvar_Get( "g_volatile_explosives", "0", CVAR_NOSET | CVAR_SERVERINFO );
 	g_allow_stun = trap_Cvar_Get( "g_allow_stun", "1", CVAR_ARCHIVE );
 	g_armor_degradation = trap_Cvar_Get( "g_armor_degradation", va( "%.2f", ARMOR_DEGRADATION ), CVAR_DEVELOPER );
 	g_armor_protection = trap_Cvar_Get( "g_armor_protection", va( "%.2f", ARMOR_PROTECTION ), CVAR_DEVELOPER );
@@ -277,7 +279,7 @@ void G_Init( unsigned int seed, unsigned int framemsec, int protocol, const char
 	g_deadbody_autogib_delay = trap_Cvar_Get( "g_deadbody_autogib_delay", "2000", CVAR_DEVELOPER );
 	g_maxtimeouts = trap_Cvar_Get( "g_maxtimeouts", "2", CVAR_ARCHIVE );
 	g_antilag = trap_Cvar_Get( "g_antilag", "1", CVAR_SERVERINFO | CVAR_ARCHIVE | CVAR_LATCH );
-	g_antilag_maxtimedelta = trap_Cvar_Get( "g_antilag_maxtimedelta", "200", CVAR_ARCHIVE );
+	g_antilag_maxtimedelta = trap_Cvar_Get( "g_antilag_maxtimedelta", "225", CVAR_ARCHIVE );
 	g_antilag_maxtimedelta->modified = true;
 	g_antilag_timenudge = trap_Cvar_Get( "g_antilag_timenudge", "0", CVAR_ARCHIVE );
 	g_antilag_timenudge->modified = true;
@@ -349,7 +351,8 @@ void G_Init( unsigned int seed, unsigned int framemsec, int protocol, const char
 		new( game.clients + i )gclient_s;
 	}
 
-	game.quits = NULL;
+	StatsowFacade::Init();
+	ChatHandlersChain::Init();
 
 	game.numentities = gs.maxclients + 1;
 
@@ -396,6 +399,9 @@ void G_Shutdown( void ) {
 
 	G_FreeCallvotes();
 
+	ChatHandlersChain::Shutdown();
+	StatsowFacade::Shutdown();
+
 	for( i = 0; i < game.numentities; i++ ) {
 		if( game.edicts[i].r.inuse ) {
 			G_FreeEdict( &game.edicts[i] );
@@ -403,11 +409,14 @@ void G_Shutdown( void ) {
 	}
 
 	G_Free( game.edicts );
+	game.edicts = nullptr;
 
 	for( i = 0; i < gs.maxclients; ++i ) {
 		game.clients[i].~gclient_t();
 	}
+
 	G_Free( game.clients );
+	game.clients = nullptr;
 
 	G_LevelFreePool();
 }
@@ -629,7 +638,7 @@ void G_ExitLevel( void ) {
 	level.exitNow = false;
 
 	nextmapname = G_SelectNextMapName();
-	timeLimit = g_timelimit->integer > 0 ? max( g_timelimit->integer, 60 ) : 60;
+	timeLimit = g_timelimit->integer > 0 ? std::max( g_timelimit->integer, 60 ) : 60;
 	timeLimit *= 60 * 1000;
 
 	// if it's the same map see if we can restart without loading
@@ -646,9 +655,11 @@ void G_ExitLevel( void ) {
 
 	G_SnapClients();
 
+	auto *const chatHandlersChain = ChatHandlersChain::Instance();
 	// clear some things before going to next level
 	for( i = 0; i < gs.maxclients; i++ ) {
 		ent = game.edicts + 1 + i;
+		chatHandlersChain->ResetForClient( i );
 		if( !ent->r.inuse ) {
 			continue;
 		}
@@ -665,6 +676,9 @@ void G_ExitLevel( void ) {
 			ent->s.team = TEAM_SPECTATOR;
 		}
 	}
+
+	// Doing that won't harm
+	StatsowFacade::Instance()->ClearEntries();
 }
 
 void G_RestartLevel( void ) {
@@ -698,3 +712,42 @@ void Com_Printf( const char *format, ... ) {
 	G_Printf( "%s", msg );
 }
 #endif
+
+// Adapters for linking angelwrap
+// TODO: Remove all of this once the game code gets linked statically to the server executable
+
+cvar_t *Cvar_Get( const char *var_name, const char *value, cvar_flag_t flags ) {
+	return trap_Cvar_Get( var_name, value, flags );
+}
+
+cvar_t *Cvar_Set( const char *var_name, const char *value ) {
+	return trap_Cvar_Set( var_name, value );
+}
+
+cvar_t *Cvar_ForceSet( const char *var_name, const char *value ) {
+	return trap_Cvar_ForceSet( var_name, value );
+}
+
+void Cvar_SetValue( const char *var_name, float value ) {
+	return trap_Cvar_SetValue( var_name, value );
+}
+
+float Cvar_Value( const char *var_name ) {
+	return trap_Cvar_Value( var_name );
+}
+
+const char *Cvar_String( const char *var_name ) {
+	return trap_Cvar_String( var_name );
+}
+
+int FS_FOpenFile( const char *filename, int *filenum, int mode ) {
+	return trap_FS_FOpenFile( filename, filenum, mode );
+}
+
+void FS_FCloseFile( int file ) {
+	return trap_FS_FCloseFile( file );
+}
+
+int FS_Read( void *buffer, size_t len, int file ) {
+	return trap_FS_Read( buffer, len, file );
+}

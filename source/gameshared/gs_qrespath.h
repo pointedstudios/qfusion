@@ -24,11 +24,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 //
 //
 
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //
 //
 // SHADERS
@@ -279,7 +274,8 @@ extern "C" {
 #define S_HIT_WATER     "sounds/misc/hit_water"
 
 #define S_PLAYER_RESPAWN "sounds/world/player_respawn"
-#define S_TELEPORT      "sounds/world/tele_in"
+#define S_TELEPORT_IN    "sounds/world/tele_in"
+#define S_TELEPORT_OUT   "sounds/world/tele_out"
 #define S_JUMPPAD       "sounds/world/jumppad"
 #define S_LAUNCHPAD     "sounds/world/launchpad"
 
@@ -309,6 +305,8 @@ extern "C" {
 #define S_FUNC_ROTATING_STOP    NULL
 
 #define S_BUTTON_START      "sounds/movers/button"
+
+#define S_EXPLOSION_LFE  "sounds/misc/explosion_lfe"
 
 //#define S_QUAD_USE				"sounds/items/quad_use"
 #define S_QUAD_FIRE     "sounds/items/quad_fire"
@@ -457,6 +455,8 @@ extern "C" {
 #define S_PLAYLIST_MATCH                        "sounds/music/match.m3u"
 #define S_PLAYLIST_POSTMATCH                    "sounds/music/postmatch.m3u"
 
+#define S_RESPECT_REWARD                        "sounds/misc/reward"
+
 //===============================
 // UI
 //===============================
@@ -560,7 +560,3 @@ extern "C" {
 #define LS_SLOW_STROBE              "aaaaaaaazzzzzzzz" // 9
 #define LS_FLUORESCENT_FLICKER      "mmamammmmammamamaaamammma" // 10
 #define LS_SLOW_PULSE_NOT_FADE      "abcdefghijklmnopqrrqponmlkjihgfedcba" // 11
-
-#ifdef __cplusplus
-};
-#endif

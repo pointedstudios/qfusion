@@ -98,7 +98,7 @@ void DocumentCache::purgeAllDocuments() {
 	// DEBUG
 	if( UI_Main::Get()->debugOn() ) {
 		if( !documentSet.empty() ) {
-			Com_Printf( "Warning: DocumentCache::purgeAllDocuments: still have %d documents in the cache\n", documentSet.size() );
+			Com_Printf( "Warning: DocumentCache::purgeAllDocuments: still have %d documents in the cache\n", (int)documentSet.size() );
 			for( DocumentSet::iterator it = documentSet.begin(); it != documentSet.end(); ++it )
 				Com_Printf( "    %s (refcount %d)\n", ( *it )->getName().c_str(), ( *it )->getReference() );
 		}
@@ -432,7 +432,7 @@ void NavigationStack::hideStack() {
 // DEBUG
 void NavigationStack::printStack() {
 	for( DocumentStack::iterator it = documentStack.begin(); it != documentStack.end(); ++it )
-		Com_Printf( "  %d %s\n", std::distance( documentStack.begin(), it ), ( *it )->getName().c_str() );
+		Com_Printf( "  %d %s\n", (int)std::distance( documentStack.begin(), it ), ( *it )->getName().c_str() );
 }
 
 }

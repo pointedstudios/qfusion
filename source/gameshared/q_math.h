@@ -23,10 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "q_arch.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //==============================================================
 //
 //MATHLIB
@@ -119,18 +115,18 @@ extern vec4_t color_table[MAX_S_COLORS];
 // returns b clamped to [a..c] range
 //#define bound(a,b,c) (max((a), min((b), (c))))
 
-#ifndef max
-#define max( a, b ) ( ( a ) > ( b ) ? ( a ) : ( b ) )
+#ifndef Q_max
+#define Q_max( a, b ) ( ( a ) > ( b ) ? ( a ) : ( b ) )
 #endif
 
-#ifndef min
-#define min( a, b ) ( ( a ) < ( b ) ? ( a ) : ( b ) )
+#ifndef Q_min
+#define Q_min( a, b ) ( ( a ) < ( b ) ? ( a ) : ( b ) )
 #endif
 
 #define bound( a, b, c ) ( ( a ) >= ( c ) ? ( a ) : ( b ) < ( a ) ? ( a ) : ( b ) > ( c ) ? ( c ) : ( b ) )
 
 // clamps a (must be lvalue) to [b..c] range
-#define clamp( a, b, c ) ( ( b ) >= ( c ) ? ( a ) = ( b ) : ( a ) < ( b ) ? ( a ) = ( b ) : ( a ) > ( c ) ? ( a ) = ( c ) : ( a ) )
+#define Q_clamp( a, b, c ) ( ( b ) >= ( c ) ? ( a ) = ( b ) : ( a ) < ( b ) ? ( a ) = ( b ) : ( a ) > ( c ) ? ( a ) = ( c ) : ( a ) )
 
 #define clamp_low( a, low ) ( ( a ) = ( a ) < ( low ) ? ( low ) : ( a ) )
 #define clamp_high( a, high ) ( ( a ) = ( a ) > ( high ) ? ( high ) : ( a ) )
@@ -144,14 +140,69 @@ int Q_rand( int *seed );
 #define Q_brandom( seed, a, b ) ( ( a ) + Q_random( seed ) * ( ( b ) - ( a ) ) )                      // a..b
 #define Q_crandom( seed )     Q_brandom( seed, -1, 1 )
 
-float   Q_RSqrt( float number );
+#if ( defined ( __i386__ ) || defined ( __x86_64__ ) || defined( _M_IX86 ) || defined( _M_AMD64 ) || defined( _M_X64 ) )
+
+static inline float Q_RSqrt( float number ) {
+	assert( number >= 0 );
+	return _mm_cvtss_f32( _mm_rsqrt_ss( _mm_set_ss( number ) ) );
+}
+
+static inline float Q_Rcp( float number ) {
+	return _mm_cvtss_f32( _mm_rcp_ss( _mm_set_ss( number ) ) );
+}
+
+static inline float Q_Sqrt( float number ) {
+	assert( number >= 0 );
+
+	// jal : The expression a * rsqrt(b) is intended as a higher performance alternative to a / sqrt(b).
+	// The two expressions are comparably accurate, but do not compute exactly the same value in every case.
+	// For example, a * rsqrt(a*a + b*b) can be just slightly greater than 1, in rare cases.
+
+	// We have to check for zero or else a NAN is produced (0 times infinity)
+
+	// Force an eager computation of result for further branch-less selection.
+	// Note that modern x86 handle infinities/NANs without penalties.
+	// Supplying zeroes is rare anyway.
+	float maybeSqrt = number * _mm_cvtss_f32( _mm_rsqrt_ss( _mm_set_ss( number ) ) );
+
+	// There's unfortunately no CMOV for the actually used SSE2+ f.p. instruction set.
+	// Here's a workaround that uses the integer CMOV.
+	// As far as we know MSVC 2019 produces an expected code (while a 2-elements array approach generates a branch).
+
+	// Copy the value bits to an integer
+	int32_t maybeSqrtAsInt = *( (int32_t *)&maybeSqrt );
+	// This should be a CMOV. The UCOMISS instruction sets the needed flags.
+	// Note that in case when `number` bits are also converted to an integer the sign bit should be masked.
+	int32_t resultAsInt = number ? maybeSqrtAsInt : 0;
+	// Return the value bits as a float
+	return *( (float *)( &resultAsInt ) );
+}
+
+#else
+
+static inline float Q_RSqrt( float number ) {
+	assert( number >= 0 );
+	return 1.0f / sqrtf( number );
+}
+
+static inline float Q_Rcp( float number ) {
+	return 1.0f / number;
+}
+
+static inline float Q_Sqrt( float number ) {
+	assert( number >= 0 );
+	return sqrtf( number );
+}
+
+#endif
+
 int Q_log2( int val );
 
 int Q_bitcount( int v );
 
 #define ISPOWOF2( x ) ( !( ( x ) & ( ( x ) - 1 ) ) )
 
-#define SQRTFAST( x ) ( ( x ) * Q_RSqrt( x ) ) // jal : //The expression a * rsqrt(b) is intended as a higher performance alternative to a / sqrt(b). The two expressions are comparably accurate, but do not compute exactly the same value in every case. For example, a * rsqrt(a*a + b*b) can be just slightly greater than 1, in rare cases.
+#define SQRTFAST( x ) ( Q_Sqrt( x ) )
 
 #define DotProduct( x, y )     ( ( x )[0] * ( y )[0] + ( x )[1] * ( y )[1] + ( x )[2] * ( y )[2] )
 #define CrossProduct( v1, v2, cross ) ( ( cross )[0] = ( v1 )[1] * ( v2 )[2] - ( v1 )[2] * ( v2 )[1], ( cross )[1] = ( v1 )[2] * ( v2 )[0] - ( v1 )[0] * ( v2 )[2], ( cross )[2] = ( v1 )[0] * ( v2 )[1] - ( v1 )[1] * ( v2 )[0] )
@@ -208,8 +259,22 @@ void _VectorSubtract( const vec3_t veca, const vec3_t vecb, vec3_t out );
 void _VectorAdd( const vec3_t veca, const vec3_t vecb, vec3_t out );
 void _VectorCopy( const vec3_t in, vec3_t out );
 
-void ClearBounds( vec3_t mins, vec3_t maxs );
-void AddPointToBounds( const vec3_t v, vec3_t mins, vec3_t maxs );
+static inline void ClearBounds( vec3_t mins, vec3_t maxs ) {
+	mins[0] = mins[1] = mins[2] = 99999;
+	maxs[0] = maxs[1] = maxs[2] = -99999;
+}
+
+static inline void AddPointToBounds( const vec3_t v, vec3_t mins, vec3_t maxs ) {
+	// A sane compiler should produce a branchless code.
+	// We should also use SIMD intrinsics manually if a code path is really hot.
+	mins[0] = v[0] < mins[0] ? v[0] : mins[0];
+	mins[1] = v[1] < mins[1] ? v[1] : mins[1];
+	mins[2] = v[2] < mins[2] ? v[2] : mins[2];
+	maxs[0] = v[0] > maxs[0] ? v[0] : maxs[0];
+	maxs[1] = v[1] > maxs[1] ? v[1] : maxs[1];
+	maxs[2] = v[2] > maxs[2] ? v[2] : maxs[2];
+}
+
 float RadiusFromBounds( const vec3_t mins, const vec3_t maxs );
 
 static inline bool BoundsIntersect( const vec3_t mins1, const vec3_t maxs1, const vec3_t mins2, const vec3_t maxs2 ) {
@@ -248,7 +313,43 @@ void ByteToDir( int b, vec3_t dir );
 void NormToLatLong( const vec3_t normal, float latlong[2] );
 
 void MakeNormalVectors( const vec3_t forward, vec3_t right, vec3_t up );
-void AngleVectors( const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up );
+
+static inline void AngleVectors( const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up ) {
+	const float deg2Rad = (float)( M_PI ) / 180.0f;
+
+	const float yaw = deg2Rad * angles[YAW];
+	const float sy = sinf( yaw );
+	const float cy = cosf( yaw );
+
+	const float pitch = deg2Rad * angles[PITCH];
+	const float sp = sinf( pitch );
+	const float cp = cosf( pitch );
+
+	const float roll = deg2Rad * angles[ROLL];
+	const float sr = sinf( roll );
+	const float cr = cosf( roll );
+
+	if( forward ) {
+		forward[0] = cp * cy;
+		forward[1] = cp * sy;
+		forward[2] = -sp;
+	}
+
+	if( right ) {
+		const float t = sr * sp;
+		right[0] = ( -1 * t * cy + -1 * cr * -sy );
+		right[1] = ( -1 * t * sy + -1 * cr * cy );
+		right[2] = -1 * sr * cp;
+	}
+
+	if( up ) {
+		const float t = cr * sp;
+		up[0] = ( t * cy + -sr * -sy );
+		up[1] = ( t * sy + -sr * cy );
+		up[2] = cr * cp;
+	}
+}
+
 int BoxOnPlaneSide( const vec3_t emins, const vec3_t emaxs, const struct cplane_s *plane );
 float anglemod( float a );
 float LerpAngle( float a1, float a2, const float frac );
@@ -352,9 +453,5 @@ vec_t LogisticCDF( vec_t x );
 vec_t LogisticPDF( vec_t x );
 vec_t NormalCDF( vec_t x );
 vec_t NormalPDF( vec_t x );
-
-#ifdef __cplusplus
-};
-#endif
 
 #endif // GAME_QMATH_H

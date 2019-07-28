@@ -1,53 +1,14 @@
 #include "FallbackMovementAction.h"
-#include "MovementFallback.h"
+#include "MovementScript.h"
 #include "MovementLocal.h"
 #include "BestJumpableSpotDetector.h"
 #include "../combat/TacticalSpotsRegistry.h"
 #include "../ai_manager.h"
 #include "../ai_trajectory_predictor.h"
 
-TriggerAreaNumsCache triggerAreaNumsCache;
-
-int TriggerAreaNumsCache::GetAreaNum( int entNum ) const {
-	int *const areaNumRef = &areaNums[entNum];
-	// Put the likely case first
-	if( *areaNumRef ) {
-		return *areaNumRef;
-	}
-
-	// Find an area that has suitable flags matching the trigger type
-	const auto *aasWorld = AiAasWorld::Instance();
-	const auto *aasAreaSettings = aasWorld->AreaSettings();
-	const auto *aiManager = AiManager::Instance();
-
-	int desiredAreaContents = ~0;
-	const edict_t *ent = game.edicts + entNum;
-	if( ent->classname ) {
-		if( !Q_stricmp( ent->classname, "trigger_push" ) ) {
-			desiredAreaContents = AREACONTENTS_JUMPPAD;
-		} else if( !Q_stricmp( ent->classname, "trigger_teleport" ) ) {
-			desiredAreaContents = AREACONTENTS_TELEPORTER;
-		}
-	}
-
-	int boxAreaNums[32];
-	int numBoxAreas = aasWorld->BBoxAreas( ent->r.absmin, ent->r.absmax, boxAreaNums, 32 );
-	for( int i = 0; i < numBoxAreas; ++i ) {
-		int areaNum = boxAreaNums[i];
-		if( aasAreaSettings[areaNum].contents & desiredAreaContents ) {
-			if( aiManager->IsAreaReachableFromHubAreas( areaNum ) ) {
-				*areaNumRef = areaNum;
-				break;
-			}
-		}
-	}
-
-	return *areaNumRef;
-}
-
 void FallbackMovementAction::PlanPredictionStep( Context *context ) {
 	bool handledSpecialMovement = false;
-	if( auto *fallback = module->activeMovementFallback ) {
+	if( auto *fallback = module->activeMovementScript ) {
 		fallback->SetupMovement( context );
 		handledSpecialMovement = true;
 	} else if( context->IsInNavTargetArea() ) {
@@ -55,34 +16,40 @@ void FallbackMovementAction::PlanPredictionStep( Context *context ) {
 		handledSpecialMovement = true;
 	}
 
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	if( entityPhysicsState.GroundEntity() && entityPhysicsState.GetGroundNormalZ() < 0.999f ) {
-		if( int groundedAreaNum = context->CurrGroundedAasAreaNum() ) {
-			if( AiAasWorld::Instance()->AreaSettings()[groundedAreaNum].areaflags & AREA_INCLINED_FLOOR ) {
-				if( TrySetupInclinedFloorMovement( context, groundedAreaNum ) ) {
-					handledSpecialMovement = true;
-				}
-			}
+	// If we have saved a path that is not perfect but good enough during attempts for bunny-hopping prediction
+	if( context->travelTimeForGoodEnoughPath < std::numeric_limits<int>::max() ) {
+		Assert( !context->goodEnoughPath.empty() );
+		context->predictedMovementActions.clear();
+		for( const auto &action: context->goodEnoughPath ) {
+			context->predictedMovementActions.push_back( action );
 		}
+		context->goodEnoughPath.clear();
+		context->isCompleted = true;
+		// Prevent saving the current (fallback) action on stack... TODO: this should be done more explicitly
+		context->isTruncated = true;
+		Debug( "Using a good enough path built during this planning session\n" );
+		Debug( "The good enough path starts with %s\n", context->predictedMovementActions.front().action->Name() );
+		return;
 	}
 
 	auto *botInput = &context->record->botInput;
 	if( handledSpecialMovement ) {
 		botInput->SetAllowedRotationMask( BotInputRotation::NONE );
 	} else {
+		const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 		if( !entityPhysicsState.GroundEntity() ) {
 			// Fallback path movement is the last hope action, wait for landing
 			SetupLostNavTargetMovement( context );
 		} else if( auto *fallback = TryFindMovementFallback( context ) ) {
-			module->activeMovementFallback = fallback;
+			module->activeMovementScript = fallback;
 			fallback->SetupMovement( context );
 			handledSpecialMovement = true;
 			botInput->SetAllowedRotationMask( BotInputRotation::NONE );
 		} else {
 			// This often leads to bot blocking and suicide. TODO: Invesigate what else can be done.
 			botInput->Clear();
-			if( bot->keptInFovPoint.IsActive() ) {
-				Vec3 intendedLookVec( bot->keptInFovPoint.Origin() );
+			if( const float *keptInFovPoint = bot->GetKeptInFovPoint() ) {
+				Vec3 intendedLookVec( keptInFovPoint );
 				intendedLookVec -= entityPhysicsState.Origin();
 				botInput->SetIntendedLookDir( intendedLookVec, false );
 			}
@@ -151,7 +118,7 @@ void FallbackMovementAction::SetupLostNavTargetMovement( Context *context ) {
 	botInput->SetIntendedLookDir( entityPhysicsState.ForwardDir(), true );
 }
 
-MovementFallback *FallbackMovementAction::TryFindMovementFallback( Context *context ) {
+MovementScript *FallbackMovementAction::TryFindMovementFallback( Context *context ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 
 	// First check for being in lava
@@ -218,7 +185,7 @@ MovementFallback *FallbackMovementAction::TryFindMovementFallback( Context *cont
 
 	if( auto *fallback = TryNodeBasedFallbacksLeft( context ) ) {
 		// Check whether its really a node based fallback
-		auto *const nodeBasedFallback = &module->useWalkableNodeFallback;
+		auto *const nodeBasedFallback = &module->useWalkableNodeScript;
 		if( fallback == nodeBasedFallback ) {
 			const vec3_t &origin = nodeBasedFallback->NodeOrigin();
 			const int areaNum = nodeBasedFallback->NodeAreaNum();
@@ -236,21 +203,17 @@ MovementFallback *FallbackMovementAction::TryFindMovementFallback( Context *cont
 	return nullptr;
 }
 
-MovementFallback *FallbackMovementAction::TryNodeBasedFallbacksLeft( Context *context ) {
+MovementScript *FallbackMovementAction::TryNodeBasedFallbacksLeft( Context *context ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 
 	const unsigned millisInBlockedState = bot->MillisInBlockedState();
-	const bool isBotEasy = bot->Skill() < 0.33f;
-	// This is a very conservative condition that however should prevent looping these node-based fallbacks are prone to.
-	// Prefer jumping fallbacks that are almost seamless to the bunnying movement.
-	// Note: threshold values are significanly lower for easy bots since they almost never use bunnying movement.
-	if( millisInBlockedState < ( isBotEasy ? 500 : 1500 ) ) {
+	if( millisInBlockedState < 500 ) {
 		return nullptr;
 	}
 
 	// Try using the nav target as a fallback movement target
 	Assert( context->NavTargetAasAreaNum() );
-	auto *nodeFallback = &module->useWalkableNodeFallback;
+	auto *nodeFallback = &module->useWalkableNodeScript;
 	if( context->NavTargetOrigin().SquareDistanceTo( entityPhysicsState.Origin() ) < SQUARE( 384.0f ) ) {
 		Vec3 target( context->NavTargetOrigin() );
 		target.Z() += -playerbox_stand_mins[2];
@@ -261,34 +224,36 @@ MovementFallback *FallbackMovementAction::TryNodeBasedFallbacksLeft( Context *co
 		}
 	}
 
-	if( millisInBlockedState > ( isBotEasy ? 700 : 2000 ) ) {
-		vec3_t areaPoint;
-		int areaNum;
-		if( context->sameFloorClusterAreasCache.GetClosestToTargetPoint( context, areaPoint, &areaNum ) ) {
-			nodeFallback->Activate( areaPoint, 48.0f, areaNum );
+	if( millisInBlockedState < 750 ) {
+		return nullptr;
+	}
+
+	vec3_t areaPoint;
+	int areaNum;
+	if( context->sameFloorClusterAreasCache.GetClosestToTargetPoint( context, areaPoint, &areaNum ) ) {
+		nodeFallback->Activate( areaPoint, 48.0f, areaNum );
+		return nodeFallback;
+	}
+
+	if( context->navMeshQueryCache.GetClosestToTargetPoint( context, areaPoint ) ) {
+		float squareDistance = Distance2DSquared( context->movementState->entityPhysicsState.Origin(), areaPoint );
+		if( squareDistance > SQUARE( 8 ) ) {
+			areaNum = AiAasWorld::Instance()->FindAreaNum( areaPoint );
+			float reachRadius = std::min( 64.0f, Q_Sqrt( squareDistance ) );
+			nodeFallback->Activate( areaPoint, reachRadius, areaNum );
 			return nodeFallback;
 		}
+	}
 
-		if( context->navMeshQueryCache.GetClosestToTargetPoint( context, areaPoint ) ) {
-			float squareDistance = Distance2DSquared( context->movementState->entityPhysicsState.Origin(), areaPoint );
-			if( squareDistance > SQUARE( 8 ) ) {
-				areaNum = AiAasWorld::Instance()->FindAreaNum( areaPoint );
-				float reachRadius = std::min( 64.0f, SQRTFAST( squareDistance ) );
-				nodeFallback->Activate( areaPoint, reachRadius, areaNum );
-				return nodeFallback;
-			}
-		}
-
-		if( millisInBlockedState > ( isBotEasy ? 1250 : 2500 ) ) {
-			// Notify the nav target selection code
-			bot->OnMovementToNavTargetBlocked();
-		}
+	if( millisInBlockedState > 1500 ) {
+		// Notify the nav target selection code
+		bot->OnMovementToNavTargetBlocked();
 	}
 
 	return nullptr;
 }
 
-MovementFallback *FallbackMovementAction::TryFindAasBasedFallback( Context *context ) {
+MovementScript *FallbackMovementAction::TryFindAasBasedFallback( Context *context ) {
 	const int nextReachNum = context->NextReachNum();
 	if( !nextReachNum ) {
 		return nullptr;
@@ -303,7 +268,7 @@ MovementFallback *FallbackMovementAction::TryFindAasBasedFallback( Context *cont
 
 	if( traveltype == TRAVEL_JUMPPAD || traveltype == TRAVEL_TELEPORT || traveltype == TRAVEL_ELEVATOR ) {
 		// Always follow these reachabilities
-		auto *fallback = &module->useWalkableNodeFallback;
+		auto *fallback = &module->useWalkableNodeScript;
 		// Note: We have to add several units to the target Z, otherwise a collision test
 		// on next frame is very likely to immediately deactivate it
 		fallback->Activate( ( Vec3( 0, 0, -playerbox_stand_mins[2] ) + nextReach.start ).Data(), 16.0f );
@@ -315,11 +280,16 @@ MovementFallback *FallbackMovementAction::TryFindAasBasedFallback( Context *cont
 	}
 
 	if( traveltype == TRAVEL_JUMP || traveltype == TRAVEL_STRAFEJUMP ) {
-		return TryFindJumpLikeReachFallback( context, nextReach );
+		// This means we try jumping directly to the reach. target the current position
+		if( auto *script = TryFindJumpLikeReachFallback( context, nextReach ) ) {
+			return script;
+		}
+		// Try walking to the reach start otherwise
+		return TryFindWalkReachFallback( context, nextReach );
 	}
 
 	// The only possible fallback left
-	auto *fallback = &module->jumpOverBarrierFallback;
+	auto *fallback = &module->jumpOverBarrierScript;
 	if( traveltype == TRAVEL_BARRIERJUMP || traveltype == TRAVEL_WATERJUMP ) {
 		fallback->Activate( nextReach.start, nextReach.end );
 		return fallback;
@@ -333,34 +303,5 @@ MovementFallback *FallbackMovementAction::TryFindAasBasedFallback( Context *cont
 
 	return nullptr;
 }
-
-bool FallbackMovementAction::TrySetupInclinedFloorMovement( Context *context, int rampAreaNum ) {
-	const auto *aasWorld = AiAasWorld::Instance();
-	const auto *aasAreas = aasWorld->Areas();
-	const auto *bestAreaNum = TryFindBestInclinedFloorExitArea( context, rampAreaNum );
-	if( !bestAreaNum ) {
-		return false;
-	}
-
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	Vec3 intendedLookDir( aasAreas[*bestAreaNum].center );
-	intendedLookDir -= entityPhysicsState.Origin();
-	intendedLookDir.NormalizeFast();
-
-	context->record->botInput.SetIntendedLookDir( intendedLookDir, true );
-	float dot = intendedLookDir.Dot( entityPhysicsState.ForwardDir() );
-	if( dot > 0.5f ) {
-		context->record->botInput.SetForwardMovement( 1 );
-		if( dot > 0.9f && entityPhysicsState.Speed2D() < context->GetDashSpeed() - 10 ) {
-			const auto *stats = context->currPlayerState->pmove.stats;
-			if( ( stats[PM_STAT_FEATURES] & PMFEAT_DASH ) && !stats[PM_STAT_DASHTIME] ) {
-				context->record->botInput.SetSpecialButton( true );
-			}
-		}
-	}
-
-	return true;
-}
-
 
 

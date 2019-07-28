@@ -3,7 +3,7 @@
 #include "MovementLocal.h"
 #include "EnvironmentTraceCache.h"
 #include "BestJumpableSpotDetector.h"
-#include "MovementFallback.h"
+#include "MovementScript.h"
 
 BotMovementModule::BotMovementModule( Bot *bot_ )
 	: bot( bot_ )
@@ -18,192 +18,40 @@ BotMovementModule::BotMovementModule( Bot *bot_ )
 	, walkCarefullyAction( this )
 	, bunnyToStairsOrRampExitAction( this )
 	, bunnyStraighteningReachChainAction( this )
-	, bunnyToBestShortcutAreaAction( this )
 	, bunnyToBestFloorClusterPointAction( this )
 	, bunnyInterpolatingChainAtStartAction( this )
-	, bunnyInVelocityDirectionAction( this )
 	, bunnyInterpolatingReachChainAction( this )
+	, bunnyToBestNavMeshPointAction( this )
 	, walkOrSlideInterpolatingReachChainAction( this )
 	, combatDodgeSemiRandomlyToTargetAction( this )
 	, scheduleWeaponJumpAction( this )
 	, tryTriggerWeaponJumpAction( this )
 	, correctWeaponJumpAction( this )
 	, predictionContext( this )
-	, useWalkableNodeFallback( bot_, this )
-	, useRampExitFallback( bot_, this )
-	, useStairsExitFallback( bot_, this )
-	, useWalkableTriggerFallback( bot_, this )
-	, jumpToSpotFallback( bot_, this )
-	, fallDownFallback( bot_, this )
-	, jumpOverBarrierFallback( bot_, this )
-	, activeMovementFallback( nullptr )
-	, nextRotateInputAttemptAt( 0 )
-	, inputRotationBlockingTimer( 0 )
-	, lastInputRotationFailureAt( 0 ) {
+	, useWalkableNodeScript( bot_, this )
+	, useRampExitScript( bot_, this )
+	, useStairsExitScript( bot_, this )
+	, useWalkableTriggerScript( bot_, this )
+	, jumpToSpotScript( bot_, this )
+	, fallDownScript( bot_, this )
+	, jumpOverBarrierScript( bot_, this ) {
 	movementState.Reset();
 }
 
-class CanSafelyKeepHighSpeedPredictor: protected AiTrajectoryPredictor {
-protected:
-	AiAasWorld *aasWorld;
-	bool hasFailed;
-
-	bool OnPredictionStep( const Vec3 &segmentStart, const Results *results ) override;
-
-public:
-	const float *startVelocity;
-	const float *startOrigin;
-
-	bool Exec();
-
-	CanSafelyKeepHighSpeedPredictor()
-		: aasWorld( nullptr ), hasFailed( false ), startVelocity( nullptr ), startOrigin( nullptr ) {
-		SetStepMillis( 200 );
-		SetNumSteps( 4 );
-		SetColliderBounds( playerbox_stand_mins, playerbox_stand_maxs );
-		AddStopEventFlags( HIT_SOLID | HIT_LIQUID );
+bool BotMovementModule::CanChangeWeapons() const {
+	auto &weaponJumpState = movementState.weaponJumpMovementState;
+	if( weaponJumpState.IsActive() ) {
+		return weaponJumpState.hasTriggeredWeaponJump;
 	}
-};
-
-class KeepHighSpeedWithoutNavTargetPredictor final: protected CanSafelyKeepHighSpeedPredictor {
-	typedef CanSafelyKeepHighSpeedPredictor Super;
-public:
-	// We do not want users to confuse different subtypes of CanSafelyKeepHighSpeedPredictor
-	// by occasionally assigning to a supertype pointer losing type info
-	// (some fields should be set explicitly for a concrete type and other approaches add way too much clutter)
-	// Thats why a protected inheritance is used, and these fields should be exposed manually.
-	using Super::Exec;
-	using Super::startVelocity;
-	using Super::startOrigin;
-};
-
-static KeepHighSpeedWithoutNavTargetPredictor keepHighSpeedWithoutNavTargetPredictor;
-
-class KeepHighSpeedMovingToNavTargetPredictor final: protected CanSafelyKeepHighSpeedPredictor {
-	typedef CanSafelyKeepHighSpeedPredictor Super;
-	bool OnPredictionStep( const Vec3 &segmentStart, const Results *results ) override;
-public:
-	const AiAasRouteCache *routeCache;
-	int navTargetAreaNum;
-	int startTravelTime;
-
-	using Super::Exec;
-	using Super::startVelocity;
-	using Super::startOrigin;
-
-	KeepHighSpeedMovingToNavTargetPredictor()
-		: routeCache( nullptr ), navTargetAreaNum( 0 ), startTravelTime( 0 ) {}
-};
-
-static KeepHighSpeedMovingToNavTargetPredictor keepHighSpeedMovingToNavTargetPredictor;
-
-bool BotMovementModule::TestWhetherCanSafelyKeepHighSpeed( Context *context ) {
-	const int navTargetAreaNum = context ? context->NavTargetAasAreaNum() : bot->NavTargetAasAreaNum();
-	if( !navTargetAreaNum ) {
-		auto *predictor = &::keepHighSpeedWithoutNavTargetPredictor;
-		if( context ) {
-			predictor->startVelocity = context->movementState->entityPhysicsState.Velocity();
-			predictor->startOrigin = context->movementState->entityPhysicsState.Origin();
-		} else {
-			const edict_t *self = game.edicts + bot->EntNum();
-			predictor->startVelocity = self->velocity;
-			predictor->startOrigin = self->s.origin;
-		}
-		return predictor->Exec();
-	}
-
-	const AiEntityPhysicsState *entityPhysicsState;
-	int startTravelTime = std::numeric_limits<int>::max();
-	if( context ) {
-		entityPhysicsState = &context->movementState->entityPhysicsState;
-		startTravelTime = context->TravelTimeToNavTarget();
-	} else {
-		entityPhysicsState = bot->EntityPhysicsState();
-		int startAreaNums[2] = { 0, 0 };
-		int numStartAreas = entityPhysicsState->PrepareRoutingStartAreas( startAreaNums );
-		int goalAreaNum = bot->NavTargetAasAreaNum();
-		if( !( startTravelTime = bot->RouteCache()->PreferredRouteToGoalArea( startAreaNums, numStartAreas, goalAreaNum ) ) ) {
-			return false;
-		}
-	}
-
-	auto *predictor = &::keepHighSpeedMovingToNavTargetPredictor;
-	predictor->startVelocity = entityPhysicsState->Velocity();
-	predictor->startOrigin = entityPhysicsState->Origin();
-	predictor->navTargetAreaNum = navTargetAreaNum;
-	predictor->startTravelTime = startTravelTime;
-	predictor->routeCache = bot->RouteCache();
-
-	return predictor->Exec();
-}
-
-bool CanSafelyKeepHighSpeedPredictor::OnPredictionStep( const Vec3 &segmentStart, const Results *results ) {
-	if( results->trace->fraction == 1.0f ) {
+	const int64_t levelTime = level.time;
+	// If there were no recent failed weapon jump attempts
+	if( levelTime - lastWeaponJumpTriggeringFailedAt > 512 ) {
 		return true;
 	}
-
-	// Disallow bumping into walls (it can lead to cycling in tight environments)
-	if( !ISWALKABLEPLANE( &results->trace->plane ) ) {
-		hasFailed = true;
-		return false;
-	}
-
-	// Disallow falling or landing that looks like falling
-	if( results->trace->endpos[2] + 8 - playerbox_stand_mins[2] < startOrigin[2] ) {
-		hasFailed = true;
-	}
-
-	// Interrupt the base prediction
-	return false;
-}
-
-bool CanSafelyKeepHighSpeedPredictor::Exec() {
-	this->aasWorld = AiAasWorld::Instance();
-	this->hasFailed = false;
-
-	AiTrajectoryPredictor::Results predictionResults;
-	auto stopEvents = AiTrajectoryPredictor::Run( startVelocity, startOrigin, &predictionResults );
-	return !( stopEvents & HIT_LIQUID ) && ( stopEvents & INTERRUPTED ) && !hasFailed;
-}
-
-bool KeepHighSpeedMovingToNavTargetPredictor::OnPredictionStep( const Vec3 &segmentStart, const Results *results ) {
-	// Continue the base prediction loop in this case waiting for actually hitting a brush
-	if( Super::OnPredictionStep( segmentStart, results ) ) {
-		return true;
-	}
-
-	// There is no need for further checks in this case
-	if( hasFailed ) {
-		return false;
-	}
-
-	// Find the area num of the trace hit pos
-	int areaNum;
-
-	// Try offsetting hit pos from the hit surface before making FindAreaNum() call
-	// otherwise its very likely to yield a zero area on the first test in FindAreaNum(),
-	// thus leading to repeated BSP traversal attempts in FindAreaNum()
-	Vec3 segmentDir( results->origin );
-	segmentDir -= segmentStart;
-	float squareSegmentLength = segmentDir.SquaredLength();
-	if( squareSegmentLength > 2 * 2 ) {
-		segmentDir *= 1.0f / sqrtf( squareSegmentLength );
-		Vec3 originForAreaNum( results->trace->endpos );
-		originForAreaNum -= segmentDir;
-		areaNum = aasWorld->FindAreaNum( originForAreaNum );
-	} else {
-		areaNum = aasWorld->FindAreaNum( results->trace->endpos );
-	}
-
-	// Don't check whether area num is zero, it should be extremely rare and handled by the router in that case
-
-	int travelTimeAtLanding = routeCache->PreferredRouteToGoalArea( areaNum, navTargetAreaNum );
-	if( !travelTimeAtLanding || travelTimeAtLanding > startTravelTime ) {
-		hasFailed = true;
-	}
-
-	// Interrupt the prediction
-	return false;
+	// Hack... make a copy of the rate limiter (it's cheap) to avoid modifying its state
+	RateLimiter limiter( this->weaponJumpAttemptsRateLimiter );
+	// Check whether the rate limiter would allow next weapon jumping attempt soon and disable switching in this case
+	return !limiter.TryAcquire( levelTime + 384 );
 }
 
 bool BotMovementModule::CanInterruptMovement() const {
@@ -232,8 +80,8 @@ void BotMovementModule::Frame( BotInput *input ) {
 	const edict_t *self = game.edicts + bot->EntNum();
 	movementState.TryDeactivateContainedStates( self, nullptr );
 
-	if( activeMovementFallback && activeMovementFallback->TryDeactivate( nullptr ) ) {
-		activeMovementFallback = nullptr;
+	if( activeMovementScript && activeMovementScript->TryDeactivate( nullptr ) ) {
+		activeMovementScript = nullptr;
 	}
 
 	MovementActionRecord movementActionRecord;
@@ -390,7 +238,8 @@ bool BotMovementModule::TryRotateInput( BotInput *input, MovementPredictionConte
 		prevRotation = &movementState.inputRotation;
 	}
 
-	if( !bot->keptInFovPoint.IsActive() || nextRotateInputAttemptAt > level.time ) {
+	const float *const keptInFovPoint = bot->GetKeptInFovPoint();
+	if( !keptInFovPoint || nextRotateInputAttemptAt > level.time ) {
 		*prevRotation = BotInputRotation::NONE;
 		return false;
 	}
@@ -398,13 +247,13 @@ bool BotMovementModule::TryRotateInput( BotInput *input, MovementPredictionConte
 	// Cut off an expensive PVS call early
 	if( input->IsRotationAllowed( BotInputRotation::ALL_KINDS_MASK ) ) {
 		// We do not utilize PVS cache since it might produce different results for predicted and actual bot origin
-		if( !trap_inPVS( bot->keptInFovPoint.Origin().Data(), botOrigin ) ) {
+		if( !trap_inPVS( keptInFovPoint, botOrigin ) ) {
 			*prevRotation = BotInputRotation::NONE;
 			return false;
 		}
 	}
 
-	Vec3 selfToPoint( bot->keptInFovPoint.Origin() );
+	Vec3 selfToPoint( keptInFovPoint );
 	selfToPoint -= botOrigin;
 	selfToPoint.NormalizeFast();
 
@@ -528,6 +377,7 @@ MovementPredictionContext::MovementPredictionContext( BotMovementModule *module_
 	: bot( module_->bot )
 	, module( module_ )
 	, sameFloorClusterAreasCache( module->bot )
+	, nextFloorClusterAreasCache( module->bot )
 	, navMeshQueryCache( module->bot )
 	, movementState( nullptr )
 	, record( nullptr )
@@ -578,7 +428,7 @@ MovementPredictionContext::HitWhileRunningTestResult MovementPredictionContext::
 	botLookDir.Z() = botToEnemyDir.Z();
 	// Normalize again
 	float lookDirSquareLength = botLookDir.SquaredLength();
-	if( lookDirSquareLength < 0.000001f ) {
+	if( lookDirSquareLength < 0.01f ) {
 		mayHitWhileRunningCachesStack.SetCachedValue( HitWhileRunningTestResult::Failure() );
 		return HitWhileRunningTestResult::Failure();
 	}
@@ -594,43 +444,4 @@ MovementPredictionContext::HitWhileRunningTestResult MovementPredictionContext::
 
 	mayHitWhileRunningCachesStack.SetCachedValue( HitWhileRunningTestResult::Failure() );
 	return HitWhileRunningTestResult::Failure();
-}
-
-int TravelTimeWalkingOrFallingShort( const AiAasRouteCache *routeCache, int fromAreaNum, int toAreaNum ) {
-	const auto *aasReach = AiAasWorld::Instance()->Reachabilities();
-	constexpr int travelFlags = TFL_WALK | TFL_AIR | TFL_WALKOFFLEDGE;
-	int numHops = 0;
-	int travelTime = 0;
-	for(;; ) {
-		if( fromAreaNum == toAreaNum ) {
-			return std::max( 1, travelTime );
-		}
-		// Limit to prevent looping
-		if ( ( numHops++ ) == 32 ) {
-			return 0;
-		}
-		int reachNum = routeCache->ReachabilityToGoalArea( fromAreaNum, toAreaNum, travelFlags );
-		if( !reachNum ) {
-			return 0;
-		}
-		// Save the returned travel time once at start.
-		// It is not so inefficient as results of the previous call including travel time are cached and the cache is fast.
-		if( !travelTime ) {
-			travelTime = routeCache->TravelTimeToGoalArea( fromAreaNum, toAreaNum, travelFlags );
-		}
-		const auto &reach = aasReach[reachNum];
-		// Move to this area for the next iteration
-		fromAreaNum = reach.areanum;
-		// Check whether the travel type fits this function restrictions
-		const int travelType = reach.traveltype & TRAVELTYPE_MASK;
-		if( travelType == TRAVEL_WALK ) {
-			continue;
-		}
-		if( travelType == TRAVEL_WALKOFFLEDGE ) {
-			if( DistanceSquared( reach.start, reach.end ) < SQUARE( 0.8 * AI_JUMPABLE_HEIGHT ) ) {
-				continue;
-			}
-		}
-		return 0;
-	}
 }

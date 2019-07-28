@@ -901,7 +901,8 @@ void G_InitLevel( char *mapname, char *entities, int entstrlen, int64_t levelTim
 		trap_ConfigString( CS_HELPMESSAGES + i, "" );
 	}
 
-	G_InitGameCommands();
+	ClientCommandsHandler::Shutdown();
+	ClientCommandsHandler::Init();
 	G_MapLocations_Init();
 	G_CallVotes_Init();
 	G_SpawnQueue_Init();
@@ -914,7 +915,7 @@ void G_InitLevel( char *mapname, char *entities, int entstrlen, int64_t levelTim
 	// ch : this would be the location to "transfer ratings"
 	G_PrecacheItems(); // set configstrings for items (gametype must be initialized)
 	G_PrecacheMedia();
-	G_PrecacheGameCommands(); // adding commands after this point won't update them to the client
+	ClientCommandsHandler::Instance()->PrecacheCommands(); // adding commands after this point won't update them to the client
 	AI_InitLevel();
 
 	// start spawning entities

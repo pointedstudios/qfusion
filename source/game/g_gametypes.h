@@ -21,9 +21,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __G_GAMETYPE_H__
 #define __G_GAMETYPE_H__
 
+#include <cassert>
+#include <cstring>
+#include <cstdlib>
 #include <utility>
 
 #include "../matchmaker/mm_rating.h"
+#include "../qalgo/WswStdTypes.h"
 
 //g_gametypes.c
 extern cvar_t *g_warmup_timelimit;
@@ -32,7 +36,6 @@ extern cvar_t *g_countdown_time;
 extern cvar_t *g_match_extendedtime;
 extern cvar_t *g_votable_gametypes;
 extern cvar_t *g_gametype; // only for use in function that deal with changing gametype, use GS_Gametype()
-extern cvar_t *g_gametype_generic;
 extern cvar_t *g_gametypes_list;
 
 
@@ -42,27 +45,132 @@ extern cvar_t *g_gametypes_list;
 
 #define MAX_RACE_CHECKPOINTS    32
 
-typedef struct gameaward_s {
-	// ch : size of this?
-	const char *name;
+struct LoggedAward {
+	const wsw::string_view name;
 	int count;
-	// struct gameaward_s *next;
-} gameaward_t;
 
-typedef struct {
-	mm_uuid_t attacker; // session-id
-	mm_uuid_t victim;   // session-id
-	int weapon;         // weapon used
-	int64_t time;		// server timestamp
-} loggedFrag_t;
+	explicit LoggedAward( const wsw::string_view &name_, int count_ = 1 )
+		: name( name_ ), count( count_ ) {}
+};
 
-typedef struct {
-	char nickname[32];    // not set if session id is valid
-	mm_uuid_t owner;	  // session id of the player, it is allowed to play without logging in in race
-	int64_t utcTimestamp; // real-world timestamp corresponding to the run completion
-	int numSectors;
-	int64_t *times;		  // unsigned int * numSectors+1, where last is final time
-} raceRun_t;
+struct LoggedFrag {
+	/**
+	 * A session id of an attacker. May be {@code Uuid_ZeroUuid()} if an attacker is missing.
+	 */
+	const mm_uuid_t attacker;
+	/**
+	 * A session id of a victim (must be always valid)
+	 */
+	const mm_uuid_t victim;
+	/**
+	 * A time in millis since the match start
+	 */
+	const int time;
+	/**
+	 * An index of a weapon used, zero if none. There's no distinction between weak and strong ammo.
+	 */
+	const int weapon;
+
+	LoggedFrag( const mm_uuid_t &attacker_, const mm_uuid_t &victim_, int time_, int weapon_ )
+		: attacker( attacker_ ), victim( victim_ ), time( time_ ), weapon( weapon_ ){
+		assert( weapon >= 0 && weapon < WEAP_TOTAL );
+	}
+};
+
+struct alignas( 8 )RaceRun {
+	/**
+	 * A nickname is a fallback identifier for race runs.
+	 * (Playing race at ranked servers being anonymous is allowed and stats are collected as well for these players).
+	 * A nickname is empty if there' s a valid session id.
+	 */
+	char nickname[32] { '\0' };
+	/**
+	 * A session id of a player (that prefers using the login system).
+	 */
+	mm_uuid_t clientSessionId;
+	/**
+	 * A real-world timestamp that corresponds to the run completion moment.
+	 */
+	int64_t utcTimestamp { 0 };
+	/**
+	 * A number of sectors to complete in the run.
+	 * The range [0, numSectors) defines valid sector values for {@code StatsowFacade::SetSectorTime()}
+	 */
+	const int numSectors;
+	/**
+	 * An array of sector times that is allocated within this object
+	 * and is capable to store {@code numSectors + 1} elements (the last one is for the final time).
+	 */
+	uint32_t *const times;
+
+	/**
+	 * Creates a new run object given an external storage for sector times.
+	 * @param client_ a client the run should belong to
+	 * @param numSectors_ a fixed number of sectors to complete
+	 * @param times_ a storage for sector times capable of storing {@code numSectors + 1} elements
+	 * @note it is assumed that the times array is allocated within
+	 * this run object and thus does not need its own memory management.
+	 */
+	RaceRun( const struct gclient_s *client_, int numSectors_, uint32_t *times_ );
+
+	void SaveNickname( const struct gclient_s *client );
+};
+
+class QueryObject;
+class StatsowFacade;
+
+class RunStatusQuery {
+	friend class StatsowFacade;
+
+	template <typename T> friend T *Link( T*, T** );
+	template <typename T> friend T *Unlink( T*, T** );
+
+	const int64_t createdAt;
+	int64_t nextRetryAt { 0 };
+	RunStatusQuery *prev { nullptr };
+	RunStatusQuery *next { nullptr };
+	StatsowFacade *const parent;
+	QueryObject *query;
+	// For debugging purposes
+	const mm_uuid_t runId;
+	int outcome { 0 };
+	int worldRank { -1 };
+	int personalRank { -1 };
+
+	RunStatusQuery( StatsowFacade *parent_, QueryObject *query_, const mm_uuid_t &runId_ );
+
+	~RunStatusQuery();
+
+	void CheckReadyForAccess( const char *tag ) const;
+	void CheckValidForAccess( const char *tag ) const;
+
+	void Update( int64_t millisNow );
+
+	void ScheduleRetry( int64_t millisNow );
+
+	int GetQueryField( const char *fieldName );
+public:
+	void DeleteSelf();
+
+	bool IsReady() const {
+		return outcome != 0;
+	}
+
+	bool HasFailed() const {
+		CheckReadyForAccess( "RunStatusQuery::HasFailed()" );
+		return outcome < 0;
+	}
+
+	int WorldRank() const {
+		CheckValidForAccess( "RunStatusQuery::WorldRank()" );
+		return worldRank;
+	}
+
+	int PersonalRank() const {
+		CheckValidForAccess( "RunStatusQuery::PersonalRank()" );
+		return personalRank;
+	}
+};
 
 class GVariousStats {
 	struct Node {
@@ -154,13 +262,231 @@ template <typename T, size_t N> inline void MoveArray( T ( &dest )[N], T ( &src 
 	memset( src, 0, N );
 }
 
-typedef struct score_stats_s: public GVariousStats {
-	score_stats_s(): GVariousStats( 271 ) {
+template <typename T>
+class StatsSequence {
+	struct Chunk {
+		Chunk *next { nullptr };
+		unsigned numItems { 0 };
+		/**
+		 * Keep this value instead of basing on the chunk size of a parent
+		 * as chunks could be transferred from other sequence
+		 * that does not obligatory has the same chunk size.
+		 */
+		unsigned itemsLeft { 0 };
+		uint8_t *data { nullptr };
+
+		~Chunk() {
+			auto *items = (T *)data;
+			for( unsigned i = 0; i < numItems; ++i ) {
+				items[i].~T();
+			}
+		}
+
+		bool IsFull() const {
+			return !itemsLeft;
+		}
+
+		void *UnsafeGrowBack() {
+			assert( itemsLeft );
+			void *result = data + ( numItems * sizeof( T ) );
+			numItems++;
+			itemsLeft--;
+			return result;
+		}
+	};
+
+	Chunk *headChunk { nullptr };
+	Chunk *tailChunk { nullptr };
+	const unsigned elemsPerChunk;
+	unsigned totalNumItems { 0 };
+
+	Chunk *AllocChunk() {
+		// TODO: Something weird was with operations priority so we have separated statements
+		size_t memSize = sizeof( Chunk );
+		memSize += ( sizeof( T ) + 8 ) & 7;
+		memSize += elemsPerChunk * sizeof( T );
+		auto *mem = (uint8_t *)trap_MemAlloc( memSize, __FILE__, __LINE__ );
+		auto *result = new( mem )Chunk;
+		result->itemsLeft = elemsPerChunk;
+		result->data = mem;
+		result->data += sizeof( Chunk );
+		result->data += ( sizeof( T ) + 8 ) & 7;
+		return result;
+	}
+
+	/**
+	 * @warning assumes default field values of `this`.
+	 */
+	void MoveFieldsFrom( StatsSequence &&that ) noexcept {
+		std::swap( this->headChunk, that.headChunk );
+		std::swap( this->tailChunk, that.tailChunk );
+		std::swap( this->totalNumItems, that.totalNumItems );
+	}
+public:
+	explicit StatsSequence( unsigned elemsPerChunk_ = 32 )
+		: elemsPerChunk( elemsPerChunk_ ) {
+		// Sanity check
+		assert( elemsPerChunk_ >= 1 && elemsPerChunk_ < ( 1u << 16u ) );
+	}
+
+	StatsSequence( const StatsSequence & ) = delete;
+	StatsSequence &operator=( const StatsSequence & ) = delete;
+
+	StatsSequence( StatsSequence &&that ) noexcept
+		: elemsPerChunk( that.elemsPerChunk ) {
+		MoveFieldsFrom( std::move( that ) );
+	}
+
+	StatsSequence &operator=( StatsSequence &&that ) noexcept {
+		Clear();
+		MoveFieldsFrom( std::move( that ) );
+		return *this;
+	}
+
+	~StatsSequence() {
 		Clear();
 	}
 
-	~score_stats_s() {
-		ReleaseAllocators();
+	void Clear() {
+		Chunk *nextChunk;
+		for( Chunk *chunk = headChunk; chunk; chunk = nextChunk ) {
+			nextChunk = chunk->next;
+			chunk->~Chunk();
+			trap_MemFree( chunk, __FILE__, __LINE__ );
+		}
+		headChunk = nullptr;
+		tailChunk = nullptr;
+		totalNumItems = 0;
+	}
+
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	unsigned size() const { return totalNumItems; }
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	bool empty() const { return !totalNumItems; };
+
+	template <typename... Args>
+	T *New( Args... args ) {
+		if( !tailChunk ) {
+			headChunk = tailChunk = AllocChunk();
+		} else if( tailChunk->IsFull() ) {
+			Chunk *chunk = AllocChunk();
+			tailChunk->next = chunk;
+			tailChunk = chunk;
+		}
+		totalNumItems++;
+		return new( tailChunk->UnsafeGrowBack() )T( args ... );
+	}
+
+	void MergeWith( StatsSequence<T> &&that ) noexcept {
+		if( !tailChunk ) {
+			this->headChunk = that.headChunk;
+			this->tailChunk = that.tailChunk;
+			this->totalNumItems = that.totalNumItems;
+		} else {
+			this->tailChunk->next = that.headChunk;
+			this->tailChunk = that.tailChunk;
+			this->totalNumItems += that.totalNumItems;
+		}
+		that.totalNumItems = 0;
+		that.headChunk = that.tailChunk = nullptr;
+	}
+
+	template <typename Impl>
+	class BaseIterator {
+	protected:
+		Chunk *currChunk;
+		unsigned currElem;
+
+		BaseIterator( Chunk *currChunk_, unsigned currElem_ )
+			: currChunk( currChunk_ ), currElem( currElem_ ) {}
+	public:
+		bool operator==( const Impl &that ) const {
+			return currChunk == that.currChunk && currElem == that.currElem;
+		}
+
+		bool operator!=( const Impl &that ) const {
+			return !( *this == that );
+		}
+
+		Impl &operator++() {
+			assert( currChunk );
+			if( currElem + 1 < currChunk->numItems ) {
+				currElem++;
+				return static_cast<Impl &>( *this );
+			}
+			currChunk = currChunk->next;
+			currElem = 0;
+			return static_cast<Impl &>( *this );
+		}
+	};
+
+	class iterator : public BaseIterator<iterator> {
+		template <typename> friend class StatsSequence;
+
+		iterator( Chunk *currChunk_, unsigned currElem_ )
+			: BaseIterator<iterator>( currChunk_, currElem_ ) {}
+	public:
+		const T &operator *() const {
+			assert( this->currChunk );
+			return *( (T *)this->currChunk->data + this->currElem );
+		}
+
+		T &operator *() {
+			assert( this->currChunk );
+			return *( (T *)this->currChunk->data + this->currElem );
+		}
+	};
+
+	class const_iterator : public BaseIterator<const_iterator> {
+		template <typename> friend class StatsSequence;
+
+		const_iterator( Chunk *currChunk_, unsigned currElem_ )
+			: BaseIterator<const_iterator>( currChunk_, currElem_ ) {}
+
+	public:
+		const T &operator *() const {
+			assert( this->currChunk );
+			return *( (T *)this->currChunk->data + this->currElem );
+		}
+	};
+
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	const_iterator cbegin() const {
+		return { headChunk, 0 };
+	}
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	const_iterator cend() const {
+		return { nullptr, 0 };
+	}
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	const_iterator begin() const { return cbegin(); }
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	const_iterator end() const { return cend(); }
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	iterator begin() { return { headChunk, 0 }; }
+	/**
+	 * Provided for STL structural compatibility.
+	 */
+	iterator end() { return { nullptr, 0 }; }
+};
+
+typedef struct score_stats_s: public GVariousStats {
+	score_stats_s(): GVariousStats( 271 ) {
+		Clear();
 	}
 
 	int score;
@@ -180,10 +506,8 @@ typedef struct score_stats_s: public GVariousStats {
 		memset( accuracy_frags, 0, sizeof( accuracy_frags ) );
 
 		had_playtime = false;
-		memset( &currentRun, 0, sizeof( currentRun ) );
-		memset( &raceRecords, 0, sizeof( raceRecords ) );
 
-		ReleaseAllocators();
+		awardsSequence.Clear();
 	}
 
 	// These getters serve an utilty. We might think of precomputing handles (key/length)
@@ -217,15 +541,9 @@ typedef struct score_stats_s: public GVariousStats {
 
 	bool had_playtime;
 
-	// loggedFrag_t
-	linear_allocator_t *fragAllocator;
+	StatsSequence<LoggedAward> awardsSequence;
 
-	// gameaward_t
-	linear_allocator_t *awardAllocator;
-	// gameaward_t *gameawards;
-
-	raceRun_t currentRun;
-	raceRun_t raceRecords;
+	RaceRun *currentRun;
 
 	score_stats_s( const score_stats_s &that ) = delete;
 	score_stats_s &operator=( const score_stats_s &that ) = delete;
@@ -257,23 +575,9 @@ private:
 		this->had_playtime = that.had_playtime, that.had_playtime = false;
 
 		this->currentRun = that.currentRun;
-		memset( &that.currentRun, 0, sizeof( that.currentRun ) );
-		this->raceRecords = that.raceRecords;
-		memset( &that.raceRecords, 0, sizeof( that.raceRecords ) );
+		that.currentRun = nullptr;
 
-		this->awardAllocator = that.awardAllocator, that.awardAllocator = nullptr;
-		this->fragAllocator = that.fragAllocator, that.fragAllocator = nullptr;
-	}
-
-	void ReleaseAllocators() {
-		if( fragAllocator ) {
-			LinearAllocator_Free( fragAllocator );
-			fragAllocator = nullptr;
-		}
-		if( awardAllocator ) {
-			LinearAllocator_Free( awardAllocator );
-			awardAllocator = nullptr;
-		}
+		this->awardsSequence = std::move( that.awardsSequence );
 	}
 } score_stats_t;
 
@@ -403,7 +707,5 @@ void G_Teams_CoachUnLockTeam( edict_t *ent );
 void G_Teams_CoachRemovePlayer( edict_t *ent );
 
 bool G_Gametype_Exists( const char *name );
-void G_Gametype_GENERIC_ScoreboardMessage( void );
-void G_Gametype_GENERIC_ClientRespawn( edict_t *self, int old_team, int new_team );
 
 #endif //  __G_GAMETYPE_H__

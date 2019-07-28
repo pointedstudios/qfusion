@@ -3,7 +3,6 @@
 
 void EventsTracker::TryGuessingBeamOwnersOrigins( const EntNumsVector &dangerousEntsNums, float failureChance ) {
 	const edict_t *const gameEdicts = game.edicts;
-	auto *const bot = self->ai->botRef;
 	for( auto entNum: dangerousEntsNums ) {
 		if( random() < failureChance ) {
 			continue;
@@ -21,7 +20,6 @@ void EventsTracker::TryGuessingBeamOwnersOrigins( const EntNumsVector &dangerous
 void EventsTracker::TryGuessingProjectileOwnersOrigins( const EntNumsVector &dangerousEntNums, float failureChance ) {
 	const edict_t *const gameEdicts = game.edicts;
 	const int64_t levelTime = level.time;
-	auto *const bot = self->ai->botRef;
 	for( auto entNum: dangerousEntNums ) {
 		if( random() < failureChance ) {
 			continue;
@@ -70,8 +68,9 @@ void EventsTracker::ResetTeammatesVisData() {
 void EventsTracker::ComputeTeammatesVisData( const vec3_t forwardDir, float fovDotFactor ) {
 	numTestedTeamMates = 0;
 	areAllTeammatesInFov = true;
-	const int numMates = teamlist[self->s.team].numplayers;
-	const int *mateNums = teamlist[self->s.team].playerIndices;
+	const edict_t *self = game.edicts + bot->EntNum();
+	const int numMates = ::teamlist[self->s.team].numplayers;
+	const int *mateNums = ::teamlist[self->s.team].playerIndices;
 	const auto *gameEdicts = game.edicts;
 	for( int i = 0; i < numMates; ++i ) {
 		const edict_t *mate = gameEdicts + mateNums[i];
@@ -100,12 +99,12 @@ bool EventsTracker::CanDistinguishEnemyShotsFromTeammates( const GuessedEnemy &g
 	trace_t trace;
 
 	Vec3 toEnemyDir( guessedEnemy.origin );
-	toEnemyDir -= self->s.origin;
+	toEnemyDir -= bot->Origin();
 	const float distanceToEnemy = toEnemyDir.NormalizeFast();
 
 	const auto *gameEdicts = game.edicts;
-	const Vec3 forwardDir( self->ai->botRef->EntityPhysicsState()->ForwardDir() );
-	const float fovDotFactor = self->ai->botRef->FovDotFactor();
+	const Vec3 forwardDir( bot->EntityPhysicsState()->ForwardDir() );
+	const float fovDotFactor = bot->FovDotFactor();
 
 	// Compute vis data lazily
 	if( !hasComputedTeammatesVisData ) {
@@ -113,6 +112,7 @@ bool EventsTracker::CanDistinguishEnemyShotsFromTeammates( const GuessedEnemy &g
 		hasComputedTeammatesVisData = true;
 	}
 
+	const edict_t *self = game.edicts + bot->EntNum();
 	const bool canShowMinimap = GS_CanShowMinimap();
 	// If the bot can't see the guessed enemy origin
 	if( toEnemyDir.Dot( forwardDir ) < fovDotFactor ) {
@@ -204,6 +204,27 @@ bool EventsTracker::CanDistinguishEnemyShotsFromTeammates( const GuessedEnemy &g
 	}
 
 	return true;
+}
+
+bool EventsTracker::CanPlayerBeHeardAsEnemy( const edict_t *ent, float distanceThreshold ) {
+	const edict_t *const self = game.edicts + bot->EntNum();
+	if( self->s.team != ent->s.team || self->s.team == TEAM_PLAYERS ) {
+		if( DistanceSquared( self->s.origin, ent->s.origin ) < distanceThreshold * distanceThreshold ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool EventsTracker::CanEntityBeHeardAsEnemy( const edict_t *ent, float distanceThreshold ) {
+	const edict_t *const owner = game.edicts + ent->s.ownerNum;
+	const edict_t *const self = game.edicts + bot->EntNum();
+	if( self->s.team != owner->s.team || self->s.team == TEAM_PLAYERS ) {
+		if( DistanceSquared( self->s.origin, ent->s.origin ) < distanceThreshold * distanceThreshold ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 bool EventsTracker::GuessedEnemyEnt::AreInPvsWith( const edict_t *botEnt ) const {
@@ -317,6 +338,7 @@ int CachedEventsToPlayersMap::PlayerEntNumForEvent( int eventEntNum ) {
 }
 
 void EventsTracker::HandleGenericEventAtPlayerOrigin( const edict_t *ent, float distanceThreshold ) {
+	const edict_t *self = game.edicts + bot->EntNum();
 	if( DistanceSquared( self->s.origin, ent->s.origin ) > distanceThreshold * distanceThreshold ) {
 		return;
 	}
@@ -345,6 +367,7 @@ void EventsTracker::HandleGenericImpactEvent( const edict_t *event, float visibl
 	}
 
 	// TODO: Throttle PVS/trace calls
+	const edict_t *self = game.edicts + bot->EntNum();
 	if( EntitiesPvsCache::Instance()->AreInPvs( self, event ) ) {
 		trace_t trace;
 		Vec3 viewPoint( self->s.origin );
@@ -374,7 +397,7 @@ void EventsTracker::HandleJumppadEvent( const edict_t *player, float ) {
 
 	// If a player uses a jumppad, a player sound is emitted, so we can distinguish enemies from teammates.
 	// Just check whether we can hear the sound.
-	if( CanPlayerBeHeardAsEnemy( player, 512.0f * ( 1.0f + 2.0f * self->ai->botRef->Skill() ) ) ) {
+	if( CanPlayerBeHeardAsEnemy( player, 512.0f * ( 1.0f + 2.0f * bot->Skill() ) ) ) {
 		jumppadUsersTracker.Register( player );
 	}
 }
@@ -476,6 +499,7 @@ const edict_t *PlayerTeleOutEventsCache::GetPlayerAndDestOriginByEvent( const ed
 }
 
 void EventsTracker::HandlePlayerTeleportOutEvent( const edict_t *ent, float ) {
+	const edict_t *self = game.edicts + bot->EntNum();
 	float distanceThreshold = 512.0f * ( 2.0f + 1.0f * self->ai->botRef->Skill() );
 	if( DistanceSquared( self->s.origin, ent->s.origin ) > distanceThreshold * distanceThreshold ) {
 		return;
@@ -499,8 +523,7 @@ void EventsTracker::HandlePlayerTeleportOutEvent( const edict_t *ent, float ) {
 
 void EventsTracker::JumppadUsersTracker::Think() {
 	// Report new origins of tracked players.
-
-	Bot *bot = eventsTracker->self->ai->botRef;
+	Bot *const bot = eventsTracker->bot;
 	const edict_t *gameEdicts = game.edicts;
 	for( int i = 0, end = gs.maxclients; i < end; ++i ) {
 		if( !isTrackedUser[i] ) {
@@ -584,7 +607,6 @@ void EventsTracker::Think() {
 	// has been accumulated during the Think() frames cycle
 	// and might contain outdated info (e.g. a player has changed its team).
 	const auto *gameEdicts = game.edicts;
-	Bot *bot = self->ai->botRef;
 	for( const auto &detectedEvent: eventsQueue ) {
 		const edict_t *ent = gameEdicts + detectedEvent.enemyEntNum;
 		if( bot->MayNotBeFeasibleEnemy( ent ) ) {

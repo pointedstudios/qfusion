@@ -1,32 +1,32 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotRetreatToGoodPositionActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
-	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
+void RetreatToGoodPositionActionRecord::Activate() {
+	BotActionRecord::Activate();
+	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 	// Set a hint for weapon selection
-	self->ai->botRef->GetMiscTactics().willRetreat = true;
-	self->ai->botRef->SetNavTarget( &navTarget );
+	Self()->GetMiscTactics().willRetreat = true;
+	Self()->SetNavTarget( &navSpot );
 }
 
-void BotRetreatToGoodPositionActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+void RetreatToGoodPositionActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
+	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotRetreatToGoodPositionActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiActionRecord::Status RetreatToGoodPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( !CheckCommonCombatConditions( currWorldState ) ) {
 		return INVALID;
 	}
 
-	if( ( navTarget.Origin() - self->s.origin ).SquaredLength() < TACTICAL_SPOT_RADIUS * TACTICAL_SPOT_RADIUS ) {
+	if( ( navSpot.Origin() - Self()->Origin() ).SquaredLength() < TACTICAL_SPOT_RADIUS * TACTICAL_SPOT_RADIUS ) {
 		return COMPLETED;
 	}
 
 	return VALID;
 }
 
-PlannerNode *BotRetreatToGoodPositionAction::TryApply( const WorldState &worldState ) {
+PlannerNode *RetreatToGoodPositionAction::TryApply( const WorldState &worldState ) {
 	if( worldState.EnemyOriginVar().Ignore() ) {
 		Debug( "Enemy is ignored in the given world state\n" );
 		return nullptr;
@@ -45,7 +45,7 @@ PlannerNode *BotRetreatToGoodPositionAction::TryApply( const WorldState &worldSt
 	}
 
 	float actionPenalty = 1.0f;
-	const float offensiveness = self->ai->botRef->GetEffectiveOffensiveness();
+	const float offensiveness = Self()->GetEffectiveOffensiveness();
 	Vec3 spotOrigin( 0, 0, 0 );
 	if( worldState.EnemyIsOnSniperRange() ) {
 		Debug( "Retreating on sniper range does not make sense\n" );
@@ -111,14 +111,14 @@ PlannerNode *BotRetreatToGoodPositionAction::TryApply( const WorldState &worldSt
 		}
 	}
 
-	int travelTimeMillis = self->ai->botRef->CheckTravelTimeMillis( worldState.BotOriginVar().Value(), spotOrigin );
+	int travelTimeMillis = Self()->CheckTravelTimeMillis( worldState.BotOriginVar().Value(), spotOrigin );
 	if( !travelTimeMillis ) {
 		Debug( "Warning: can't find travel time from the bot origin to the spot origin in the given world state\n" );
 		return nullptr;
 	}
 
-	unsigned selectedEnemiesInstanceId = self->ai->botRef->GetSelectedEnemies().InstanceId();
-	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( self, spotOrigin, selectedEnemiesInstanceId ) );
+	unsigned selectedEnemiesInstanceId = Self()->GetSelectedEnemies().InstanceId();
+	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( Self(), spotOrigin, selectedEnemiesInstanceId ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

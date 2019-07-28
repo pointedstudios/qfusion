@@ -3,17 +3,17 @@
 #include "../combat/AdvantageProblemSolver.h"
 #include "../combat/CoverProblemSolver.h"
 
-inline AiAasRouteCache *BotTacticalSpotsCache::RouteCache() {
-	return self->ai->botRef->routeCache;
+inline const AiAasRouteCache *BotTacticalSpotsCache::RouteCache() {
+	return bot->RouteCache();
 }
 
 inline float BotTacticalSpotsCache::Skill() const {
-	return self->ai->botRef->Skill();
+	return bot->Skill();
 }
 
 inline bool BotTacticalSpotsCache::BotHasAlmostSameOrigin( const Vec3 &unpackedOrigin ) const {
-	constexpr float squareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
-	return DistanceSquared( self->s.origin, unpackedOrigin.Data() ) < squareDistanceError;
+	constexpr float squareDistanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	return unpackedOrigin.SquareDistanceTo( bot->Origin() ) <= squareDistanceError;
 }
 
 template <typename ProblemParams>
@@ -21,7 +21,7 @@ inline bool BotTacticalSpotsCache::FindForOrigin( const ProblemParams &problemPa
 												  const Vec3 &origin, float searchRadius, vec3_t result ) {
 	if( BotHasAlmostSameOrigin( origin ) ) {
 		// Provide a bot entity to aid trace checks
-		AdvantageProblemSolver::OriginParams originParams( self, searchRadius, RouteCache() );
+		AdvantageProblemSolver::OriginParams originParams( game.edicts + bot->EntNum(), searchRadius, RouteCache() );
 		return AdvantageProblemSolver( originParams, problemParams ).FindSingle( result );
 	}
 	TacticalSpotsRegistry::OriginParams originParams( origin.Data(), searchRadius, RouteCache() );
@@ -44,10 +44,8 @@ const short *BotTacticalSpotsCache::GetSingleOriginSpot( SingleOriginSpotsCache 
 	VectorCopy( origin, newSpot->origin );
 	VectorCopy( enemyOrigin, newSpot->enemyOrigin );
 
-	Vec3 unpackedOrigin( 4 * origin[0], 4 * origin[1], 4 * origin[2] );
-	Vec3 unpackedEnemyOrigin( 4 * enemyOrigin[0], 4 * enemyOrigin[1], 4 * enemyOrigin[2] );
 	vec3_t foundSpotOrigin;
-	if( !( this->*findMethod )( unpackedOrigin, unpackedEnemyOrigin, foundSpotOrigin ) ) {
+	if( !( this->*findMethod )( GetUnpacked4uVec( origin ), GetUnpacked4uVec( enemyOrigin ), foundSpotOrigin ) ) {
 		newSpot->succeeded = false;
 		return nullptr;
 	}
@@ -75,10 +73,8 @@ const short *BotTacticalSpotsCache::GetDualOriginSpot( DualOriginSpotsCache *cac
 	VectorCopy( origin, newSpot->origin );
 	VectorCopy( enemyOrigin, newSpot->enemyOrigin );
 
-	Vec3 unpackedOrigin( 4 * origin[0], 4 * origin[1], 4 * origin[2] );
-	Vec3 unpackedEnemyOrigin( 4 * enemyOrigin[0], 4 * enemyOrigin[1], 4 * enemyOrigin[2] );
 	vec3_t foundOrigins[2];
-	if( !( this->*findMethod )( unpackedOrigin, unpackedEnemyOrigin, foundOrigins ) ) {
+	if( !( this->*findMethod )( GetUnpacked4uVec( origin ), GetUnpacked4uVec( enemyOrigin ), foundOrigins ) ) {
 		newSpot->succeeded = false;
 		return nullptr;
 	}
@@ -92,6 +88,20 @@ const short *BotTacticalSpotsCache::GetDualOriginSpot( DualOriginSpotsCache *cac
 	return newSpot->spotData;
 }
 
+template <typename ProblemParams>
+inline void BotTacticalSpotsCache::TakeEnemiesIntoAccount( ProblemParams &problemParams ) {
+	if( Skill() < 0.33f ) {
+		return;
+	}
+	const auto &selectedEnemies = bot->GetSelectedEnemies();
+	if( !selectedEnemies.AreValid() ) {
+		return;
+	}
+	// TODO: Provide PrimaryEnemy() getter?
+	assert( selectedEnemies.IsPrimaryEnemy( *selectedEnemies.begin() ) );
+	problemParams.TakeEnemiesIntoAccount( bot->TrackedEnemiesHead(), *selectedEnemies.begin() );
+}
+
 bool BotTacticalSpotsCache::FindSniperRangeTacticalSpot( const Vec3 &origin, const Vec3 &enemyOrigin, vec3_t result ) {
 	AdvantageProblemSolver::ProblemParams problemParams( enemyOrigin.Data() );
 	problemParams.SetMinSpotDistanceToEntity( WorldState::FAR_RANGE_MAX );
@@ -102,6 +112,9 @@ bool BotTacticalSpotsCache::FindSniperRangeTacticalSpot( const Vec3 &origin, con
 	problemParams.SetHeightOverOriginInfluence( 0.3f );
 	problemParams.SetHeightOverEntityInfluence( 0.1f );
 	problemParams.SetCheckToAndBackReach( false );
+	problemParams.SetMaxFeasibleTravelTimeMillis( 12500 );
+	problemParams.OptimizeAggressively( true );
+	TakeEnemiesIntoAccount( problemParams );
 
 	float searchRadius = 192.0f + 768.0f * Skill();
 	float distanceToEnemy = ( origin - enemyOrigin ).LengthFast();
@@ -126,6 +139,9 @@ bool BotTacticalSpotsCache::FindFarRangeTacticalSpot( const Vec3 &origin, const 
 	problemParams.SetHeightOverOriginInfluence( 0.3f );
 	problemParams.SetHeightOverEntityInfluence( 0.7f );
 	problemParams.SetCheckToAndBackReach( false );
+	problemParams.SetMaxFeasibleTravelTimeMillis( 7500 );
+	problemParams.OptimizeAggressively( true );
+	TakeEnemiesIntoAccount( problemParams );
 
 	float searchRadius = 192.0f + 768.0f * Skill();
 	float distanceToEnemy = ( origin - enemyOrigin ).LengthFast();
@@ -153,6 +169,8 @@ bool BotTacticalSpotsCache::FindMiddleRangeTacticalSpot( const Vec3 &origin, con
 	problemParams.SetHeightOverOriginInfluence( 0.6f );
 	problemParams.SetHeightOverEntityInfluence( 0.8f );
 	problemParams.SetCheckToAndBackReach( false );
+	problemParams.SetMaxFeasibleTravelTimeMillis( 4000 );
+	TakeEnemiesIntoAccount( problemParams );
 
 	float searchRadius = WorldState::MIDDLE_RANGE_MAX;
 	float distanceToEnemy = ( origin - enemyOrigin ).LengthFast();
@@ -182,6 +200,8 @@ bool BotTacticalSpotsCache::FindCloseRangeTacticalSpot( const Vec3 &origin, cons
 	problemParams.SetHeightOverEntityInfluence( 0.9f );
 	// Bot should be able to retreat from close combat
 	problemParams.SetCheckToAndBackReach( true );
+	problemParams.SetMaxFeasibleTravelTimeMillis( 2000 );
+	TakeEnemiesIntoAccount( problemParams );
 
 	float searchRadius = WorldState::CLOSE_RANGE_MAX * 2;
 	float distanceToEnemy = ( origin - enemyOrigin ).LengthFast();
@@ -204,9 +224,11 @@ bool BotTacticalSpotsCache::FindCoverSpot( const Vec3 &origin, const Vec3 &enemy
 	problemParams.SetMinHeightAdvantageOverOrigin( -searchRadius );
 	problemParams.SetHeightOverOriginInfluence( 0.3f );
 	problemParams.SetCheckToAndBackReach( false );
+	problemParams.SetMaxFeasibleTravelTimeMillis( 1250 );
+	TakeEnemiesIntoAccount( problemParams );
 
 	if( BotHasAlmostSameOrigin( origin ) ) {
-		TacticalSpotsRegistry::OriginParams originParams( self, searchRadius, RouteCache() );
+		TacticalSpotsRegistry::OriginParams originParams( game.edicts + bot->EntNum(), searchRadius, RouteCache() );
 		return CoverProblemSolver( originParams, problemParams ).FindSingle( result );
 	}
 	TacticalSpotsRegistry::OriginParams originParams( origin.Data(), searchRadius, RouteCache() );
@@ -325,65 +347,35 @@ void BotTacticalSpotsCache::FindReachableClassEntities( const Vec3 &origin, floa
 		}
 	}
 
-	const AiAasWorld *aasWorld = AiAasWorld::Instance();
-	AiAasRouteCache *routeCache = self->ai->botRef->routeCache;
+	const auto *aasWorld = AiAasWorld::Instance();
+	const auto *routeCache = RouteCache();
 
-	bool testTwoCurrAreas = false;
-	int fromAreaNum = 0;
+	int fromAreaNums[2] { 0, 0 };
+	int numFromAreas;
 	// If an origin matches actual bot origin
-	if( ( origin - self->s.origin ).SquaredLength() < WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR ) {
-		// Try testing both areas
-		if( self->ai->botRef->CurrAreaNum() != self->ai->botRef->DroppedToFloorAreaNum() ) {
-			testTwoCurrAreas = true;
-		} else {
-			fromAreaNum = self->ai->botRef->CurrAreaNum();
-		}
+	if( BotHasAlmostSameOrigin( origin ) ) {
+		numFromAreas = bot->EntityPhysicsState()->PrepareRoutingStartAreas( fromAreaNums );
 	} else {
-		fromAreaNum = aasWorld->FindAreaNum( origin );
+		fromAreaNums[0] = aasWorld->FindAreaNum( origin );
+		numFromAreas = fromAreaNums[0] ? 1 : 0;
 	}
 
-	if( testTwoCurrAreas ) {
-		int fromAreaNums[2] = { self->ai->botRef->CurrAreaNum(), self->ai->botRef->DroppedToFloorAreaNum() };
-		for( EntAndScore &candidate: candidateEntities ) {
-			edict_t *ent = gameEdicts + candidate.entNum;
+	for( EntAndScore &candidate: candidateEntities ) {
+		const edict_t *ent = gameEdicts + candidate.entNum;
 
-			int toAreaNum = FindMostFeasibleEntityAasArea( ent, aasWorld );
-			if( !toAreaNum ) {
-				continue;
-			}
-
-			int travelTime = 0;
-			for( int i = 0; i < 2; ++i ) {
-				travelTime = routeCache->TravelTimeToGoalArea( fromAreaNums[i], toAreaNum, Bot::ALLOWED_TRAVEL_FLAGS );
-				if( travelTime ) {
-					break;
-				}
-			}
-			if( !travelTime ) {
-				continue;
-			}
-
-			// AAS travel time is in seconds^-2
-			float factor = 1.0f / Q_RSqrt( 1.0001f - BoundedFraction( travelTime, 200 ) );
-			result.push_back( EntAndScore( candidate.entNum, candidate.score * factor ) );
+		const int toAreaNum = FindMostFeasibleEntityAasArea( ent, aasWorld );
+		if( !toAreaNum ) {
+			continue;
 		}
-	} else {
-		for( EntAndScore &candidate: candidateEntities ) {
-			edict_t *ent = gameEdicts + candidate.entNum;
 
-			int toAreaNum = FindMostFeasibleEntityAasArea( ent, aasWorld );
-			if( !toAreaNum ) {
-				continue;
-			}
-
-			int travelTime = routeCache->TravelTimeToGoalArea( fromAreaNum, toAreaNum, Bot::ALLOWED_TRAVEL_FLAGS );
-			if( !travelTime ) {
-				continue;
-			}
-
-			float factor = 1.0f / Q_RSqrt( 1.0001f - BoundedFraction( travelTime, 200 ) );
-			result.push_back( EntAndScore( candidate.entNum, candidate.score * factor ) );
+		const int travelTime = routeCache->PreferredRouteToGoalArea( fromAreaNums, numFromAreas, toAreaNum );
+		if( !travelTime ) {
+			continue;
 		}
+
+		// AAS travel time is in seconds^-2
+		const float factor = Q_Sqrt( 1.01f - std::min( travelTime, 200 ) * Q_Rcp( 200 ) );
+		result.push_back( EntAndScore( candidate.entNum, candidate.score * factor ) );
 	}
 
 	// Sort entities so best entities are first
@@ -391,25 +383,21 @@ void BotTacticalSpotsCache::FindReachableClassEntities( const Vec3 &origin, floa
 }
 
 int BotTacticalSpotsCache::FindMostFeasibleEntityAasArea( const edict_t *ent, const AiAasWorld *aasWorld ) const {
-	const auto *areaSettings = aasWorld->AreaSettings();
+	int areaNums[24];
+	const Vec3 boxMins( Vec3( -20, -20, -12 ) + ent->r.absmin );
+	const Vec3 boxMaxs( Vec3( +20, +20, +12 ) + ent->r.absmax );
+	int numAreas = aasWorld->BBoxAreas( boxMins.Data(), boxMaxs.Data(), areaNums, 24 );
 
-	constexpr vec3_t minsOffset = { -20, -20, -12 };
-	constexpr vec3_t maxsOffset = { +20, +20, +12 };
-	Vec3 boxMins( ent->r.absmin ), boxMaxs( ent->r.absmax );
-	boxMins += minsOffset;
-	boxMaxs += maxsOffset;
-
-	int areas[24];
-	int numAreas = aasWorld->BBoxAreas( boxMins.Data(), boxMaxs.Data(), areas, 24 );
+	const auto *aasAreaSettings = aasWorld->AreaSettings();
 	for( int i = 0; i < numAreas; ++i ) {
-		int areaFlags = areaSettings[areas[i]].areaflags;
+		int areaFlags = aasAreaSettings[areaNums[i]].areaflags;
 		if( !( areaFlags & AREA_GROUNDED ) ) {
 			continue;
 		}
 		if( areaFlags & AREA_DISABLED ) {
 			continue;
 		}
-		return areas[i];
+		return areaNums[i];
 	}
 	return 0;
 }
@@ -420,7 +408,7 @@ bool BotTacticalSpotsCache::FindRunAwayTeleportOrigin( const Vec3 &origin, const
 
 	trace_t trace;
 	const auto *pvsCache = EntitiesPvsCache::Instance();
-	edict_t *enemyEnt = const_cast<edict_t *>( self->ai->botRef->selectedEnemies.Ent() );
+	edict_t *enemyEnt = const_cast<edict_t *>( bot->GetSelectedEnemies().Ent() );
 	for( const auto &entAndScore: reachableEntities ) {
 		edict_t *ent = game.edicts + entAndScore.entNum;
 		if( !ent->target ) {
@@ -456,7 +444,7 @@ bool BotTacticalSpotsCache::FindRunAwayJumppadOrigin( const Vec3 &origin, const 
 
 	trace_t trace;
 	const auto *pvsCache = EntitiesPvsCache::Instance();
-	edict_t *enemyEnt = const_cast<edict_t *>( self->ai->botRef->selectedEnemies.Ent() );
+	edict_t *enemyEnt = const_cast<edict_t *>( bot->GetSelectedEnemies().Ent() );
 	for( const auto &entAndScore: reachableEntities ) {
 		edict_t *ent = game.edicts + entAndScore.entNum;
 		if( !pvsCache->AreInPvs( enemyEnt, ent ) ) {
@@ -484,7 +472,7 @@ bool BotTacticalSpotsCache::FindRunAwayElevatorOrigin( const Vec3 &origin, const
 
 	trace_t trace;
 	const auto *pvsCache = EntitiesPvsCache::Instance();
-	edict_t *enemyEnt = const_cast<edict_t *>( self->ai->botRef->selectedEnemies.Ent() );
+	edict_t *enemyEnt = const_cast<edict_t *>( bot->GetSelectedEnemies().Ent() );
 	edict_t *gameEdicts = game.edicts;
 	for( const auto &entAndScore: reachableEntities ) {
 		edict_t *ent = gameEdicts + entAndScore.entNum;

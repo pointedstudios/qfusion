@@ -2,30 +2,31 @@
 #include "../bot.h"
 #include "../combat/SideStepDodgeProblemSolver.h"
 
-void BotAttackFromCurrentPositionActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
-	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
-	self->ai->botRef->SetNavTarget( &navTarget );
+void AttackFromCurrentPositionActionRecord::Activate() {
+	BotActionRecord::Activate();
+	Self()->GetMiscTactics().PreferAttackRatherThanRun();
+	Self()->SetNavTarget( &navSpot );
 }
 
-void BotAttackFromCurrentPositionActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+void AttackFromCurrentPositionActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
+	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotAttackFromCurrentPositionActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiActionRecord::Status AttackFromCurrentPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( !CheckCommonCombatConditions( currWorldState ) ) {
 		return INVALID;
 	}
 
-	if( navTarget.Origin().SquareDistance2DTo( self->s.origin ) < 16 * 16 ) {
+	if( navSpot.Origin().SquareDistance2DTo( Self()->Origin() ) < 16 * 16 ) {
 		vec3_t spotOrigin;
-		SideStepDodgeProblemSolver::OriginParams originParams( self, 128.0f, AiAasRouteCache::Shared() );
-		const float *keepVisibleOrigin = self->ai->botRef->GetSelectedEnemies().LastSeenOrigin().Data();
+		const edict_t *ent = game.edicts + Self()->EntNum();
+		SideStepDodgeProblemSolver::OriginParams originParams( ent, 192.0f, AiAasRouteCache::Shared() );
+		const Vec3 keepVisibleOrigin( Self()->GetSelectedEnemies().LastSeenOrigin() );
 		SideStepDodgeProblemSolver::ProblemParams problemParams( keepVisibleOrigin );
 		SideStepDodgeProblemSolver solver( originParams, problemParams );
 		if( solver.FindSingle( spotOrigin ) ) {
-			self->ai->botRef->SetNavTarget( Vec3( spotOrigin ), 4.0f );
+			self->SetNavTarget( Vec3( spotOrigin ), 4.0f );
 		}
 	}
 
@@ -33,9 +34,7 @@ AiBaseActionRecord::Status BotAttackFromCurrentPositionActionRecord::CheckStatus
 	return VALID;
 }
 
-PlannerNode *BotAttackFromCurrentPositionAction::TryApply( const WorldState &worldState ) {
-	// Use almost the same criteria as for BotSteadyCombatAction
-	// with the exception that tactical spots must be absent for low offensiveness.
+PlannerNode *AttackFromCurrentPositionAction::TryApply( const WorldState &worldState ) {
 	// Allow attacking from current position on high offensiveness even if a tactical spot exist
 	// (attacking from tactical spots has more restrictive conditions on kill/be killed damage ratio).
 
@@ -52,7 +51,7 @@ PlannerNode *BotAttackFromCurrentPositionAction::TryApply( const WorldState &wor
 		return nullptr;
 	}
 
-	float offensiveness = self->ai->botRef->GetEffectiveOffensiveness();
+	float offensiveness = Self()->GetEffectiveOffensiveness();
 	if( offensiveness <= 0.5f && !worldState.HasThreateningEnemyVar() ) {
 		return nullptr;
 	}
@@ -103,8 +102,8 @@ PlannerNode *BotAttackFromCurrentPositionAction::TryApply( const WorldState &wor
 	}
 
 	Vec3 navTargetOrigin( worldState.BotOriginVar().Value() );
-	unsigned selectedEnemiesInstanceId = self->ai->botRef->GetSelectedEnemies().InstanceId();
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self, navTargetOrigin, selectedEnemiesInstanceId ) ) );
+	unsigned selectedEnemiesInstanceId = Self()->GetSelectedEnemies().InstanceId();
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self(), navTargetOrigin, selectedEnemiesInstanceId ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -114,7 +113,7 @@ PlannerNode *BotAttackFromCurrentPositionAction::TryApply( const WorldState &wor
 
 	plannerNode.WorldState() = worldState;
 	plannerNode.WorldState().BotOriginVar().SetValue( navTargetOrigin )
-		.SetSatisfyOp( WorldState::SatisfyOp::EQ, TACTICAL_SPOT_RADIUS );
+		.SetSatisfyOp( OriginVar::SatisfyOp::EQ, TACTICAL_SPOT_RADIUS );
 	// Setting this is required to satisfy the BotKillEnemyAction preconditions
 	// (even they are not really met from human point of view).
 	plannerNode.WorldState().HasPositionalAdvantageVar().SetValue( true ).SetIgnore( false );

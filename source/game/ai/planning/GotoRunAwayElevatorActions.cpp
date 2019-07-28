@@ -2,7 +2,7 @@
 #include "../bot.h"
 #include "../ai_ground_trace_cache.h"
 
-PlannerNode *BotStartGotoRunAwayElevatorAction::TryApply( const WorldState &worldState ) {
+PlannerNode *StartGotoRunAwayElevatorAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}
@@ -24,7 +24,7 @@ PlannerNode *BotStartGotoRunAwayElevatorAction::TryApply( const WorldState &worl
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self ) ) );
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -35,33 +35,34 @@ PlannerNode *BotStartGotoRunAwayElevatorAction::TryApply( const WorldState &worl
 	plannerNode.WorldState().HasPendingRunAwayElevatorVar().SetValue( true ).SetIgnore( false );
 	// Set nav target to the elevator origin
 	plannerNode.WorldState().NavTargetOriginVar().SetValue( worldState.RunAwayElevatorOriginVar().Value() );
-	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().NavTargetOriginVar().SetIgnore( false );
 	// Set pending origin to the elevator destination
 	plannerNode.WorldState().PendingOriginVar().SetValue( worldState.RunAwayElevatorOriginVar().Value2() );
-	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().PendingOriginVar().SetIgnore( false );
 
 	return plannerNode.PrepareActionResult();
 }
 
-void BotDoRunAwayViaElevatorActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
-	self->ai->botRef->SetNavTarget( &navTarget );
+void DoRunAwayViaElevatorActionRecord::Activate() {
+	BotActionRecord::Activate();
+	Self()->SetNavTarget( &navSpot );
 }
 
-void BotDoRunAwayViaElevatorActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+void DoRunAwayViaElevatorActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
+	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotDoRunAwayViaElevatorActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiActionRecord::Status DoRunAwayViaElevatorActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	// Checking of this action record differs from other run away action record.
 	// We want the bot to stand on a platform until it finishes its movement.
 
 	// We do not want to invalidate an action due to being a bit in air above the platform, don't check self->groundentity
 	trace_t selfTrace;
-	AiGroundTraceCache::Instance()->GetGroundTrace( self, 64.0f, &selfTrace );
+	const edict_t *ent = game.edicts + Self()->EntNum();
+	AiGroundTraceCache::Instance()->GetGroundTrace( ent, 64.0f, &selfTrace );
 
 	if( selfTrace.fraction == 1.0f ) {
 		Debug( "Bot is too high above the ground (if any)\n" );
@@ -73,7 +74,7 @@ AiBaseActionRecord::Status BotDoRunAwayViaElevatorActionRecord::CheckStatus( con
 	}
 
 	// If there are no valid enemies, just keep standing on the platform
-	const auto &selectedEnemies = self->ai->botRef->GetSelectedEnemies();
+	const auto &selectedEnemies = Self()->GetSelectedEnemies();
 	if( selectedEnemies.AreValid() ) {
 		trace_t enemyTrace;
 		AiGroundTraceCache::Instance()->GetGroundTrace( selectedEnemies.Ent(), 128.0f, &enemyTrace );
@@ -90,7 +91,7 @@ AiBaseActionRecord::Status BotDoRunAwayViaElevatorActionRecord::CheckStatus( con
 	return VALID;
 }
 
-PlannerNode *BotDoRunAwayViaElevatorAction::TryApply( const WorldState &worldState ) {
+PlannerNode *DoRunAwayViaElevatorAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}
@@ -122,8 +123,8 @@ PlannerNode *BotDoRunAwayViaElevatorAction::TryApply( const WorldState &worldSta
 	}
 
 	Vec3 elevatorOrigin = worldState.NavTargetOriginVar().Value();
-	unsigned selectedEnemiesInstanceId = self->ai->botRef->GetSelectedEnemies().InstanceId();
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self, elevatorOrigin, selectedEnemiesInstanceId ) ) );
+	unsigned selectedEnemiesInstanceId = Self()->GetSelectedEnemies().InstanceId();
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self(), elevatorOrigin, selectedEnemiesInstanceId ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -137,7 +138,7 @@ PlannerNode *BotDoRunAwayViaElevatorAction::TryApply( const WorldState &worldSta
 	plannerNode.WorldState().HasJustEnteredElevatorVar().SetValue( true ).SetIgnore( false );
 	// Set bot origin to the elevator destination
 	plannerNode.WorldState().BotOriginVar().SetValue( worldState.PendingOriginVar().Value() );
-	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	// Reset pending origin
 	plannerNode.WorldState().PendingOriginVar().SetIgnore( true );
 	plannerNode.WorldState().HasPendingRunAwayElevatorVar().SetIgnore( true );

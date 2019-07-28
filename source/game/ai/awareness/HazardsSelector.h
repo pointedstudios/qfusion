@@ -1,7 +1,7 @@
 #ifndef QFUSION_HAZARDSSELECTOR_H
 #define QFUSION_HAZARDSSELECTOR_H
 
-#include "../planning/BasePlanner.h"
+#include "../planning/Planner.h"
 #include "HazardsDetector.h"
 
 struct Hazard : public PoolItem {
@@ -40,7 +40,7 @@ struct Hazard : public PoolItem {
 class HazardsSelector {
 	friend class BotAwarenessModule;
 
-	edict_t *const self;
+	Bot *const bot;
 
 	static constexpr auto MAX_CLASS_HAZARDS = 1;
 	typedef Pool<Hazard, MAX_CLASS_HAZARDS> HazardsPool;
@@ -56,7 +56,7 @@ class HazardsSelector {
 	void FindPlasmaHazards( const EntNumsVector &entNums );
 	void FindLaserHazards( const EntNumsVector &entNums );
 public:
-	explicit HazardsSelector( edict_t *self_ ): self( self_ ) {}
+	explicit HazardsSelector( Bot *bot_ ): bot( bot_ ) {}
 
 	void BeginUpdate();
 	void EndUpdate();
@@ -68,6 +68,29 @@ public:
 					   const vec3_t direction,
 					   const edict_t *owner,
 					   float splashRadius = 0.0f );
+};
+
+class HazardsSelectorCache {
+	friend class SameDirBeamsList;
+
+	template <typename, unsigned> friend class StaticVector;
+
+	uint8_t *storageMem;
+	class CachingAllocator *sortedProjectilesAllocator;
+	class CachingAllocator *plasmaBeamsAllocator;
+
+	HazardsSelectorCache();
+	~HazardsSelectorCache();
+
+	static HazardsSelectorCache *instance;
+public:
+	static HazardsSelectorCache *Instance() {
+		assert( instance );
+		return instance;
+	}
+
+	static void Init();
+	static void Shutdown();
 };
 
 #endif

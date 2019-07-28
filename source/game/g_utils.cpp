@@ -42,11 +42,11 @@ Ported over from Quake 1 and Quake 3.
 #define ZONEID      0x1d4a11
 #define MINFRAGMENT 64
 
-typedef struct memblock_s
+typedef struct alignas( 16 )memblock_s
 {
+	struct memblock_s       *next, *prev;
 	int size;               // including the header and possibly tiny fragments
 	int tag;                // a tag of 0 is a free block
-	struct memblock_s       *next, *prev;
 	int id;                 // should be ZONEID
 } memblock_t;
 
@@ -155,7 +155,7 @@ static void *G_Z_TagMalloc( int size, int tag, const char *filename, int filelin
 	//
 	size += sizeof( memblock_t ); // account for size of block header
 	size += 4;                  // space for memory trash tester
-	size = ( size + 3 ) & ~3;     // align to 32-bit boundary
+	size = ( size + 15 ) & ~15;     // align to 16-byte boundary
 
 	zone = levelzone;
 	base = rover = zone->rover;
@@ -893,25 +893,25 @@ void G_InitMover( edict_t *ent ) {
 		}
 
 		i /= 4;
-		i = min( i, 255 );
+		i = std::min( i, 255 );
 
 		r = ent->color[0];
 		if( r <= 1.0 ) {
 			r *= 255;
 		}
-		clamp( r, 0, 255 );
+		Q_clamp( r, 0, 255 );
 
 		g = ent->color[1];
 		if( g <= 1.0 ) {
 			g *= 255;
 		}
-		clamp( g, 0, 255 );
+		Q_clamp( g, 0, 255 );
 
 		b = ent->color[2];
 		if( b <= 1.0 ) {
 			b *= 255;
 		}
-		clamp( b, 0, 255 );
+		Q_clamp( b, 0, 255 );
 
 		ent->s.light = COLOR_RGBA( r, g, b, i );
 	}
@@ -1015,7 +1015,7 @@ int G_PlayerGender( edict_t *player ) {
 *
 * NULL sends to all the message to all clients
 */
-void G_PrintMsg( edict_t *ent, const char *format, ... ) {
+void G_PrintMsg( const edict_t *ent, const char *format, ... ) {
 	char msg[MAX_STRING_CHARS];
 	va_list argptr;
 	char *s, *p;
@@ -1044,7 +1044,7 @@ void G_PrintMsg( edict_t *ent, const char *format, ... ) {
 	}
 }
 
-void G_PrintChasersf( edict_t *self, const char *format, ... ) {
+void G_PrintChasersf( const edict_t *self, const char *format, ... ) {
 	char msg[1024];
 	va_list argptr;
 	edict_t *ent;
@@ -1064,63 +1064,128 @@ void G_PrintChasersf( edict_t *self, const char *format, ... ) {
 	}
 }
 
-/*
-* G_ChatMsg
-*
-* NULL sends the message to all clients
-*/
-void G_ChatMsg( edict_t *ent, edict_t *who, bool teamonly, const char *format, ... ) {
-	char msg[1024];
-	va_list argptr;
-	char *s, *p;
+ChatPrintHelper::ChatPrintHelper( const edict_t *source_, const char *format, ... ) : source( source_ ) {
+	va_list va;
+	va_start( va, format );
+	InitFromV( format, va );
+	va_end( va );
+}
 
-	va_start( argptr, format );
-	Q_vsnprintfz( msg, sizeof( msg ), format, argptr );
-	va_end( argptr );
+ChatPrintHelper::ChatPrintHelper( const char *format, ... ) : source( nullptr ) {
+	va_list va;
+	va_start( va, format );
+	InitFromV( format, va );
+	va_end( va );
+}
 
-	// double quotes are bad
-	p = msg;
-	while( ( p = strchr( p, '\"' ) ) != NULL )
+void ChatPrintHelper::InitFromV( const char *format, va_list va ) {
+	std::fill( buffer, buffer + OFFSET, ' ' );
+	messageLength = Q_vsnprintfz( buffer + OFFSET, sizeof( buffer ) - OFFSET, format, va );
+	if( messageLength < 0 ) {
+		messageLength = sizeof( buffer ) - OFFSET - 1;
+	}
+
+	// Replace double quotes in the message
+	char *p = buffer + OFFSET;
+	while( ( p = strchr( p, '\"' ) ) ) {
 		*p = '\'';
+	}
 
-	s = va( "%s %i \"%s\"", ( who && teamonly ? "tch" : "ch" ), ( who ? ENTNUM( who ) : 0 ), msg );
+	std::fill( buffer, buffer + OFFSET - 1, ' ' );
+	int numLen = Q_snprintfz( buffer + OFFSET / 2, OFFSET / 2, "%d", source ? PLAYERNUM( source ) + 1 : 0 );
+	assert( buffer[OFFSET / 2 + numLen] == '\0' );
+	buffer[OFFSET / 2 + numLen] = ' ';
 
-	if( !ent ) {
-		// mirror at server console
-		if( dedicated->integer ) {
-			if( !who ) {
-				G_Printf( S_COLOR_GREEN "console: %s\n", msg );     // admin console
-			} else if( !who->r.client ) {
-				;   // wtf?
-			} else if( teamonly ) {
-				G_Printf( S_COLOR_YELLOW "[%s]" S_COLOR_WHITE "%s" S_COLOR_YELLOW ": %s\n",
-						  who->r.client->ps.stats[STAT_TEAM] == TEAM_SPECTATOR ? "SPEC" : "TEAM", who->r.client->netname, msg );
-			} else {
-				G_Printf( "%s" S_COLOR_GREEN ": %s\n", who->r.client->netname, msg );
-			}
-		}
+	// Wrap the message in double quotes
+	buffer[OFFSET - 1] = '\"';
+	buffer[OFFSET + messageLength] = '\"';
+}
 
-		if( who && teamonly ) {
-			int i;
+void ChatPrintHelper::PrintToServerConsole( bool teamOnly ) {
+	if( !dedicated->integer ) {
+		return;
+	}
 
-			for( i = 0; i < gs.maxclients; i++ ) {
-				ent = game.edicts + 1 + i;
+	if( hasPrintedToServerConsole || skipServerConsole ) {
+		return;
+	}
 
-				if( ent->r.inuse && ent->r.client && trap_GetClientState( i ) >= CS_CONNECTED ) {
-					if( ent->s.team == who->s.team ) {
-						trap_GameCmd( ent, s );
-					}
-				}
-			}
+	hasPrintedToServerConsole = true;
+
+	const char *msg = buffer + OFFSET;
+	// Truncate the double quote at the end of the buffer
+	buffer[OFFSET + messageLength] = '\0';
+
+	if( !source ) {
+		G_Printf( S_COLOR_GREEN "console: %s\n", buffer );     // admin console
+	} else if( const auto *client = source->r.client ) {
+		if( teamOnly ) {
+			const char *team = client->ps.stats[STAT_TEAM] == TEAM_SPECTATOR ? "SPEC" : "TEAM";
+			G_Printf( S_COLOR_YELLOW "[%s]" S_COLOR_WHITE "%s" S_COLOR_YELLOW ": %s\n", team, client->netname, msg );
 		} else {
-			trap_GameCmd( NULL, s );
+			G_Printf( "%s" S_COLOR_GREEN ": %s\n", client->netname, msg );
 		}
+	}
+
+	// Restore the double quote at the end of the buffer
+	buffer[OFFSET + messageLength] = '\"';
+}
+
+void ChatPrintHelper::DispatchWithFilter( const ChatHandlersChain *filter, bool teamOnly ) {
+	SetCommandPrefix( teamOnly && source != nullptr );
+	PrintToServerConsole( true );
+
+	if( !source ) {
+		trap_GameCmd( nullptr, buffer );
+		return;
+	}
+
+	for( int i = 0; i < gs.maxclients; i++ ) {
+		edict_t *ent = game.edicts + 1 + i;
+		if( !ent->r.inuse || !ent->r.client ) {
+			continue;
+		}
+		if( teamOnly && ent->s.team != source->s.team ) {
+			continue;
+		}
+		if( trap_GetClientState( i ) < CS_CONNECTED ) {
+			continue;
+		}
+		if( filter && filter->Ignores( ent, source ) ) {
+			filter->NotifyOfIgnoredMessage( ent, source );
+			continue;
+		}
+		trap_GameCmd( ent, buffer );
+	}
+}
+
+void ChatPrintHelper::PrintTo( const edict_t *target, bool teamOnly ) {
+	if( !target->r.inuse ) {
+		return;
+	}
+
+	if( !target->r.client ) {
+		return;
+	}
+
+	if( teamOnly && source && source->s.team != target->s.team ) {
+		return;
+	}
+
+	if( trap_GetClientState( PLAYERNUM( target ) ) < CS_SPAWNED ) {
+		return;
+	}
+
+	PrintToServerConsole( teamOnly );
+	SetCommandPrefix( teamOnly );
+	trap_GameCmd( target, buffer );
+}
+
+inline void ChatPrintHelper::SetCommandPrefix( bool teamOnly ) {
+	if( teamOnly ) {
+		std::tie( buffer[0], buffer[1], buffer[2] ) = std::make_tuple( 't', 'c', 'h' );
 	} else {
-		if( ent->r.inuse && ent->r.client && trap_GetClientState( PLAYERNUM( ent ) ) >= CS_CONNECTED ) {
-			if( !who || !teamonly || ent->s.team == who->s.team ) {
-				trap_GameCmd( ent, s );
-			}
-		}
+		std::tie( buffer[0], buffer[1], buffer[2] ) = std::make_tuple( 'c', 'h', ' ' );
 	}
 }
 
@@ -1129,7 +1194,7 @@ void G_ChatMsg( edict_t *ent, edict_t *who, bool teamonly, const char *format, .
 *
 * NULL sends to all the message to all clients
 */
-void G_CenterPrintMsg( edict_t *ent, const char *format, ... ) {
+void G_CenterPrintMsg( const edict_t *ent, const char *format, ... ) {
 	char msg[1024];
 	char cmd[MAX_STRING_CHARS];
 	va_list argptr;
@@ -1169,7 +1234,7 @@ void G_CenterPrintMsg( edict_t *ent, const char *format, ... ) {
 *
 * NULL sends to all the message to all clients
 */
-void G_CenterPrintFormatMsg( edict_t *ent, int numVargs, const char *format, ... ) {
+void G_CenterPrintFormatMsg( const edict_t *ent, int numVargs, const char *format, ... ) {
 	int i;
 	char cmd[MAX_STRING_CHARS];
 	char arg_fmt[MAX_TOKEN_CHARS];
@@ -1988,30 +2053,36 @@ void G_PureModel( const char *model ) {
 /*
 * G_PrecacheWeapondef
 */
-void G_PrecacheWeapondef( int weapon, firedef_t *firedef ) {
-	char cstring[MAX_CONFIGSTRING_CHARS];
+void G_PrecacheWeapondef( int weapon ) {	
+	assert( weapon < ( MAX_WEAPONDEFS / 4 ) );
 
-	if( !firedef ) {
-		return;
-	}
+	bool race, strong;
+	for( int index = weapon; index < MAX_WEAPONDEFS; index += MAX_WEAPONDEFS / 4 )
+	{
+		// see CG_OverrideWeapondef, uses same operations
+		weapon = index % ( MAX_WEAPONDEFS / 4 );
+		race = index > ( MAX_WEAPONDEFS / 2 );
+		strong = ( index % ( MAX_WEAPONDEFS / 2 ) ) > ( MAX_WEAPONDEFS / 4 );
 
-	Q_snprintfz( cstring, sizeof( cstring ), "%i %i %u %u %u %u %u %i %i %i",
-				 firedef->usage_count,
-				 firedef->projectile_count,
-				 firedef->weaponup_time,
-				 firedef->weapondown_time,
-				 firedef->reload_time,
-				 firedef->cooldown_time,
-				 firedef->timeout,
-				 firedef->speed,
-				 firedef->spread,
-				 firedef->v_spread
-				 );
+		const auto *weaponDef = GS_GetWeaponDefExt( weapon, race );
+		const auto *firedef = strong ? &weaponDef->firedef : &weaponDef->firedef_weak;
+		
+		char cstring[MAX_CONFIGSTRING_CHARS];
 
-	if( firedef->fire_mode == FIRE_MODE_WEAK ) {
-		trap_ConfigString( CS_WEAPONDEFS + weapon, cstring );
-	} else {
-		trap_ConfigString( CS_WEAPONDEFS + ( MAX_WEAPONDEFS / 2 ) + weapon, cstring );
+		Q_snprintfz( cstring, sizeof( cstring ), "%i %i %u %u %u %u %u %i %i %i",
+					 firedef->usage_count,
+					 firedef->projectile_count,
+					 firedef->weaponup_time,
+					 firedef->weapondown_time,
+					 firedef->reload_time,
+					 firedef->cooldown_time,
+					 firedef->timeout,
+					 firedef->speed,
+					 firedef->spread,
+					 firedef->v_spread
+					 );
+
+		trap_ConfigString( CS_WEAPONDEFS + index, cstring );
 	}
 }
 

@@ -1,53 +1,77 @@
 #ifndef QFUSION_BUNNYTESTINGMULTIPLELOOKDIRSACTION_H
 #define QFUSION_BUNNYTESTINGMULTIPLELOOKDIRSACTION_H
 
-#include "GenericBunnyingAction.h"
+#include "BunnyHopAction.h"
 
-class BunnyTestingMultipleLookDirsAction : public GenericRunBunnyingAction
-{
+class BunnyTestingMultipleLookDirsAction : public BunnyHopAction {
+	friend class BunnyStraighteningReachChainAction;
+	friend class BunnyToBestShortcutAreaAction;
+	friend class BunnyInterpolatingChainAtStartAction;
 protected:
-	static constexpr auto MAX_SUGGESTED_LOOK_DIRS = 16;
+	BaseMovementAction *suggestedAction { nullptr };
+	const float *suggestedDir { nullptr };
 
-	StaticVector<Vec3, MAX_SUGGESTED_LOOK_DIRS> suggestedLookDirs;
-	// Contains areas that were used in dirs construction.
-	// Might be useful by skipping areas already tested by other (also an descendant of this class) action.
-	// Note that 1-1 correspondence between dirs and areas (and even dirs size and areas size) is not mandatory.
-	StaticVector<int, MAX_SUGGESTED_LOOK_DIRS> dirsBaseAreas;
+	virtual void OnApplicationSequenceFailed( MovementPredictionContext *context, unsigned stoppedAtFrameIndex ) {};
+public:
+	BunnyTestingMultipleLookDirsAction( BotMovementModule *module_, const char *name_, int debugColor_ )
+		: BunnyHopAction( module_, name_, debugColor_ ) {}
 
-	unsigned maxSuggestedLookDirs;
-	unsigned currSuggestedLookDirNum;
-	BaseMovementAction *suggestedAction;
+	void BeforePlanning() override;
+	void OnApplicationSequenceStopped( MovementPredictionContext *context,
+									   SequenceStopReason stopReason,
+									   unsigned stoppedAtFrameIndex ) override;
+	void PlanPredictionStep( MovementPredictionContext *context ) override;
+};
+
+class BunnyTestingSavedLookDirsAction : public BunnyTestingMultipleLookDirsAction {
+protected:
+	static constexpr auto MAX_SUGGESTED_LOOK_DIRS = 40;
+
+	struct DirAndArea {
+		Vec3 dir;
+		int area;
+
+		DirAndArea( const Vec3 &dir_, int area_ )
+			: dir( dir_ ), area( area_ ) {}
+	};
+
+	StaticVector<DirAndArea, MAX_SUGGESTED_LOOK_DIRS> suggestedLookDirs;
+
+	unsigned maxSuggestedLookDirs { MAX_SUGGESTED_LOOK_DIRS };
+	unsigned currSuggestedLookDirNum { 0 };
+
+	void BeforePlanning() override {
+		BunnyTestingMultipleLookDirsAction::BeforePlanning();
+		currSuggestedLookDirNum = 0;
+		suggestedLookDirs.clear();
+	}
+
+	void OnApplicationSequenceStarted( MovementPredictionContext *context ) final;
+
+	void OnApplicationSequenceFailed( MovementPredictionContext *context, unsigned stoppedAtFrameIndex ) final;
 
 	virtual void SaveSuggestedLookDirs( MovementPredictionContext *context ) = 0;
 
-	// A helper method to select best N areas that is optimized for small areas count.
-	// Modifies the collection in-place putting best areas at its beginning.
-	// Returns the new end iterator for the selected areas range.
-	// The begin iterator is assumed to remain the same.
-	inline AreaAndScore *TakeBestCandidateAreas( AreaAndScore *inputBegin, AreaAndScore *inputEnd, unsigned maxAreas );
+	/**
+	 * A helper method to select best N areas that is optimized for small areas count.
+	 * Modifies the collection in-place putting best areas at its beginning.
+	 * Returns the new end iterator for the selected areas range.
+	 * The begin iterator is assumed to remain the same.
+	 */
+	AreaAndScore *TakeBestCandidateAreas( AreaAndScore *inputBegin, AreaAndScore *inputEnd, unsigned maxAreas );
 
 	void SaveCandidateAreaDirs( MovementPredictionContext *context,
 								AreaAndScore *candidateAreasBegin,
 								AreaAndScore *candidateAreasEnd );
 
-	// Used for candidate spots selection.
-	// Tracing a straight line between two points fails in stairs-like environment way too often.
-	// This routine uses extremely coarse arc approximation which still should be sufficient
-	// to avoid the mentioned failure in some environment kinds.
-public:
-	static bool TraceArcInSolidWorld( const AiEntityPhysicsState &startPhysicsState, const vec3_t from, const vec3_t to );
-	BunnyTestingMultipleLookDirsAction( BotMovementModule *module_, const char *name_, int debugColor_ )
-		: GenericRunBunnyingAction( module_, name_, debugColor_ )
-		, maxSuggestedLookDirs( MAX_SUGGESTED_LOOK_DIRS )
-		, currSuggestedLookDirNum( 0 )
-		, suggestedAction( nullptr ) {}
+	bool HasSavedSimilarDir( const Vec3 &dir, float dotThreshold = 0.98f ) {
+		return HasSavedSimilarDir( dir.Data(), dotThreshold );
+	}
 
-	void BeforePlanning() override;
-	void OnApplicationSequenceStarted( MovementPredictionContext *context ) override;
-	void OnApplicationSequenceStopped( MovementPredictionContext *context,
-									   SequenceStopReason stopReason,
-									   unsigned stoppedAtFrameIndex ) override;
-	void PlanPredictionStep( MovementPredictionContext *context ) override;
+	bool HasSavedSimilarDir( const float *dir, float dotThreshold = 0.98f );
+
+	BunnyTestingSavedLookDirsAction( BotMovementModule *module_, const char *name_, int debugColor_ )
+		: BunnyTestingMultipleLookDirsAction( module_, name_, debugColor_ ) {}
 };
 
 #endif

@@ -1,28 +1,7 @@
 #include "CampASpotAction.h"
 #include "MovementLocal.h"
 
-void DirToKeyInput( const Vec3 &desiredDir, const vec3_t actualForwardDir, const vec3_t actualRightDir, BotInput *input ) {
-	input->ClearMovementDirections();
 
-	float dotForward = desiredDir.Dot( actualForwardDir );
-	if( dotForward > 0.3 ) {
-		input->SetForwardMovement( 1 );
-	} else if( dotForward < -0.3 ) {
-		input->SetForwardMovement( -1 );
-	}
-
-	float dotRight = desiredDir.Dot( actualRightDir );
-	if( dotRight > 0.3 ) {
-		input->SetRightMovement( 1 );
-	} else if( dotRight < -0.3 ) {
-		input->SetRightMovement( -1 );
-	}
-
-	// Prevent being blocked
-	if( !input->ForwardMovement() && !input->RightMovement() ) {
-		input->SetForwardMovement( 1 );
-	}
-}
 
 bool CampASpotMovementAction::TryUpdateKeyMoveDirs( Context *context ) {
 	auto *campingSpotState = &context->movementState->campingSpotState;
@@ -41,10 +20,16 @@ bool CampASpotMovementAction::TryUpdateKeyMoveDirs( Context *context ) {
 }
 
 Vec3 CampASpotMovementAction::GetUpdatedPendingLookDir( Context *context ) {
-	auto *lookAtPointState = &context->movementState->pendingLookAtPointState;
+	auto *const lookAtPointState = &context->movementState->pendingLookAtPointState;
+	const float *keptInFovPoint = bot->GetKeptInFovPoint();
 	const auto &campingSpotState = context->movementState->campingSpotState;
 
-	if( !lookAtPointState->IsActive() ) {
+	// The "kept in fov point" is stronger than any intrinsic camping spot state direction
+	if( keptInFovPoint ) {
+		// Create an intrinsic "pending look at point" that has a default suggested turn speed multiplier
+		AiPendingLookAtPoint lookAtPoint( AiPendingLookAtPoint( keptInFovPoint, 1.0f ) );
+		lookAtPointState->Activate( lookAtPoint, 100 );
+	} else if( !lookAtPointState->IsActive() ) {
 		AiPendingLookAtPoint lookAtPoint( campingSpotState.GetOrUpdateRandomLookAtPoint() );
 		lookAtPointState->Activate( lookAtPoint, 750 );
 	}

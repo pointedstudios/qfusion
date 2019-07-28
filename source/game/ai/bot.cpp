@@ -1,7 +1,9 @@
 #include "bot.h"
 #include "navigation/AasWorld.h"
 #include "navigation/NavMeshManager.h"
+#include "teamplay/ObjectiveBasedTeam.h"
 #include "../g_gametypes.h"
+#include "ai_manager.h"
 #include <algorithm>
 #include <array>
 
@@ -14,74 +16,26 @@
 
 Bot::Bot( edict_t *self_, float skillLevel_ )
 	: Ai( self_
-		, &botPlanner
+		, &planningModule.planner
 		, AiAasRouteCache::NewInstance( &travelFlags[0] )
 		, &movementModule.movementState.entityPhysicsState
 		, PREFERRED_TRAVEL_FLAGS
-		, ALLOWED_TRAVEL_FLAGS )
-	, weightConfig( self_ )
-	, awarenessModule( self_, this, skillLevel_ )
-	, botPlanner( this, skillLevel_ )
+		, ALLOWED_TRAVEL_FLAGS
+		, skillLevel_ > 0.33f ? DEFAULT_YAW_SPEED * 1.5f : DEFAULT_YAW_SPEED
+		, skillLevel_ > 0.33f ? DEFAULT_PITCH_SPEED * 1.2f : DEFAULT_PITCH_SPEED )
 	, skillLevel( skillLevel_ )
-	, selectedEnemies( self_ )
-	, lostEnemies( self_ )
-	, weaponsUsageModule( this )
-	, tacticalSpotsCache( self_ )
-	, roamingManager( self_ )
-	, grabItemGoal( this )
-	, killEnemyGoal( this )
-	, runAwayGoal( this )
-	, reactToHazardGoal( this )
-	, reactToThreatGoal( this )
-	, reactToEnemyLostGoal( this )
-	, attackOutOfDespairGoal( this )
-	, roamGoal( this )
-	, genericRunToItemAction( this )
-	, pickupItemAction( this )
-	, waitForItemAction( this )
-	, killEnemyAction( this )
-	, advanceToGoodPositionAction( this )
-	, retreatToGoodPositionAction( this )
-	, steadyCombatAction( this )
-	, gotoAvailableGoodPositionAction( this )
-	, attackFromCurrentPositionAction( this )
-	, attackAdvancingToTargetAction( this )
-	, genericRunAvoidingCombatAction( this )
-	, startGotoCoverAction( this )
-	, takeCoverAction( this )
-	, startGotoRunAwayTeleportAction( this )
-	, doRunAwayViaTeleportAction( this )
-	, startGotoRunAwayJumppadAction( this )
-	, doRunAwayViaJumppadAction( this )
-	, startGotoRunAwayElevatorAction( this )
-	, doRunAwayViaElevatorAction( this )
-	, stopRunningAwayAction( this )
-	, dodgeToSpotAction( this )
-	, turnToThreatOriginAction( this )
-	, turnToLostEnemyAction( this )
-	, startLostEnemyPursuitAction( this )
-	, stopLostEnemyPursuitAction( this )
-	, movementModule( this )
-	, vsayTimeout( level.time + 10000 )
-	, lastTouchedTeleportAt( 0 )
-	, lastTouchedJumppadAt( 0 )
-	, lastTouchedElevatorAt( 0 )
-	, lastKnockbackAt( 0 )
-	, lastOwnKnockbackAt( 0 )
-	, lastOwnKnockbackKick( 0 )
-	, similarWorldStateInstanceId( 0 )
-	, lastItemSelectedAt( 0 )
-	, noItemAvailableSince( 0 )
-	, lastBlockedNavTargetReportedAt( 0 )
-	, keptInFovPoint( self_ )
-	, lastChosenLostOrHiddenEnemy( nullptr )
-	, lastChosenLostOrHiddenEnemyInstanceId( 0 )
+	, selectedEnemies( this )
+	, lostEnemies( this )
 	, selectedNavEntity( nullptr, 0, 0, 0 )
-	, itemsSelector( self ) {
+	, movementModule( this )
+	, awarenessModule( this )
+	, planningModule( this )
+	, weightConfig( self_ )
+	, weaponsUsageModule( this ) {
 	self->r.client->movestyle = GS_CLASSICBUNNY;
 	// Enable skimming for bots (since it is useful and should not be noticed from a 3rd person POV).
-	self->r.client->ps.pmove.stats[PM_STAT_FEATURES] &= PMFEAT_CORNERSKIMMING;
-	SetTag( self->r.client->netname );
+	self->r.client->ps.pmove.stats[PM_STAT_FEATURES] |= PMFEAT_CORNERSKIMMING;
+	SetTag( "%s", self->r.client->netname );
 }
 
 #ifndef _MSC_VER
@@ -96,68 +50,51 @@ Bot::~Bot() {
 	}
 }
 
-
-
-void Bot::UpdateKeptInFovPoint() {
-	if( GetMiscTactics().shouldRushHeadless ) {
-		keptInFovPoint.Deactivate();
-		return;
+void Bot::OnAttachedToSquad( AiSquad *squad_ ) {
+	if( !squad_ ) {
+		FailWith( "Bot::OnAttachedToSquad(): Attempt to attach to a null squad" );
 	}
-
-	if( selectedEnemies.AreValid() ) {
-		Vec3 origin( selectedEnemies.ClosestEnemyOrigin( self->s.origin ) );
-		if( !GetMiscTactics().shouldKeepXhairOnEnemy ) {
-			if( !selectedEnemies.HaveQuad() && !selectedEnemies.HaveCarrier() ) {
-				float distanceThreshold = 768.0f + 1024.0f * selectedEnemies.MaxThreatFactor();
-				distanceThreshold *= 0.5f + 0.5f * self->ai->botRef->GetEffectiveOffensiveness();
-				if( origin.SquareDistanceTo( self->s.origin ) > distanceThreshold * distanceThreshold ) {
-					return;
-				}
-			}
+	if( this->squad ) {
+		if( this->squad == squad_ ) {
+			FailWith( "Bot::OnAttachedToSquad(%p): Was already attached to the squad\n", squad_ );
+		} else {
+			FailWith( "Bot::OnAttachedToSquad(%p): Was attached to another squad %p\n", squad_, this->squad );
 		}
-
-		keptInFovPoint.Update( origin, selectedEnemies.InstanceId() );
-		return;
 	}
 
-	unsigned timeout = GetMiscTactics().shouldKeepXhairOnEnemy ? 2000 : 1000;
-	if( GetMiscTactics().willRetreat ) {
-		timeout = ( timeout * 3u ) / 2u;
-	}
+	this->squad = squad_;
+	awarenessModule.OnAttachedToSquad( squad_ );
+	ForcePlanBuilding();
+}
 
-	if( const TrackedEnemy *lostOrHiddenEnemy = awarenessModule.ChooseLostOrHiddenEnemy( timeout ) ) {
-		if( !lastChosenLostOrHiddenEnemy ) {
-			lastChosenLostOrHiddenEnemyInstanceId++;
-		} else if( lastChosenLostOrHiddenEnemy->ent != lostOrHiddenEnemy->ent ) {
-			lastChosenLostOrHiddenEnemyInstanceId++;
+void Bot::OnDetachedFromSquad( AiSquad *squad_ ) {
+	if( squad_ != this->squad ) {
+		if( this->squad ) {
+			FailWith( "OnDetachedFromSquad(%p): Was attached to squad %p\n", squad_, this->squad );
+		} else {
+			FailWith( "OnDetachedFromSquad(%p): Was not attached to a squad\n", squad_ );
 		}
-
-		Vec3 origin( lostOrHiddenEnemy->LastSeenOrigin() );
-		if( !GetMiscTactics().shouldKeepXhairOnEnemy ) {
-			float distanceThreshold = 384.0f;
-			if( lostOrHiddenEnemy->ent ) {
-				distanceThreshold += 1024.0f * selectedEnemies.ComputeThreatFactor( lostOrHiddenEnemy->ent );
-			}
-			distanceThreshold *= 0.5f + 0.5f * self->ai->botRef->GetEffectiveOffensiveness();
-			if( origin.SquareDistanceTo( self->s.origin ) > distanceThreshold * distanceThreshold ) {
-				lastChosenLostOrHiddenEnemy = nullptr;
-				return;
-			}
-		}
-
-		lastChosenLostOrHiddenEnemy = lostOrHiddenEnemy;
-		keptInFovPoint.Update( origin, lastChosenLostOrHiddenEnemyInstanceId );
-		return;
 	}
 
-	lastChosenLostOrHiddenEnemy = nullptr;
+	this->squad = nullptr;
+	awarenessModule.OnDetachedFromSquad( squad_ );
+	ForcePlanBuilding();
+}
 
-	if( const auto *hurtEvent = awarenessModule.GetValidHurtEvent() ) {
-		keptInFovPoint.Activate( hurtEvent->possibleOrigin, (unsigned)hurtEvent->lastHitTimestamp );
-		return;
+int Bot::DefenceSpotId() const {
+	// This call is used only for scripts compatibility so this is not that bad
+	if( dynamic_cast<AiDefenceSpot *>( objectiveSpot ) ) {
+		return objectiveSpot->id;
 	}
+	return -1;
+}
 
-	keptInFovPoint.Deactivate();
+int Bot::OffenseSpotId() const {
+	// This call is used only for scripts compatibility so this is not that bad
+	if( dynamic_cast<AiOffenseSpot *>( objectiveSpot ) ) {
+		return objectiveSpot->id;
+	}
+	return -1;
 }
 
 void Bot::TouchedOtherEntity( const edict_t *entity ) {
@@ -207,6 +144,8 @@ bool Bot::HasJustPickedGoalItem() const {
 }
 
 void Bot::CheckTargetProximity() {
+	planningModule.CheckTargetProximity();
+
 	if( !NavTargetAasAreaNum() ) {
 		return;
 	}
@@ -230,7 +169,7 @@ const SelectedNavEntity &Bot::GetOrUpdateSelectedNavEntity() {
 
 	// Force an update using the currently selected nav entity
 	// (it's OK if it's not valid) as a reference info for selection
-	ForceSetNavEntity( itemsSelector.SuggestGoalNavEntity( selectedNavEntity ) );
+	ForceSetNavEntity( planningModule.SuggestGoalNavEntity( selectedNavEntity ) );
 	// Return the modified selected nav entity
 	return selectedNavEntity;
 }
@@ -244,94 +183,6 @@ void Bot::ForceSetNavEntity( const SelectedNavEntity &selectedNavEntity_ ) {
 		self->ai->botRef->lastItemSelectedAt = level.time;
 	} else if( self->ai->botRef->lastItemSelectedAt >= self->ai->botRef->noItemAvailableSince ) {
 		self->ai->botRef->noItemAvailableSince = level.time;
-	}
-}
-
-void Bot::EnableAutoAlert( const AiAlertSpot &alertSpot, AlertCallback callback, void *receiver ) {
-	// First check duplicate ids. Fail on error since callers of this method are internal.
-	for( unsigned i = 0; i < alertSpots.size(); ++i ) {
-		if( alertSpots[i].id == alertSpot.id ) {
-			FailWith( "Duplicated alert spot (id=%d)\n", alertSpot.id );
-		}
-	}
-
-	if( alertSpots.size() == alertSpots.capacity() ) {
-		FailWith( "Can't add an alert spot (id=%d)\n: too many spots", alertSpot.id );
-	}
-
-	alertSpots.emplace_back( AlertSpot( alertSpot, callback, receiver ) );
-}
-
-void Bot::DisableAutoAlert( int id ) {
-	for( unsigned i = 0; i < alertSpots.size(); ++i ) {
-		if( alertSpots[i].id == id ) {
-			alertSpots.erase( alertSpots.begin() + i );
-			return;
-		}
-	}
-
-	FailWith( "Can't find alert spot by id %d\n", id );
-}
-
-void Bot::CheckAlertSpots( const StaticVector<uint16_t, MAX_CLIENTS> &visibleTargets ) {
-	float scores[MAX_ALERT_SPOTS];
-
-	edict_t *const gameEdicts = game.edicts;
-	// First compute scores (good for instruction cache)
-	for( unsigned i = 0; i < alertSpots.size(); ++i ) {
-		float score = 0.0f;
-		const auto &alertSpot = alertSpots[i];
-		const float squareRadius = alertSpot.radius * alertSpot.radius;
-		const float invRadius = 1.0f / alertSpot.radius;
-		for( uint16_t entNum: visibleTargets ) {
-			edict_t *ent = gameEdicts + entNum;
-			float squareDistance = DistanceSquared( ent->s.origin, alertSpot.origin.Data() );
-			if( squareDistance > squareRadius ) {
-				continue;
-			}
-			float distance = Q_RSqrt( squareDistance + 0.001f );
-			score += 1.0f - distance * invRadius;
-			// Put likely case first
-			if( !( ent->s.effects & EF_CARRIER ) ) {
-				score *= alertSpot.regularEnemyInfluenceScale;
-			} else {
-				score *= alertSpot.carrierEnemyInfluenceScale;
-			}
-		}
-		// Clamp score by a max value
-		clamp_high( score, 3.0f );
-		// Convert score to [0, 1] range
-		score /= 3.0f;
-		// Get a square root of score (values closer to 0 gets scaled more than ones closer to 1)
-		// Note: preserving zero value is important, otherwise an infinite alert is observed.
-		if( score ) {
-			score = 1.0f / sqrtf( score );
-		}
-		// Sanitize
-		clamp( score, 0.0f, 1.0f );
-		scores[i] = score;
-	}
-
-	// Then call callbacks
-	const int64_t levelTime = level.time;
-	for( unsigned i = 0; i < alertSpots.size(); ++i ) {
-		auto &alertSpot = alertSpots[i];
-		uint64_t nonReportedFor = (uint64_t)( levelTime - alertSpot.lastReportedAt );
-		if( nonReportedFor >= 1000 ) {
-			alertSpot.lastReportedScore = 0.0f;
-		}
-
-		// Since scores are sanitized, they are in range [0.0f, 1.0f], and abs(scoreDelta) is in range [-1.0f, 1.0f];
-		float scoreDelta = scores[i] - alertSpot.lastReportedScore;
-		if( scoreDelta >= 0 ) {
-			if( nonReportedFor >= 1000 - scoreDelta * 500 ) {
-				alertSpot.Alert( this, scores[i] );
-			}
-		} else {
-			if( nonReportedFor >= 500 - scoreDelta * 500 ) {
-				alertSpot.Alert( this, scores[i] );
-			}
-		}
 	}
 }
 
@@ -363,9 +214,7 @@ void Bot::OnBlockedTimeout() {
 void Bot::GhostingFrame() {
 	selectedEnemies.Invalidate();
 
-	lastChosenLostOrHiddenEnemy = nullptr;
-
-	botPlanner.ClearGoalAndPlan();
+	planningModule.ClearGoalAndPlan();
 
 	movementModule.Reset();
 
@@ -423,6 +272,9 @@ void Bot::CallGhostingClientThink( const BotInput &input ) {
 }
 
 void Bot::OnRespawn() {
+	VectorClear( self->r.client->ps.pmove.delta_angles );
+	self->r.client->level.last_activity = level.time;
+
 	ResetNavigation();
 }
 
@@ -434,11 +286,9 @@ void Bot::Think() {
 		return;
 	}
 
-	UpdateKeptInFovPoint();
-
 	// TODO: Let the weapons usage module decide?
 	if( CanChangeWeapons() ) {
-		weaponsUsageModule.Think( botPlanner.cachedWorldState );
+		weaponsUsageModule.Think( planningModule.CachedWorldState() );
 		ChangeWeapons( weaponsUsageModule.GetSelectedWeapons() );
 	}
 }
@@ -467,13 +317,12 @@ void Bot::ActiveFrame() {
 	// Always calls Frame() and calls Think() if needed
 	awarenessModule.Update();
 
-	weaponsUsageModule.Frame( botPlanner.cachedWorldState );
+	weaponsUsageModule.Frame( planningModule.CachedWorldState() );
 
 	BotInput botInput;
 	// Might modify botInput
 	movementModule.Frame( &botInput );
 
-	roamingManager.CheckSpotsProximity();
 	CheckTargetProximity();
 
 	// Might modify botInput
@@ -521,18 +370,15 @@ void Bot::OnMovementToNavTargetBlocked() {
 	lastBlockedNavTargetReportedAt = level.time;
 
 	// Force replanning
-	botPlanner.ClearGoalAndPlan();
+	planningModule.ClearGoalAndPlan();
 
 	const auto *navEntity = selectedNavEntity.GetNavEntity();
-	if( !navEntity ) {
-		// It is very likely that the nav entity was based on a tactical spot.
-		// Disable all nearby tactical spots for the origin
-		roamingManager.DisableSpotsInRadius( navEntity->Origin(), 144.0f );
+	if( navEntity ) {
+		planningModule.OnMovementToNavEntityBlocked( navEntity );
 		selectedNavEntity.InvalidateNextFrame();
 		return;
 	}
 
-	itemsSelector.MarkAsDisabled( *navEntity, 4000 );
 	selectedNavEntity.InvalidateNextFrame();
 }
 
@@ -549,13 +395,39 @@ bool Bot::NavTargetWorthRushing() const {
 		return true;
 	}
 
+	// Force insta-jumps regardless of GS_SelfDamage() value
+	if( GS_Instagib() && g_instajump->integer ) {
+		// Check whether the bot really has an IG.
+		const auto *inventory = self->r.client->ps.inventory;
+		if( inventory[WEAP_INSTAGUN] && inventory[AMMO_INSTAS] ) {
+			return true;
+		}
+	}
+
 	// If the bot cannot refill health
 	if( !( level.gametype.spawnableItemsMask & IT_HEALTH ) ) {
 		// TODO: Allow it at the end of round. How to detect a round state in the native code?
 		return false;
 	}
 
-	return selectedEnemies.AreValid() && itemsSelector.IsTopTierItem( navTarget );
+	// Force jumps for pursuing enemies
+	if( planningModule.IsPerformingPursuit() ) {
+		return true;
+	}
+
+	// Don't jump if there's no pressure from enemies
+	if( !selectedEnemies.AreValid() ) {
+		// Duel-like gametypes are an exception
+		if( !( GS_TeamBasedGametype() && GS_InvidualGameType() ) ) {
+			return false;
+		}
+	}
+
+	if( planningModule.IsTopTierItem( navTarget ) ) {
+		return true;
+	}
+
+	return HasOnlyGunblade() && ( navTarget && navTarget->IsTopTierWeapon() );
 }
 
 int Bot::GetWeaponsForWeaponJumping( int *weaponNumsBuffer ) {
@@ -614,7 +486,7 @@ int Bot::GetWeaponsForWeaponJumping( int *weaponNumsBuffer ) {
 	return numSuitableWeapons;
 }
 
-bool Bot::ForceCombatKindOfMovement() const {
+bool Bot::ShouldSkinBunnyInFavorOfCombatMovement() const {
 	// Return a feasible value for this case
 	if( !selectedEnemies.AreValid() ) {
 		return false;
@@ -669,7 +541,7 @@ bool Bot::IsCombatDashingAllowed() const {
 
 bool Bot::IsCombatCrouchingAllowed() const {
 	if( !selectedEnemies.AreValid() ) {
-		return true;
+		return false;
 	}
 
 	// If they're with EB and IG and are about to hit me
@@ -680,4 +552,44 @@ bool Bot::IsCombatCrouchingAllowed() const {
 	}
 
 	return false;
+}
+
+float Bot::GetEffectiveOffensiveness() const {
+	if( squad ) {
+		return squad->IsSupporter( self ) ? 1.0f : 0.0f;
+	}
+	if( selectedEnemies.AreValid() && selectedEnemies.HaveCarrier() ) {
+		return 0.75f;
+	}
+	return baseOffensiveness;
+}
+
+bool Bot::TryGetExtraComputationQuota() const {
+	return MillisInBlockedState() < 100 && AiManager::Instance()->TryGetExpensiveComputationQuota( this );
+}
+
+bool Bot::TryGetVitalComputationQuota() const {
+	return AiManager::Instance()->TryGetExpensiveComputationQuota( this );
+}
+
+bool Bot::TryGetExpensiveThinkCallQuota() const {
+	return AiManager::Instance()->TryGetExpensiveThinkCallQuota( this );
+}
+
+void Bot::PreFrame() {
+	// We should update weapons status each frame since script weapons may be changed each frame.
+	// These statuses are used by firing methods, so actual weapon statuses are required.
+	weaponsUsageModule.UpdateScriptWeaponsStatus();
+
+	const int weakAmmoShift = AMMO_GUNBLADE - WEAP_GUNBLADE;
+	const int strongAmmoShift = AMMO_WEAK_GUNBLADE - WEAP_GUNBLADE;
+	const auto *inventory = self->r.client->ps.inventory;
+
+	hasOnlyGunblade = true;
+	for( int weapon = WEAP_GUNBLADE + 1; weapon < WEAP_TOTAL; ++weapon ) {
+		if( inventory[weapon] && ( inventory[weapon + strongAmmoShift] || inventory[weapon + weakAmmoShift] ) ) {
+			hasOnlyGunblade = false;
+			break;
+		}
+	}
 }

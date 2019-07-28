@@ -21,8 +21,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "g_local.h"
 #include "g_as_local.h"
 
-angelwrap_api_t *angelExport = NULL;
-
 //=======================================================================
 
 static const asEnumVal_t asConfigstringEnumVals[] =
@@ -579,7 +577,7 @@ static void G_asRegisterEnums( asIScriptEngine *asEngine, const asEnum_t *asEnum
 //=======================================================================
 
 static asIObjectType *asEntityArrayType() {
-	asIScriptContext *ctx = angelExport->asGetActiveContext();
+	asIScriptContext *ctx = qasGetActiveContext();
 	asIScriptEngine *engine = ctx->GetEngine();
 	asIObjectType *ot = engine->GetObjectTypeById( engine->GetTypeIdByDecl( "array<Entity @>" ) );
 	return ot;
@@ -690,39 +688,39 @@ static const asClassDescriptor_t asTraceClassDescriptor =
 
 // CLASS: Item
 static asstring_t *objectGItem_getClassName( gsitem_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->classname, self->classname ? strlen( self->classname ) : 0 );
+	return qasStringFactoryBuffer( self->classname, self->classname ? strlen( self->classname ) : 0 );
 }
 
 static asstring_t *objectGItem_getName( gsitem_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->name, self->name ? strlen( self->name ) : 0 );
+	return qasStringFactoryBuffer( self->name, self->name ? strlen( self->name ) : 0 );
 }
 
 static asstring_t *objectGItem_getShortName( gsitem_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->shortname, self->shortname ? strlen( self->shortname ) : 0 );
+	return qasStringFactoryBuffer( self->shortname, self->shortname ? strlen( self->shortname ) : 0 );
 }
 
 static asstring_t *objectGItem_getModelName( gsitem_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->world_model[0], self->world_model[0] ? strlen( self->world_model[0] ) : 0 );
+	return qasStringFactoryBuffer( self->world_model[0], self->world_model[0] ? strlen( self->world_model[0] ) : 0 );
 }
 
 static asstring_t *objectGItem_getModel2Name( gsitem_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->world_model[1], self->world_model[1] ? strlen( self->world_model[1] ) : 0 );
+	return qasStringFactoryBuffer( self->world_model[1], self->world_model[1] ? strlen( self->world_model[1] ) : 0 );
 }
 
 static asstring_t *objectGItem_getIconName( gsitem_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->icon, self->icon ? strlen( self->icon ) : 0 );
+	return qasStringFactoryBuffer( self->icon, self->icon ? strlen( self->icon ) : 0 );
 }
 
 static asstring_t *objectGItem_getSimpleItemName( gsitem_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->simpleitem, self->simpleitem ? strlen( self->simpleitem ) : 0 );
+	return qasStringFactoryBuffer( self->simpleitem, self->simpleitem ? strlen( self->simpleitem ) : 0 );
 }
 
 static asstring_t *objectGItem_getPickupSoundName( gsitem_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->pickup_sound, self->pickup_sound ? strlen( self->pickup_sound ) : 0 );
+	return qasStringFactoryBuffer( self->pickup_sound, self->pickup_sound ? strlen( self->pickup_sound ) : 0 );
 }
 
 static asstring_t *objectGItem_getColorToken( gsitem_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->color, self->color ? strlen( self->color ) : 0 );
+	return qasStringFactoryBuffer( self->color, self->color ? strlen( self->color ) : 0 );
 }
 
 static bool objectGItem_isPickable( gsitem_t *self ) {
@@ -861,13 +859,13 @@ static int objectMatch_getState( match_t *self ) {
 static asstring_t *objectMatch_getName( match_t *self ) {
 	const char *s = trap_GetConfigString( CS_MATCHNAME );
 
-	return angelExport->asStringFactoryBuffer( s, strlen( s ) );
+	return qasStringFactoryBuffer( s, strlen( s ) );
 }
 
 static asstring_t *objectMatch_getScore( match_t *self ) {
 	const char *s = trap_GetConfigString( CS_MATCHSCORE );
 
-	return angelExport->asStringFactoryBuffer( s, strlen( s ) );
+	return qasStringFactoryBuffer( s, strlen( s ) );
 }
 
 static void objectMatch_setName( asstring_t *name, match_t *self ) {
@@ -951,7 +949,7 @@ static const asClassDescriptor_t asMatchClassDescriptor =
 static asstring_t *objectGametypeDescriptor_getTitle( gametype_descriptor_t *self ) {
 	const char *s = trap_GetConfigString( CS_GAMETYPETITLE );
 
-	return angelExport->asStringFactoryBuffer( s, strlen( s ) );
+	return qasStringFactoryBuffer( s, strlen( s ) );
 }
 
 static void objectGametypeDescriptor_setTitle( asstring_t *other, gametype_descriptor_t *self ) {
@@ -963,13 +961,13 @@ static void objectGametypeDescriptor_setTitle( asstring_t *other, gametype_descr
 }
 
 static asstring_t *objectGametypeDescriptor_getName( gametype_descriptor_t *self ) {
-	return angelExport->asStringFactoryBuffer( gs.gametypeName, strlen( gs.gametypeName ) );
+	return qasStringFactoryBuffer( gs.gametypeName, strlen( gs.gametypeName ) );
 }
 
 static asstring_t *objectGametypeDescriptor_getVersion( gametype_descriptor_t *self ) {
 	const char *s = trap_GetConfigString( CS_GAMETYPEVERSION );
 
-	return angelExport->asStringFactoryBuffer( s, strlen( s ) );
+	return qasStringFactoryBuffer( s, strlen( s ) );
 }
 
 static void objectGametypeDescriptor_setVersion( asstring_t *other, gametype_descriptor_t *self ) {
@@ -983,7 +981,7 @@ static void objectGametypeDescriptor_setVersion( asstring_t *other, gametype_des
 static asstring_t *objectGametypeDescriptor_getAuthor( gametype_descriptor_t *self ) {
 	const char *s = trap_GetConfigString( CS_GAMETYPEAUTHOR );
 
-	return angelExport->asStringFactoryBuffer( s, strlen( s ) );
+	return qasStringFactoryBuffer( s, strlen( s ) );
 }
 
 static void objectGametypeDescriptor_setAuthor( asstring_t *other, gametype_descriptor_t *self ) {
@@ -997,7 +995,7 @@ static void objectGametypeDescriptor_setAuthor( asstring_t *other, gametype_desc
 static asstring_t *objectGametypeDescriptor_getManifest( gametype_descriptor_t *self ) {
 	const char *s = trap_GetConfigString( CS_MODMANIFEST );
 
-	return angelExport->asStringFactoryBuffer( s, strlen( s ) );
+	return qasStringFactoryBuffer( s, strlen( s ) );
 }
 
 static void objectGametypeDescriptor_SetTeamSpawnsystem( int team, int spawnsystem, int wave_time, int wave_maxcount, bool spectate_team, gametype_descriptor_t *self ) {
@@ -1123,13 +1121,13 @@ static edict_t *objectTeamlist_GetPlayerEntity( int index, g_teamlist_t *obj ) {
 static asstring_t *objectTeamlist_getName( g_teamlist_t *obj ) {
 	const char *name = GS_TeamName( obj - teamlist );
 
-	return angelExport->asStringFactoryBuffer( name, name ? strlen( name ) : 0 );
+	return qasStringFactoryBuffer( name, name ? strlen( name ) : 0 );
 }
 
 static asstring_t *objectTeamlist_getDefaultName( g_teamlist_t *obj ) {
 	const char *name = GS_DefaultTeamName( obj - teamlist );
 
-	return angelExport->asStringFactoryBuffer( name, name ? strlen( name ) : 0 );
+	return qasStringFactoryBuffer( name, name ? strlen( name ) : 0 );
 }
 
 static void objectTeamlist_setName( asstring_t *str, g_teamlist_t *obj ) {
@@ -1345,7 +1343,55 @@ static const asClassDescriptor_t asScoreStatsClassDescriptor =
 	NULL, NULL                  /* string factory hack */
 };
 
+static bool objectRunStatusQuery_isReady( RunStatusQuery *self ) {
+	return self->IsReady();
+}
 
+static bool objectRunStatusQuery_hasFailed( RunStatusQuery *self ) {
+	return self->HasFailed();
+}
+
+static int objectRunStatusQuery_personalRank( RunStatusQuery *self ) {
+	return self->PersonalRank();
+}
+
+static int objectRunStatusQuery_worldRank( RunStatusQuery *self ) {
+	return self->WorldRank();
+}
+
+static void objectRunStatusQuery_deleteSelf( RunStatusQuery *self ) {
+	return self->DeleteSelf();
+}
+
+// Why is it even needed to declare empty trait arrays for every declared type...
+// Thinking about porting sane bindings from a private AI branch
+static const asFuncdef_t runStatusQuery_Funcdefs[] = { ASLIB_FUNCDEF_NULL };
+static const asBehavior_t runStatusQuery_Behaviors[] = { ASLIB_BEHAVIOR_NULL };
+static const asProperty_t runStatusQuery_Properties[] = { ASLIB_PROPERTY_NULL };
+
+static const asMethod_t runStatusQuery_Methods[] =
+{
+	{ ASLIB_FUNCTION_DECL( bool, get_isReady, () const ), asFUNCTION( objectRunStatusQuery_isReady ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( bool, get_hasFailed, () const ), asFUNCTION( objectRunStatusQuery_hasFailed ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( int, get_personalRank, () const ), asFUNCTION( objectRunStatusQuery_personalRank ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( int, get_worldRank, () const ), asFUNCTION( objectRunStatusQuery_worldRank ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( void, deleteSelf, () ), asFUNCTION( objectRunStatusQuery_deleteSelf ), asCALL_CDECL_OBJLAST },
+
+	ASLIB_METHOD_NULL
+};
+
+static const asClassDescriptor_t asRunStatusQueryClassDescriptor =
+{
+	"RunStatusQuery",           /* name */
+	asOBJ_REF | asOBJ_NOCOUNT,  /* object type flags */
+	sizeof( RunStatusQuery ),   /* size */
+	runStatusQuery_Funcdefs,    /* funcdefs */
+	runStatusQuery_Behaviors,   /* object behaviors */
+	runStatusQuery_Methods,     /* methods */
+	runStatusQuery_Properties,  /* properties */
+
+	NULL, NULL                  /* string factory hack */
+};
 
 //=======================================================================
 
@@ -1413,7 +1459,7 @@ static asstring_t *objectGameClient_getName( gclient_t *self ) {
 	Q_strncpyz( temp, self->netname, sizeof( temp ) );
 	Q_strncatz( temp, S_COLOR_WHITE, sizeof( temp ) );
 
-	return angelExport->asStringFactoryBuffer( temp, strlen( temp ) );
+	return qasStringFactoryBuffer( temp, strlen( temp ) );
 }
 
 static asstring_t *objectGameClient_getClanName( gclient_t *self ) {
@@ -1422,7 +1468,7 @@ static asstring_t *objectGameClient_getClanName( gclient_t *self ) {
 	Q_strncpyz( temp, self->clanname, sizeof( temp ) );
 	Q_strncatz( temp, S_COLOR_WHITE, sizeof( temp ) );
 
-	return angelExport->asStringFactoryBuffer( temp, strlen( temp ) );
+	return qasStringFactoryBuffer( temp, strlen( temp ) );
 }
 
 static asstring_t *objectGameClient_getMMLogin( gclient_t *self ) {
@@ -1435,7 +1481,7 @@ static asstring_t *objectGameClient_getMMLogin( gclient_t *self ) {
 		login = "";
 	}
 
-	return angelExport->asStringFactoryBuffer( login, strlen( login ) );
+	return qasStringFactoryBuffer( login, strlen( login ) );
 }
 
 static void objectGameClient_Respawn( bool ghost, gclient_t *self ) {
@@ -1669,15 +1715,15 @@ static asstring_t *objectGameClient_getUserInfoKey( asstring_t *key, gclient_t *
 	char *s;
 
 	if( !key || !key->buffer || !key->buffer[0] ) {
-		return angelExport->asStringFactoryBuffer( NULL, 0 );
+		return qasStringFactoryBuffer( NULL, 0 );
 	}
 
 	s = Info_ValueForKey( self->userinfo, key->buffer );
 	if( !s || !*s ) {
-		return angelExport->asStringFactoryBuffer( NULL, 0 );
+		return qasStringFactoryBuffer( NULL, 0 );
 	}
 
-	return angelExport->asStringFactoryBuffer( s, strlen( s ) );
+	return qasStringFactoryBuffer( s, strlen( s ) );
 }
 
 static void objectGameClient_printMessage( asstring_t *str, gclient_t *self ) {
@@ -1730,18 +1776,53 @@ static void objectGameClient_NewRaceRun( int numSectors, gclient_t *self ) {
 		return;
 	}
 
-	G_NewRaceRun( PLAYERENT( playerNum ), numSectors );
+	StatsowFacade::Instance()->NewRaceRun( PLAYERENT( playerNum ), numSectors );
 }
 
-static void objectGameClient_SetRaceTime( int sector, int64_t time, gclient_t *self ) {
-	int playerNum;
-
-	playerNum = objectGameClient_PlayerNum( self );
+static void objectGameClient_SetSectorTime( int sector, uint32_t time, gclient_t *self ) {
+	// TODO: Validate `self`
+	int playerNum = objectGameClient_PlayerNum( self );
+	// TODO: Throw a script exception at this!
 	if( playerNum < 0 || playerNum >= gs.maxclients ) {
 		return;
 	}
 
-	G_SetRaceTime( PLAYERENT( playerNum ), sector, time );
+	StatsowFacade::Instance()->SetSectorTime( PLAYERENT( playerNum ), sector, time );
+}
+
+static RunStatusQuery *objectGameClient_CompleteRaceRun( uint32_t finalTime, gclient_t *self ) {
+	int playerNum = objectGameClient_PlayerNum( self );
+	// TODO: Throw a script exception at this!
+	if( playerNum < 0 || playerNum >= gs.maxclients ) {
+		return nullptr;
+	}
+
+	return StatsowFacade::Instance()->CompleteRun( PLAYERENT( playerNum ), finalTime );
+}
+
+static RunStatusQuery *objectGameClient_CompleteRaceRun2( uint32_t finalTime, const asstring_t *tag, gclient_t *self ) {
+	int playerNum = objectGameClient_PlayerNum( self );
+	// TODO: Throw a script exception at this!
+	if( playerNum < 0 || playerNum >= gs.maxclients ) {
+		return nullptr;
+	}
+
+	edict_t *playerEnt = PLAYERENT( playerNum );
+	if( !tag || !tag->size ) {
+		return StatsowFacade::Instance()->CompleteRun( playerEnt, finalTime );
+	}
+
+	return StatsowFacade::Instance()->CompleteRun( playerEnt, finalTime, tag->buffer );
+}
+
+static void objectGameClient_AddToRacePlayTime( int64_t timeToAdd, gclient_t *self ) {
+	int playerNum = objectGameClient_PlayerNum( self );
+	// TODO: Throw a script exception at this!
+	if( playerNum < 0 || playerNum >= gs.maxclients ) {
+		return;
+	}
+
+	StatsowFacade::Instance()->AddToRacePlayTime( self, timeToAdd );
 }
 
 static void objectGameClient_SetHelpMessage( unsigned int index, gclient_t *self ) {
@@ -1825,7 +1906,10 @@ static const asMethod_t gameclient_Methods[] =
 	{ ASLIB_FUNCTION_DECL( void, set_chaseActive, ( const bool active ) ), asFUNCTION( objectGameClient_SetChaseActive ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( bool, get_chaseActive, ( ) const ), asFUNCTION( objectGameClient_GetChaseActive ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, newRaceRun, ( int numSectors ) ), asFUNCTION( objectGameClient_NewRaceRun ), asCALL_CDECL_OBJLAST },
-	{ ASLIB_FUNCTION_DECL( void, setRaceTime, ( int sector, int64 time ) ), asFUNCTION( objectGameClient_SetRaceTime ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( void, setSectorTime, ( int sector, uint time ) ), asFUNCTION( objectGameClient_SetSectorTime ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( RunStatusQuery @, completeRaceRun, ( uint finalTime ) ), asFUNCTION( objectGameClient_CompleteRaceRun ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( RunStatusQuery @, completeRaceRun, ( uint finalTime, const String @tag ) ), asFUNCTION( objectGameClient_CompleteRaceRun2 ), asCALL_CDECL_OBJLAST },
+	{ ASLIB_FUNCTION_DECL( void, addToRacePlayTime, ( int64 finalTime ) ), asFUNCTION( objectGameClient_AddToRacePlayTime ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, setHelpMessage, ( uint msg ) ), asFUNCTION( objectGameClient_SetHelpMessage ), asCALL_CDECL_OBJLAST },
 	{ ASLIB_FUNCTION_DECL( void, setQuickMenuItems, ( const String &in ) ), asFUNCTION( objectGameClient_SetQuickMenuItems ), asCALL_CDECL_OBJLAST },
 
@@ -1841,7 +1925,6 @@ static const asProperty_t gameclient_Properties[] =
 	{ ASLIB_PROPERTY_DECL( const int, hand ), ASLIB_FOFFSET( gclient_t, hand ) },
 	{ ASLIB_PROPERTY_DECL( const bool, isOperator ), ASLIB_FOFFSET( gclient_t, isoperator ) },
 	{ ASLIB_PROPERTY_DECL( const int64, queueTimeStamp ), ASLIB_FOFFSET( gclient_t, queueTimeStamp ) },
-	{ ASLIB_PROPERTY_DECL( const int, muted ), ASLIB_FOFFSET( gclient_t, muted ) },
 	{ ASLIB_PROPERTY_DECL( float, armor ), ASLIB_FOFFSET( gclient_t, resp.armor ) },
 	{ ASLIB_PROPERTY_DECL( const bool, chaseActive ), ASLIB_FOFFSET( gclient_t, resp.chase.active ) },
 	{ ASLIB_PROPERTY_DECL( int, chaseTarget ), ASLIB_FOFFSET( gclient_t, resp.chase.target ) },
@@ -1997,15 +2080,15 @@ static int objectGameEntity_PlayerNum( edict_t *self ) {
 }
 
 static asstring_t *objectGameEntity_getModelName( edict_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->model, self->model ? strlen( self->model ) : 0 );
+	return qasStringFactoryBuffer( self->model, self->model ? strlen( self->model ) : 0 );
 }
 
 static asstring_t *objectGameEntity_getModel2Name( edict_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->model2, self->model2 ? strlen( self->model2 ) : 0 );
+	return qasStringFactoryBuffer( self->model2, self->model2 ? strlen( self->model2 ) : 0 );
 }
 
 static asstring_t *objectGameEntity_getClassname( edict_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->classname, self->classname ? strlen( self->classname ) : 0 );
+	return qasStringFactoryBuffer( self->classname, self->classname ? strlen( self->classname ) : 0 );
 }
 
 /*
@@ -2014,16 +2097,16 @@ static asstring_t *objectGameEntity_getSpawnKey( asstring_t *key, edict_t *self 
 const char *val;
 
 if( !key )
-return angelExport->asStringFactoryBuffer( NULL, 0 );
+return qasStringFactoryBuffer( NULL, 0 );
 
 val = G_GetEntitySpawnKey( key->buffer, self );
 
-return angelExport->asStringFactoryBuffer( val, strlen( val ) );
+return qasStringFactoryBuffer( val, strlen( val ) );
 }
 */
 
 static asstring_t *objectGameEntity_getTargetname( edict_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->targetname, self->targetname ? strlen( self->targetname ) : 0 );
+	return qasStringFactoryBuffer( self->targetname, self->targetname ? strlen( self->targetname ) : 0 );
 }
 
 static void objectGameEntity_setTargetname( asstring_t *targetname, edict_t *self ) {
@@ -2031,7 +2114,7 @@ static void objectGameEntity_setTargetname( asstring_t *targetname, edict_t *sel
 }
 
 static asstring_t *objectGameEntity_getTarget( edict_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->target, self->target ? strlen( self->target ) : 0 );
+	return qasStringFactoryBuffer( self->target, self->target ? strlen( self->target ) : 0 );
 }
 
 static void objectGameEntity_setTarget( asstring_t *target, edict_t *self ) {
@@ -2039,11 +2122,11 @@ static void objectGameEntity_setTarget( asstring_t *target, edict_t *self ) {
 }
 
 static asstring_t *objectGameEntity_getMap( edict_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->map, self->map ? strlen( self->map ) : 0 );
+	return qasStringFactoryBuffer( self->map, self->map ? strlen( self->map ) : 0 );
 }
 
 static asstring_t *objectGameEntity_getSoundName( edict_t *self ) {
-	return angelExport->asStringFactoryBuffer( self->sounds, self->sounds ? strlen( self->sounds ) : 0 );
+	return qasStringFactoryBuffer( self->sounds, self->sounds ? strlen( self->sounds ) : 0 );
 }
 
 static void objectGameEntity_setClassname( asstring_t *classname, edict_t *self ) {
@@ -2118,7 +2201,7 @@ static edict_t *objectGameEntity_DropItem( gsitem_t *item, edict_t *self ) {
 
 static CScriptArrayInterface *objectGameEntity_findTargets( edict_t *self ) {
 	asIObjectType *ot = asEntityArrayType();
-	CScriptArrayInterface *arr = angelExport->asCreateArrayCpp( 0, ot );
+	CScriptArrayInterface *arr = qasCreateArrayCpp( 0, ot );
 
 	if( self->target && self->target[0] != '\0' ) {
 		int count = 0;
@@ -2135,7 +2218,7 @@ static CScriptArrayInterface *objectGameEntity_findTargets( edict_t *self ) {
 
 static CScriptArrayInterface *objectGameEntity_findTargeting( edict_t *self ) {
 	asIObjectType *ot = asEntityArrayType();
-	CScriptArrayInterface *arr = angelExport->asCreateArrayCpp( 0, ot );
+	CScriptArrayInterface *arr = qasCreateArrayCpp( 0, ot );
 
 	if( self->targetname && self->targetname[0] != '\0' ) {
 		int count = 0;
@@ -2371,6 +2454,7 @@ static const asClassDescriptor_t * const asGameClassesDescriptors[] =
 	&asGametypeClassDescriptor,
 	&asTeamListClassDescriptor,
 	&asScoreStatsClassDescriptor,
+	&asRunStatusQueryClassDescriptor,
 	&asGameClientDescriptor,
 	&asGameEntityClassDescriptor,
 
@@ -2473,7 +2557,7 @@ static edict_t *asFunc_G_Spawn( asstring_t *classname ) {
 
 	ent->scriptSpawned = true;
 	ent->asScriptModule = static_cast<void *>(
-		GAME_AS_ENGINE()->GetModule( angelExport->asGetActiveContext()->GetFunction( 0 )->GetModuleName() )
+		GAME_AS_ENGINE()->GetModule( qasGetActiveContext()->GetFunction( 0 )->GetModuleName() )
 		);
 
 	G_asClearEntityBehaviors( ent );
@@ -2667,7 +2751,7 @@ static asstring_t *asFunc_LoadFile( asstring_t *path ) {
 	asstring_t *data;
 
 	if( !path || !path->len ) {
-		return angelExport->asStringFactoryBuffer( NULL, 0 );
+		return qasStringFactoryBuffer( NULL, 0 );
 	}
 
 	filelen = trap_FS_FOpenFile( path->buffer, &filehandle, FS_READ );
@@ -2679,10 +2763,10 @@ static asstring_t *asFunc_LoadFile( asstring_t *path ) {
 	trap_FS_FCloseFile( filehandle );
 
 	if( !buf ) {
-		return angelExport->asStringFactoryBuffer( NULL, 0 );
+		return qasStringFactoryBuffer( NULL, 0 );
 	}
 
-	data = angelExport->asStringFactoryBuffer( (char *)buf, filelen );
+	data = qasStringFactoryBuffer( (char *)buf, filelen );
 	G_Free( buf );
 
 	return data;
@@ -2716,7 +2800,7 @@ static asstring_t *asFunc_ML_GetMapByNum( int num ) {
 		return NULL;
 	}
 
-	data = angelExport->asStringFactoryBuffer( (char *)mapname, strlen( mapname ) );
+	data = qasStringFactoryBuffer( (char *)mapname, strlen( mapname ) );
 	return data;
 }
 
@@ -2726,7 +2810,7 @@ static asstring_t *asFunc_LocationName( asvec3_t *origin ) {
 
 	G_MapLocationNameForTAG( G_MapLocationTAGForOrigin( origin->v ), buf, sizeof( buf ) );
 
-	data = angelExport->asStringFactoryBuffer( (char *)buf, strlen( buf ) );
+	data = qasStringFactoryBuffer( (char *)buf, strlen( buf ) );
 	return data;
 }
 
@@ -2740,7 +2824,7 @@ static asstring_t *asFunc_LocationForTag( int tag ) {
 
 	G_MapLocationNameForTAG( tag, buf, sizeof( buf ) );
 
-	data = angelExport->asStringFactoryBuffer( (char *)buf, strlen( buf ) );
+	data = qasStringFactoryBuffer( (char *)buf, strlen( buf ) );
 
 	return data;
 }
@@ -2804,7 +2888,7 @@ static void asFunc_RegisterCommand( asstring_t *str ) {
 		return;
 	}
 
-	G_AddCommand( str->buffer, NULL );
+	ClientCommandsHandler::Instance()->AddScriptCommand( str->buffer );
 }
 
 static void asFunc_RegisterCallvote( asstring_t *asname, asstring_t *asusage, asstring_t *astype, asstring_t *ashelp ) {
@@ -2820,7 +2904,7 @@ static void asFunc_RegisterCallvote( asstring_t *asname, asstring_t *asusage, as
 
 static asstring_t *asFunc_GetConfigString( int index ) {
 	const char *cs = trap_GetConfigString( index );
-	return angelExport->asStringFactoryBuffer( (char *)cs, cs ? strlen( cs ) : 0 );
+	return qasStringFactoryBuffer( (char *)cs, cs ? strlen( cs ) : 0 );
 }
 
 static void asFunc_SetConfigString( int index, asstring_t *str ) {
@@ -2902,7 +2986,7 @@ static CScriptArrayInterface *asFunc_G_FindInRadius( asvec3_t *org, float radius
 
 	int touch[MAX_EDICTS];
 	int numtouch = GClip_FindInRadius( org->v, radius, touch, MAX_EDICTS );
-	CScriptArrayInterface *arr = angelExport->asCreateArrayCpp( numtouch, ot );
+	CScriptArrayInterface *arr = qasCreateArrayCpp( numtouch, ot );
 	for( int i = 0; i < numtouch; i++ ) {
 		*( (edict_t **)arr->At( i ) ) = game.edicts + touch[i];
 	}
@@ -2914,7 +2998,7 @@ static CScriptArrayInterface *asFunc_G_FindByClassname( asstring_t *str ) {
 	const char *classname = str->buffer;
 
 	asIObjectType *ot = asEntityArrayType();
-	CScriptArrayInterface *arr = angelExport->asCreateArrayCpp( 0, ot );
+	CScriptArrayInterface *arr = qasCreateArrayCpp( 0, ot );
 
 	int count = 0;
 	edict_t *ent = NULL;
@@ -2991,7 +3075,7 @@ static asstring_t *asFunc_G_SpawnTempValue( asstring_t *key ) {
 	const char *val;
 
 	if( !key ) {
-		return angelExport->asStringFactoryBuffer( NULL, 0 );
+		return qasStringFactoryBuffer( NULL, 0 );
 	}
 
 	if( level.spawning_entity == NULL ) {
@@ -3000,7 +3084,7 @@ static asstring_t *asFunc_G_SpawnTempValue( asstring_t *key ) {
 
 	val = G_GetEntitySpawnKey( key->buffer, level.spawning_entity );
 
-	return angelExport->asStringFactoryBuffer( val, strlen( val ) );
+	return qasStringFactoryBuffer( val, strlen( val ) );
 }
 
 static void asFunc_FireInstaShot( asvec3_t *origin, asvec3_t *angles, int range, int damage, int knockback, int stun, edict_t *owner ) {
@@ -3008,7 +3092,7 @@ static void asFunc_FireInstaShot( asvec3_t *origin, asvec3_t *angles, int range,
 }
 
 static edict_t *asFunc_FireWeakBolt( asvec3_t *origin, asvec3_t *angles, int speed, int damage, int knockback, int stun, edict_t *owner ) {
-	return W_Fire_Electrobolt_Weak( owner, origin->v, angles->v, speed, damage, min( 1, knockback ), knockback, stun, 5000, MOD_ELECTROBOLT_W, 0 );
+	return W_Fire_Electrobolt_Weak( owner, origin->v, angles->v, speed, damage, std::min( 1, knockback ), knockback, stun, 5000, MOD_ELECTROBOLT_W, 0 );
 }
 
 static void asFunc_FireStrongBolt( asvec3_t *origin, asvec3_t *angles, int range, int damage, int knockback, int stun, edict_t *owner ) {
@@ -3016,15 +3100,15 @@ static void asFunc_FireStrongBolt( asvec3_t *origin, asvec3_t *angles, int range
 }
 
 static edict_t *asFunc_FirePlasma( asvec3_t *origin, asvec3_t *angles, int speed, int radius, int damage, int knockback, int stun, edict_t *owner ) {
-	return W_Fire_Plasma( owner, origin->v, angles->v, damage, min( 1, knockback ), knockback, stun, min( 1, damage ), radius, speed, 5000, MOD_PLASMA_S, 0 );
+	return W_Fire_Plasma( owner, origin->v, angles->v, damage, std::min( 1, knockback ), knockback, stun, std::min( 1, damage ), radius, speed, 5000, MOD_PLASMA_S, 0 );
 }
 
 static edict_t *asFunc_FireRocket( asvec3_t *origin, asvec3_t *angles, int speed, int radius, int damage, int knockback, int stun, edict_t *owner ) {
-	return W_Fire_Rocket( owner, origin->v, angles->v, speed, damage, min( 1, knockback ), knockback, stun, min( 1, damage ), radius, 5000, MOD_ROCKET_S, 0 );
+	return W_Fire_Rocket( owner, origin->v, angles->v, speed, damage, std::min( 1, knockback ), knockback, stun, std::min( 1, damage ), radius, 5000, MOD_ROCKET_S, 0 );
 }
 
 static edict_t *asFunc_FireGrenade( asvec3_t *origin, asvec3_t *angles, int speed, int radius, int damage, int knockback, int stun, edict_t *owner ) {
-	return W_Fire_Grenade( owner, origin->v, angles->v, speed, damage, min( 1, knockback ), knockback, stun, min( 1, damage ), radius, 5000, MOD_GRENADE_S, 0, false );
+	return W_Fire_Grenade( owner, origin->v, angles->v, speed, damage, std::min( 1, knockback ), knockback, stun, std::min( 1, damage ), radius, 5000, MOD_GRENADE_S, 0, false );
 }
 
 static void asFunc_FireRiotgun( asvec3_t *origin, asvec3_t *angles, int range, int spread, int count, int damage, int knockback, int stun, edict_t *owner ) {
@@ -3036,7 +3120,7 @@ static void asFunc_FireBullet( asvec3_t *origin, asvec3_t *angles, int range, in
 }
 
 static edict_t *asFunc_FireBlast( asvec3_t *origin, asvec3_t *angles, int speed, int radius, int damage, int knockback, int stun, edict_t *owner ) {
-	return W_Fire_GunbladeBlast( owner, origin->v, angles->v, damage, min( 1, knockback ), knockback, stun, min( 1, damage ), radius, speed, 5000, MOD_SPLASH, 0 );
+	return W_Fire_GunbladeBlast( owner, origin->v, angles->v, damage, std::min( 1, knockback ), knockback, stun, std::min( 1, damage ), radius, speed, 5000, MOD_SPLASH, 0 );
 }
 
 static unsigned asFunc_G_RegisterHelpMessage( asstring_t *str ) {
@@ -3250,7 +3334,7 @@ bool G_asCallMapEntitySpawnScript( const char *classname, edict_t *ent ) {
 	G_asClearEntityBehaviors( ent );
 
 	// call the spawn function
-	asContext = angelExport->asAcquireContext( asEngine );
+	asContext = qasAcquireContext( asEngine );
 	error = asContext->Prepare( asSpawnFunc );
 	if( error < 0 ) {
 		return false;
@@ -3303,7 +3387,7 @@ void G_asClearEntityBehaviors( edict_t *ent ) {
 * Release callback function references held by the engine for script spawned entities
 */
 void G_asReleaseEntityBehaviors( edict_t *ent ) {
-	if( ent->scriptSpawned && angelExport ) {
+	if( ent->scriptSpawned ) {
 		if( ent->asThinkFunc ) {
 			static_cast<asIScriptFunction*>( ent->asThinkFunc )->Release();
 		}
@@ -3336,7 +3420,7 @@ void G_asCallMapEntityThink( edict_t *ent ) {
 		return;
 	}
 
-	ctx = angelExport->asAcquireContext( GAME_AS_ENGINE() );
+	ctx = qasAcquireContext( GAME_AS_ENGINE() );
 
 	error = ctx->Prepare( static_cast<asIScriptFunction *>( ent->asThinkFunc ) );
 	if( error < 0 ) {
@@ -3362,7 +3446,7 @@ void G_asCallMapEntityTouch( edict_t *ent, edict_t *other, cplane_t *plane, int 
 		return;
 	}
 
-	ctx = angelExport->asAcquireContext( GAME_AS_ENGINE() );
+	ctx = qasAcquireContext( GAME_AS_ENGINE() );
 
 	error = ctx->Prepare( static_cast<asIScriptFunction *>( ent->asTouchFunc ) );
 	if( error < 0 ) {
@@ -3396,7 +3480,7 @@ void G_asCallMapEntityUse( edict_t *ent, edict_t *other, edict_t *activator ) {
 		return;
 	}
 
-	ctx = angelExport->asAcquireContext( GAME_AS_ENGINE() );
+	ctx = qasAcquireContext( GAME_AS_ENGINE() );
 
 	error = ctx->Prepare( static_cast<asIScriptFunction *>( ent->asUseFunc ) );
 	if( error < 0 ) {
@@ -3423,7 +3507,7 @@ void G_asCallMapEntityPain( edict_t *ent, edict_t *other, float kick, float dama
 		return;
 	}
 
-	ctx = angelExport->asAcquireContext( GAME_AS_ENGINE() );
+	ctx = qasAcquireContext( GAME_AS_ENGINE() );
 
 	error = ctx->Prepare( static_cast<asIScriptFunction *>( ent->asPainFunc ) );
 	if( error < 0 ) {
@@ -3451,7 +3535,7 @@ void G_asCallMapEntityDie( edict_t *ent, edict_t *inflicter, edict_t *attacker, 
 		return;
 	}
 
-	ctx = angelExport->asAcquireContext( GAME_AS_ENGINE() );
+	ctx = qasAcquireContext( GAME_AS_ENGINE() );
 
 	error = ctx->Prepare( static_cast<asIScriptFunction *>( ent->asDieFunc ) );
 	if( error < 0 ) {
@@ -3478,7 +3562,7 @@ void G_asCallMapEntityStop( edict_t *ent ) {
 		return;
 	}
 
-	ctx = angelExport->asAcquireContext( GAME_AS_ENGINE() );
+	ctx = qasAcquireContext( GAME_AS_ENGINE() );
 
 	error = ctx->Prepare( static_cast<asIScriptFunction *>( ent->asStopFunc ) );
 	if( error < 0 ) {
@@ -3510,7 +3594,7 @@ bool G_ExecutionErrorReport( int error ) {
 * G_LoadGameScript
 */
 asIScriptModule *G_LoadGameScript( const char *moduleName, const char *dir, const char *filename, const char *ext ) {
-	return angelExport->asLoadScriptProject( GAME_AS_ENGINE(), moduleName, GAME_SCRIPTS_DIRECTORY, dir, filename, ext );
+	return qasLoadScriptProject( GAME_AS_ENGINE(), moduleName, GAME_SCRIPTS_DIRECTORY, dir, filename, ext );
 }
 
 /*
@@ -3570,13 +3654,7 @@ void G_asInitGameModuleEngine( void ) {
 	G_ResetGameModuleScriptData();
 
 	// initialize the engine
-	angelExport = trap_asGetAngelExport();
-	if( !angelExport ) {
-		G_Printf( "* Couldn't initialize angelscript, missing symbol.\n" );
-		return;
-	}
-
-	asEngine = angelExport->asCreateEngine( &asGeneric );
+	asEngine = qasCreateEngine( &asGeneric );
 	if( !asEngine ) {
 		G_Printf( "* Couldn't initialize angelscript.\n" );
 		return;
@@ -3598,9 +3676,7 @@ void G_asInitGameModuleEngine( void ) {
 */
 void G_asShutdownGameModuleEngine( void ) {
 	if( game.asEngine != NULL ) {
-		if( angelExport ) {
-			angelExport->asReleaseEngine( static_cast<asIScriptEngine *>( game.asEngine ) );
-		}
+		qasReleaseEngine( static_cast<asIScriptEngine *>( game.asEngine ) );
 		G_ResetGameModuleScriptData();
 	}
 }
@@ -3614,10 +3690,6 @@ void G_asGarbageCollect( bool force ) {
 	static int64_t lastTime = 0;
 	unsigned int currentSize, totalDestroyed, totalDetected;
 	asIScriptEngine *asEngine;
-
-	if( !angelExport ) {
-		return;
-	}
 
 	asEngine = GAME_AS_ENGINE();
 	if( !asEngine ) {

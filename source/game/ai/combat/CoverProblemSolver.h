@@ -22,8 +22,25 @@ public:
 		}
 	};
 private:
-	SpotsAndScoreVector &SelectCoverSpots( const SpotsAndScoreVector &reachCheckedSpots, int maxSpots );
-	bool LooksLikeACoverSpot( uint16_t spotNum ) const;
+	using EntNumsVector = StaticVector<int, MAX_EDICTS>;
+
+	int FindTopNodeAndEntNums( SpotsAndScoreVector &spotsAndScores, EntNumsVector &entNums );
+
+	void FilterRawEntNums( EntNumsVector &entNums );
+
+	SpotsAndScoreVector &FilterByAreaVisTables( SpotsAndScoreVector &spotsAndScores );
+
+	SpotsAndScoreVector &FilterByCoarseRayTests( SpotsAndScoreVector &spotsAndScores,
+												 int collisionTopNodeHint,
+												 const EntNumsVector &entNums );
+
+	SpotsAndScoreVector &SelectCoverSpots( SpotsAndScoreVector &candidateSpots,
+		                                   int collisionTopNodeHint,
+		                                   const EntNumsVector &entNums );
+
+	bool LooksLikeACoverSpot( const TacticalSpot &spot, const vec3_t *rayBounds, int topNode, const EntNumsVector &entNums );
+
+	bool CastRay( const float *from, const float *to, int topNode, const EntNumsVector &entNums );
 
 	const ProblemParams &problemParams;
 public:

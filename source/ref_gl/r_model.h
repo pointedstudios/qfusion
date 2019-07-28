@@ -76,7 +76,7 @@ typedef struct msurface_s {
 
 	unsigned int drawSurf;
 
-	int fragmentframe;                  // for multi-check avoidance
+	mutable int fragmentframe;                  // for multi-check avoidance
 
 	vec4_t plane;
 
@@ -100,28 +100,24 @@ typedef struct msurface_s {
 } msurface_t;
 
 typedef struct mnode_s {
-	// common with leaf
-	cplane_t        *plane;
+	cplane_t        plane;
 
-	// node specific
-	struct mnode_s  *children[2];
+	// TODO: We can really use short indices!
+	int32_t        children[2];
 } mnode_t;
 
 typedef struct mleaf_s {
-	// common with node
-	cplane_t        *plane;
-
 	// leaf specific
 	int cluster, area;
 
 	float mins[3];
 	float maxs[3];                      // for bounding box culling
 
-	unsigned numVisSurfaces;
 	unsigned *visSurfaces;
-
-	unsigned numFragmentSurfaces;
 	unsigned *fragmentSurfaces;
+
+	unsigned numVisSurfaces;
+	unsigned numFragmentSurfaces;
 } mleaf_t;
 
 typedef struct {
@@ -424,9 +420,9 @@ unsigned int Mod_Handle( const model_t *mod );
 model_t     *Mod_ForHandle( unsigned int elem );
 
 // force 16-bytes alignment for all memory chunks allocated for model data
-#define     Mod_Malloc( mod, size ) ri.Mem_AllocExt( ( mod )->mempool, size, 16, 1, __FILE__, __LINE__ )
-#define     Mod_Realloc( data, size ) ri.Mem_Realloc( data, size, __FILE__, __LINE__ )
-#define     Mod_MemFree( data ) ri.Mem_Free( data, __FILE__, __LINE__ )
+#define     Mod_Malloc( mod, size ) _Mem_AllocExt( ( mod )->mempool, size, 16, 1, MEMPOOL_REFMODULE, 0, __FILE__, __LINE__ )
+#define     Mod_Realloc( data, size ) _Mem_Realloc( data, size, __FILE__, __LINE__ )
+#define     Mod_MemFree( data ) _Mem_Free( data, MEMPOOL_REFMODULE, 0, __FILE__, __LINE__ )
 
 void        Mod_StripLODSuffix( char *name );
 

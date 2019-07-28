@@ -21,7 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __UI_PUBLIC_H__
 #define __UI_PUBLIC_H__
 
-#define UI_API_VERSION      66
+#include "../qalgo/WswStdTypes.h"
+
+#define UI_API_VERSION      70
 
 typedef size_t ( *ui_async_stream_read_cb_t )( const void *buf, size_t numb, float percentage,
 											 int status, const char *contentType, void *privatep );
@@ -72,7 +74,7 @@ typedef struct {
 
 	void ( *R_ClearScene )( void );
 	void ( *R_AddEntityToScene )( const entity_t *ent );
-	void ( *R_AddLightToScene )( const vec3_t org, float intensity, float r, float g, float b );
+	void ( *R_AddLightToScene )( const vec3_t org, float programIntensity, float coronaIntensity, float r, float g, float b );
 	void ( *R_AddLightStyleToScene )( int style, float r, float g, float b );
 	void ( *R_AddPolyToScene )( const poly_t *poly );
 	void ( *R_RenderScene )( const refdef_t *fd );
@@ -104,7 +106,7 @@ typedef struct {
 	struct cinematics_s *( *R_GetShaderCinematic )( struct shader_s *shader );
 
 	struct sfx_s *( *S_RegisterSound )( const char *name );
-	void ( *S_StartLocalSound )( const char *s );
+	void ( *S_StartLocalSound )( const char *s, float fvol );
 	void ( *S_StartBackgroundTrack )( const char *intro, const char *loop, int mode );
 	void ( *S_StopBackgroundTrack )( void );
 
@@ -184,15 +186,14 @@ typedef struct {
 	// MatchMaker
 	bool ( *MM_Login )( const char *user, const char *password );
 	bool ( *MM_Logout )( bool force );
-	int ( *MM_GetLoginState )( void );
-	size_t ( *MM_GetLastErrorMessage )( char *buffer, size_t buffer_size );
-	size_t ( *MM_GetProfileURL )( char *buffer, size_t buffer_size, bool rml );
-	size_t ( *MM_GetBaseWebURL )( char *buffer, size_t buffer_size );
+	int ( *MM_GetLoginState )();
+	const wsw::string_view &( *MM_GetLastErrorMessage )();
+	const wsw::string_view &( *MM_GetProfileWebUrl )();
+	const wsw::string_view &( *MM_GetProfileRmlUrl )();
+	const wsw::string_view &( *MM_GetBaseWebUrl )();
 
 	void *( *Mem_Alloc )( size_t size, const char *filename, int fileline );
 	void ( *Mem_Free )( void *data, const char *filename, int fileline );
-
-	struct angelwrap_api_s *( *asGetAngelExport )( void );
 
 	// Asynchronous HTTP requests
 	void ( *AsyncStream_UrlEncode )( const char *src, char *dst, size_t size );

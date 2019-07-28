@@ -182,7 +182,7 @@ edict_t *SelectDeathmatchSpawnPoint( edict_t *ent ) {
 /*
 * G_OffsetSpawnPoint - use a grid of player boxes to offset the spawn point
 */
-bool G_OffsetSpawnPoint( vec3_t origin, vec3_t box_mins, vec3_t box_maxs, float radius, bool checkground ) {
+bool G_OffsetSpawnPoint( vec3_t origin, const vec3_t box_mins, const vec3_t box_maxs, float radius, bool checkground ) {
 	trace_t trace;
 	vec3_t virtualorigin;
 	vec3_t absmins, absmaxs;
@@ -424,7 +424,7 @@ void G_SpawnQueue_Init( void ) {
 		memset( &g_spawnQueues[team].list, -1, sizeof( g_spawnQueues[team].list ) );
 
 	spawnsystem = g_spawnsystem->integer;
-	clamp( spawnsystem, SPAWNSYSTEM_INSTANT, SPAWNSYSTEM_HOLD );
+	Q_clamp( spawnsystem, SPAWNSYSTEM_INSTANT, SPAWNSYSTEM_HOLD );
 	if( spawnsystem != g_spawnsystem->integer ) {
 		trap_Cvar_ForceSet( "g_spawnsystem", va( "%i", spawnsystem ) );
 	}
@@ -598,7 +598,7 @@ void G_SpawnQueue_Think( void ) {
 		maxCount = MAX_CLIENTS;
 
 		spawnSystem = queue->system;
-		clamp( spawnSystem, SPAWNSYSTEM_INSTANT, SPAWNSYSTEM_HOLD );
+		Q_clamp( spawnSystem, SPAWNSYSTEM_INSTANT, SPAWNSYSTEM_HOLD );
 
 		switch( spawnSystem ) {
 			case SPAWNSYSTEM_INSTANT:

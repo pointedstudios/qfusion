@@ -19,8 +19,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // winquake.h: Win32-specific Quake header file
 
-#include <winsock2.h>
-#include <ws2tcpip.h>
+#ifndef WINQUAKE_H_
+#define WINQUAKE_H_
+
+// This is a fairly common method to fix the strict requirement of winsock2.h inclusion before windows.h
+#define _WINSOCKAPI_
 
 #include <windows.h>
 #ifdef HAVE_MMSYSTEM
@@ -35,9 +38,11 @@ enum {
 	MWHEEL_UNKNOWN,
 	MWHEEL_DINPUT,
 	MWHEEL_WM
-} mwheel_type;
+};
 
 extern HINSTANCE global_hInstance;
 
 extern HWND cl_hwnd, cl_parent_hwnd;
 extern int ActiveApp, Minimized, AppFocused;
+
+#endif

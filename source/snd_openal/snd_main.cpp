@@ -21,14 +21,56 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "snd_local.h"
 #include "snd_cmdque.h"
 #include "snd_env_sampler.h"
+#include "../client/client.h"
+#include "../qalgo/SingletonHolder.h"
 
-#ifndef __cplusplus
-extern C {
-#endif
+class NullSoundSystem : public SoundSystem {
+public:
+	explicit NullSoundSystem( client_state_s *client_ ) : SoundSystem( client_ ) {}
 
-static sndCmdPipe_t *s_cmdPipe;
+	void DeleteSelf( bool ) override;
 
-static struct qthread_s *s_backThread;
+	void PostInit() override {}
+
+	void BeginRegistration() override {}
+	void EndRegistration() override {}
+
+	void StopAllSounds( bool, bool ) override {}
+
+	void Clear() override {}
+	void Update( const float *, const float *, const mat3_t, bool ) override {}
+	void Activate( bool ) override {}
+
+	void SetEntitySpatialization( int, const float *, const float * ) override {};
+
+	sfx_s *RegisterSound( const char * ) override { return nullptr; }
+	void StartFixedSound( sfx_s *, const float *, int, float, float ) override {}
+	void StartRelativeSound( sfx_s *, int, int, float, float ) override {}
+	void StartGlobalSound( sfx_s *, int, float ) override {}
+	void StartLocalSound( const char *, float ) override {}
+	void StartLocalSound( sfx_s *, float ) override {}
+	void AddLoopSound( sfx_s *, int, float, int ) override {}
+
+	void RawSamples( unsigned, unsigned, uint16_t, uint16_t, const uint8_t *, bool ) override {}
+	void PositionedRawSamples( int, float, float, unsigned, unsigned, uint16_t, uint16_t, const uint8_t * ) override {}
+
+	unsigned GetRawSamplesLength() override { return 0; }
+	unsigned GetPositionedRawSamplesLength( int ) override { return 0; }
+
+	void StartBackgroundTrack( const char *, const char *, int ) override {}
+	void StopBackgroundTrack() override {}
+	void LockBackgroundTrack( bool lock ) override {}
+
+	void BeginAviDemo() override {}
+	void StopAviDemo() override {}
+};
+
+static SingletonHolder<ALSoundSystem> alSoundSystemHolder;
+static SingletonHolder<NullSoundSystem> nullSoundSystemHolder;
+
+void NullSoundSystem::DeleteSelf( bool ) {
+	::nullSoundSystemHolder.Shutdown();
+}
 
 struct mempool_s *soundpool;
 
@@ -44,7 +86,7 @@ cvar_t *s_effects_number_threshold;
 cvar_t *s_hrtf;
 cvar_t *s_realistic_obstruction;
 cvar_t *s_stereo2mono;
-cvar_t *s_globalfocus;
+static cvar_t *s_globalfocus;
 
 static int s_registration_sequence = 1;
 static bool s_registering;
@@ -53,9 +95,6 @@ static bool s_registering;
 static unsigned s_num_ent_spats;
 static smdCmdSpatialization_t s_ent_spats[SND_SPATIALIZE_ENTS_MAX];
 static const unsigned s_max_ent_spats = sizeof( s_ent_spats ) / sizeof( s_ent_spats[0] );
-
-static void SF_UnregisterSound( sfx_t *sfx );
-static void SF_FreeSound( sfx_t *sfx );
 
 /*
 * Commands
@@ -80,10 +119,10 @@ static void SF_Play_f( void ) {
 * SF_Music
 */
 static void SF_Music_f( void ) {
-	if( trap_Cmd_Argc() == 2 ) {
-		SF_StartBackgroundTrack( trap_Cmd_Argv( 1 ), trap_Cmd_Argv( 1 ), 0 );
-	} else if( trap_Cmd_Argc() == 3 ) {
-		SF_StartBackgroundTrack( trap_Cmd_Argv( 1 ), trap_Cmd_Argv( 2 ), 0 );
+	if( Cmd_Argc() == 2 ) {
+		::alSoundSystemHolder.Instance()->StartBackgroundTrack( Cmd_Argv( 1 ), Cmd_Argv( 1 ), 0 );
+	} else if( Cmd_Argc() == 3 ) {
+		::alSoundSystemHolder.Instance()->StartBackgroundTrack( Cmd_Argv( 1 ), Cmd_Argv( 2 ), 0 );
 	} else {
 		Com_Printf( "music <intro|playlist> [loop|shuffle]\n" );
 		return;
@@ -93,21 +132,45 @@ static void SF_Music_f( void ) {
 /*
 * SF_SoundList
 */
-static void SF_SoundList_f( void ) {
-	S_IssueStuffCmd( s_cmdPipe, "soundlist" );
+static void SF_SoundList_f() {
+	::alSoundSystemHolder.Instance()->ListSounds();
+}
+
+void ALSoundSystem::ListSounds() {
+	S_IssueStuffCmd( pipe, "soundlist" );
 }
 
 /*
 * SF_ListDevices_f
 */
-static void SF_ListDevices_f( void ) {
-	S_IssueStuffCmd( s_cmdPipe, "devicelist" );
+static void SF_ListDevices_f() {
+	::alSoundSystemHolder.Instance()->ListDevices();
 }
 
-/*
-* SF_Init
-*/
-bool SF_Init( void *hwnd, int maxEntities, bool verbose ) {
+void ALSoundSystem::ListDevices() {
+	S_IssueStuffCmd( pipe, "devicelist" );
+}
+
+bool SoundSystem::Init( client_state_t *client, void *hWnd, bool verbose ) {
+	s_volume = Cvar_Get( "s_volume", "0.8", CVAR_ARCHIVE );
+	s_musicvolume = Cvar_Get( "s_musicvolume", "0.05", CVAR_ARCHIVE );
+	s_doppler = Cvar_Get( "s_doppler", "1.0", CVAR_ARCHIVE );
+	s_sound_velocity = Cvar_Get( "s_sound_velocity", "8500", CVAR_DEVELOPER );
+	s_stereo2mono = Cvar_Get( "s_stereo2mono", "0", CVAR_ARCHIVE );
+	s_globalfocus = Cvar_Get( "s_globalfocus", "0", CVAR_ARCHIVE );
+
+	instance = ALSoundSystem::TryCreate( client, hWnd, verbose );
+	if( instance ) {
+		instance->PostInit();
+		return true;
+	}
+
+	::nullSoundSystemHolder.Init( client );
+	instance = nullSoundSystemHolder.Instance();
+	return false;
+}
+
+ALSoundSystem *ALSoundSystem::TryCreate( client_state_s *client, void *hWnd, bool verbose ) {
 	soundpool = S_MemAllocPool( "OpenAL sound module" );
 
 	s_num_ent_spats = 0;
@@ -124,104 +187,120 @@ bool SF_Init( void *hwnd, int maxEntities, bool verbose ) {
 	}
 #endif
 
-	s_volume = trap_Cvar_Get( "s_volume", "0.8", CVAR_ARCHIVE );
-	s_musicvolume = trap_Cvar_Get( "s_musicvolume", "0.05", CVAR_ARCHIVE );
-	s_doppler = trap_Cvar_Get( "s_doppler", "1.0", CVAR_ARCHIVE );
-	s_sound_velocity = trap_Cvar_Get( "s_sound_velocity", "8500", CVAR_DEVELOPER );
-	s_stereo2mono = trap_Cvar_Get( "s_stereo2mono", "0", CVAR_ARCHIVE );
-	s_globalfocus = trap_Cvar_Get( "s_globalfocus", "0", CVAR_ARCHIVE );
+	s_environment_effects = Cvar_Get( "s_environment_effects", "1", CVAR_ARCHIVE | CVAR_LATCH_SOUND );
 
-	s_environment_effects = trap_Cvar_Get( "s_environment_effects", "1", CVAR_ARCHIVE | CVAR_LATCH_SOUND );
-	s_environment_sampling_quality = trap_Cvar_Get( "s_environment_sampling_quality", "0.5", CVAR_ARCHIVE );
+	s_environment_sampling_quality = Cvar_Get( "s_environment_sampling_quality", "0.5", CVAR_ARCHIVE );
 	if ( s_environment_sampling_quality->value < 0 || s_environment_sampling_quality->value > 1.0f ) {
-		trap_Cvar_ForceSet( s_environment_sampling_quality->name, "0.5" );
+		Cvar_ForceSet( s_environment_sampling_quality->name, "0.5" );
 	}
-	s_effects_number_threshold = trap_Cvar_Get( "s_effects_number_threshold", "15", CVAR_ARCHIVE );
-	s_hrtf = trap_Cvar_Get( "s_hrtf", "1", CVAR_ARCHIVE | CVAR_LATCH_SOUND );
-	s_realistic_obstruction = trap_Cvar_Get( "s_realistic_obstruction", "1", CVAR_ARCHIVE );
+
+	s_effects_number_threshold = Cvar_Get( "s_effects_number_threshold", "15", CVAR_ARCHIVE );
+	s_hrtf = Cvar_Get( "s_hrtf", "1", CVAR_ARCHIVE | CVAR_LATCH_SOUND );
+	s_realistic_obstruction = Cvar_Get( "s_realistic_obstruction", "1", CVAR_ARCHIVE );
 
 #ifdef ENABLE_PLAY
 	trap_Cmd_AddCommand( "play", SF_Play_f );
 #endif
-	trap_Cmd_AddCommand( "music", SF_Music_f );
-	trap_Cmd_AddCommand( "stopmusic", SF_StopBackgroundTrack );
-	trap_Cmd_AddCommand( "prevmusic", SF_PrevBackgroundTrack );
-	trap_Cmd_AddCommand( "nextmusic", SF_NextBackgroundTrack );
-	trap_Cmd_AddCommand( "pausemusic", SF_PauseBackgroundTrack );
-	trap_Cmd_AddCommand( "soundlist", SF_SoundList_f );
-	trap_Cmd_AddCommand( "s_devices", SF_ListDevices_f );
+	Cmd_AddCommand( "music", SF_Music_f );
+	Cmd_AddCommand( "stopmusic", SF_StopBackgroundTrack );
+	Cmd_AddCommand( "prevmusic", SF_PrevBackgroundTrack );
+	Cmd_AddCommand( "nextmusic", SF_NextBackgroundTrack );
+	Cmd_AddCommand( "pausemusic", SF_PauseBackgroundTrack );
+	Cmd_AddCommand( "soundlist", SF_SoundList_f );
+	Cmd_AddCommand( "s_devices", SF_ListDevices_f );
 
-	s_cmdPipe = S_CreateSoundCmdPipe();
-	if( !s_cmdPipe ) {
-		return false;
+	auto *pipe = S_CreateSoundCmdPipe();
+	if( !pipe ) {
+		return nullptr;
 	}
 
-	s_backThread = trap_Thread_Create( S_BackgroundUpdateProc, s_cmdPipe );
+	auto *thread = QThread_Create( S_BackgroundUpdateProc, pipe );
 
-	S_IssueInitCmd( s_cmdPipe, hwnd, maxEntities, verbose );
+	S_IssueInitCmd( pipe, hWnd, MAX_EDICTS, verbose );
 
-	S_FinishSoundCmdPipe( s_cmdPipe );
+	S_FinishSoundCmdPipe( pipe );
 
 	if( !alContext ) {
-		return false;
+		return nullptr;
 	}
 
 	S_InitBuffers();
 
-	ENV_Init();
-
-	return true;
+	::alSoundSystemHolder.Init( client, pipe, thread );
+	return ::alSoundSystemHolder.Instance();
 }
 
-/*
-* SF_Shutdown
-*/
-void SF_Shutdown( bool verbose ) {
+void ALSoundSystem::DeleteSelf( bool verbose ) {
+	useVerboseShutdown = verbose;
+	::alSoundSystemHolder.Shutdown();
+}
+
+ALSoundSystem::~ALSoundSystem() {
 	if( !soundpool ) {
 		return;
 	}
 
-	SF_StopAllSounds( true, true );
+	StopAllSounds( true, true );
 
 	// wake up the mixer
-	SF_Activate( true );
+	Activate( true );
 
 	// wait for the queue to be processed
-	S_FinishSoundCmdPipe( s_cmdPipe );
+	S_FinishSoundCmdPipe( pipe );
 
 	S_ShutdownBuffers();
 
 	ENV_Shutdown();
 
 	// shutdown backend
-	S_IssueShutdownCmd( s_cmdPipe, verbose );
+	S_IssueShutdownCmd( pipe, useVerboseShutdown );
 
 	// wait for the queue to be processed
-	S_FinishSoundCmdPipe( s_cmdPipe );
+	S_FinishSoundCmdPipe( pipe );
 
 	// wait for the backend thread to die
-	trap_Thread_Join( s_backThread );
-	s_backThread = NULL;
+	QThread_Join( thread );
 
-	S_DestroySoundCmdPipe( &s_cmdPipe );
+	S_DestroySoundCmdPipe( &pipe );
 
 #ifdef ENABLE_PLAY
-	trap_Cmd_RemoveCommand( "play" );
+	Cmd_RemoveCommand( "play" );
 #endif
-	trap_Cmd_RemoveCommand( "music" );
-	trap_Cmd_RemoveCommand( "stopmusic" );
-	trap_Cmd_RemoveCommand( "prevmusic" );
-	trap_Cmd_RemoveCommand( "nextmusic" );
-	trap_Cmd_RemoveCommand( "pausemusic" );
-	trap_Cmd_RemoveCommand( "soundlist" );
-	trap_Cmd_RemoveCommand( "s_devices" );
+	Cmd_RemoveCommand( "music" );
+	Cmd_RemoveCommand( "stopmusic" );
+	Cmd_RemoveCommand( "prevmusic" );
+	Cmd_RemoveCommand( "nextmusic" );
+	Cmd_RemoveCommand( "pausemusic" );
+	Cmd_RemoveCommand( "soundlist" );
+	Cmd_RemoveCommand( "s_devices" );
 
 	QAL_Shutdown();
 
 	S_MemFreePool( &soundpool );
 }
 
-void SF_BeginRegistration( void ) {
+void ALSoundSystem::PostInit() {
+	ENV_Init();
+
+	int model = S_DEFAULT_ATTENUATION_MODEL;
+	float maxDistance = S_DEFAULT_ATTENUATION_MAXDISTANCE;
+	float refDistance = S_DEFAULT_ATTENUATION_REFDISTANCE;
+
+#ifndef PUBLIC_BUILD
+	constexpr const auto varFlags = CVAR_DEVELOPER | CVAR_LATCH_SOUND;
+	cvar_t *modelVar = Cvar_Get( "s_attenuation_model", va( "%i", model ), varFlags );
+	cvar_t *maxDistanceVar = Cvar_Get( "s_attenuation_maxdistance", va( "%f", maxDistance ), varFlags );
+	cvar_t *refDistanceVar = Cvar_Get( "s_attenuation_refdistance", va( "%f", refDistance ), varFlags );
+
+	model = modelVar->integer;
+	maxDistance = maxDistanceVar->value;
+	refDistance = refDistanceVar->value;
+#endif
+
+	S_IssueSetAttenuationCmd( pipe, model, maxDistance, refDistance );
+}
+
+void ALSoundSystem::BeginRegistration() {
 	s_registration_sequence++;
 	if( !s_registration_sequence ) {
 		s_registration_sequence = 1;
@@ -229,19 +308,27 @@ void SF_BeginRegistration( void ) {
 	s_registering = true;
 
 	// wait for the queue to be processed
-	S_FinishSoundCmdPipe( s_cmdPipe );
+	S_FinishSoundCmdPipe( pipe );
 }
 
-void SF_EndRegistration( void ) {
+void ALSoundSystem::EndRegistration() {
 	// wait for the queue to be processed
-	S_FinishSoundCmdPipe( s_cmdPipe );
+	S_FinishSoundCmdPipe( pipe );
 
-	S_ForEachBuffer( SF_UnregisterSound );
+	S_ForEachBuffer( [=]( sfx_t *sfx ) {
+		if( sfx->filename[0] && sfx->registration_sequence != s_registration_sequence ) {
+			S_IssueFreeSfxCmd( pipe, sfx->id );
+		}
+	});
 
 	// wait for the queue to be processed
-	S_FinishSoundCmdPipe( s_cmdPipe );
+	S_FinishSoundCmdPipe( pipe );
 
-	S_ForEachBuffer( SF_FreeSound );
+	S_ForEachBuffer( [=]( sfx_t *sfx ) {
+		if( sfx->registration_sequence && sfx->registration_sequence != s_registration_sequence ) {
+			S_MarkBufferFree( sfx );
+		}
+	});
 
 	s_registering = false;
 
@@ -251,134 +338,77 @@ void SF_EndRegistration( void ) {
 /*
 * SF_RegisterSound
 */
-sfx_t *SF_RegisterSound( const char *name ) {
-	sfx_t *sfx;
-
-	assert( name );
-
-	sfx = S_FindBuffer( name );
-	S_IssueLoadSfxCmd( s_cmdPipe, sfx->id );
-	sfx->used = trap_Milliseconds();
+sfx_t *ALSoundSystem::RegisterSound( const char *name ) {
+	sfx_t *sfx = S_FindBuffer( PathForName( name, tmpString1 ) );
+	S_IssueLoadSfxCmd( pipe, sfx->id );
+	sfx->used = Sys_Milliseconds();
 	sfx->registration_sequence = s_registration_sequence;
 	return sfx;
 }
 
-/*
-* SF_UnregisterSound
-*/
-static void SF_UnregisterSound( sfx_t *sfx ) {
-	if( sfx->filename[0] == '\0' ) {
-		return;
-	}
-	if( sfx->registration_sequence != s_registration_sequence ) {
-		S_IssueFreeSfxCmd( s_cmdPipe, sfx->id );
-	}
-}
-
-/*
-* SF_FreeSound
-*/
-static void SF_FreeSound( sfx_t *sfx ) {
-	if( !sfx->registration_sequence ) {
-		return;
-	}
-	if( sfx->registration_sequence != s_registration_sequence ) {
-		S_MarkBufferFree( sfx );
-	}
-}
-
-/*
-* SF_Activate
-*/
-void SF_Activate( bool active ) {
+void ALSoundSystem::Activate( bool active ) {
 	if( !active && s_globalfocus->integer ) {
 		return;
 	}
 
-	SF_LockBackgroundTrack( !active );
+	LockBackgroundTrack( !active );
 
-	S_IssueActivateCmd( s_cmdPipe, active );
+	S_IssueActivateCmd( pipe, active );
 }
 
-/*
-* SF_StartBackgroundTrack
-*/
-void SF_StartBackgroundTrack( const char *intro, const char *loop, int mode ) {
-	S_IssueStartBackgroundTrackCmd( s_cmdPipe, intro, loop, mode );
+void ALSoundSystem::StartBackgroundTrack( const char *intro, const char *loop, int mode ) {
+	const char *introPath = PathForName( intro, tmpString1 );
+	const char *loopPath = PathForName( intro, tmpString2 );
+	// The path values are deeply copied by this call so using temporary objects is correct
+	S_IssueStartBackgroundTrackCmd( pipe, introPath, loopPath, mode );
 }
 
-/*
-* SF_StopBackgroundTrack
-*/
-void SF_StopBackgroundTrack( void ) {
-	S_IssueStopBackgroundTrackCmd( s_cmdPipe );
+void ALSoundSystem::StopBackgroundTrack() {
+	S_IssueStopBackgroundTrackCmd( pipe );
 }
 
-/*
-* SF_LockBackgroundTrack
-*/
-void SF_LockBackgroundTrack( bool lock ) {
-	S_IssueLockBackgroundTrackCmd( s_cmdPipe, lock );
+void ALSoundSystem::LockBackgroundTrack( bool lock ) {
+	S_IssueLockBackgroundTrackCmd( pipe, lock );
 }
 
-/*
-* SF_StopAllSounds
-*/
-void SF_StopAllSounds( bool clear, bool stopMusic ) {
-	S_IssueStopAllSoundsCmd( s_cmdPipe, clear, stopMusic );
+void ALSoundSystem::StopAllSounds( bool clear, bool stopMusic ) {
+	S_IssueStopAllSoundsCmd( pipe, clear, stopMusic );
 }
 
-/*
-* SF_PrevBackgroundTrack
-*/
-void SF_PrevBackgroundTrack( void ) {
-	S_IssueAdvanceBackgroundTrackCmd( s_cmdPipe, -1 );
+void SF_StopBackgroundTrack() {
+	::alSoundSystemHolder.Instance()->StopBackgroundTrack();
 }
 
-/*
-* SF_NextBackgroundTrack
-*/
-void SF_NextBackgroundTrack( void ) {
-	S_IssueAdvanceBackgroundTrackCmd( s_cmdPipe, 1 );
+void SF_PrevBackgroundTrack() {
+	::alSoundSystemHolder.Instance()->PrevBackgroundTrack();
 }
 
-/*
-* SF_PauseBackgroundTrack
-*/
-void SF_PauseBackgroundTrack( void ) {
-	S_IssuePauseBackgroundTrackCmd( s_cmdPipe );
+void ALSoundSystem::PrevBackgroundTrack() {
+	S_IssueAdvanceBackgroundTrackCmd( pipe, -1 );
 }
 
-/*
-* SF_BeginAviDemo
-*/
-void SF_BeginAviDemo( void ) {
-	S_IssueAviDemoCmd( s_cmdPipe, true );
+void SF_NextBackgroundTrack() {
+	::alSoundSystemHolder.Instance()->NextBackgroundTrack();
 }
 
-/*
-* SF_StopAviDemo
-*/
-void SF_StopAviDemo( void ) {
-	S_IssueAviDemoCmd( s_cmdPipe, false );
+void ALSoundSystem::NextBackgroundTrack() {
+	S_IssueAdvanceBackgroundTrackCmd( pipe, 1 );
 }
 
-/*
-* SF_SetAttenuationModel
-*/
-void SF_SetAttenuationModel( int model, float maxdistance, float refdistance ) {
-	S_IssueSetAttenuationCmd( s_cmdPipe, model, maxdistance, refdistance );
+void SF_PauseBackgroundTrack() {
+	::alSoundSystemHolder.Instance()->PauseBackgroundTrack();
 }
 
-/*
-* SF_SetEntitySpatialization
-*/
-void SF_SetEntitySpatialization( int entnum, const vec3_t origin, const vec3_t velocity ) {
+void ALSoundSystem::PauseBackgroundTrack() {
+	S_IssueAdvanceBackgroundTrackCmd( pipe, 0 );
+}
+
+void ALSoundSystem::SetEntitySpatialization( int entnum, const vec3_t origin, const vec3_t velocity ) {
 	smdCmdSpatialization_t *spat;
 
 	if( s_num_ent_spats == s_max_ent_spats ) {
 		// flush all spatializations at once to free room
-		S_IssueSetMulEntitySpatializationCmd( s_cmdPipe, s_num_ent_spats, s_ent_spats );
+		S_IssueSetMulEntitySpatializationCmd( pipe, s_num_ent_spats, s_ent_spats );
 		s_num_ent_spats = 0;
 	}
 
@@ -388,169 +418,149 @@ void SF_SetEntitySpatialization( int entnum, const vec3_t origin, const vec3_t v
 	VectorCopy( velocity, spat->velocity );
 }
 
-/*
-* SF_StartFixedSound
-*/
-void SF_StartFixedSound( sfx_t *sfx, const vec3_t origin, int channel, float fvol, float attenuation ) {
-	if( sfx != NULL ) {
-		S_IssueStartFixedSoundCmd( s_cmdPipe, sfx->id, origin, channel, fvol, attenuation );
+void ALSoundSystem::StartFixedSound( sfx_t *sfx, const vec3_t origin, int channel, float fvol, float attenuation ) {
+	if( sfx ) {
+		S_IssueStartFixedSoundCmd( pipe, sfx->id, origin, channel, fvol, attenuation );
 	}
 }
 
-/*
-* SF_StartRelativeSound
-*/
-void SF_StartRelativeSound( sfx_t *sfx, int entnum, int channel, float fvol, float attenuation ) {
-	if( sfx != NULL ) {
-		S_IssueStartRelativeSoundCmd( s_cmdPipe, sfx->id, entnum, channel, fvol, attenuation );
+void ALSoundSystem::StartRelativeSound( sfx_t *sfx, int entnum, int channel, float fvol, float attenuation ) {
+	if( sfx ) {
+		S_IssueStartRelativeSoundCmd( pipe, sfx->id, entnum, channel, fvol, attenuation );
 	}
 }
 
-/*
-* SF_StartGlobalSound
-*/
-void SF_StartGlobalSound( sfx_t *sfx, int channel, float fvol ) {
-	if( sfx != NULL ) {
-		S_IssueStartGlobalSoundCmd( s_cmdPipe, sfx->id, channel, fvol );
+void ALSoundSystem::StartGlobalSound( sfx_t *sfx, int channel, float fvol ) {
+	if( sfx ) {
+		S_IssueStartGlobalSoundCmd( pipe, sfx->id, channel, fvol );
 	}
 }
 
-/*
-* SF_StartLocalSoundByName
-*/
-void SF_StartLocalSoundByName( const char *sound ) {
-	sfx_t *sfx;
-
-	sfx = SF_RegisterSound( sound );
+void ALSoundSystem::StartLocalSound( const char *sound, float fvol ) {
+	sfx_t *sfx = RegisterSound( sound );
 	if( !sfx ) {
 		Com_Printf( "S_StartLocalSoundByName: can't cache %s\n", sound );
 		return;
 	}
 
-	S_IssueStartLocalSoundCmd( s_cmdPipe, sfx->id, 1.0f );
+	S_IssueStartLocalSoundCmd( pipe, sfx->id, fvol );
 }
 
-/*
-* SF_StartLocalSound
-*/
-void SF_StartLocalSound( sfx_t *sfx, float fvol ) {
-	if( sfx != NULL ) {
-		S_IssueStartLocalSoundCmd( s_cmdPipe, sfx->id, fvol );
+void ALSoundSystem::StartLocalSound( sfx_t *sfx, float fvol ) {
+	if( sfx ) {
+		S_IssueStartLocalSoundCmd( pipe, sfx->id, fvol );
 	}
 }
 
-/*
-* SF_Clear
-*/
-void SF_Clear( void ) {
-	S_IssueClearCmd( s_cmdPipe );
+void ALSoundSystem::Clear() {
+	S_IssueClearCmd( pipe );
 }
 
-/*
-* SF_AddLoopSound
-*/
-void SF_AddLoopSound( sfx_t *sfx, int entnum, float fvol, float attenuation ) {
-	if( sfx != NULL ) {
-		S_IssueAddLoopSoundCmd( s_cmdPipe, sfx->id, entnum, fvol, attenuation );
+void ALSoundSystem::AddLoopSound( sfx_s *sfx, int entNum, float fvol, int attenuation ) {
+	if( sfx ) {
+		S_IssueAddLoopSoundCmd( pipe, sfx->id, entNum, fvol, attenuation );
 	}
 }
 
-/*
-* SF_Update
-*/
-void SF_Update( const vec3_t origin, const vec3_t velocity, const mat3_t axis, bool avidump ) {
+void ALSoundSystem::Update( const vec3_t origin, const vec3_t velocity, const mat3_t axis, bool avidump ) {
 	if( s_num_ent_spats ) {
-		S_IssueSetMulEntitySpatializationCmd( s_cmdPipe, s_num_ent_spats, s_ent_spats );
+		S_IssueSetMulEntitySpatializationCmd( pipe, s_num_ent_spats, s_ent_spats );
 		s_num_ent_spats = 0;
 	}
 
-	S_IssueSetListenerCmd( s_cmdPipe, origin, velocity, axis, avidump );
+	S_IssueSetListenerCmd( pipe, origin, velocity, axis, avidump );
 }
 
-/*
-* SF_RawSamples
-*/
-void SF_RawSamples( unsigned int samples, unsigned int rate, unsigned short width,
-					unsigned short channels, const uint8_t *data, bool music ) {
+void ALSoundSystem::RawSamples( unsigned samples, unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data, bool music ) {
 	size_t data_size = samples * width * channels;
 	uint8_t *data_copy = (uint8_t *)S_Malloc( data_size );
 
 	memcpy( data_copy, data, data_size );
 
-	S_IssueRawSamplesCmd( s_cmdPipe, samples, rate, width, channels, data_copy, music );
+	S_IssueRawSamplesCmd( pipe, samples, rate, width, channels, data_copy, music );
 }
 
-/*
-* SF_PositionedRawSamples
-*/
-void SF_PositionedRawSamples( int entnum, float fvol, float attenuation,
-							  unsigned int samples, unsigned int rate,
-							  unsigned short width, unsigned short channels, const uint8_t *data ) {
+void ALSoundSystem::PositionedRawSamples( int entnum, float fvol, float attenuation, unsigned samples, unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data ) {
 	size_t data_size = samples * width * channels;
 	uint8_t *data_copy = (uint8_t *)S_Malloc( data_size );
 
 	memcpy( data_copy, data, data_size );
 
-	S_IssuePositionedRawSamplesCmd( s_cmdPipe, entnum, fvol, attenuation,
-									samples, rate, width, channels, data_copy );
+	S_IssuePositionedRawSamplesCmd( pipe, entnum, fvol, attenuation, samples, rate, width, channels, data_copy );
 }
 
-// =====================================================================
-
-/*
-* S_API
-*/
-int S_API( void ) {
-	return SOUND_API_VERSION;
+unsigned ALSoundSystem::GetRawSamplesLength() {
+	return S_GetRawSamplesLength();
 }
 
-/*
-* S_Error
-*/
-void S_Error( const char *format, ... ) {
-	va_list argptr;
-	char msg[1024];
-
-	va_start( argptr, format );
-	Q_vsnprintfz( msg, sizeof( msg ), format, argptr );
-	va_end( argptr );
-
-	trap_Error( msg );
+unsigned ALSoundSystem::GetPositionedRawSamplesLength( int entNum ) {
+	return S_GetPositionedRawSamplesLength( entNum );
 }
 
-#ifndef SOUND_HARD_LINKED
+void S_Trace( trace_t *tr, const vec3_t start,
+			  const vec3_t end, const vec3_t mins,
+			  const vec3_t maxs, int mask, int topNodeHint ) {
+	if( const auto *cms = SoundSystem::Instance()->GetClient()->cms ) {
+		CM_TransformedBoxTrace( cms, tr, start, end, mins, maxs, nullptr, mask, nullptr, nullptr, topNodeHint );
+		return;
+	}
 
-// this is only here so the functions in q_shared.c and q_math.c can link
-void Sys_Error( const char *format, ... ) {
-	va_list argptr;
-	char msg[3072];
-
-	va_start( argptr, format );
-	Q_vsnprintfz( msg, sizeof( msg ), format, argptr );
-	va_end( argptr );
-
-	trap_Error( msg );
+	::memset( tr, 0, sizeof( trace_t ) );
+	tr->fraction = 1.0f;
 }
 
-void Com_Printf( const char *format, ... ) {
-	va_list argptr;
-	char msg[3072];
-
-	va_start( argptr, format );
-	Q_vsnprintfz( msg, sizeof( msg ), format, argptr );
-	va_end( argptr );
-
-	trap_Print( msg );
+int S_PointContents( const float *p, int topNodeHint ) {
+	if( const auto *cms = SoundSystem::Instance()->GetClient()->cms ) {
+		return CM_TransformedPointContents( cms, p, nullptr, nullptr, nullptr, topNodeHint );
+	}
+	return 0;
 }
 
-#if defined ( HAVE_DLLMAIN )
-int WINAPI DLLMain( void *hinstDll, unsigned long dwReason, void *reserved ) {
-	return 1;
+int S_PointLeafNum( const vec3_t p, int topNodeHint ) {
+	if( const auto *cms = SoundSystem::Instance()->GetClient()->cms ) {
+		return CM_PointLeafnum( cms, p, topNodeHint );
+	}
+	return 0;
 }
-#endif
 
-#ifndef __cplusplus
-extern C {
-#endif
+int S_NumLeafs() {
+	if( const auto *cms = SoundSystem::Instance()->GetClient()->cms ) {
+		return CM_NumLeafs( cms );
+	}
+	return 0;
+}
 
-#endif
+const vec3_t *S_GetLeafBounds( int leafnum ) {
+	if( const auto *cms = SoundSystem::Instance()->GetClient()->cms ) {
+		return CM_GetLeafBounds( cms, leafnum );
+	}
+	return nullptr;
+}
+
+bool S_LeafsInPVS( int leafNum1, int leafNum2 ) {
+	if( const auto *cms = SoundSystem::Instance()->GetClient()->cms ) {
+		return ( leafNum1 == leafNum2 ) || CM_LeafsInPVS( cms, leafNum1, leafNum2 );
+	}
+	return true;
+}
+
+int S_FindTopNodeForBox( const vec3_t mins, const vec3_t maxs ) {
+	if( const auto *cms = SoundSystem::Instance()->GetClient()->cms ) {
+		return CM_FindTopNodeForBox( cms, mins, maxs );
+	}
+	return 0;
+}
+
+int S_FindTopNodeForSphere( const vec3_t center, float radius ) {
+	if( const auto *cms = SoundSystem::Instance()->GetClient()->cms ) {
+		return CM_FindTopNodeForSphere( cms, center, radius );
+	}
+	return 0;
+}
+
+const char *S_GetConfigString( int index ) {
+	if( (unsigned)index >= MAX_CONFIGSTRINGS ) {
+		Com_Error( ERR_FATAL, "CL_SoundModule_GetConfigString: Illegal configstring index %d\n", index );
+	}
+	return cl.configstrings[index];
+}

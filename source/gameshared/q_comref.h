@@ -23,10 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "q_arch.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //
 // button bits
 //
@@ -220,7 +216,7 @@ typedef struct {
 #define DEFAULT_MASTER_SERVERS_STEAM_IPS    "208.64.200.65:27015 208.64.200.39:27011 208.64.200.52:27011"
 #define SERVER_PINGING_TIMEOUT              50
 #define LAN_SERVER_PINGING_TIMEOUT          20
-#define DEFAULT_PLAYERMODEL                 "bigvic"
+#define DEFAULT_PLAYERMODEL                 "viciious"
 #define DEFAULT_PLAYERSKIN                  "default"
 
 #ifdef UCMDTIMENUDGE
@@ -332,6 +328,7 @@ typedef struct entity_state_s {
 	vec3_t linearMovementBegin;			// the starting movement point for brush models
 	unsigned int linearMovementDuration;
 	int64_t linearMovementTimeStamp;
+	int64_t linearMovementPrevServerTime;
 
 	float attenuation;                  // should be <= 255/16.0 as this is sent as byte
 
@@ -467,6 +464,8 @@ typedef struct {
 
 	// A hint (in)
 	bool skipCollision;
+	// A flag for disabling occasional ladder usage for bots without intrusive changes to bot code (in)
+	bool skipLadders;
 
 	// results (out)
 	int numtouch;
@@ -486,10 +485,5 @@ typedef struct {
 
 	bool ladder;
 } pmove_t;
-
-
-#ifdef __cplusplus
-};
-#endif
 
 #endif // GAME_QCOMREF_H

@@ -20,9 +20,17 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __MM_RATING_H__
 #define __MM_RATING_H__
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <cstdint>
+#include <cstdlib>
+#include <cinttypes>
+#include <cassert>
+#include <cstring>
+#include <cmath>
+#include <limits>
+#include <new>
+#include <utility>
+#include <functional>
+#include <atomic>
 
 //=============================================
 //	rating
@@ -37,32 +45,20 @@ extern "C" {
 #define MM_DEFAULT_T            4.0
 #define MM_PROBABILITY_DEFAULT  0.5
 
-// Disable warnings about non-C return type linkage of mm_uuid_t.
-// The code works fine and should work fine since the return type is a POD struct
-// and inline methods are the only augmentation that is efficiently erased in object code.
-#if defined( __GNUC__ )
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wreturn-type-c-linkage"
-#elif defined( _MSC_VER )
-#pragma warning( push )
-#pragma warning( disable : 4190 )
-#endif
-
 // We were thinking about using strings without much care about actual uuid representation,
 // but string manipulation turned to be painful in the current codebase state,
 // so its better to introduce this value-type.
-typedef struct mm_uuid_s {
+struct mm_uuid_t {
 	uint64_t hiPart;
 	uint64_t loPart;
 
-#ifdef __cplusplus
-	mm_uuid_s(): hiPart( 0 ), loPart( 0 ) {}
+	mm_uuid_t(): hiPart( 0 ), loPart( 0 ) {}
 
-	mm_uuid_s( uint64_t hiPart_, uint64_t loPart_ )
+	mm_uuid_t( uint64_t hiPart_, uint64_t loPart_ )
 		: hiPart( hiPart_ ), loPart( loPart_ ) {}
 
-	bool operator==( const mm_uuid_s &that ) const;
-	bool operator!=( const mm_uuid_s &that ) const {
+	bool operator==( const mm_uuid_t &that ) const;
+	bool operator!=( const mm_uuid_t &that ) const {
 		return !( *this == that );
 	}
 
@@ -71,9 +67,9 @@ typedef struct mm_uuid_s {
 	bool IsValidSessionId() const;
 
 	char *ToString( char *buffer ) const;
-	static mm_uuid_s *FromString( const char *buffer, mm_uuid_s *dest );
-#endif
-} mm_uuid_t;
+	static mm_uuid_t *FromString( const char *buffer, mm_uuid_t *dest );
+	static mm_uuid_t Random();
+};
 
 // Let pass non-modified parameters by value to reduce visual clutter
 static inline bool Uuid_Compare( mm_uuid_t u1, mm_uuid_t u2 ) {
@@ -123,13 +119,6 @@ static inline bool Uuid_IsFFFsUuid( mm_uuid_t uuid ) {
 	return uuid.hiPart == (uint64_t)-1 && uuid.loPart == (uint64_t)-1;
 }
 
-#if defined( __GNUC__ )
-#pragma GCC diagnostic pop
-#elif defined( _MSC_VER )
-#pragma warning( pop )
-#endif
-
-#ifdef __cplusplus
 inline bool mm_uuid_t::operator==( const mm_uuid_t &that ) const {
 	return Uuid_Compare( *this, that );
 }
@@ -154,7 +143,6 @@ inline char *mm_uuid_t::ToString( char *buffer ) const {
 inline mm_uuid_t *mm_uuid_t::FromString( const char *buffer, mm_uuid_t *dest ) {
 	return Uuid_FromString( buffer, dest );
 }
-#endif
 
 // returns the given rating or NULL
 clientRating_t *Rating_Find( clientRating_t *ratings, const char *gametype );
@@ -177,9 +165,5 @@ float Rating_GetProbabilitySingle( clientRating_t *single, clientRating_t *other
 
 // create an average clientRating out of list of clientRatings
 void Rating_AverageRating( clientRating_t *out, clientRating_t *list );
-
-#ifdef __cplusplus
-};
-#endif
 
 #endif

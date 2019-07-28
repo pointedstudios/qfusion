@@ -150,7 +150,8 @@ typedef vec3_t aas_vertex_t;
 typedef struct aas_plane_s {
 	vec3_t normal;                      //normal vector of the plane
 	float dist;                         //distance of the plane (normal vector * distance = point in plane)
-	int type;
+	uint16_t type;
+	uint16_t signBits;
 } aas_plane_t;
 
 //edge
@@ -192,10 +193,14 @@ typedef struct aas_node_s {
 	//when a child is zero it's a solid leaf
 } aas_node_t;
 
+template <typename T> class ArrayRange;
+
 class AiAasWorld
 {
+	friend class AasFileReader;
+
 	bool loaded = false;
-	// Should be released by G_LevelFree();
+	// Should be released by G_Free();
 	char *checksum = nullptr;
 
 	//bounding boxes
@@ -241,21 +246,6 @@ class AiAasWorld
 	int numclusters;
 	aas_cluster_t *clusters;
 
-	//structure to link entities to areas and areas to entities
-	typedef struct aas_link_s {
-		int entnum;
-		int areanum;
-		struct aas_link_s *next_ent, *prev_ent;
-		struct aas_link_s *next_area, *prev_area;
-	} aas_link_t;
-
-	//enities linked in the areas
-	aas_link_t *linkheap;                       //heap with link structures
-	int linkheapsize;                           //size of the link heap
-	aas_link_t *freelinks;                      //first free link
-	aas_link_t **arealinkedentities;            //entities linked into areas
-	int numaaslinks;
-
 	uint16_t *areaFloorClusterNums;            // A number of a floor cluster for an area, 0 = not in a floor cluster
 	uint16_t *areaStairsClusterNums;           // A number of a stairs cluster for an area, 0 = not in a stairs cluster
 
@@ -273,6 +263,17 @@ class AiAasWorld
 	int *areaMapLeafListOffsets;    // An element #i contains an offset of leafs list data in the joint data
 	int *areaMapLeafsData;          // Contains area map (collision/vis) leafs lists, each one is prepended by the length
 
+	bool *floorClustersVisTable { nullptr };
+
+	uint16_t *areaVisData { nullptr };
+	int32_t *areaVisDataOffsets { nullptr };
+
+	uint16_t *groundedPrincipalRoutingAreas { nullptr };
+	uint16_t *jumppadReachPassThroughAreas { nullptr };
+	uint16_t *ladderReachPassThroughAreas { nullptr };
+	uint16_t *elevatorReachPassThroughAreas { nullptr };
+	uint16_t *walkOffLedgePassThroughAirAreas { nullptr };
+
 	static AiAasWorld *instance;
 
 	AiAasWorld() {
@@ -281,16 +282,11 @@ class AiAasWorld
 
 	bool Load( const char *mapname );
 
-	void PostLoad() {
-		InitLinkHeap();
-		InitLinkedEntities();
-		ComputeExtraAreaData();
-	}
+	void PostLoad();
 
 	void SwapData();
+	void CategorizePlanes();
 
-	void InitLinkHeap();
-	void InitLinkedEntities();
 	// Computes extra Qfusion area flags based on loaded world data
 	void ComputeExtraAreaData();
 	// Computes extra Qfusion area floor and stairs clusters
@@ -299,6 +295,20 @@ class AiAasWorld
 	void ComputeFace2DProjVertices();
 	// Computes map (collision/vis) leafs for areas
 	void ComputeAreasLeafsLists();
+	// Builds lists of specific area types
+	void BuildSpecificAreaTypesLists();
+
+	static const ArrayRange<char> StripMapName( const char *rawMapName, char buffer[MAX_QPATH] );
+	static const char *MakeFileName( const ArrayRange<char> &strippedName, const char *extension, char buffer[MAX_QPATH] );
+
+	void LoadAreaVisibility( const ArrayRange<char> &strippedMapName );
+	void ComputeAreasVisibility( uint32_t *offsetsDataSize, uint32_t *listsDataSize );
+
+	void LoadFloorClustersVisibility( const ArrayRange<char> &strippedMapName );
+	// Returns the actual data size in bytes
+	uint32_t ComputeFloorClustersVisibility();
+
+	bool ComputeVisibilityForClustersPair( int floorClusterNum1, int floorClusterNum2 );
 
 	void TrySetAreaLedgeFlags( int areaNum );
 	void TrySetAreaWallFlags( int areaNum );
@@ -310,19 +320,8 @@ class AiAasWorld
 	// Should be called after all other flags are computed
 	void TrySetAreaSkipCollisionFlags();
 
-	void FreeLinkHeap();
-	void FreeLinkedEntities();
-
-	aas_link_t *LinkEntity( const vec3_t absmins, const vec3_t absmaxs, int entnum );
-	void UnlinkFromAreas( aas_link_t *linkedAreas );
-	aas_link_t *AllocLink();
-	void DeAllocLink( aas_link_t *link );
-
-	int BoxOnPlaneSide2( const vec3_t absmins, const vec3_t absmaxs, const aas_plane_t *p );
-
 	int FindAreaNum( const vec3_t mins, const vec3_t maxs ) const;
 	int BBoxAreasNonConst( const vec3_t absmins, const vec3_t absmaxs, int *areas_, int maxareas );
-
 public:
 	AiAasWorld( AiAasWorld &&that );
 	~AiAasWorld();
@@ -348,14 +347,12 @@ public:
 	//stores the areas the trace went through and returns the number of passed areas
 	int TraceAreas( const vec3_t start, const vec3_t end, int *areas_, vec3_t *points, int maxareas ) const;
 
-	inline int BBoxAreas( const Vec3 &absmins, const Vec3 &absmaxs, int *areas_, int maxareas ) const {
-		return BBoxAreas( absmins.Data(), absmaxs.Data(), areas_, maxareas );
+	int BBoxAreas( const Vec3 &absMins, const Vec3 &absMaxs, int *areaNums, int maxAreas ) const {
+		return BBoxAreas( absMins.Data(), absMaxs.Data(), areaNums, maxAreas );
 	}
 
 	//returns the areas the bounding box is in
-	int BBoxAreas( const vec3_t absmins, const vec3_t absmaxs, int *areas_, int maxareas ) const {
-		return ( const_cast<AiAasWorld*>( this ) )->BBoxAreasNonConst( absmins, absmaxs, areas_, maxareas );
-	}
+	int BBoxAreas( const vec3_t absMins, const vec3_t absMaxs, int *areaNums, int maxAreas ) const;
 
 	//returns the area the point is in
 	int PointAreaNum( const vec3_t point ) const;
@@ -439,6 +436,7 @@ public:
 	inline const aas_areasettings_t *AreaSettings() const { return areasettings; }
 	//reachablity list
 	inline int NumReachabilities() const { return reachabilitysize; }
+	inline int NumReach() const { return reachabilitysize; }
 	inline const aas_reachability_t *Reachabilities() const { return reachability; }
 	//nodes of the bsp tree
 	inline int NumNodes() const { return numnodes; }
@@ -482,12 +480,140 @@ public:
 		return stairsClusterData + stairsClusterDataOffsets[stairsClusterNum];
 	}
 
-	inline int *Face2DProjVertexNums() const { return face2DProjVertexNums; }
+	/**
+	 * Performs a 2D ray-casting in a floor cluster.
+	 * A floor cluster is not usually a convex N-gon.
+	 * A successful result means that there is a straight-walkable path between areas.
+	 * @param startAreaNum a start area
+	 * @param targetAreaNum a target area
+	 * @return true if the segment between areas is fully inside the cluster boundaries.
+	 */
+	bool IsAreaWalkableInFloorCluster( int startAreaNum, int targetAreaNum ) const;
 
 	inline const int *AreaMapLeafsList( int areaNum ) const {
 		assert( areaNum >= 0 && areaNum < numareas );
 		return areaMapLeafsData + areaMapLeafListOffsets[areaNum];
 	}
+
+	/**
+	 * Gets a list of grounded areas that are considered "principal" for routing
+	 * and that should be tested for blocking by enemies for a proper bot behaviour.
+	 * Not all principal areas are included in this list but only grounded ones
+	 * as they are tested using a separate code path during determination of areas blocked status.
+	 */
+	const uint16_t *GroundedPrincipalRoutingAreas() const { return groundedPrincipalRoutingAreas; }
+
+	const uint16_t *JumppadReachPassThroughAreas() const { return jumppadReachPassThroughAreas; }
+	const uint16_t *LadderReachPassThroughAreas() const { return ladderReachPassThroughAreas; }
+	const uint16_t *ElevatorReachPassThroughAreas() const { return elevatorReachPassThroughAreas; }
+	const uint16_t *WalkOffLedgePassThroughAirAreas() const { return walkOffLedgePassThroughAirAreas; }
+
+	/**
+	 * Retrieves a cached mutual floor cluster visibility result.
+	 * Clusters are considered visible if some area in a cluster is visible from some other area in another cluster.
+	 * @param clusterNum1 a number of first floor cluster
+	 * @param clusterNum2 a number of second floor cluster
+	 * @return true if supplied floor clusters are visible, false if the visibility test failed
+	 * @note there could be false negatives as the visibility determination algorithm is probabilistic.
+	 * That's what the "certainly" part stands for.
+	 */
+	bool AreFloorClustersCertainlyVisible( int clusterNum1, int clusterNum2 ) const {
+		assert( (unsigned)clusterNum1 < (unsigned)numFloorClusters );
+		assert( (unsigned)clusterNum2 < (unsigned)numFloorClusters );
+		// Skip the dummy zero leaf
+		return floorClustersVisTable[( clusterNum1 - 1 ) * ( numFloorClusters - 1 ) + clusterNum2 - 1];
+	}
+
+	/**
+	 * Checks whether areas are in PVS.
+	 * Areas are considered to be in PVS if some leaf that area occupies is visible from some other leaf of another area.
+	 * @param areaNum1 a number of the first area
+	 * @param areaNum2 a number of another area
+	 * @return true if areas are in PVS.This test is precise (no false positives/negatives are produced).
+	 * @note this is not that cheap to call. Prefer using {@code AreaVisList()} where possible.
+	 */
+	bool AreAreasInPvs( int areaNum1, int areaNum2 ) const;
+
+	/**
+	 * Returns a list of all areas that are certainly visible from the area.
+	 * There could be false negatives but no false positives (in regard to a solid world).
+	 * @param areaNum an area number
+	 * @return a list of area numbers certainly visible from the area. The first element is the list length.
+	 */
+	const uint16_t *AreaVisList( int areaNum ) const {
+		assert( (unsigned)areaNum < (unsigned)numareas );
+		return areaVisData + areaVisDataOffsets[areaNum];
+	}
+
+	/**
+	 * @see DecompressAreaVis(const uint16_t *__resrict, bool *__restrict)
+	 * @param areaNum an number of an area
+	 * @param row a buffer for a decompressed row
+	 * @return an address of the supplied buffer.
+	 */
+	const bool *DecompressAreaVis( int areaNum, bool *__restrict row ) const {
+		return DecompressAreaVis( AreaVisList( areaNum ), row );
+	}
+
+	/**
+	 * Converts a dense list of areas (certainly) visible from the area to a sparse row addressed by area numbers.
+	 * @param visList a list of areas (a result of {@code AreaVisList()} call)
+	 * @param row a buffer for a decompressed row
+	 * @return an address of the supplied buffer
+	 * @warning using this in a loop is not cheap. Consider using {@code FindInVisList()} in this case.
+	 */
+	bool *DecompressAreaVis( const uint16_t *__restrict visList, bool *__restrict row ) const {
+		::memset( row, 0, sizeof( bool ) * numareas );
+		return AddToDecompressedAreaVis( visList, row );
+	}
+
+	/**
+	 * @see AddToDecompressedAreaVis(const uint16_t *__restrict, bool *__restrict)
+	 * @param areaNum an number of an area
+	 * @param row a buffer for a decompressed row
+	 * @return an address of the supplied buffer.
+	 */
+	bool *AddToDecompressedAreaVis( int areaNum, bool *__restrict row ) const {
+		return AddToDecompressedAreaVis( AreaVisList( areaNum ), row );
+	}
+
+	/**
+	 * Converts a dense list of areas (certainly) visible from the area to a sparse row addressed by area numbers.
+	 * Contrary to {@code DecompressAreaVis()} the supplied buffer contents are not erased.
+	 * This allows building a lookup table of areas visible from multiple POV areas.
+	 * @param visList a list of areas (a result of {@code AreaVisList()} call)
+	 * @param row a buffer for a decompressed row (a result of {@code DecompressAreaVis()} call for some other area)
+	 * @return an address of the supplied buffer
+	 */
+	bool *AddToDecompressedAreaVis( const uint16_t *__restrict visList, bool *__restrict row ) const;
+
+	// Consider SSE2 instruction set always available for x86 targets
+#if !( defined ( __i386__ ) || defined ( __x86_64__ ) || defined( _M_IX86 ) || defined( _M_AMD64 ) || defined( _M_X64 ) )
+	static constexpr bool ScansVisFast() { return false; }
+#else
+	static constexpr bool ScansVisFast() { return true; }
+#endif
+
+	/**
+	 * Scans the supplied list of areas trying to find an area.
+	 * The implementation may use platform-dependent optimizations
+	 * so calling this method should be preferred to manual naive scanning.
+	 * @param visList a list of areas (a result of {@code AreaVisList()} call.
+	 * @param areaNum a number of area to find
+	 * @return true if the supplied area has been found.
+	 */
+	bool FindInVisList( const uint16_t *__restrict visList, int areaNum ) const;
+
+	/**
+	 * Scans the supplied list of areas trying to find some of supplied areas.
+	 * The implementation may use platform-dependent optimizations
+	 * so calling this method should be preferred to manual naive scanning.
+	 * @param visList a list of areas (a result of {@code AreaVisList()} call.
+	 * @param areaNum1 a number of an area to find
+	 * @param areaNum2 a number of another area to find
+	 * @return true if some of supplied areas has been found.
+	 */
+	bool FindInVisList( const uint16_t *__restrict visList, int areaNum1, int areaNum2 ) const;
 };
 
 #endif

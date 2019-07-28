@@ -2,28 +2,33 @@
 #include "../ai_ground_trace_cache.h"
 #include "../teamplay/SquadBasedTeam.h"
 #include "BotPlanner.h"
+#include "PlanningLocal.h"
 #include "../combat/DodgeHazardProblemSolver.h"
 #include <algorithm>
 #include <limits>
 #include <stdarg.h>
 
-BotPlanner::BotPlanner( Bot *bot, float skillLevel_ )
-	: BasePlanner( bot->self ), cachedWorldState( bot->self ) {}
+BotPlanner::BotPlanner( Bot *bot_, BotPlanningModule *module_ )
+	: AiPlanner( bot_ ), bot( bot_ ), module( module_ ), cachedWorldState( bot_ ) {}
 
-BotBaseGoal *BotPlanner::GetGoalByName( const char *name ) {
-	for( unsigned i = 0; i < scriptGoals.size(); ++i ) {
-		if( !Q_stricmp( name, scriptGoals[i].Name() ) ) {
-			return &scriptGoals[i];
+const int *BotPlanner::Inventory() const {
+	return game.edicts[bot->EntNum()].r.client->ps.inventory;
+}
+
+BotGoal *BotPlanner::GetGoalByName( const char *name ) {
+	for( auto &goal: scriptGoals ) {
+		if( !Q_stricmp( name, goal.Name() ) ) {
+			return &goal;
 		}
 	}
 
 	return nullptr;
 }
 
-BotBaseAction *BotPlanner::GetActionByName( const char *name ) {
-	for( unsigned i = 0; i < scriptActions.size(); ++i ) {
-		if( !Q_stricmp( name, scriptActions[i].Name() ) ) {
-			return &scriptActions[i];
+BotAction *BotPlanner::GetActionByName( const char *name ) {
+	for( auto &action: scriptActions ) {
+		if( !Q_stricmp( name, action.Name() ) ) {
+			return &action;
 		}
 	}
 
@@ -31,9 +36,9 @@ BotBaseAction *BotPlanner::GetActionByName( const char *name ) {
 }
 
 bool BotPlanner::FindDodgeHazardSpot( const Hazard &hazard, vec3_t spotOrigin ) {
-	float radius = 128.0f + 192.0f * self->ai->botRef->Skill();
+	float radius = 128.0f + 192.0f * bot->Skill();
 	typedef DodgeHazardProblemSolver Solver;
-	Solver::OriginParams originParams( self, radius, self->ai->botRef->routeCache );
+	Solver::OriginParams originParams( game.edicts + bot->EntNum(), radius, bot->RouteCache() );
 	Solver::ProblemParams problemParams( hazard.hitPoint, hazard.direction, hazard.IsSplashLike() );
 	problemParams.SetCheckToAndBackReach( false );
 	problemParams.SetMinHeightAdvantageOverOrigin( -64.0f );
@@ -49,10 +54,10 @@ bool BotPlanner::FindDodgeHazardSpot( const Hazard &hazard, vec3_t spotOrigin ) 
 void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 	worldState->SetIgnoreAll( false );
 
-	worldState->BotOriginVar().SetValue( self->s.origin );
+	worldState->BotOriginVar().SetValue( bot->Origin() );
 	worldState->PendingOriginVar().SetIgnore( true );
 
-	const auto &selectedEnemies = self->ai->botRef->GetSelectedEnemies();
+	const auto &selectedEnemies = bot->GetSelectedEnemies();
 
 	if( selectedEnemies.AreValid() ) {
 		worldState->EnemyOriginVar().SetValue( selectedEnemies.LastSeenOrigin() );
@@ -63,7 +68,7 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 		worldState->EnemyHasGoodFarRangeWeaponsVar().SetValue( selectedEnemies.HaveGoodFarRangeWeapons() );
 		worldState->EnemyHasGoodMiddleRangeWeaponsVar().SetValue( selectedEnemies.HaveGoodMiddleRangeWeapons() );
 		worldState->EnemyHasGoodCloseRangeWeaponsVar().SetValue( selectedEnemies.HaveGoodCloseRangeWeapons() );
-		worldState->EnemyCanHitVar().SetValue( selectedEnemies.CanHit() );
+		worldState->CanHitEnemyVar().SetValue( selectedEnemies.CanBeHit() );
 	} else {
 		worldState->EnemyOriginVar().SetIgnore( true );
 		worldState->HasThreateningEnemyVar().SetIgnore( true );
@@ -74,18 +79,20 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 		worldState->EnemyHasGoodMiddleRangeWeaponsVar().SetIgnore( true );
 		worldState->EnemyHasGoodCloseRangeWeaponsVar().SetIgnore( true );
 		worldState->EnemyCanHitVar().SetIgnore( true );
+		worldState->CanHitEnemyVar().SetIgnore( true );
 	}
 
-	auto &lostEnemies = self->ai->botRef->lostEnemies;
+	auto &lostEnemies = bot->lostEnemies;
 	if( lostEnemies.AreValid() ) {
 		worldState->IsReactingToEnemyLostVar().SetValue( false );
 		worldState->HasReactedToEnemyLostVar().SetValue( false );
 		worldState->LostEnemyLastSeenOriginVar().SetValue( lostEnemies.LastSeenOrigin() );
 		worldState->MightSeeLostEnemyAfterTurnVar().SetValue( false );
 		Vec3 toEnemiesDir( lostEnemies.LastSeenOrigin() );
-		toEnemiesDir -= self->s.origin;
+		toEnemiesDir -= bot->Origin();
 		toEnemiesDir.NormalizeFast();
-		if( toEnemiesDir.Dot( self->ai->botRef->EntityPhysicsState()->ForwardDir() ) < self->ai->botRef->FovDotFactor() ) {
+		if( toEnemiesDir.Dot( bot->EntityPhysicsState()->ForwardDir() ) < bot->FovDotFactor() ) {
+			edict_t *self = game.edicts + bot->EntNum();
 			if( EntitiesPvsCache::Instance()->AreInPvs( self, lostEnemies.TraceKey() ) ) {
 				trace_t trace;
 				G_Trace( &trace, self->s.origin, nullptr, nullptr, lostEnemies.LastSeenOrigin().Data(), self, MASK_AISOLID );
@@ -101,6 +108,7 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 		worldState->MightSeeLostEnemyAfterTurnVar().SetIgnore( true );
 	}
 
+	const edict_t *self = game.edicts + bot->EntNum();
 	worldState->HealthVar().SetValue( (short)HEALTH_TO_INT( self->health ) );
 	worldState->ArmorVar().SetValue( self->r.client->ps.stats[STAT_ARMOR] );
 
@@ -134,11 +142,11 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 	worldState->HasQuadVar().SetValue( ::HasQuad( self ) );
 	worldState->HasShellVar().SetValue( ::HasShell( self ) );
 
-	const SelectedNavEntity &currSelectedNavEntity = self->ai->botRef->GetOrUpdateSelectedNavEntity();
+	const SelectedNavEntity &currSelectedNavEntity = bot->GetOrUpdateSelectedNavEntity();
 	if( currSelectedNavEntity.IsEmpty() ) {
 		// HACK! If there is no selected nav entity, set the value to the roaming spot origin.
-		if( self->ai->botRef->ShouldUseRoamSpotAsNavTarget() ) {
-			Vec3 spot( self->ai->botRef->roamingManager.GetCachedRoamingSpot() );
+		if( bot->ShouldUseRoamSpotAsNavTarget() ) {
+			Vec3 spot( module->roamingManager.GetCachedRoamingSpot() );
 			Debug( "Using a roaming spot @ %.1f %.1f %.1f as a world state nav target var\n", spot.X(), spot.Y(), spot.Z() );
 			worldState->NavTargetOriginVar().SetValue( spot );
 		} else {
@@ -151,8 +159,8 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 		// Find a travel time to the goal itme nav entity in milliseconds
 		// We hope this router call gets cached by AAS subsystem
 		int areaNums[2] = { 0, 0 };
-		int numAreas = self->ai->botRef->EntityPhysicsState()->PrepareRoutingStartAreas( areaNums );
-		const auto *routeCache = self->ai->botRef->routeCache;
+		int numAreas = bot->EntityPhysicsState()->PrepareRoutingStartAreas( areaNums );
+		const auto *routeCache = bot->RouteCache();
 		unsigned travelTime = 10U * routeCache->PreferredRouteToGoalArea( areaNums, numAreas, navEntity->AasAreaNum() );
 		// AAS returns 1 seconds^-2 as a lowest feasible value
 		if( travelTime <= 10 ) {
@@ -167,18 +175,17 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 		}
 	}
 
-	worldState->HasJustPickedGoalItemVar().SetValue( self->ai->botRef->HasJustPickedGoalItem() );
+	worldState->HasJustPickedGoalItemVar().SetValue( bot->HasJustPickedGoalItem() );
 
 	worldState->HasPositionalAdvantageVar().SetValue( false );
-	worldState->CanHitEnemyVar().SetValue( true );
 
 	worldState->HasJustKilledEnemyVar().SetValue( false );
 
 	// If methods corresponding to these comparisons are extracted, their names will be confusing
 	// (they are useful for filling world state only as not always corresponding to what a human caller expect).
-	worldState->HasJustTeleportedVar().SetValue( level.time - self->ai->botRef->lastTouchedTeleportAt < 64 + 1 );
-	worldState->HasJustTouchedJumppadVar().SetValue( level.time - self->ai->botRef->lastTouchedJumppadAt < 64 + 1 );
-	worldState->HasJustEnteredElevatorVar().SetValue( level.time - self->ai->botRef->lastTouchedElevatorAt < 64 + 1 );
+	worldState->HasJustTeleportedVar().SetValue( level.time - bot->lastTouchedTeleportAt < 64 + 1 );
+	worldState->HasJustTouchedJumppadVar().SetValue( level.time - bot->lastTouchedJumppadAt < 64 + 1 );
+	worldState->HasJustEnteredElevatorVar().SetValue( level.time - bot->lastTouchedElevatorAt < 64 + 1 );
 
 	worldState->HasPendingCoverSpotVar().SetIgnore( true );
 	worldState->HasPendingRunAwayTeleportVar().SetIgnore( true );
@@ -188,9 +195,9 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 	worldState->IsRunningAwayVar().SetIgnore( true );
 	worldState->HasRunAwayVar().SetIgnore( true );
 
-	const Hazard *activeHazard = self->ai->botRef->PrimaryHazard();
+	const Hazard *activeHazard = bot->PrimaryHazard();
 	worldState->HasReactedToHazardVar().SetValue( false );
-	if( self->ai->botRef->Skill() > 0.33f && activeHazard ) {
+	if( bot->Skill() > 0.33f && activeHazard ) {
 		worldState->PotentialHazardDamageVar().SetValue( (short)activeHazard->damage );
 		worldState->HazardHitPointVar().SetValue( activeHazard->hitPoint );
 		worldState->HazardDirectionVar().SetValue( activeHazard->direction );
@@ -207,7 +214,7 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 		worldState->DodgeHazardSpotVar().SetIgnore( true );
 	}
 
-	if( const auto *activeThreat = self->ai->botRef->ActiveHurtEvent() ) {
+	if( const auto *activeThreat = bot->ActiveHurtEvent() ) {
 		worldState->ThreatInflictedDamageVar().SetValue( (short)activeThreat->totalDamage );
 		worldState->ThreatPossibleOriginVar().SetValue( activeThreat->possibleOrigin );
 		worldState->HasReactedToThreatVar().SetValue( false );
@@ -221,28 +228,16 @@ void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {
 
 	worldState->SimilarWorldStateInstanceIdVar().SetIgnore( true );
 
-	worldState->PrepareAttachment();
-
 	cachedWorldState = *worldState;
 }
 
 // Cannot be defined in the header
 bool BotPlanner::ShouldSkipPlanning() const {
-	return !self->ai->botRef->CanInterruptMovement();
+	return !bot->CanInterruptMovement();
 }
 
 void BotPlanner::BeforePlanning() {
-	BasePlanner::BeforePlanning();
+	AiPlanner::BeforePlanning();
 
-	self->ai->botRef->tacticalSpotsCache.Clear();
-}
-
-float Bot::GetEffectiveOffensiveness() const {
-	if( squad ) {
-		return squad->IsSupporter( self ) ? 1.0f : 0.0f;
-	}
-	if( selectedEnemies.AreValid() && selectedEnemies.HaveCarrier() ) {
-		return 0.75f;
-	}
-	return baseOffensiveness;
+	module->tacticalSpotsCache.Clear();
 }

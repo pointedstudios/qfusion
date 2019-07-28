@@ -1127,7 +1127,7 @@ bool G_EntIsADoor( edict_t *ent ) {
 //noise_start : overrides default start moving sound
 //noise : overrides default movement sound
 //noise_stop : overrides default stop moving sound
-//model2 : path/name of model to include (eg: models/mapobjects/bitch/fembotbig.md3).
+//model2 : path/name of model to include
 //origin : alternate method of setting XYZ origin of entity's rotation axis and .md3 model included with entity (default "0 0 0" - See Notes).
 //light : constantLight radius of .md3 model included with entity. Has no effect on the entity's brushes (default 0).
 //color : constantLight color of .md3 model included with entity. Has no effect on the entity's brushes (default 1 1 1).

@@ -1,329 +1,192 @@
 #include "WorldState.h"
+#include "../bot.h"
 
-#ifndef PUBLIC_BUILD
+inline Bot *WorldState::Self() { return (Bot *)self; }
 
-WorldState::WorldState( edict_t *self_ ) {
-	// Shut up an analyzer
-	memset( this, 0, sizeof( WorldState ) );
+inline const Bot *WorldState::Self() const { return (const Bot *)self; }
 
-	// Initialize these fields after the memset() call
-	this->self = self_;
-	this->isCopiedFromOtherWorldState = false;
-
-	// If state bits are not initialized, vars often does not get printed in debug output.
-	// This is useful for release non-public builds too, not only for debug ones.
-	for( unsigned i = 0; i < NUM_ORIGIN_VARS; ++i ) {
-		auto *packedFields = (OriginVar::PackedFields *)&originVarsData[i * 4 + 3];
-		packedFields->ignore = true;
-		packedFields->epsilon = 1;
-		packedFields->satisfyOp = (unsigned char)SatisfyOp::EQ;
-	}
-
-	for( unsigned i = 0; i < NUM_ORIGIN_LAZY_VARS; ++i ) {
-		auto *packedFields = (OriginLazyVarBase::PackedFields * )&originLazyVarsData[i * 4 + 3];
-		packedFields->stateBits = OriginLazyVarBase::PENDING;
-		packedFields->ignore = true;
-		packedFields->epsilon = 1;
-		packedFields->satisfyOp = (unsigned char)SatisfyOp::EQ;
-	}
-
-	for( unsigned i = 0; i < NUM_DUAL_ORIGIN_LAZY_VARS; ++i ) {
-		auto *packedFields = (DualOriginLazyVar::PackedFields * )&dualOriginLazyVarsData[i * 4 + 3];
-		packedFields->stateBits = OriginLazyVarBase::PENDING;
-		packedFields->ignore = true;
-		packedFields->epsilon = 1;
-		packedFields->satisfyOp = (unsigned char)SatisfyOp::EQ;
-	}
-
-	scriptAttachment = GENERIC_asNewScriptWorldStateAttachment( self_ );
+const short *WorldState::GetSniperRangeTacticalSpot() {
+	return Self()->planningModule.tacticalSpotsCache.GetSniperRangeTacticalSpot( BotOriginData(), EnemyOriginData() );
 }
 
-#endif
+const short *WorldState::GetFarRangeTacticalSpot() {
+	return Self()->planningModule.tacticalSpotsCache.GetFarRangeTacticalSpot( BotOriginData(), EnemyOriginData() );
+}
 
-void WorldState::SetIgnoreAll( bool ignore ) {
-	if( ignore ) {
-		unsignedVarsIgnoreFlags = std::numeric_limits<decltype( unsignedVarsIgnoreFlags )>::max();
-		floatVarsIgnoreFlags = std::numeric_limits<decltype( floatVarsIgnoreFlags )>::max();
-		shortVarsIgnoreFlags = std::numeric_limits<decltype( shortVarsIgnoreFlags )>::max();
-		boolVarsIgnoreFlags = std::numeric_limits<decltype( boolVarsIgnoreFlags )>::max();
-	} else {
-		unsignedVarsIgnoreFlags = 0;
-		floatVarsIgnoreFlags = 0;
-		shortVarsIgnoreFlags = 0;
-		boolVarsIgnoreFlags = 0;
+const short *WorldState::GetMiddleRangeTacticalSpot() {
+	return Self()->planningModule.tacticalSpotsCache.GetMiddleRangeTacticalSpot( BotOriginData(), EnemyOriginData() );
+}
+
+const short *WorldState::GetCloseRangeTacticalSpot() {
+	return Self()->planningModule.tacticalSpotsCache.GetCloseRangeTacticalSpot( BotOriginData(), EnemyOriginData() );
+}
+
+const short *WorldState::GetCoverSpot() {
+	return Self()->planningModule.tacticalSpotsCache.GetCoverSpot( BotOriginData(), EnemyOriginData() );
+}
+
+const short *WorldState::GetRunAwayTeleportOrigin() {
+	return Self()->planningModule.tacticalSpotsCache.GetRunAwayTeleportOrigin( BotOriginData(), EnemyOriginData() );
+}
+
+const short *WorldState::GetRunAwayJumppadOrigin() {
+	return Self()->planningModule.tacticalSpotsCache.GetRunAwayJumppadOrigin( BotOriginData(), EnemyOriginData() );
+}
+
+const short *WorldState::GetRunAwayElevatorOrigin() {
+	return Self()->planningModule.tacticalSpotsCache.GetRunAwayElevatorOrigin( BotOriginData(), EnemyOriginData() );
+}
+
+template <typename Var>
+struct ZippedIterator {
+	const Var *thisVar;
+	const Var *thatVar;
+
+	ZippedIterator( const Var *thisVarsHead, const Var *thatVarsHead ) {
+		thisVar = thisVarsHead;
+		thatVar = thatVarsHead;
+		assert( ( thisVar == nullptr ) == ( thatVar == nullptr ) );
 	}
 
-	for( unsigned i = 0; i < NUM_ORIGIN_VARS; ++i )
-		( (OriginVar::PackedFields *)&originVarsData[i * 4 + 3] )->ignore = ignore;
+	bool HasNext() const { return thisVar != nullptr; }
 
-	for( unsigned i = 0; i < NUM_ORIGIN_LAZY_VARS; ++i )
-		( (OriginLazyVar::PackedFields *)&originLazyVarsData[i * 4 + 3] )->ignore = ignore;
+	void Next() {
+		assert( thisVar && thatVar );
+		thisVar = thisVar->next;
+		thatVar = thatVar->next;
+		assert( ( thisVar == nullptr ) == ( thatVar == nullptr ) );
+	}
+};
 
-	for( unsigned i = 0; i < NUM_DUAL_ORIGIN_LAZY_VARS; ++i )
-		( (DualOriginLazyVar::PackedFields *)&dualOriginLazyVarsData[i * 4 + 3] )->ignore = ignore;
-
-	if( scriptAttachment ) {
-		GENERIC_asSetScriptWorldStateAttachmentIgnoreAllVars( scriptAttachment, ignore );
+template <typename Var>
+inline void WorldState::CopyVarsFromThat( Var *thisVars, const Var *thatVars ) {
+	ZippedIterator<Var> iterator( thisVars, thatVars );
+	while( iterator.HasNext() ) {
+		const_cast<Var *>( iterator.thisVar )->CopyFromThat( *iterator.thatVar );
+		iterator.Next();
 	}
 }
 
-// Use this macro so one have to write condition that matches the corresponding case and not its negation
-#define TEST_OR_FAIL( condition )  \
-	do                               \
-	{                                \
-		if( !( condition ) ) {            \
-			return false; }            \
-	}                                \
-	while( 0 )
-
-template <typename T>
-static inline bool TestCareFlags( T thisFlags, T thatFlags ) {
-	T careMask = thisFlags ^ std::numeric_limits<T>::max();
-	T thatCareMask = thatFlags ^ std::numeric_limits<T>::max();
-	// There are vars that this world state cares about and that one do not
-	if( careMask & ~thatCareMask ) {
-		return false;
+template <typename Var>
+inline bool WorldState::CheckSatisfiedBy( const Var *thisVars, const Var *thatVars ) {
+	ZippedIterator<Var> iterator( thisVars, thatVars );
+	while( iterator.HasNext() ) {
+		if( !iterator.thisVar->IsSatisfiedBy( *iterator.thatVar ) ) {
+			return false;
+		}
+		iterator.Next();
 	}
-
 	return true;
 }
 
-#define TEST_GENERIC_COMPARABLE_VARS_SATISFACTION( values, flags, ops )             \
-	do                                                                                \
-	{                                                                                 \
-		if( !TestCareFlags( flags, that.flags ) ) { return false; }                          \
-		decltype( flags )mask = 1;                                                     \
-		for( unsigned i = 0; i < sizeof( values ) / sizeof( values[0] ); ++i, mask <<= 1 )     \
-		{                                                                             \
-			if( flags & mask ) { continue; }                                               \
-			switch( this->GetVarSatisfyOp( ops, i ) )                                    \
-			{                                                                         \
-				case SatisfyOp::EQ: TEST_OR_FAIL( values[i] == that.values[i] ); break; \
-				case SatisfyOp::NE: TEST_OR_FAIL( values[i] != that.values[i] ); break; \
-				case SatisfyOp::GT: TEST_OR_FAIL( values[i] > that.values[i] ); break;  \
-				case SatisfyOp::GE: TEST_OR_FAIL( values[i] >= that.values[i] ); break; \
-				case SatisfyOp::LS: TEST_OR_FAIL( values[i] < that.values[i] ); break;  \
-				case SatisfyOp::LE: TEST_OR_FAIL( values[i] <= that.values[i] ); break; \
-			}                                                                         \
-		}                                                                             \
-	} while( 0 )
-
-bool WorldState::IsSatisfiedBy( const WorldState &that ) const {
-	// Test bool vars first since it is cheaper and would reject non-matching `that`state quickly
-	if( !TestCareFlags( boolVarsIgnoreFlags, that.boolVarsIgnoreFlags ) ) {
-		return false;
+template <typename Var>
+inline void WorldState::SetIgnore( Var *varsHead, bool ignore ) {
+	for( Var *var = varsHead; var; var = var->next ) {
+		var->SetIgnore( ignore );
 	}
+}
 
-	auto boolVarsCareMask = boolVarsIgnoreFlags ^ std::numeric_limits<decltype( boolVarsIgnoreFlags )>::max();
-	// If values masked for this ignore flags do not match
-	if( ( boolVarsValues & boolVarsCareMask ) != ( that.boolVarsValues & boolVarsCareMask ) ) {
-		return false;
+template <typename Var>
+inline uint32_t WorldState::ComputeHash( const Var *varsHead ) {
+	// TODO: Could be optimized if we know that a number of vars is even (and if this is really needed).
+	// We can cut a loop-carried dependency chain by half in that case.
+	uint32_t result = 0;
+	for( const Var *var = varsHead; var; var = var->next ) {
+		result += var->Hash();
 	}
+	return result;
+}
 
-	TEST_GENERIC_COMPARABLE_VARS_SATISFACTION( unsignedVarsValues, unsignedVarsIgnoreFlags, unsignedVarsSatisfyOps );
-	static_assert( NUM_FLOAT_VARS == 0, "Implement satisfaction tests for float vars" );
-	TEST_GENERIC_COMPARABLE_VARS_SATISFACTION( shortVarsValues, shortVarsIgnoreFlags, shortVarsSatisfyOps );
-
-	for( int i = 0, offset = 0; i < NUM_ORIGIN_VARS; ++i, offset += 4 ) {
-		const OriginVar::PackedFields &packed = *(OriginVar::PackedFields *)( &originVarsData[offset + 3] );
-		const OriginVar::PackedFields &thatPacked = *(OriginVar::PackedFields *)( &that.originVarsData[offset + 3] );
-
-		if( packed.ignore ) {
-			continue;
-		}
-		if( thatPacked.ignore ) {
+template <typename Var>
+inline bool WorldState::CheckEquality( const Var *thisVars, const Var *thatVars ) {
+	ZippedIterator<Var> iterator( thisVars, thatVars );
+	while( iterator.HasNext() ) {
+		if( !( ( *iterator.thisVar ) == ( *iterator.thatVar ) ) ) {
 			return false;
 		}
+		iterator.Next();
+	}
+	return true;
+}
 
-		const float epsilon = packed.epsilon * 4.0f;
-		const short *thisOriginData = originVarsData + offset;
-		const short *thatOriginData = that.originVarsData + offset;
+void WorldState::CopyFromOtherWorldState( const WorldState &that ) {
+	CopyVarsFromThat( this->shortVarsHead, that.shortVarsHead );
+	CopyVarsFromThat( this->unsignedVarsHead, that.unsignedVarsHead );
+	CopyVarsFromThat( this->boolVarsHead, that.boolVarsHead );
+	CopyVarsFromThat( this->originVarsHead, that.originVarsHead );
+	CopyVarsFromThat( this->originLazyVarsHead, that.originLazyVarsHead );
+	CopyVarsFromThat( this->dualOriginLazyVarsHead, that.dualOriginLazyVarsHead );
 
-		switch( (SatisfyOp)packed.satisfyOp ) {
-			case SatisfyOp::EQ:
-				if( DistanceSquared( thisOriginData, thatOriginData ) > epsilon * epsilon ) {
-					return false;
-				}
-				break;
-			case SatisfyOp::NE:
-				if( DistanceSquared( thisOriginData, thatOriginData ) < epsilon * epsilon ) {
-					return false;
-				}
-				break;
-			default:
-				AI_FailWith( "WorldState::IsSatisfiedBy()", "Illegal packed.satisfyOp bits: %d\n", (int)packed.satisfyOp );
-		}
-	}
+#ifndef PUBLIC_BUILD
+	isCopiedFromOtherWorldState = true;
+#endif
+}
 
-	if( !SniperRangeTacticalSpotVar().IsSatisfiedBy( that.SniperRangeTacticalSpotVar() ) ) {
-		return false;
-	}
-	if( !FarRangeTacticalSpotVar().IsSatisfiedBy( that.FarRangeTacticalSpotVar() ) ) {
-		return false;
-	}
-	if( !MiddleRangeTacticalSpotVar().IsSatisfiedBy( that.MiddleRangeTacticalSpotVar() ) ) {
-		return false;
-	}
-	if( !CloseRangeTacticalSpotVar().IsSatisfiedBy( that.CloseRangeTacticalSpotVar() ) ) {
-		return false;
-	}
-	if( !CoverSpotVar().IsSatisfiedBy( that.CoverSpotVar() ) ) {
-		return false;
-	}
+void WorldState::SetIgnoreAll( bool ignore ) {
+	SetIgnore( shortVarsHead, ignore );
+	SetIgnore( unsignedVarsHead, ignore );
+	SetIgnore( boolVarsHead, ignore );
+	SetIgnore( originVarsHead, ignore );
+	SetIgnore( originLazyVarsHead, ignore );
+	SetIgnore( dualOriginLazyVarsHead, ignore );
+}
 
-	if( !RunAwayTeleportOriginVar().IsSatisfiedBy( that.RunAwayTeleportOriginVar() ) ) {
+bool WorldState::IsSatisfiedBy( const WorldState &that ) const {
+	if( !CheckSatisfiedBy( this->shortVarsHead, that.shortVarsHead ) ) {
 		return false;
 	}
-	if( !RunAwayJumppadOriginVar().IsSatisfiedBy( that.RunAwayJumppadOriginVar() ) ) {
+	if( !CheckSatisfiedBy( this->unsignedVarsHead, that.unsignedVarsHead ) ) {
 		return false;
 	}
-	if( !RunAwayElevatorOriginVar().IsSatisfiedBy( that.RunAwayElevatorOriginVar() ) ) {
+	if( !CheckSatisfiedBy( this->boolVarsHead, that.boolVarsHead ) ) {
 		return false;
 	}
-
-	if( !scriptAttachment ) {
-		return true;
+	if( !CheckSatisfiedBy( this->originVarsHead, that.originVarsHead ) ) {
+		return false;
 	}
-
-	return GENERIC_asIsScriptWorldStateAttachmentSatisfiedBy( scriptAttachment, that.scriptAttachment );
+	if( !CheckSatisfiedBy( this->originLazyVarsHead, that.originLazyVarsHead ) ) {
+		return false;
+	}
+	if( !CheckSatisfiedBy( this->dualOriginLazyVarsHead, that.dualOriginLazyVarsHead ) ) {
+		return false;
+	}
+	return true;
 }
 
 uint32_t WorldState::Hash() const {
-	uint32_t result = 37;
-
-	decltype( unsignedVarsIgnoreFlags )unsignedVarsMask = 1;
-	for( int i = 0; i < NUM_UNSIGNED_VARS; ++i, unsignedVarsMask <<= 1 ) {
-		if( unsignedVarsIgnoreFlags & unsignedVarsMask ) {
-			continue;
-		}
-		result = result * 17 + unsignedVarsValues[i];
-		result = result * 17 + (unsigned)GetVarSatisfyOp( unsignedVarsSatisfyOps, i ) + 1;
-	}
-
-	static_assert( NUM_FLOAT_VARS == 0, "Implement hashing for float vars" );
-
-	decltype( shortVarsIgnoreFlags )shortVarsMask = 1;
-	for( int i = 0; i < NUM_SHORT_VARS; ++i ) {
-		if( shortVarsIgnoreFlags & shortVarsMask ) {
-			result = result * 17 + shortVarsValues[i];
-			result = result * 17 + (unsigned)GetVarSatisfyOp( shortVarsSatisfyOps, i ) + 1;
-		}
-	}
-
-	result = result * 17;
-	result += boolVarsValues & ( boolVarsIgnoreFlags ^ std::numeric_limits<decltype( boolVarsIgnoreFlags )>::max() );
-
-	for( int i = 0; i < NUM_ORIGIN_VARS; ++i ) {
-		const auto &packed = *(OriginVar::PackedFields *)&originVarsData[i * 4 + 3];
-		if( !( packed.ignore ) ) {
-			for( int j = 0; j < 4; ++j )
-				result = result * 17 + originVarsData[i * 4 + j];
-		}
-	}
-
-	result = result * 17 + SniperRangeTacticalSpotVar().Hash();
-	result = result * 17 + FarRangeTacticalSpotVar().Hash();
-	result = result * 17 + MiddleRangeTacticalSpotVar().Hash();
-	result = result * 17 + CloseRangeTacticalSpotVar().Hash();
-	result = result * 17 + CoverSpotVar().Hash();
-
-	result = result * 17 + RunAwayTeleportOriginVar().Hash();
-	result = result * 17 + RunAwayJumppadOriginVar().Hash();
-	result = result * 17 + RunAwayElevatorOriginVar().Hash();
-
-	if( !scriptAttachment ) {
-		return result;
-	}
-
-	return result * 17 + (uint32_t)GENERIC_asScriptWorldStateAttachmentHash( scriptAttachment );
+	uint32_t result = 17;
+	result = result * 31 + ComputeHash( shortVarsHead );
+	result = result * 31 + ComputeHash( unsignedVarsHead );
+	result = result * 31 + ComputeHash( boolVarsHead );
+	result = result * 31 + ComputeHash( originVarsHead );
+	result = result * 31 + ComputeHash( originLazyVarsHead );
+	result = result * 31 + ComputeHash( dualOriginLazyVarsHead );
+	return result;
 }
-
-#define TEST_VARS_EQUALITY( values, flags, ops )                           \
-	do                                                                       \
-	{                                                                        \
-		if( flags != that.flags ) {                                             \
-			return false; }                                                    \
-		decltype( flags )mask = 1;                                            \
-		for( unsigned i = 0; i < sizeof( values ) / sizeof( values[0] ); ++i )         \
-		{                                                                    \
-			if( !( flags & mask ) )                                             \
-			{                                                                \
-				if( values[i] != that.values[i] ) {                             \
-					return false; }                                            \
-				if( GetVarSatisfyOp( ops, i ) != GetVarSatisfyOp( that.ops, i ) ) { \
-					return false; }                                            \
-			}                                                                \
-			mask <<= 1;                                                      \
-		}                                                                    \
-	}                                                                        \
-	while( 0 )
 
 bool WorldState::operator==( const WorldState &that ) const {
-	// Test bool vars first since it is cheaper and would reject non-matching `that` state quickly
-
-	if( boolVarsIgnoreFlags != that.boolVarsIgnoreFlags ) {
+	if( !CheckEquality( this->shortVarsHead, that.shortVarsHead ) ) {
 		return false;
 	}
-
-	auto boolVarsCareFlags = boolVarsIgnoreFlags ^ std::numeric_limits<decltype( boolVarsIgnoreFlags )>::max();
-	if( ( boolVarsValues & boolVarsCareFlags ) != ( that.boolVarsValues & boolVarsCareFlags ) ) {
+	if( !CheckEquality( this->unsignedVarsHead, that.unsignedVarsHead ) ) {
 		return false;
 	}
-
-	TEST_VARS_EQUALITY( unsignedVarsValues, unsignedVarsIgnoreFlags, unsignedVarsSatisfyOps );
-	static_assert( NUM_FLOAT_VARS == 0, "Implement equality tests for float vars" );
-	TEST_VARS_EQUALITY( shortVarsValues, shortVarsIgnoreFlags, shortVarsSatisfyOps );
-
-	for( int i = 0, offset = 0; i < NUM_ORIGIN_VARS; ++i, offset += 4 ) {
-		const auto &packed = *( (OriginVar::PackedFields *)&originVarsData[offset + 3] );
-		const auto &thatPacked = *( (OriginVar::PackedFields *)&that.originVarsData[offset + 3] );
-		if( !packed.ignore ) {
-			if( thatPacked.ignore ) {
-				return false;
-			}
-
-			for( int j = 0; j < 4; ++j ) {
-				if( originVarsData[offset + j] != that.originVarsData[offset + j] ) {
-					return false;
-				}
-			}
-		} else if( !thatPacked.ignore ) {
-			return false;
-		}
-	}
-
-	if( SniperRangeTacticalSpotVar() != that.SniperRangeTacticalSpotVar() ) {
+	if( !CheckEquality( this->boolVarsHead, that.boolVarsHead ) ) {
 		return false;
 	}
-	if( FarRangeTacticalSpotVar() != that.FarRangeTacticalSpotVar() ) {
+	if( !CheckEquality( this->originVarsHead, that.originVarsHead ) ) {
 		return false;
 	}
-	if( MiddleRangeTacticalSpotVar() != that.MiddleRangeTacticalSpotVar() ) {
+	if( !CheckEquality( this->originLazyVarsHead, that.originLazyVarsHead ) ) {
 		return false;
 	}
-	if( CloseRangeTacticalSpotVar() != that.CloseRangeTacticalSpotVar() ) {
+	if( !CheckEquality( this->dualOriginLazyVarsHead, that.dualOriginLazyVarsHead ) ) {
 		return false;
 	}
-	if( CoverSpotVar() != that.CoverSpotVar() ) {
-		return false;
-	}
-
-	if( RunAwayTeleportOriginVar() != that.RunAwayTeleportOriginVar() ) {
-		return false;
-	}
-	if( RunAwayJumppadOriginVar() != that.RunAwayJumppadOriginVar() ) {
-		return false;
-	}
-	if( RunAwayElevatorOriginVar() != that.RunAwayElevatorOriginVar() ) {
-		return false;
-	}
-
-	if( !scriptAttachment ) {
-		return true;
-	}
-
-	return GENERIC_asScriptWorldStateAttachmentEquals( scriptAttachment, that.scriptAttachment );
+	return true;
 }
+
+#define PRINT_VAR( varName ) varName##Var().DebugPrint( tag, #varName )
 
 void WorldState::DebugPrint( const char *tag ) const {
 	// We have to list all vars manually
@@ -331,73 +194,67 @@ void WorldState::DebugPrint( const char *tag ) const {
 	// since vars instances do not (and should not) exist in optimized by a compiler code
 	// (WorldState members are accessed directly instead)
 
-	GoalItemWaitTimeVar().DebugPrint( tag );
-	SimilarWorldStateInstanceIdVar().DebugPrint( tag );
+	PRINT_VAR( GoalItemWaitTime );
+	PRINT_VAR( SimilarWorldStateInstanceId );
 
-	HealthVar().DebugPrint( tag );
-	ArmorVar().DebugPrint( tag );
-	RawDamageToKillVar().DebugPrint( tag );
+	PRINT_VAR( Health );
+	PRINT_VAR( Armor );
+	PRINT_VAR( RawDamageToKill );
 
-	BotOriginVar().DebugPrint( tag );
-	EnemyOriginVar().DebugPrint( tag );
-	NavTargetOriginVar().DebugPrint( tag );
-	PendingOriginVar().DebugPrint( tag );
+	PRINT_VAR( BotOrigin );
+	PRINT_VAR( EnemyOrigin );
+	PRINT_VAR( NavTargetOrigin );
+	PRINT_VAR( PendingOrigin );
 
-	HasQuadVar().DebugPrint( tag );
-	HasShellVar().DebugPrint( tag );
-	EnemyHasQuadVar().DebugPrint( tag );
-	HasThreateningEnemyVar().DebugPrint( tag );
-	HasJustPickedGoalItemVar().DebugPrint( tag );
+	PRINT_VAR( HasQuad );
+	PRINT_VAR( HasShell );
+	PRINT_VAR( EnemyHasQuad );
+	PRINT_VAR( HasThreateningEnemy );
+	PRINT_VAR( HasJustPickedGoalItem );
 
-	HasPositionalAdvantageVar().DebugPrint( tag );
-	CanHitEnemyVar().DebugPrint( tag );
-	EnemyCanHitVar().DebugPrint( tag );
-	HasJustKilledEnemyVar().DebugPrint( tag );
+	PRINT_VAR( HasPositionalAdvantage );
+	PRINT_VAR( CanHitEnemy );
+	PRINT_VAR( EnemyCanHit );
+	PRINT_VAR( HasJustKilledEnemy );
 
-	IsRunningAwayVar().DebugPrint( tag );
-	HasRunAwayVar().DebugPrint( tag );
+	PRINT_VAR( IsRunningAway );
+	PRINT_VAR( HasRunAway );
 
-	HasJustTeleportedVar().DebugPrint( tag );
-	HasJustTouchedJumppadVar().DebugPrint( tag );
-	HasJustEnteredElevatorVar().DebugPrint( tag );
+	PRINT_VAR( HasJustTeleported );
+	PRINT_VAR( HasJustTouchedJumppad );
+	PRINT_VAR( HasJustEnteredElevator );
 
-	HasPendingCoverSpotVar().DebugPrint( tag );
-	HasPendingRunAwayTeleportVar().DebugPrint( tag );
-	HasPendingRunAwayJumppadVar().DebugPrint( tag );
-	HasPendingRunAwayElevatorVar().DebugPrint( tag );
+	PRINT_VAR( HasPendingCoverSpot );
+	PRINT_VAR( HasPendingRunAwayTeleport );
+	PRINT_VAR( HasPendingRunAwayJumppad );
+	PRINT_VAR( HasPendingRunAwayElevator );
 
-	HasGoodSniperRangeWeaponsVar().DebugPrint( tag );
-	HasGoodFarRangeWeaponsVar().DebugPrint( tag );
-	HasGoodMiddleRangeWeaponsVar().DebugPrint( tag );
-	HasGoodCloseRangeWeaponsVar().DebugPrint( tag );
+	PRINT_VAR( HasGoodSniperRangeWeapons );
+	PRINT_VAR( HasGoodFarRangeWeapons );
+	PRINT_VAR( HasGoodMiddleRangeWeapons );
+	PRINT_VAR( HasGoodCloseRangeWeapons );
 
-	EnemyHasGoodSniperRangeWeaponsVar().DebugPrint( tag );
-	EnemyHasGoodFarRangeWeaponsVar().DebugPrint( tag );
-	EnemyHasGoodMiddleRangeWeaponsVar().DebugPrint( tag );
-	EnemyHasGoodCloseRangeWeaponsVar().DebugPrint( tag );
+	PRINT_VAR( EnemyHasGoodSniperRangeWeapons );
+	PRINT_VAR( EnemyHasGoodFarRangeWeapons );
+	PRINT_VAR( EnemyHasGoodMiddleRangeWeapons );
+	PRINT_VAR( EnemyHasGoodCloseRangeWeapons );
 
-	SniperRangeTacticalSpotVar().DebugPrint( tag );
-	FarRangeTacticalSpotVar().DebugPrint( tag );
-	MiddleRangeTacticalSpotVar().DebugPrint( tag );
-	CloseRangeTacticalSpotVar().DebugPrint( tag );
+	PRINT_VAR( SniperRangeTacticalSpot );
+	PRINT_VAR( FarRangeTacticalSpot );
+	PRINT_VAR( MiddleRangeTacticalSpot );
+	PRINT_VAR( CloseRangeTacticalSpot );
 
-	RunAwayTeleportOriginVar().DebugPrint( tag );
-	RunAwayJumppadOriginVar().DebugPrint( tag );
-	RunAwayElevatorOriginVar().DebugPrint( tag );
-
-	if( scriptAttachment ) {
-		GENERIC_asDebugPrintScriptWorldStateAttachment( scriptAttachment );
-	}
+	PRINT_VAR( RunAwayTeleportOrigin );
+	PRINT_VAR( RunAwayJumppadOrigin );
+	PRINT_VAR( RunAwayElevatorOrigin );
 }
 
-#define PRINT_DIFF( varName )                             \
-	do                                                      \
-	{                                                       \
-		if( this->varName ## Var() != that.varName ## Var() )    \
-		{                                                   \
-			this->varName ## Var().DebugPrint( oldTag );        \
-			that.varName ## Var().DebugPrint( newTag );         \
-		}                                                   \
+#define PRINT_DIFF( varName )                                           \
+	do {                                                                \
+		if( !( this->varName ## Var() == that.varName ## Var() ) ) {    \
+			this->varName ## Var().DebugPrint( oldTag, #varName );      \
+			that.varName ## Var().DebugPrint( newTag, #varName );       \
+		}                                                               \
 	} while( 0 )
 
 void WorldState::DebugPrintDiff( const WorldState &that, const char *oldTag, const char *newTag ) const {
@@ -454,8 +311,4 @@ void WorldState::DebugPrintDiff( const WorldState &that, const char *oldTag, con
 	PRINT_DIFF( RunAwayTeleportOrigin );
 	PRINT_DIFF( RunAwayJumppadOrigin );
 	PRINT_DIFF( RunAwayElevatorOrigin );
-
-	if( scriptAttachment ) {
-		GENERIC_asDebugPrintScriptWorldStateAttachmentDiff( scriptAttachment, that.scriptAttachment );
-	}
 }

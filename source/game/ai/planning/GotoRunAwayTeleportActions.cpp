@@ -1,7 +1,7 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-PlannerNode *BotStartGotoRunAwayTeleportAction::TryApply( const WorldState &worldState ) {
+PlannerNode *StartGotoRunAwayTeleportAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}
@@ -23,7 +23,7 @@ PlannerNode *BotStartGotoRunAwayTeleportAction::TryApply( const WorldState &worl
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self ) ) );
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -34,27 +34,27 @@ PlannerNode *BotStartGotoRunAwayTeleportAction::TryApply( const WorldState &worl
 	plannerNode.WorldState().HasPendingRunAwayTeleportVar().SetValue( true ).SetIgnore( false );
 	// Set nav target to the teleport origin
 	plannerNode.WorldState().NavTargetOriginVar().SetValue( worldState.RunAwayTeleportOriginVar().Value() );
-	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().NavTargetOriginVar().SetIgnore( false );
 	// Set pending origin to the teleport destination
 	plannerNode.WorldState().PendingOriginVar().SetValue( worldState.RunAwayTeleportOriginVar().Value2() );
-	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().PendingOriginVar().SetIgnore( false );
 
 	return plannerNode.PrepareActionResult();
 }
 
-void BotDoRunAwayViaTeleportActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
-	self->ai->botRef->SetNavTarget( &navTarget );
+void DoRunAwayViaTeleportActionRecord::Activate() {
+	BotActionRecord::Activate();
+	Self()->SetNavTarget( &navSpot );
 }
 
-void BotDoRunAwayViaTeleportActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+void DoRunAwayViaTeleportActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
+	Self()->ResetNavTarget();
 }
 
-PlannerNode *BotDoRunAwayViaTeleportAction::TryApply( const WorldState &worldState ) {
+PlannerNode *DoRunAwayViaTeleportAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}
@@ -86,8 +86,8 @@ PlannerNode *BotDoRunAwayViaTeleportAction::TryApply( const WorldState &worldSta
 	}
 
 	Vec3 teleportOrigin = worldState.NavTargetOriginVar().Value();
-	const auto &selectedEnemies = self->ai->botRef->GetSelectedEnemies();
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self, teleportOrigin, selectedEnemies.InstanceId() ) ) );
+	const auto &selectedEnemies = Self()->GetSelectedEnemies();
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self(), teleportOrigin, selectedEnemies.InstanceId() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -99,7 +99,7 @@ PlannerNode *BotDoRunAwayViaTeleportAction::TryApply( const WorldState &worldSta
 	plannerNode.WorldState().HasJustTeleportedVar().SetValue( false ).SetIgnore( false );
 	// Set bot origin to the teleport destination
 	plannerNode.WorldState().BotOriginVar().SetValue( worldState.PendingOriginVar().Value() );
-	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	// Reset pending origin
 	plannerNode.WorldState().PendingOriginVar().SetIgnore( true );
 	plannerNode.WorldState().HasPendingRunAwayTeleportVar().SetIgnore( true );
@@ -113,7 +113,7 @@ PlannerNode *BotDoRunAwayViaTeleportAction::TryApply( const WorldState &worldSta
 	return plannerNode.PrepareActionResult();
 }
 
-AiBaseActionRecord::Status BotDoRunAwayViaTeleportActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiActionRecord::Status DoRunAwayViaTeleportActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( currWorldState.HasJustTeleportedVar().Ignore() ) {
 		Debug( "Has bot just teleported is ignored\n" );
 		return INVALID;
@@ -130,13 +130,13 @@ AiBaseActionRecord::Status BotDoRunAwayViaTeleportActionRecord::CheckStatus( con
 		Debug( "A threatening enemy is absent\n" );
 		return INVALID;
 	}
-	if( selectedEnemiesInstanceId != self->ai->botRef->GetSelectedEnemies().InstanceId() ) {
+	if( selectedEnemiesInstanceId != Self()->GetSelectedEnemies().InstanceId() ) {
 		Debug( "New enemies have been selected\n" );
 		return INVALID;
 	}
 	// Use the same radius as for goal items pickups
 	// (running actions for picking up an item and running away might be shared)
-	if( ( navTarget.Origin() - self->s.origin ).SquaredLength() > GOAL_PICKUP_ACTION_RADIUS * GOAL_PICKUP_ACTION_RADIUS ) {
+	if( ( navSpot.Origin() - Self()->Origin() ).SquaredLength() > GOAL_PICKUP_ACTION_RADIUS * GOAL_PICKUP_ACTION_RADIUS ) {
 		Debug( "Bot is too far from the teleport trigger\n" );
 		return INVALID;
 	}

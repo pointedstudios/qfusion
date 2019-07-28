@@ -1,19 +1,22 @@
 #ifndef QFUSION_BOT_THREAT_TRACKER_H
 #define QFUSION_BOT_THREAT_TRACKER_H
 
+#include "AlertTracker.h"
 #include "EnemiesTracker.h"
 #include "SelectedEnemies.h"
 #include "HazardsSelector.h"
 #include "EventsTracker.h"
+#include "KeptInFovPointTracker.h"
+#include "PathBlockingTracker.h"
 
 class AiSquad;
+class Bot;
 
-class BotAwarenessModule: public AiFrameAwareUpdatable {
+class BotAwarenessModule: public AiFrameAwareComponent {
 	friend class Bot;
 
 	AiEnemiesTracker *activeEnemiesTracker { &ownEnemiesTracker };
-	AiSquad *squad { nullptr };
-	const edict_t *const self;
+	Bot *const bot;
 
 	SelectedEnemies &selectedEnemies;
 	SelectedEnemies &lostEnemies;
@@ -21,11 +24,16 @@ class BotAwarenessModule: public AiFrameAwareUpdatable {
 	const unsigned targetChoicePeriod;
 	const unsigned reactionTime;
 
+	bool shouldUpdateBlockedAreasStatus { false };
+
+	AlertTracker alertTracker;
 	HazardsDetector hazardsDetector;
 	HazardsSelector hazardsSelector;
 	EventsTracker eventsTracker;
+	KeptInFovPointTracker keptInFovPointTracker;
+	PathBlockingTracker pathBlockingTracker;
 public:
-	struct HurtEvent {
+	struct HurtEvent: public Selection {
 		// Initialize the inflictor by the world entity (it is never valid as one).
 		// This helps to avoid extra branching from testing for nullity.
 		const edict_t *inflictor { world };
@@ -33,35 +41,48 @@ public:
 		Vec3 possibleOrigin { 0, 0, 0 };
 		float totalDamage { 0.0f };
 
-		bool IsValidFor( const edict_t *self ) const;
-		void Invalidate() { lastHitTimestamp = 0; }
+		bool IsValidFor( const Bot *bot ) const;
+
+		void Invalidate() {
+			// We used to set zero timestamp but the timestamp acts as an instance id now
+			// and we must comply to the instance id contract
+			// (it remains the same for an invalidated Selection).
+			inflictor = world;
+		}
+
+		unsigned InstanceId() const override {
+			// This code is aware of unsigned range overflow... even if it should not realistically happen.
+			return (unsigned)( lastHitTimestamp % std::numeric_limits<unsigned>::max() );
+		}
+
+		bool ValidAsSelection() const override {
+			// This is just to comply to the Selection interface.
+			// Return true if the hurt event has not been invalidated.
+			return inflictor != world;
+		}
 	};
 
 private:
 	mutable HurtEvent hurtEvent;
 
 	class EnemiesTracker : public AiEnemiesTracker {
-		edict_t *const self;
-		BotAwarenessModule *const threatTracker;
+		Bot *const bot;
+		BotAwarenessModule *const module;
 	protected:
-		void OnHurtByNewThreat( const edict_t *newThreat ) override {
-			threatTracker->OnHurtByNewThreat( newThreat, this );
-		}
-		bool CheckHasQuad() const override { return ::HasQuad( self ); }
-		bool CheckHasShell() const override { return ::HasShell( self ); }
-		float ComputeDamageToBeKilled() const override { return DamageToKill( self ); }
-		void OnEnemyRemoved( const TrackedEnemy *enemy ) override {
-			threatTracker->OnEnemyRemoved( enemy );
-		}
+		void OnHurtByNewThreat( const edict_t *newThreat ) override;
+		bool CheckHasQuad() const override;
+		bool CheckHasShell() const override;
+		float ComputeDamageToBeKilled() const override;
+		void OnEnemyRemoved( const TrackedEnemy *enemy ) override;
+		// These two methods are overridden to just return the supplied value under certain conditions.
+		// This helps to avoid an unwanted positive feedback loop in these cases.
+		float ModifyWeightForAttacker( const edict_t *enemy, float weightSoFar ) override;
+		float ModifyWeightForHitTarget( const edict_t *enemy, float weightSoFar ) override;
 		void SetBotRoleWeight( const edict_t *bot_, float weight ) override {}
 		float GetAdditionalEnemyWeight( const edict_t *bot_, const edict_t *enemy ) const override { return 0; }
 		void OnBotEnemyAssigned( const edict_t *bot_, const TrackedEnemy *enemy ) override {}
-
 	public:
-		EnemiesTracker( edict_t *self_, BotAwarenessModule *threatTracker_, float skill_ )
-			: AiEnemiesTracker( skill_ ), self( self_ ), threatTracker( threatTracker_ ) {
-			SetTag( va( "BotAwarenessModule(%s)::EnemiesTracker", self_->r.client->netname ) );
-		}
+		EnemiesTracker( Bot *bot_, BotAwarenessModule *module_ );
 	};
 
 	EnemiesTracker ownEnemiesTracker;
@@ -72,7 +93,7 @@ private:
 	void Think() override;
 
 	void SetFrameAffinity( unsigned modulo, unsigned offset ) override {
-		AiFrameAwareUpdatable::SetFrameAffinity( modulo, offset );
+		AiFrameAwareComponent::SetFrameAffinity( modulo, offset );
 		eventsTracker.SetFrameAffinity( modulo, offset );
 		ownEnemiesTracker.SetFrameAffinity( modulo, offset );
 	}
@@ -85,13 +106,12 @@ private:
 
 	void CheckForNewHazards();
 public:
-	// We have to provide both entity and Bot class refs due to initialization order issues
-	BotAwarenessModule( edict_t *self_, Bot *bot_, float skill_ );
+	BotAwarenessModule( Bot *bot_ );
 
 	void OnAttachedToSquad( AiSquad *squad_ );
 	void OnDetachedFromSquad( AiSquad *squad_ );
 
-	void OnHurtByNewThreat( const edict_t *newThreat, const AiFrameAwareUpdatable *threatDetector );
+	void OnHurtByNewThreat( const edict_t *newThreat, const AiFrameAwareComponent *threatDetector );
 	void OnEnemyRemoved( const TrackedEnemy *enemy );
 
 	void OnEnemyViewed( const edict_t *enemy );
@@ -122,12 +142,16 @@ public:
 	}
 
 	const HurtEvent *GetValidHurtEvent() const {
-		if( !hurtEvent.IsValidFor( self ) ) {
+		if( !hurtEvent.IsValidFor( bot ) ) {
 			hurtEvent.Invalidate();
 			return nullptr;
 		}
 
 		return &hurtEvent;
+	}
+
+	const float *GetKeptInFovPoint() const {
+		return keptInFovPointTracker.GetActivePoint();
 	}
 
 	// In these calls use not active but bot's own enemy pool
@@ -138,6 +162,16 @@ public:
 
 	inline int64_t LastTargetTime( const edict_t *target ) const {
 		return ownEnemiesTracker.LastTargetTime( target );
+	}
+
+	void EnableAutoAlert( const AiAlertSpot &alertSpot,
+						  AlertTracker::AlertCallback callback,
+						  AiFrameAwareComponent *receiver ) {
+		alertTracker.EnableAutoAlert( alertSpot, callback, receiver );
+	}
+
+	void DisableAutoAlert( int id ) {
+		alertTracker.DisableAutoAlert( id );
 	}
 };
 

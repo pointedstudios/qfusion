@@ -1,22 +1,22 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotDodgeToSpotActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
-	self->ai->botRef->SetNavTarget( &navTarget );
+void DodgeToSpotActionRecord::Activate() {
+	BotActionRecord::Activate();
+	Self()->SetNavTarget( &navSpot );
 	timeoutAt = level.time + Hazard::TIMEOUT;
-	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
+	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 }
 
-void BotDodgeToSpotActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+void DodgeToSpotActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
+	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotDodgeToSpotActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiActionRecord::Status DodgeToSpotActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	// If the bot has reached the spot, consider the action completed
 	// (use a low threshold because dodging is a precise movement)
-	if( ( navTarget.Origin() - self->s.origin ).SquaredLength() < 16 * 16 ) {
+	if( ( navSpot.Origin() - Self()->Origin() ).SquaredLength() < 16 * 16 ) {
 		return COMPLETED;
 	}
 
@@ -24,7 +24,7 @@ AiBaseActionRecord::Status BotDodgeToSpotActionRecord::CheckStatus( const WorldS
 	return timeoutAt > level.time ? VALID : INVALID;
 }
 
-PlannerNode *BotDodgeToSpotAction::TryApply( const WorldState &worldState ) {
+PlannerNode *DodgeToSpotAction::TryApply( const WorldState &worldState ) {
 	if( worldState.PotentialHazardDamageVar().Ignore() ) {
 		Debug( "Potential hazard damage is ignored in the given world state\n" );
 		return nullptr;
@@ -40,8 +40,8 @@ PlannerNode *BotDodgeToSpotAction::TryApply( const WorldState &worldState ) {
 	}
 #endif
 
-	constexpr float squareDistanceError = WorldState::OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
-	if( ( worldState.BotOriginVar().Value() - self->s.origin ).SquaredLength() > squareDistanceError ) {
+	constexpr float squareDistanceError = OriginVar::MAX_ROUNDING_SQUARE_DISTANCE_ERROR;
+	if( ( worldState.BotOriginVar().Value() - Self()->Origin() ).SquaredLength() > squareDistanceError ) {
 		Debug( "The action can be applied only to the current bot origin\n" );
 		return nullptr;
 	}
@@ -52,13 +52,13 @@ PlannerNode *BotDodgeToSpotAction::TryApply( const WorldState &worldState ) {
 	}
 
 	const Vec3 spotOrigin = worldState.DodgeHazardSpotVar().Value();
-	int travelTimeMillis = self->ai->botRef->CheckTravelTimeMillis( worldState.BotOriginVar().Value(), spotOrigin );
+	int travelTimeMillis = Self()->CheckTravelTimeMillis( worldState.BotOriginVar().Value(), spotOrigin );
 	if( !travelTimeMillis ) {
 		Debug( "Warning: can't find travel time from the bot origin to the spot origin in the given world state\n" );
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self, spotOrigin ) ) );
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self(), spotOrigin ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

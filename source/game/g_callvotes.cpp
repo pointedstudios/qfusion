@@ -1056,7 +1056,7 @@ static bool G_VoteMuteValidate( callvotedata_t *vote, bool first ) {
 // chat mute
 static void G_VoteMutePassed( callvotedata_t *vote ) {
 	if( edict_t *ent = G_Vote_GetValidDeferredVoteTarget( vote ) ) {
-		ent->r.client->muted |= 1;
+		ChatHandlersChain::Instance()->Mute( ent );
 		ent->r.client->level.stats.AddToEntry( "muted_count", 1 );
 	}
 }
@@ -1068,7 +1068,7 @@ static bool G_VoteUnmuteValidate( callvotedata_t *vote, bool first ) {
 // chat unmute
 static void G_VoteUnmutePassed( callvotedata_t *vote ) {
 	if( edict_t *ent = G_Vote_GetValidDeferredVoteTarget( vote ) ) {
-		ent->r.client->muted &= ~1;
+		ChatHandlersChain::Instance()->Unmute( ent );
 	}
 }
 
@@ -2048,6 +2048,16 @@ void G_CallVotes_Think( void ) {
 	}
 }
 
+static bool G_CallVotes_CheckFlood( const edict_t *ent ) {
+	const auto lastClientVoteAt = ent->r.client->level.callvote_when;
+	if( !lastClientVoteAt || lastClientVoteAt + g_callvote_cooldowntime->integer * 1000 <= game.realtime ) {
+		return true;
+	}
+
+	G_PrintMsg( ent, "%sYou can not call a vote right now\n", S_COLOR_RED );
+	return false;
+}
+
 /*
 * G_CallVote
 */
@@ -2129,10 +2139,11 @@ static void G_CallVote( edict_t *ent, bool isopcall ) {
 		return;
 	}
 
-	if( !isopcall && ent->r.client->level.callvote_when &&
-		( ent->r.client->level.callvote_when + g_callvote_cooldowntime->integer * 1000 > game.realtime ) ) {
-		G_PrintMsg( ent, "%sYou can not call a vote right now\n", S_COLOR_RED );
-		return;
+	// Apply flood check in this case early (avoid a fruitless state creation)
+	if( !callvote->validate ) {
+		if( !G_CallVotes_CheckFlood( ent ) ) {
+			return;
+		}
 	}
 
 	//we got a valid type. Get the parameters if any
@@ -2155,9 +2166,21 @@ static void G_CallVote( edict_t *ent, bool isopcall ) {
 
 	//validate if there's a validation func
 	if( callvote->validate != NULL && !callvote->validate( &callvoteState.vote, true ) ) {
+		// Hack... save the old timestamp before G_CallVotes_Reset()
+		// and restore it afterwards. All of this begs for refactoring anyway.
+		const auto oldClientTimestamp = ent->r.client->level.callvote_when;
 		G_CallVotes_PrintHelpToPlayer( ent, callvote );
 		G_CallVotes_Reset(); // free the args
+		ent->r.client->level.callvote_when = oldClientTimestamp;
 		return;
+	}
+
+	if( !isopcall ) {
+		// Actually apply flood check if it has not been performed yet
+		if( callvote->validate && !G_CallVotes_CheckFlood( ent ) ) {
+			G_CallVotes_Reset();
+			return;
+		}
 	}
 
 	//we're done. Proceed launching the election

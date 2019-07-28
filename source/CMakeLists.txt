@@ -99,9 +99,9 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     if (MSVC)
         add_release_link_flags("/LTCG")
 
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD /W4 /Ob1 /GL /Ot")
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD /W4 /GL /O2 /Ot /Ob2 /Oi")
         set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd /W4")
-        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MD /W4 /Ob1 /GL /Ot")
+        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MD /W4 /GL /O2 /Ot /Ob2 /Oi")
         set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MDd /W4")
         set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /MD /W4")
         set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} /MD /W4")
@@ -116,7 +116,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set(CMAKE_OSX_SYSROOT "macosx")                                # Compile with latest available OS X sdk
     set(CMAKE_XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET "10.8")     # Use 10.8 as deployment target
     set(CMAKE_XCODE_ATTRIBUTE_GCC_C_LANGUAGE_STANDARD "gnu99")     # Use GNU99 standart for compiling C files
-    set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD "c++11") # Use C++11 standart for compiling C++ files
+    set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD "c++14") # Use C++14 standart for compiling C++ files
     set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")          # Use modern libc++ instead of libstdc++
     set(CMAKE_FRAMEWORK_PATH "../libsrcs/lib/mac/Frameworks")
     set(CMAKE_MACOSX_RPATH 1)
@@ -125,7 +125,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wno-unused-function -fvisibility=hidden -Winvalid-pch")
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -D_DEBUG")
-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fno-strict-aliasing -ffast-math -funroll-loops -msse2")
+    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fno-strict-aliasing -ffast-math -fno-finite-math-only -funroll-loops -msse2")
 
     set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
@@ -143,21 +143,18 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux" OR MINGW)
 
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pipe -Wall -g -fno-omit-frame-pointer -Wno-unused-function -fvisibility=hidden -Winvalid-pch")
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -D_DEBUG")
-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fno-strict-aliasing -ffast-math -funroll-loops -msse2 -O2")
+    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fno-strict-aliasing -ffast-math -fno-finite-math-only -funroll-loops -msse2 -O2")
 
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-        set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++11")
+        set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++14")
     else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++11")
+        set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++14")
     endif()
 
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
 
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -D_POSIX_C_SOURCE=200112L -D_XOPEN_SOURCE=500")
-
-    # -Wl,--as-needed
-    add_common_link_flags("-Wl,--as-needed")
 
     # -s in release link flags
     add_release_link_flags("-s")
@@ -229,6 +226,8 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux" OR MINGW)
     add_custom_target(tar_gz COMMAND ${CMAKE_COMMAND} -E tar "cfvz" ${TAR_GZ_DIST} "${CMAKE_HOME_DIRECTORY}/build/")
 endif()
 
+set(DEFAULT_CMAKE_EXECUTABLE_SUFFIX "${CMAKE_EXECUTABLE_SUFFIX}")
+
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(CMAKE_EXECUTABLE_SUFFIX "_${QFUSION_WINDOWS_ARCH}${CMAKE_EXECUTABLE_SUFFIX}")
     set(CMAKE_SHARED_LIBRARY_PREFIX "")
@@ -288,20 +287,14 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 endif()
 
 add_subdirectory(angelwrap)
-add_subdirectory(cgame)
 add_subdirectory(game)
 
 if (NOT GAME_MODULES_ONLY)
     add_subdirectory(server)
 
     if (NOT SERVER_ONLY)
-        add_subdirectory(cin)
-        add_subdirectory(ftlib)
-        add_subdirectory(ref_gl)
         add_subdirectory(snd_openal)
-        add_subdirectory(snd_qf)
         add_subdirectory(ui_cef)
-        add_subdirectory(steamlib)
         add_subdirectory(client)
     endif()
 endif()

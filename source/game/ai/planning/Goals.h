@@ -1,136 +1,147 @@
 #ifndef QFUSION_BOT_GOALS_H
 #define QFUSION_BOT_GOALS_H
 
-#include "BasePlanner.h"
+#include "Planner.h"
 
-class BotBaseGoal : public AiBaseGoal
-{
-	StaticVector<AiBaseAction *, BasePlanner::MAX_ACTIONS> extraApplicableActions;
+class BotPlanningModule;
 
+class BotGoal : public AiGoal {
+	StaticVector<AiAction *, AiPlanner::MAX_ACTIONS> extraApplicableActions;
 public:
-	BotBaseGoal( Ai *ai_, const char *name_, int debugColor_, unsigned updatePeriod_ )
-		: AiBaseGoal( ai_, name_, updatePeriod_ ) {
-		this->debugColor = debugColor_;
-	}
+	BotGoal( BotPlanningModule *module_, const char *name_, int debugColor_, unsigned updatePeriod_ );
 
-	inline void AddExtraApplicableAction( AiBaseAction *action ) {
+	void AddExtraApplicableAction( AiAction *action ) {
 		extraApplicableActions.push_back( action );
 	}
-
 protected:
-	inline PlannerNode *ApplyExtraActions( PlannerNode *firstTransition, const WorldState &worldState );
+	BotPlanningModule *const module;
 
-	inline const class SelectedNavEntity &SelectedNavEntity() const;
-	inline const class SelectedEnemies &SelectedEnemies() const;
-	inline const class BotWeightConfig &WeightConfig() const;
+	PlannerNode *ApplyExtraActions( PlannerNode *firstTransition, const WorldState &worldState );
+
+	Bot *Self() { return (Bot *)self; }
+	const Bot *Self() const { return (Bot *)self; }
+
+	const class SelectedNavEntity &SelectedNavEntity() const;
+	const class SelectedEnemies &SelectedEnemies() const;
+	const class BotWeightConfig &WeightConfig() const;
 };
 
-class BotGrabItemGoal : public BotBaseGoal
-{
+class GrabItemGoal : public BotGoal {
 public:
-	BotGrabItemGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotGrabItemGoal", COLOR_RGB( 0, 255, 0 ), 950 ) {}
+	explicit GrabItemGoal( BotPlanningModule *module_ )
+		: BotGoal( module_, "GrabItemGoal", COLOR_RGB( 0, 255, 0 ), 950 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotKillEnemyGoal : public BotBaseGoal
-{
+class KillEnemyGoal : public BotGoal {
+	float additionalWeight { 0.0f };
 public:
-	BotKillEnemyGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotKillEnemyGoal", COLOR_RGB( 255, 0, 0 ), 1250 ) {}
+	explicit KillEnemyGoal( BotPlanningModule *module_ )
+		: BotGoal( module_, "KillEnemyGoal", COLOR_RGB( 255, 0, 0 ), 1250 ) {}
+
+	void SetAdditionalWeight( float weight ) {
+		this->additionalWeight = weight;
+	}
+
+	float GetAndResetAdditionalWeight() {
+		float result = std::max( 0.0f, additionalWeight );
+		this->additionalWeight = 0;
+		return result;
+	}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotRunAwayGoal : public BotBaseGoal
-{
+class RunAwayGoal : public BotGoal {
 public:
-	BotRunAwayGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotRunAwayGoal", COLOR_RGB( 0, 0, 255 ), 950 ) {}
+	explicit RunAwayGoal( BotPlanningModule *module_ )
+		: BotGoal( module_, "RunAwayGoal", COLOR_RGB( 0, 0, 255 ), 950 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotAttackOutOfDespairGoal : public BotBaseGoal
-{
-	float oldOffensiveness;
-
+class AttackOutOfDespairGoal : public BotGoal {
+	float oldOffensiveness { 1.0f };
 public:
-	BotAttackOutOfDespairGoal( Ai *ai_ )
-		: BotBaseGoal( ai_, "BotAttackOutOfDespairGoal", COLOR_RGB( 192, 192, 0 ), 750 ),
-		oldOffensiveness( 1.0f ) {}
+	explicit AttackOutOfDespairGoal( BotPlanningModule *module_ )
+		: BotGoal( module_, "AttackOutOfDespairGoal", COLOR_RGB( 192, 192, 0 ), 750 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 
 	void OnPlanBuildingStarted() override;
-	void OnPlanBuildingCompleted( const AiBaseActionRecord *planHead ) override;
+	void OnPlanBuildingCompleted( const AiActionRecord *planHead ) override;
 };
 
-class BotReactToHazardGoal : public BotBaseGoal
-{
+class ReactToHazardGoal : public BotGoal {
 public:
-	BotReactToHazardGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotReactToHazardGoal", COLOR_RGB( 192, 0, 192 ), 750 ) {}
+	explicit ReactToHazardGoal( BotPlanningModule *module_ )
+		: BotGoal( module_, "ReactToHazardGoal", COLOR_RGB( 192, 0, 192 ), 750 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotReactToThreatGoal : public BotBaseGoal
-{
+class ReactToThreatGoal : public BotGoal {
 public:
-	BotReactToThreatGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotReactToThreatGoal", COLOR_RGB( 255, 0, 128 ), 350 ) {}
+	explicit ReactToThreatGoal( BotPlanningModule *module_ )
+		: BotGoal( module_, "ReactToThreatGoal", COLOR_RGB( 255, 0, 128 ), 350 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotReactToEnemyLostGoal : public BotBaseGoal
-{
+class ReactToEnemyLostGoal : public BotGoal {
+	void ModifyWeightForTurningBack( const WorldState &currWorldState );
+	void ModifyWeightForPursuit( const WorldState &currWorldState );
+	bool HuntEnemiesLeftInMinority( const WorldState &currWorldState ) const;
+	int FindNumPlayersAlive( int team ) const;
 public:
-	BotReactToEnemyLostGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotReactToEnemyLostGoal", COLOR_RGB( 0, 192, 192 ), 950 ) {}
+	explicit ReactToEnemyLostGoal( BotPlanningModule *module_ )
+		: BotGoal( module_, "ReactToEnemyLostGoal", COLOR_RGB( 0, 192, 192 ), 950 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotRoamGoal : public BotBaseGoal
-{
+class RoamGoal : public BotGoal {
 public:
-	BotRoamGoal( Ai *ai_ ) : BotBaseGoal( ai_, "BotRoamGoal", COLOR_RGB( 0, 0, 80 ), 400 ) {}
+	explicit RoamGoal( BotPlanningModule *module_ )
+		: BotGoal( module_, "RoamGoal", COLOR_RGB( 0, 0, 80 ), 400 ) {}
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 };
 
-class BotScriptGoal : public BotBaseGoal
-{
+class BotScriptGoal : public BotGoal {
 	void *scriptObject;
-
 public:
 	// TODO: Provide ways for setting the debug color for this kind of goals
-	BotScriptGoal( Ai *ai_, const char *name_, unsigned updatePeriod_, void *scriptObject_ )
-		: BotBaseGoal( ai_, name_, 0, updatePeriod_ ),
+	explicit BotScriptGoal( BotPlanningModule *module_, const char *name_, unsigned updatePeriod_, void *scriptObject_ )
+		: BotGoal( module_, name_, 0, updatePeriod_ ),
 		scriptObject( scriptObject_ ) {}
 
 	// Exposed for script API
-	inline edict_t *Self() { return self; }
+	using BotGoal::Self;
 
 	void UpdateWeight( const WorldState &currWorldState ) override;
 	void GetDesiredWorldState( WorldState *worldState ) override;
 	PlannerNode *GetWorldStateTransitions( const WorldState &worldState ) override;
 
 	void OnPlanBuildingStarted() override;
-	void OnPlanBuildingCompleted( const AiBaseActionRecord *planHead ) override;
+	void OnPlanBuildingCompleted( const AiActionRecord *planHead ) override;
 };
 
 #endif

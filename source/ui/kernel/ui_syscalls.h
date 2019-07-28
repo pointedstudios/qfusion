@@ -68,7 +68,7 @@ inline void R_AddEntityToScene( entity_t *ent ) {
 }
 
 inline void R_AddLightToScene( vec3_t org, float intensity, float r, float g, float b ) {
-	UI_IMPORT.R_AddLightToScene( org, intensity, r, g, b );
+	UI_IMPORT.R_AddLightToScene( org, intensity, 0, r, g, b );
 }
 
 inline void R_AddLightStyleToScene( int style, float r, float g, float b ) {
@@ -186,7 +186,7 @@ inline struct sfx_s *S_RegisterSound( const char *name ) {
 }
 
 inline void S_StartLocalSound( const char *s ) {
-	UI_IMPORT.S_StartLocalSound( s );
+	UI_IMPORT.S_StartLocalSound( s, 1.0f );
 }
 
 inline void S_StartBackgroundTrack( const char *intro, const char *loop, int mode ) {
@@ -454,10 +454,6 @@ inline void Mem_Free( void *data, const char *filename, int fileline ) {
 	UI_IMPORT.Mem_Free( data, filename, fileline );
 }
 
-inline struct angelwrap_api_s *asGetAngelExport( void ) {
-	return UI_IMPORT.asGetAngelExport();
-}
-
 inline void AsyncStream_UrlEncode( const char *src, char *dst, size_t size ) {
 	UI_IMPORT.AsyncStream_UrlEncode( src, dst, size );
 }
@@ -483,20 +479,24 @@ inline bool MM_Logout( bool force ) {
 	return UI_IMPORT.MM_Logout( force );
 }
 
-inline int MM_GetLoginState( void ) {
+inline int MM_GetLoginState() {
 	return UI_IMPORT.MM_GetLoginState();
 }
 
-inline size_t MM_GetLastErrorMessage( char *buffer, size_t buffer_size ) {
-	return UI_IMPORT.MM_GetLastErrorMessage( buffer, buffer_size );
+inline const wsw::string_view &MM_GetLastErrorMessage() {
+	return UI_IMPORT.MM_GetLastErrorMessage();
 }
 
-inline size_t MM_GetProfileURL( char *buffer, size_t buffer_size, bool rml ) {
-	return UI_IMPORT.MM_GetProfileURL( buffer, buffer_size, rml );
+inline const wsw::string_view &MM_GetProfileWebUrl() {
+	return UI_IMPORT.MM_GetProfileWebUrl();
 }
 
-inline size_t MM_GetBaseWebURL( char *buffer, size_t buffer_size ) {
-	return UI_IMPORT.MM_GetBaseWebURL( buffer, buffer_size );
+inline const wsw::string_view &MM_GetProfileRmlUrl() {
+	return UI_IMPORT.MM_GetProfileRmlUrl();
+}
+
+inline const wsw::string_view &MM_GetBaseWebUrl() {
+	return UI_IMPORT.MM_GetBaseWebUrl();
 }
 
 inline const char *L10n_TranslateString( const char *string ) {

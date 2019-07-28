@@ -57,7 +57,15 @@ void BotWeaponJumpMovementState::TryDeactivate( const edict_t *self, const Conte
 		Deactivate();
 	}
 
-	if( !( hasTriggeredWeaponJump && hasCorrectedWeaponJump ) ) {
+	if( !hasTriggeredWeaponJump ) {
+		// If we have still not managed to trigger the jump
+		if( !millisToTriggerJumpLeft ) {
+			Deactivate();
+		}
+		return;
+	}
+
+	if( !hasCorrectedWeaponJump ) {
 		return;
 	}
 
@@ -90,8 +98,11 @@ AiPendingLookAtPoint BotCampingSpotState::GetOrUpdateRandomLookAtPoint() const {
 		return AiPendingLookAtPoint( campingSpot.LookAtPoint(), turnSpeedMultiplier );
 	}
 
-	Vec3 lookAtPoint( random(), random(), random() );
+	Vec3 lookAtPoint( -0.5f + random(), -0.5f + random(), -0.25f + 0.5f * random() );
 	lookAtPoint.NormalizeFast();
+	// The magnitude does not actually mattter.
+	// Just make sure we don't end with denormalized direction later.
+	lookAtPoint *= 1000.0f;
 	lookAtPoint += campingSpot.Origin();
 	campingSpot.SetLookAtPoint( lookAtPoint );
 	this->lookAtPointTimeLeft = ( decltype( this->lookAtPointTimeLeft ) )LookAtPointTimeout();

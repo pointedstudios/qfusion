@@ -1,276 +1,260 @@
 #ifndef QFUSION_BOT_ACTIONS_H
 #define QFUSION_BOT_ACTIONS_H
 
-#include "BasePlanner.h"
+#include "Planner.h"
 
 constexpr const float GOAL_PICKUP_ACTION_RADIUS = 72.0f;
 constexpr const float TACTICAL_SPOT_RADIUS = 40.0f;
 
-class BotBaseActionRecord : public AiBaseActionRecord
-{
+class Bot;
+
+class BotPlanningModule;
+
+class BotActionRecord : public AiActionRecord {
+protected:
+	Bot *Self() { return (Bot *)self; }
+	const Bot *Self() const { return (const Bot *)self; }
 public:
-	BotBaseActionRecord( PoolBase *pool_, edict_t *self_, const char *name_ )
-		: AiBaseActionRecord( pool_, self_, name_ ) {}
+	BotActionRecord( PoolBase *pool_, Bot *self_, const char *name_ );
 
 	void Activate() override;
 	void Deactivate() override;
 };
 
-class BotBaseAction : public AiBaseAction
-{
+class BotAction : public AiAction {
+protected:
+	BotPlanningModule *const module;
+	Bot *Self() { return (Bot *)self; }
+	const Bot *Self() const { return (const Bot *)self; }
 public:
-	BotBaseAction( Ai *ai, const char *name_ )
-		: AiBaseAction( ai, name_ ) {}
+	BotAction( BotPlanningModule *module_, const char *name_ );
 
 	inline const class BotWeightConfig &WeightConfig() const;
 };
 
-class BotGenericRunToItemActionRecord : public BotBaseActionRecord
-{
-	NavTarget navTarget;
+class RunToNavEntityActionRecord : public BotActionRecord {
+	const NavEntity *const navEntity;
 
+	bool ShouldUseSneakyBehaviour( const WorldState &currWorldState ) const;
+	bool IsInPhsForEnemyTeam() const;
 public:
-	BotGenericRunToItemActionRecord( PoolBase *pool_, edict_t *self_, const NavEntity *navEntity_ )
-		: BotBaseActionRecord( pool_, self_, "BotGenericRunToItemActionRecord" ), navTarget( NavTarget::Dummy() ) {
-		navTarget.SetToNavEntity( navEntity_ );
-	}
+	RunToNavEntityActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
+		: BotActionRecord( pool_, self_, "RunToNavEntityActionRecord" ), navEntity( navEntity_ ) {}
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
-#define DECLARE_ACTION( actionName, poolSize )                                                     \
-	class actionName : public BotBaseAction                                                           \
-	{                                                                                                \
-		Pool<actionName ## Record, poolSize> pool;                                                     \
-public:                                                                                          \
-		actionName( Ai * ai_ ) : BotBaseAction( ai_, #actionName ), pool( "Pool<" #actionName "Record>" ) {} \
-		PlannerNode *TryApply( const WorldState &worldState ) override final;                          \
+#define DECLARE_ACTION( actionName, poolSize )                                    \
+	class actionName final : public BotAction {                                   \
+		Pool<actionName ## Record, poolSize> pool;                                \
+	public:                                                                       \
+		explicit actionName( BotPlanningModule * module_ )                        \
+			: BotAction( module_, #actionName )                                   \
+			, pool( "Pool<" #actionName "Record>" ) {}                            \
+		PlannerNode *TryApply( const WorldState &worldState ) override;           \
 	}
 
-#define DECLARE_INHERITED_ACTION( actionName, baseActionName, poolSize )                            \
-	class actionName : public baseActionName                                                           \
-	{                                                                                                 \
-		Pool<actionName ## Record, poolSize> pool;                                                      \
-public:                                                                                           \
-		actionName( Ai * ai_ ) : baseActionName( ai_, #actionName ), pool( "Pool<" #actionName "Record>" ) {} \
-		PlannerNode *TryApply( const WorldState &worldState ) override final;                           \
+#define DECLARE_INHERITED_ACTION( actionName, baseActionName, poolSize )          \
+	class actionName : public baseActionName {                                    \
+		Pool<actionName ## Record, poolSize> pool;                                \
+public:                                                                           \
+		actionName( BotPlanningModule * module_ )                                 \
+			: baseActionName( module_, #actionName )                              \
+			, pool( "Pool<" #actionName "Record>" ) {}                            \
+		PlannerNode *TryApply( const WorldState &worldState ) override;           \
 	}
 
-DECLARE_ACTION( BotGenericRunToItemAction, 3 );
+DECLARE_ACTION( RunToNavEntityAction, 3 );
 
-class BotPickupItemActionRecord : public BotBaseActionRecord
-{
-	NavTarget navTarget;
-
+class PickupNavEntityActionRecord : public BotActionRecord {
+	const NavEntity *const navEntity;
 public:
-	BotPickupItemActionRecord( PoolBase *pool_, edict_t *self_, const NavEntity *navEntity_ )
-		: BotBaseActionRecord( pool_, self_, "BotPickupItemActionRecord" ), navTarget( NavTarget::Dummy() ) {
-		navTarget.SetToNavEntity( navEntity_ );
-	}
+	PickupNavEntityActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
+		: BotActionRecord( pool_, self_, "PickupNavEntityActionRecord" ), navEntity( navEntity_ ) {}
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
-DECLARE_ACTION( BotPickupItemAction, 3 );
+DECLARE_ACTION( PickupNavEntityAction, 3 );
 
-class BotWaitForItemActionRecord : public BotBaseActionRecord
-{
-	NavTarget navTarget;
-
+class WaitForNavEntityActionRecord : public BotActionRecord {
+	const NavEntity *const navEntity;
 public:
-	BotWaitForItemActionRecord( PoolBase *pool_, edict_t *self_, const NavEntity *navEntity_ )
-		: BotBaseActionRecord( pool_, self_, "BotWaitForItemActionRecord" ), navTarget( NavTarget::Dummy() ) {
-		navTarget.SetToNavEntity( navEntity_ );
-	}
+	WaitForNavEntityActionRecord( PoolBase *pool_, Bot *self_, const NavEntity *navEntity_ )
+		: BotActionRecord( pool_, self_, "WaitForNavEntityActionRecord" ), navEntity( navEntity_ ) {}
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
-DECLARE_ACTION( BotWaitForItemAction, 3 );
+DECLARE_ACTION( WaitForNavEntityAction, 3 );
 
 // A dummy action that always terminates actions chain but should not actually gets reached.
 // This action is used to avoid direct world state satisfaction by temporary actions
 // (that leads to premature planning termination).
-class BotDummyActionRecord : public BotBaseActionRecord
-{
+class DummyActionRecord : public BotActionRecord {
 public:
-	BotDummyActionRecord( PoolBase *pool_, edict_t *self_, const char *name_ )
-		: BotBaseActionRecord( pool_, self_, name_ ) {}
+	DummyActionRecord( PoolBase *pool_, Bot *self_, const char *name_ )
+		: BotActionRecord( pool_, self_, name_ ) {}
 
-	void Activate() override { BotBaseActionRecord::Activate(); }
-	void Deactivate() override { BotBaseActionRecord::Deactivate(); }
-	Status CheckStatus( const WorldState &currWorldState ) const override {
+	void Activate() override { BotActionRecord::Activate(); }
+	void Deactivate() override { BotActionRecord::Deactivate(); }
+
+	Status UpdateStatus( const WorldState &currWorldState ) override {
 		Debug( "This is a dummy action, should move to next one or replan\n" );
 		return COMPLETED;
 	}
 };
 
-#define DECLARE_DUMMY_ACTION_RECORD( recordName )              \
-	class recordName : public BotDummyActionRecord                \
-	{                                                            \
-public:                                                      \
-		recordName( PoolBase * pool_, edict_t * self_ )              \
-			: BotDummyActionRecord( pool_, self_, #recordName ) {} \
-	};
+#define DECLARE_DUMMY_ACTION_RECORD( recordName )               \
+class recordName : public DummyActionRecord  {                  \
+public:                                                         \
+	recordName( PoolBase * pool_, Bot *self_ )                  \
+		: DummyActionRecord( pool_, self_, #recordName ) {}     \
+};
 
-DECLARE_DUMMY_ACTION_RECORD( BotKillEnemyActionRecord )
-DECLARE_ACTION( BotKillEnemyAction, 5 );
+DECLARE_DUMMY_ACTION_RECORD( KillEnemyActionRecord )
+DECLARE_ACTION( KillEnemyAction, 5 );
 
-class BotCombatActionRecord : public BotBaseActionRecord
-{
+class CombatActionRecord : public BotActionRecord {
 protected:
-	NavTarget navTarget;
+	NavSpot navSpot;
 	unsigned selectedEnemiesInstanceId;
 
 	bool CheckCommonCombatConditions( const WorldState &currWorldState ) const;
-
 public:
-	BotCombatActionRecord( PoolBase *pool_, edict_t *self_, const char *name_,
-						   const Vec3 &tacticalSpotOrigin,
-						   unsigned selectedEnemiesInstanceId )
-		: BotBaseActionRecord( pool_, self_, name_ ),
-		navTarget( NavTarget::Dummy() ),
-		selectedEnemiesInstanceId( selectedEnemiesInstanceId ) {
-		navTarget.SetToTacticalSpot( tacticalSpotOrigin );
-	}
+	CombatActionRecord( PoolBase *pool_,
+						Bot *self_,
+						const char *name_,
+						const Vec3 &tacticalSpotOrigin,
+						unsigned selectedEnemiesInstanceId )
+		: BotActionRecord( pool_, self_, name_ )
+		, navSpot( tacticalSpotOrigin, 32.0f, NavTargetFlags::REACH_ON_RADIUS )
+		, selectedEnemiesInstanceId( selectedEnemiesInstanceId ) {}
 };
 
-#define DECLARE_COMBAT_ACTION_RECORD( recordName )                                                                     \
-	class recordName : public BotCombatActionRecord                                                                       \
-	{                                                                                                                    \
+#define DECLARE_COMBAT_ACTION_RECORD( recordName )                                                                   \
+class recordName : public CombatActionRecord {                                                                       \
 public:                                                                                                              \
-		recordName( PoolBase * pool_, edict_t * self_, const Vec3 &tacticalSpotOrigin, unsigned selectedEnemiesInstanceId_ ) \
-			: BotCombatActionRecord( pool_, self_, #recordName, tacticalSpotOrigin, selectedEnemiesInstanceId_ ) {}        \
-		void Activate() override;                                                                                        \
-		void Deactivate() override;                                                                                      \
-		Status CheckStatus( const WorldState &currWorldState ) const override;                                             \
-	};
+	recordName( PoolBase * pool_, Bot *self_, const Vec3 &tacticalSpotOrigin, unsigned selectedEnemiesInstanceId_ )  \
+		: CombatActionRecord( pool_, self_, #recordName, tacticalSpotOrigin, selectedEnemiesInstanceId_ ) {}         \
+	void Activate() override;                                                                                        \
+	void Deactivate() override;                                                                                      \
+	Status UpdateStatus( const WorldState &currWorldState ) override;                                                \
+};
 
-DECLARE_COMBAT_ACTION_RECORD( BotAdvanceToGoodPositionActionRecord );
-DECLARE_ACTION( BotAdvanceToGoodPositionAction, 2 );
+DECLARE_COMBAT_ACTION_RECORD( AdvanceToGoodPositionActionRecord );
+DECLARE_ACTION( AdvanceToGoodPositionAction, 2 );
 
-DECLARE_COMBAT_ACTION_RECORD( BotRetreatToGoodPositionActionRecord );
-DECLARE_ACTION( BotRetreatToGoodPositionAction, 2 );
+DECLARE_COMBAT_ACTION_RECORD( RetreatToGoodPositionActionRecord );
+DECLARE_ACTION( RetreatToGoodPositionAction, 2 );
 
-DECLARE_COMBAT_ACTION_RECORD( BotSteadyCombatActionRecord );
-DECLARE_ACTION( BotSteadyCombatAction, 2 );
+DECLARE_COMBAT_ACTION_RECORD( GotoAvailableGoodPositionActionRecord );
+DECLARE_ACTION( GotoAvailableGoodPositionAction, 2 );
 
-DECLARE_COMBAT_ACTION_RECORD( BotGotoAvailableGoodPositionActionRecord );
-DECLARE_ACTION( BotGotoAvailableGoodPositionAction, 2 );
+DECLARE_COMBAT_ACTION_RECORD( AttackFromCurrentPositionActionRecord );
+DECLARE_ACTION( AttackFromCurrentPositionAction, 2 );
 
-DECLARE_COMBAT_ACTION_RECORD( BotAttackFromCurrentPositionActionRecord );
-DECLARE_ACTION( BotAttackFromCurrentPositionAction, 2 );
-
-class BotAttackAdvancingToTargetActionRecord: public BotBaseActionRecord
-{
+class AttackAdvancingToTargetActionRecord : public BotActionRecord {
 	unsigned selectedEnemiesInstanceId;
-	NavTarget navTarget;
+	NavSpot navSpot { Vec3( 0, 0, 0 ), 0.0f, NavTargetFlags::NONE };
 public:
-	BotAttackAdvancingToTargetActionRecord( PoolBase *pool_
-										  , edict_t *self_
-		                                  , unsigned selectedEnemiesInstanceId_ )
-		: BotBaseActionRecord( pool_, self_, "BotAttackAdvancingToTargetActionRecord" )
-		, selectedEnemiesInstanceId( selectedEnemiesInstanceId_ )
-		, navTarget( NavTarget::Dummy() ) {}
+	AttackAdvancingToTargetActionRecord( PoolBase *pool_,
+										 Bot *self_,
+										 unsigned selectedEnemiesInstanceId_ )
+		: BotActionRecord( pool_, self_, "AttackAdvancingToTargetActionRecord" )
+		, selectedEnemiesInstanceId( selectedEnemiesInstanceId_ ) {}
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
-DECLARE_ACTION( BotAttackAdvancingToTargetAction, 2 );
+DECLARE_ACTION( AttackAdvancingToTargetAction, 2 );
 
-class BotRunAwayActionRecord : public BotBaseActionRecord
-{
+class RunAwayActionRecord : public BotActionRecord {
 protected:
-	NavTarget navTarget;
+	NavSpot navSpot { Vec3( 0, 0, 0 ), 0.0f, NavTargetFlags::NONE };
 	const unsigned selectedEnemiesInstanceId;
 
 public:
-	BotRunAwayActionRecord( PoolBase *pool_,
-							edict_t *self_,
-							const char *name_,
-							const Vec3 &navTargetOrigin,
-							unsigned selectedEnemiesInstanceId_ )
-		: BotBaseActionRecord( pool_, self_, name_ ),
-		navTarget( NavTarget::Dummy() ),
+	RunAwayActionRecord( PoolBase *pool_,
+						 Bot *self_,
+						 const char *name_,
+						 const Vec3 &navTargetOrigin,
+						 unsigned selectedEnemiesInstanceId_ )
+		: BotActionRecord( pool_, self_, name_ ),
 		selectedEnemiesInstanceId( selectedEnemiesInstanceId_ ) {
-		navTarget.SetToTacticalSpot( navTargetOrigin );
+		navSpot.Set( navTargetOrigin, 32.0f, NavTargetFlags::REACH_ON_RADIUS );
 	}
 };
 
-#define DECLARE_RUN_AWAY_ACTION_RECORD( recordName )                                                                   \
-	class recordName : public BotRunAwayActionRecord                                                                      \
-	{                                                                                                                    \
+#define DECLARE_RUN_AWAY_ACTION_RECORD( recordName )                                                                 \
+class recordName : public RunAwayActionRecord {                                                                      \
 public:                                                                                                              \
-		recordName( PoolBase * pool_, edict_t * self_, const Vec3 &tacticalSpotOrigin, unsigned selectedEnemiesInstanceId_ ) \
-			: BotRunAwayActionRecord( pool_, self_, #recordName, tacticalSpotOrigin, selectedEnemiesInstanceId_ ) {}       \
-		void Activate() override;                                                                                        \
-		void Deactivate() override;                                                                                      \
-		Status CheckStatus( const WorldState &currWorldState ) const override;                                             \
-	}
+	recordName( PoolBase * pool_, Bot *self_, const Vec3 &tacticalSpotOrigin, unsigned selectedEnemiesInstanceId_ )  \
+		: RunAwayActionRecord( pool_, self_, #recordName, tacticalSpotOrigin, selectedEnemiesInstanceId_ ) {}        \
+	void Activate() override;                                                                                        \
+	void Deactivate() override;                                                                                      \
+	Status UpdateStatus( const WorldState &currWorldState ) override;                                                \
+}
 
-class BotRunAwayAction : public BotBaseAction
-{
+class RunAwayAction : public BotAction {
 protected:
 	bool CheckCommonRunAwayPreconditions( const WorldState &worldState ) const;
 	bool CheckMiddleRangeKDDamageRatio( const WorldState &worldState ) const;
 	bool CheckCloseRangeKDDamageRatio( const WorldState &worldState ) const;
-
 public:
-	BotRunAwayAction( Ai *ai_, const char *name_ ) : BotBaseAction( ai_, name_ ) {}
+	RunAwayAction( BotPlanningModule *module_, const char *name_ )
+		: BotAction( module_, name_ ) {}
 };
 
-class BotGenericRunAvoidingCombatActionRecord : public BotBaseActionRecord
-{
-	NavTarget navTarget;
-
+class FleeToSpotActionRecord : public BotActionRecord {
+	NavSpot navSpot { NavSpot::Dummy() };
 public:
-	BotGenericRunAvoidingCombatActionRecord( PoolBase *pool_, edict_t *self_, const Vec3 &destination )
-		: BotBaseActionRecord( pool_, self_, "BotGenericRunAvoidingCombatActionRecord" ),
-		navTarget( NavTarget::Dummy() ) {
-		navTarget.SetToTacticalSpot( destination, GOAL_PICKUP_ACTION_RADIUS );
+	FleeToSpotActionRecord( PoolBase *pool_, Bot *self_, const Vec3 &destination )
+		: BotActionRecord( pool_, self_, "FleeToSpotActionRecord" ) {
+		navSpot.Set( destination, GOAL_PICKUP_ACTION_RADIUS, NavTargetFlags::REACH_ON_RADIUS );
 	}
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
-DECLARE_ACTION( BotGenericRunAvoidingCombatAction, 5 );
+DECLARE_ACTION( FleeToSpotAction, 5 );
 
-DECLARE_DUMMY_ACTION_RECORD( BotStartGotoCoverActionRecord );
-DECLARE_INHERITED_ACTION( BotStartGotoCoverAction, BotRunAwayAction, 5 );
+DECLARE_DUMMY_ACTION_RECORD( StartGotoCoverActionRecord );
+DECLARE_INHERITED_ACTION( StartGotoCoverAction, RunAwayAction, 5 );
 
-DECLARE_RUN_AWAY_ACTION_RECORD( BotTakeCoverActionRecord );
-DECLARE_INHERITED_ACTION( BotTakeCoverAction, BotRunAwayAction, 5 );
+DECLARE_RUN_AWAY_ACTION_RECORD( TakeCoverActionRecord );
+DECLARE_INHERITED_ACTION( TakeCoverAction, RunAwayAction, 5 );
 
-DECLARE_DUMMY_ACTION_RECORD( BotStartGotoRunAwayTeleportActionRecord );
-DECLARE_INHERITED_ACTION( BotStartGotoRunAwayTeleportAction, BotRunAwayAction, 5 );
+DECLARE_DUMMY_ACTION_RECORD( StartGotoRunAwayTeleportActionRecord );
+DECLARE_INHERITED_ACTION( StartGotoRunAwayTeleportAction, RunAwayAction, 5 );
 
-DECLARE_RUN_AWAY_ACTION_RECORD( BotDoRunAwayViaTeleportActionRecord );
-DECLARE_INHERITED_ACTION( BotDoRunAwayViaTeleportAction, BotRunAwayAction, 5 );
+DECLARE_RUN_AWAY_ACTION_RECORD( DoRunAwayViaTeleportActionRecord );
+DECLARE_INHERITED_ACTION( DoRunAwayViaTeleportAction, RunAwayAction, 5 );
 
-DECLARE_DUMMY_ACTION_RECORD( BotStartGotoRunAwayJumppadActionRecord );
-DECLARE_INHERITED_ACTION( BotStartGotoRunAwayJumppadAction, BotRunAwayAction, 5 );
+DECLARE_DUMMY_ACTION_RECORD( StartGotoRunAwayJumppadActionRecord );
+DECLARE_INHERITED_ACTION( StartGotoRunAwayJumppadAction, RunAwayAction, 5 );
 
-DECLARE_RUN_AWAY_ACTION_RECORD( BotDoRunAwayViaJumppadActionRecord );
-DECLARE_INHERITED_ACTION( BotDoRunAwayViaJumppadAction, BotRunAwayAction, 5 );
+DECLARE_RUN_AWAY_ACTION_RECORD( DoRunAwayViaJumppadActionRecord );
+DECLARE_INHERITED_ACTION( DoRunAwayViaJumppadAction, RunAwayAction, 5 );
 
-DECLARE_DUMMY_ACTION_RECORD( BotStartGotoRunAwayElevatorActionRecord );
-DECLARE_INHERITED_ACTION( BotStartGotoRunAwayElevatorAction, BotRunAwayAction, 5 );
+DECLARE_DUMMY_ACTION_RECORD( StartGotoRunAwayElevatorActionRecord );
+DECLARE_INHERITED_ACTION( StartGotoRunAwayElevatorAction, RunAwayAction, 5 );
 
-DECLARE_RUN_AWAY_ACTION_RECORD( BotDoRunAwayViaElevatorActionRecord );
-DECLARE_INHERITED_ACTION( BotDoRunAwayViaElevatorAction, BotRunAwayAction, 5 );
+DECLARE_RUN_AWAY_ACTION_RECORD( DoRunAwayViaElevatorActionRecord );
+DECLARE_INHERITED_ACTION( DoRunAwayViaElevatorAction, RunAwayAction, 5 );
 
-DECLARE_DUMMY_ACTION_RECORD( BotStopRunningAwayActionRecord );
-DECLARE_INHERITED_ACTION( BotStopRunningAwayAction, BotRunAwayAction, 5 );
+DECLARE_DUMMY_ACTION_RECORD( StopRunningAwayActionRecord );
+DECLARE_INHERITED_ACTION( StopRunningAwayAction, RunAwayAction, 5 );
 
 #undef DEFINE_ACTION
 #undef DEFINE_INHERITED_ACTION
@@ -278,115 +262,102 @@ DECLARE_INHERITED_ACTION( BotStopRunningAwayAction, BotRunAwayAction, 5 );
 #undef DEFINE_COMBAT_ACTION_RECORD
 #undef DEFINE_RUN_AWAY_ACTION_RECORD
 
-class BotDodgeToSpotActionRecord : public BotBaseActionRecord
-{
-	NavTarget navTarget;
-	int64_t timeoutAt;
-
+class DodgeToSpotActionRecord : public BotActionRecord {
+	NavSpot navSpot { NavSpot::Dummy() };
+	int64_t timeoutAt { std::numeric_limits<int>::max() };
 public:
-	BotDodgeToSpotActionRecord( PoolBase *pool_, edict_t *self_, const Vec3 &spotOrigin )
-		: BotBaseActionRecord( pool_, self_, "BotDodgeToSpotActionRecord" ),
-		navTarget( NavTarget::Dummy() ) {
-		// Shut an analyzer up (this var value gets really set in Activate()).
-		timeoutAt = std::numeric_limits<int>::max();
-		navTarget.SetToTacticalSpot( spotOrigin );
-	}
+	DodgeToSpotActionRecord( PoolBase *pool_, Bot *self_, const Vec3 &spotOrigin )
+		: BotActionRecord( pool_, self_, "DodgeToSpotActionRecord" )
+		, navSpot( spotOrigin, 16.0f, NavTargetFlags::REACH_ON_RADIUS ) {}
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
-DECLARE_ACTION( BotDodgeToSpotAction, 1 );
+DECLARE_ACTION( DodgeToSpotAction, 1 );
 
-class BotTurnToThreatOriginActionRecord : public BotBaseActionRecord
-{
+class TurnToThreatOriginActionRecord : public BotActionRecord {
 	Vec3 threatPossibleOrigin;
-
 public:
-	BotTurnToThreatOriginActionRecord( PoolBase *pool_, edict_t *self_, const Vec3 &threatPossibleOrigin_ )
-		: BotBaseActionRecord( pool_, self_, "BotTurnToThreatOriginActionRecord" ),
+	TurnToThreatOriginActionRecord( PoolBase *pool_, Bot *self_, const Vec3 &threatPossibleOrigin_ )
+		: BotActionRecord( pool_, self_, "TurnToThreatOriginActionRecord" ),
 		threatPossibleOrigin( threatPossibleOrigin_ ) {}
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
-DECLARE_ACTION( BotTurnToThreatOriginAction, 1 );
+DECLARE_ACTION( TurnToThreatOriginAction, 1 );
 
-class BotTurnToLostEnemyActionRecord : public BotBaseActionRecord
-{
+class TurnToLostEnemyActionRecord : public BotActionRecord {
 	Vec3 lastSeenEnemyOrigin;
-
 public:
-	BotTurnToLostEnemyActionRecord( PoolBase *pool_, edict_t *self_, const Vec3 &lastSeenEnemyOrigin_ )
-		: BotBaseActionRecord( pool_, self_, "BotTurnToLostEnemyActionRecord" ),
+	TurnToLostEnemyActionRecord( PoolBase *pool_, Bot *self_, const Vec3 &lastSeenEnemyOrigin_ )
+		: BotActionRecord( pool_, self_, "TurnToLostEnemyActionRecord" ),
 		lastSeenEnemyOrigin( lastSeenEnemyOrigin_ ) {}
 
 	void Activate() override;
 	void Deactivate() override;
-	Status CheckStatus( const WorldState &currWorldState ) const override;
+	Status UpdateStatus( const WorldState &currWorldState ) override;
 };
 
-DECLARE_ACTION( BotTurnToLostEnemyAction, 1 );
+DECLARE_ACTION( TurnToLostEnemyAction, 1 );
 
-class BotStartLostEnemyPursuitActionRecord : public BotDummyActionRecord
-{
+class StartLostEnemyPursuitActionRecord : public DummyActionRecord {
 public:
-	BotStartLostEnemyPursuitActionRecord( PoolBase *pool_, edict_t *self_ )
-		: BotDummyActionRecord( pool_, self_, "BotStartLostEnemyPursuitActionRecord" ) {}
+	StartLostEnemyPursuitActionRecord( PoolBase *pool_, Bot *self_ )
+		: DummyActionRecord( pool_, self_, "StartLostEnemyPursuitActionRecord" ) {}
 };
 
-DECLARE_ACTION( BotStartLostEnemyPursuitAction, 1 );
+DECLARE_ACTION( StartLostEnemyPursuitAction, 1 );
 
-class BotStopLostEnemyPursuitActionRecord : public BotDummyActionRecord
-{
+class StopLostEnemyPursuitActionRecord : public DummyActionRecord {
 public:
-	BotStopLostEnemyPursuitActionRecord( PoolBase *pool_, edict_t *self_ )
-		: BotDummyActionRecord( pool_, self_, "BotStopLostEnemyPursuitActionRecord" ) {}
+	StopLostEnemyPursuitActionRecord( PoolBase *pool_, Bot *self_ )
+		: DummyActionRecord( pool_, self_, "StopLostEnemyPursuitActionRecord" ) {}
 };
 
-DECLARE_ACTION( BotStopLostEnemyPursuitAction, 1 );
+DECLARE_ACTION( StopLostEnemyPursuitAction, 1 );
 
-class BotScriptActionRecord : public BotBaseActionRecord
-{
+class BotScriptActionRecord : public BotActionRecord {
 	void *scriptObject;
-
 public:
-	BotScriptActionRecord( PoolBase *pool_, edict_t *self_, const char *name_, void *scriptObject_ )
-		: BotBaseActionRecord( pool_, self_, name_ ),
-		scriptObject( scriptObject_ ) {}
+	BotScriptActionRecord( PoolBase *pool_, Bot *self_, const char *name_, void *scriptObject_ )
+		: BotActionRecord( pool_, self_, name_ ),
+		scriptObject( scriptObject_ ) {
+		// This field is currently unused... Let's just
+		(void)scriptObject;
+	}
 
 	~BotScriptActionRecord() override;
 
-	inline edict_t *Self() { return self; }
-	using BotBaseActionRecord::Debug;
+	using BotActionRecord::Self;
+	using BotActionRecord::Debug;
 
 	void Activate() override;
 	void Deactivate() override;
 
-	Status CheckStatus( const WorldState &worldState ) const override;
+	Status UpdateStatus( const WorldState &worldState ) override;
 };
 
-class BotScriptAction : public BotBaseAction
-{
+class BotScriptAction : public BotAction {
 	Pool<BotScriptActionRecord, 3> pool;
 	void *scriptObject;
-
 public:
-	BotScriptAction( Ai *ai_, const char *name_, void *scriptObject_ )
-		: BotBaseAction( ai_, name_ ),
+	BotScriptAction( BotPlanningModule *module_, const char *name_, void *scriptObject_ )
+		: BotAction( module_, name_ ),
 		pool( name_ ),
 		scriptObject( scriptObject_ ) {}
 
 	// Exposed for script API
-	inline edict_t *Self() { return self; }
-	using BotBaseAction::Debug;
+	using BotAction::Self;
+	using BotAction::Debug;
 
-	inline PlannerNode *NewNodeForRecord( void *scriptRecord ) {
+	PlannerNode *NewNodeForRecord( void *scriptRecord ) {
 		// Reuse the existing method to ensure that logic and messaging is consistent
-		PlannerNodePtr plannerNodePtr( AiBaseAction::NewNodeForRecord( pool.New( self, name, scriptRecord ) ) );
+		PlannerNodePtr plannerNodePtr( AiAction::NewNodeForRecord( pool.New( Self(), name, scriptRecord ) ) );
 		return plannerNodePtr.ReleaseOwnership();
 	}
 

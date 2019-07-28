@@ -21,8 +21,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "g_local.h"
 
-#undef min
-#undef max
 // The only sane implementation among 40 y/o garbage
 #include <chrono>
 
@@ -310,7 +308,7 @@ void G_CheckCvars( void ) {
 	GS_GamestatSetFlag( GAMESTAT_FLAG_CANDROPWEAPON, ( level.gametype.dropableItemsMask & IT_WEAPON ) != 0 );
 
 	gs.gameState.stats[GAMESTAT_MAXPLAYERSINTEAM] = level.gametype.maxPlayersPerTeam;
-	clamp( gs.gameState.stats[GAMESTAT_MAXPLAYERSINTEAM], 0, 255 );
+	Q_clamp( gs.gameState.stats[GAMESTAT_MAXPLAYERSINTEAM], 0, 255 );
 
 }
 
@@ -709,17 +707,17 @@ static edict_t *G_GetNextThinkClient( edict_t *current ) {
 void G_RunFrame( unsigned int msec, int64_t serverTime ) {
 	G_CheckCvars();
 
-	using namespace std::chrono;
-	// Some IDE's always infer "rep" type as "int" confusing a coder
-	static_assert( sizeof( milliseconds::rep ) == 8, "The underlying implementation must use a 64-bit type" );
-	game.utcTimeMillis = duration_cast<milliseconds>( system_clock::now().time_since_epoch() ).count();
+	const auto utcTime = std::chrono::system_clock::now().time_since_epoch();
+	game.utcTimeMillis = std::chrono::duration_cast<std::chrono::milliseconds>( utcTime ).count();
 
-	if( GS_MatchState() == MATCH_STATE_PLAYTIME ) {
-		if( !game.utcMatchStartTime ) {
+	const auto matchState = GS_MatchState();
+	// Set or reset the match start time if needed
+	if( matchState <= MATCH_STATE_PLAYTIME ) {
+		if( matchState < MATCH_STATE_PLAYTIME ) {
+			game.utcMatchStartTime = 0;
+		} else if( !game.utcMatchStartTime ) {
 			game.utcMatchStartTime = game.utcTimeMillis;
 		}
-	} else {
-		game.utcMatchStartTime = 0;
 	}
 
 	unsigned int serverTimeDelta = serverTime - game.serverTime;
@@ -732,12 +730,16 @@ void G_RunFrame( unsigned int msec, int64_t serverTime ) {
 
 	G_CallVotes_Think();
 
+	ChatHandlersChain::Instance()->Frame();
+	StatsowFacade::Instance()->Frame();
+
 	if( GS_MatchPaused() ) {
 		// freeze match clock and linear projectiles
 		gs.gameState.stats[GAMESTAT_MATCHSTART] += serverTimeDelta;
 		for( edict_t *ent = game.edicts + gs.maxclients; ENTNUM( ent ) < game.numentities; ent++ ) {
 			if( ent->s.linearMovement ) {
 				ent->s.linearMovementTimeStamp += serverTimeDelta;
+				ent->s.linearMovementPrevServerTime += serverTimeDelta;
 			}
 		}
 

@@ -1,31 +1,31 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotGotoAvailableGoodPositionActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+void GotoAvailableGoodPositionActionRecord::Activate() {
+	BotActionRecord::Activate();
 	// Since the combat movement has a decent quality and this action is often triggered in combat, set flags this way.
-	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
-	self->ai->botRef->SetNavTarget( &navTarget );
+	Self()->GetMiscTactics().PreferAttackRatherThanRun();
+	Self()->SetNavTarget( &navSpot );
 }
 
-void BotGotoAvailableGoodPositionActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+void GotoAvailableGoodPositionActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
+	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotGotoAvailableGoodPositionActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiActionRecord::Status GotoAvailableGoodPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( !CheckCommonCombatConditions( currWorldState ) ) {
 		return INVALID;
 	}
 
-	if( ( navTarget.Origin() - self->s.origin ).SquaredLength() < TACTICAL_SPOT_RADIUS * TACTICAL_SPOT_RADIUS ) {
+	if( ( navSpot.Origin() - Self()->Origin() ).SquaredLength() < TACTICAL_SPOT_RADIUS * TACTICAL_SPOT_RADIUS ) {
 		return COMPLETED;
 	}
 
 	return VALID;
 }
 
-PlannerNode *BotGotoAvailableGoodPositionAction::TryApply( const WorldState &worldState ) {
+PlannerNode *GotoAvailableGoodPositionAction::TryApply( const WorldState &worldState ) {
 	if( worldState.EnemyOriginVar().Ignore() ) {
 		Debug( "Enemy is ignored in the given world state\n" );
 		return nullptr;
@@ -95,7 +95,7 @@ PlannerNode *BotGotoAvailableGoodPositionAction::TryApply( const WorldState &wor
 		spotOrigin = worldState.CloseRangeTacticalSpotVar().Value();
 	}
 
-	float offensiveness = self->ai->botRef->GetEffectiveOffensiveness();
+	float offensiveness = Self()->GetEffectiveOffensiveness();
 	// It is faster to check this apriori before spot assignation but the code becomes unmaintainable
 	if( worldState.HasThreateningEnemyVar() && offensiveness != 1.0f ) {
 		if( worldState.BotOriginVar().Value().DistanceTo( spotOrigin ) > LgRange() ) {
@@ -111,14 +111,14 @@ PlannerNode *BotGotoAvailableGoodPositionAction::TryApply( const WorldState &wor
 		}
 	}
 
-	int travelTimeMillis = self->ai->botRef->CheckTravelTimeMillis( worldState.BotOriginVar().Value(), spotOrigin );
+	int travelTimeMillis = Self()->CheckTravelTimeMillis( worldState.BotOriginVar().Value(), spotOrigin );
 	if( !travelTimeMillis ) {
 		Debug( "Warning: can't find travel time from the bot origin to the spot origin in the given world state\n" );
 		return nullptr;
 	}
 
-	unsigned selectedEnemiesInstanceId = self->ai->botRef->GetSelectedEnemies().InstanceId();
-	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( self, spotOrigin, selectedEnemiesInstanceId ) );
+	unsigned selectedEnemiesInstanceId = Self()->GetSelectedEnemies().InstanceId();
+	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( Self(), spotOrigin, selectedEnemiesInstanceId ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -126,13 +126,13 @@ PlannerNode *BotGotoAvailableGoodPositionAction::TryApply( const WorldState &wor
 	plannerNode.Cost() = travelTimeMillis * actionPenalty;
 	plannerNode.WorldState() = worldState;
 	plannerNode.WorldState().BotOriginVar().SetValue( spotOrigin );
-	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, TACTICAL_SPOT_RADIUS );
+	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, TACTICAL_SPOT_RADIUS );
 	plannerNode.WorldState().ResetTacticalSpots();
 	// Satisfy conditions for BotKillEnemyGoal
 	plannerNode.WorldState().CanHitEnemyVar().SetValue( true ).SetIgnore( false );
 	plannerNode.WorldState().HasPositionalAdvantageVar().SetValue( true ).SetIgnore( false );
 	// Otherwise an another identical world state might be yield leading to the planner logic violation
-	unsigned similarWorldStateInstanceId = self->ai->botRef->NextSimilarWorldStateInstanceId();
+	unsigned similarWorldStateInstanceId = Self()->NextSimilarWorldStateInstanceId();
 	plannerNode.WorldState().SimilarWorldStateInstanceIdVar().SetValue( similarWorldStateInstanceId ).SetIgnore( false );
 
 	return plannerNode.PrepareActionResult();

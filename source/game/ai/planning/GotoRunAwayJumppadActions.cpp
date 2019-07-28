@@ -1,7 +1,7 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-PlannerNode *BotStartGotoRunAwayJumppadAction::TryApply( const WorldState &worldState ) {
+PlannerNode *StartGotoRunAwayJumppadAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}
@@ -19,7 +19,7 @@ PlannerNode *BotStartGotoRunAwayJumppadAction::TryApply( const WorldState &world
 		return nullptr;
 	}
 
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self ) ) );
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self() ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -30,27 +30,27 @@ PlannerNode *BotStartGotoRunAwayJumppadAction::TryApply( const WorldState &world
 	plannerNode.WorldState().HasPendingRunAwayJumppadVar().SetValue( true ).SetIgnore( false );
 	// Set nav target to the jumppad origin
 	plannerNode.WorldState().NavTargetOriginVar().SetValue( worldState.RunAwayJumppadOriginVar().Value() );
-	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().NavTargetOriginVar().SetIgnore( false );
 	// Set pending origin to the jumppad destination
 	plannerNode.WorldState().PendingOriginVar().SetValue( worldState.RunAwayJumppadOriginVar().Value2() );
-	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().PendingOriginVar().SetIgnore( false );
 
 	return plannerNode.PrepareActionResult();
 }
 
-void BotDoRunAwayViaJumppadActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
-	self->ai->botRef->SetNavTarget( &navTarget );
+void DoRunAwayViaJumppadActionRecord::Activate() {
+	BotActionRecord::Activate();
+	Self()->SetNavTarget( &navSpot );
 }
 
-void BotDoRunAwayViaJumppadActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+void DoRunAwayViaJumppadActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
+	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotDoRunAwayViaJumppadActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiActionRecord::Status DoRunAwayViaJumppadActionRecord::UpdateStatus( const WorldState &currWorldState )  {
 	if( currWorldState.HasJustTouchedJumppadVar().Ignore() ) {
 		Debug( "Has just touched jumppad is ignored\n" );
 		return INVALID;
@@ -67,13 +67,13 @@ AiBaseActionRecord::Status BotDoRunAwayViaJumppadActionRecord::CheckStatus( cons
 		Debug( "A threatening enemy is absent\n" );
 		return INVALID;
 	}
-	if( selectedEnemiesInstanceId != self->ai->botRef->GetSelectedEnemies().InstanceId() ) {
+	if( selectedEnemiesInstanceId != Self()->GetSelectedEnemies().InstanceId() ) {
 		Debug( "New enemies have been selected\n" );
 		return INVALID;
 	}
 	// Use the same radius as for goal items pickups
 	// (running actions for picking up an item and running away might be shared)
-	if( ( navTarget.Origin() - self->s.origin ).SquaredLength() > GOAL_PICKUP_ACTION_RADIUS * GOAL_PICKUP_ACTION_RADIUS ) {
+	if( ( navSpot.Origin() - Self()->Origin() ).SquaredLength() > GOAL_PICKUP_ACTION_RADIUS * GOAL_PICKUP_ACTION_RADIUS ) {
 		Debug( "Bot is too far from the jumppad trigger\n" );
 		return INVALID;
 	}
@@ -81,7 +81,7 @@ AiBaseActionRecord::Status BotDoRunAwayViaJumppadActionRecord::CheckStatus( cons
 	return VALID;
 }
 
-PlannerNode *BotDoRunAwayViaJumppadAction::TryApply( const WorldState &worldState ) {
+PlannerNode *DoRunAwayViaJumppadAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}
@@ -113,8 +113,8 @@ PlannerNode *BotDoRunAwayViaJumppadAction::TryApply( const WorldState &worldStat
 	}
 
 	Vec3 jumppadOrigin = worldState.NavTargetOriginVar().Value();
-	unsigned selectedEnemiesInstanceId = self->ai->botRef->GetSelectedEnemies().InstanceId();
-	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( self, jumppadOrigin, selectedEnemiesInstanceId ) ) );
+	unsigned selectedEnemiesInstanceId = Self()->GetSelectedEnemies().InstanceId();
+	PlannerNodePtr plannerNode( NewNodeForRecord( pool.New( Self(), jumppadOrigin, selectedEnemiesInstanceId ) ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -126,7 +126,7 @@ PlannerNode *BotDoRunAwayViaJumppadAction::TryApply( const WorldState &worldStat
 	plannerNode.WorldState().HasJustTouchedJumppadVar().SetValue( true ).SetIgnore( false );
 	// Set bot origin to the jumppad destination
 	plannerNode.WorldState().BotOriginVar().SetValue( worldState.PendingOriginVar().Value() );
-	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().BotOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	// Reset pending origin
 	plannerNode.WorldState().PendingOriginVar().SetIgnore( true );
 	plannerNode.WorldState().HasPendingRunAwayJumppadVar().SetIgnore( true );

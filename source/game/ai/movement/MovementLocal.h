@@ -6,6 +6,10 @@
 #include "MovementPredictionContext.h"
 #include "EnvironmentTraceCache.h"
 
+// For macOS Clang
+#include <cmath>
+#include <cstdlib>
+
 #ifndef PUBLIC_BUILD
 #define CHECK_ACTION_SUGGESTION_LOOPS
 #define ENABLE_MOVEMENT_ASSERTIONS
@@ -157,19 +161,55 @@ inline void MovementPredictionContext::SaveActionOnStack( BaseMovementAction *ac
 	topOfStack->action = action;
 	// Make sure the angles can always be modified for input interpolation or aiming
 	topOfStack->record.botInput.hasAlreadyComputedAngles = false;
-	topOfStack->timestamp = level.time + this->totalMillisAhead;
-	// Check the value for sanity, huge values are a product of negative values wrapping in unsigned context
-	Assert( this->predictionStepMillis < 100 );
-	Assert( this->predictionStepMillis % 16 == 0 );
+	topOfStack->timestamp = this->totalMillisAhead;
+
+#ifdef ENABLE_MOVEMENT_ASSERTIONS
+	constexpr auto *tag = "MovementPredictionContext::SaveActionOnStack()";
+	if( !action ) {
+		AI_FailWith( tag, "The action is null\n" );
+	}
+	if( this->predictionStepMillis > 100 ) {
+		const char *format =
+			"%s: The prediction step millis value %u is way too large. "
+			"Is it a result of wrapping of negative values in unsigned context?\n";
+		AI_FailWith( tag, format, action->Name() );
+	}
+	if( this->predictionStepMillis % DefaultFrameTime() ) {
+		const char *format = "%s: The prediction step millis value %u is no a multiple of %u\n";
+		AI_FailWith( tag, format, action->Name(), this->predictionStepMillis, DefaultFrameTime() );
+	}
+#endif
+
 	topOfStack->stepMillis = this->predictionStepMillis;
 	this->topOfStackIndex++;
 }
 
-inline void MovementPredictionContext::MarkSavepoint( BaseMovementAction *markedBy, unsigned frameIndex ) {
-	Assert( !this->cannotApplyAction );
-	Assert( !this->shouldRollback );
+inline const char *MovementPredictionContext::ActiveActionName() const {
+	return activeAction ? activeAction->Name() : nullptr;
+}
 
-	Assert( frameIndex == this->topOfStackIndex || frameIndex == this->topOfStackIndex + 1 );
+inline void MovementPredictionContext::MarkSavepoint( BaseMovementAction *markedBy, unsigned frameIndex ) {
+#ifdef ENABLE_MOVEMENT_ASSERTIONS
+	constexpr auto *tag = "MovementPredictionContext::MarkSavepoint()";
+	if( !markedBy ) {
+		AI_FailWith( tag, "`markedBy` action is null\n" );
+	}
+	if( this->cannotApplyAction ) {
+		constexpr auto *format = "%s: Attempt to mark a savepoint while `cannotApplyAction` context flag is set\n";
+		AI_FailWith( tag, format, markedBy->Name() );
+	}
+	if( this->shouldRollback ) {
+		constexpr auto *format = "%s: Attempt to mark a savepoint while `shouldRollback` context flag is set\n";
+		AI_FailWith( tag, format, markedBy->Name() );
+	}
+	if( frameIndex != this->topOfStackIndex && frameIndex != this->topOfStackIndex + 1 ) {
+		constexpr auto *format =
+			"%s: Attempt to mark a savepoint at index %d while ToS index is %d:"
+			" the savepoint index must be the same or be a first next index\n";
+		AI_FailWith( tag, format, markedBy->Name(), frameIndex, this->topOfStackIndex );
+	}
+#endif
+
 	this->savepointTopOfStackIndex = frameIndex;
 	Debug( "%s has marked frame %d as a savepoint\n", markedBy->Name(), frameIndex );
 }
@@ -177,23 +217,42 @@ inline void MovementPredictionContext::MarkSavepoint( BaseMovementAction *marked
 inline void MovementPredictionContext::SetPendingRollback() {
 	this->cannotApplyAction = true;
 	this->shouldRollback = true;
+
+#ifdef ENABLE_MOVEMENT_ASSERTIONS
+	if( !this->isCompleted ) {
+		return;
+	}
+
+	constexpr auto *tag = "MovementPredictionContext::SetPendingRollback()";
+	constexpr auto *format = "%s: Attempt to rollback while the context is in completed state\n";
+	AI_FailWith( tag, format, ActiveActionName() );
+#endif
 }
 
 inline void MovementPredictionContext::RollbackToSavepoint() {
-	Assert( !this->isCompleted );
-	Assert( this->shouldRollback );
-	Assert( this->cannotApplyAction );
+#ifdef ENABLE_MOVEMENT_ASSERTIONS
+	constexpr auto *tag = "MovementPredictionContext::RollbackToSavepoint()";
+	if( this->isCompleted ) {
+		constexpr auto *format = "%s: Attempt to rollback while the context is in completed state\n";
+		AI_FailWith( tag, format, ActiveActionName() );
+	}
+	if( !this->shouldRollback ) {
+		constexpr auto *format = "%s: Attempt to rollback while `shouldRollback` context flag is not set\n";
+		AI_FailWith( tag, format, ActiveActionName() );
+	}
+	if( !this->cannotApplyAction ) {
+		constexpr auto *format = "%s: Attempt to rollback while `cannotApplyAction` context flag is not set\n";
+		AI_FailWith( tag, format, ActiveActionName() );
+	}
+	if( this->savepointTopOfStackIndex > this->topOfStackIndex ) {
+		constexpr auto *format = "The savepoint index %u is greater than the current ToS index %u\n";
+		AI_FailWith( tag, format, this->savepointTopOfStackIndex, this->topOfStackIndex );
+	}
+#endif
 
 	constexpr const char *format = "Rolling back to savepoint frame %d from ToS frame %d\n";
 	Debug( format, this->savepointTopOfStackIndex, this->topOfStackIndex );
-	Assert( this->topOfStackIndex >= this->savepointTopOfStackIndex );
 	this->topOfStackIndex = this->savepointTopOfStackIndex;
-}
-
-inline void MovementPredictionContext::SetPendingWeapon( int weapon ) {
-	Assert( weapon >= WEAP_NONE && weapon < WEAP_TOTAL );
-	record->pendingWeapon = ( decltype( record->pendingWeapon ) )weapon;
-	pendingWeaponsStack.back() = record->pendingWeapon;
 }
 
 inline void MovementPredictionContext::SaveSuggestedActionForNextFrame( BaseMovementAction *action ) {
@@ -202,14 +261,18 @@ inline void MovementPredictionContext::SaveSuggestedActionForNextFrame( BaseMove
 }
 
 inline unsigned MovementPredictionContext::MillisAheadForFrameStart( unsigned frameIndex ) const {
-	Assert( frameIndex <= topOfStackIndex );
+#ifdef ENABLE_MOVEMENT_ASSERTIONS
+	constexpr auto *tag = "MovementPredictionContext::MillisAheadForFrameStart()";
+	constexpr auto *format = "The frame index %u must not be greater than the current ToS index %u\n";
+	if( frameIndex > topOfStackIndex ) {
+		AI_FailWith( tag, format, frameIndex, topOfStackIndex );
+	}
+#endif
 	if( frameIndex < topOfStackIndex ) {
-		return (unsigned)( predictedMovementActions[frameIndex].timestamp - level.time );
+		return (unsigned)( predictedMovementActions[frameIndex].timestamp );
 	}
 	return totalMillisAhead;
 }
-
-typedef EnvironmentTraceCache::ObstacleAvoidanceResult ObstacleAvoidanceResult;
 
 inline ObstacleAvoidanceResult MovementPredictionContext::TryAvoidFullHeightObstacles( float correctionFraction ) {
 	// Make a modifiable copy of the intended look dir
@@ -280,13 +343,34 @@ inline bool BaseMovementAction::GenericCheckIsActionEnabled( MovementPredictionC
 
 typedef MovementPredictionContext Context;
 
+inline void BaseMovementAction::CheckDisableOrSwitchPreconditions( Context *context, const char *methodTag ) {
+#ifdef ENABLE_MOVEMENT_ASSERTIONS
+	if( context->isCompleted ) {
+		AI_FailWith( va( "%s::%s()", Name(), methodTag ), "The context must not have `isCompleted` flag set" );
+	}
+	if( context->cannotApplyAction ) {
+		AI_FailWith( va( "%s::%s()", Name(), methodTag ), "The context must not have `cannotApplyAction` flag set" );
+	}
+	if( context->shouldRollback ) {
+		AI_FailWith( va( "%s::%s()", Name(), methodTag ), "The context must not have `shouldRollback` flag set" );
+	}
+	if( this->isDisabledForPlanning ) {
+		AI_FailWith( va( "%s::%s()", Name(), methodTag ), "The action must not have been already disabled for planning" );
+	}
+#endif
+}
+
 inline void BaseMovementAction::DisableWithAlternative( Context *context, BaseMovementAction *suggestedAction ) {
+	CheckDisableOrSwitchPreconditions( context, "DisableWithAlternative" );
+
 	context->cannotApplyAction = true;
 	context->actionSuggestedByAction = suggestedAction;
 	this->isDisabledForPlanning = true;
 }
 
 inline void BaseMovementAction::SwitchOrStop( Context *context, BaseMovementAction *suggestedAction ) {
+	CheckDisableOrSwitchPreconditions( context, "SwitchOrStop" );
+
 	// Few predicted frames are enough if the action cannot be longer applied (but have not caused rollback)
 	if( context->topOfStackIndex > 0 ) {
 		Debug( "There were enough successfully predicted frames anyway, stopping prediction\n" );
@@ -298,6 +382,8 @@ inline void BaseMovementAction::SwitchOrStop( Context *context, BaseMovementActi
 }
 
 inline void BaseMovementAction::SwitchOrRollback( Context *context, BaseMovementAction *suggestedAction ) {
+	CheckDisableOrSwitchPreconditions( context, "SwitchOrRollback" );
+
 	if( context->topOfStackIndex > 0 ) {
 		Debug( "There were some frames predicted ahead that lead to a failure, should rollback\n" );
 		this->isDisabledForPlanning = true;
@@ -375,6 +461,119 @@ public:
 
 extern TriggerAreaNumsCache triggerAreaNumsCache;
 
+class CollisionTopNodeCache {
+	mutable vec3_t cachedForMins { 0, 0, 0 };
+	mutable vec3_t cachedForMaxs { 0, 0, 0 };
+
+	mutable int cachedNode { 0 };
+
+	// This approach looks much cleaner rather multiple ifdefs spread over the code
+#ifndef PUBLIC_BUILD
+	static constexpr auto profileHits = true;
+#else
+	static constexpr auto profileHits = false;
+#endif
+
+	mutable int64_t hits { 0 };
+	mutable int64_t total { 0 };
+	mutable int64_t nodeValuesSum { 0 };
+
+	bool WithinCachedBounds( const float *mins, const float *maxs ) const {
+		// TODO: Use SIMD if it becomes noticeable at profiling results
+		return
+			( mins[0] > cachedForMins[0] ) & ( mins[1] > cachedForMins[1] ) & ( mins[2] > cachedForMins[2] ) &
+			( maxs[0] < cachedForMaxs[0] ) & ( maxs[1] < cachedForMaxs[1] ) & ( maxs[2] < cachedForMaxs[2] );
+	}
+
+	void SaveCachedBounds( const float *testedForMins, const float *testedForMaxs ) const {
+		VectorSet( cachedForMins, -56, -56, -24 );
+		VectorSet( cachedForMaxs, +56, +56, +24 );
+		VectorAdd( testedForMins, cachedForMins, cachedForMins );
+		VectorAdd( testedForMaxs, cachedForMaxs, cachedForMaxs );
+	}
+public:
+	~CollisionTopNodeCache() {
+		if( !profileHits ) {
+			return;
+		}
+
+		double hitRate = total ? hits / ( (double)total ) : 0.0;
+		// Divide the node values sum by count of misses
+		int avgTopNode = total ? (int)( nodeValuesSum / ( (double)( total - hits ) ) ) : 0;
+		// We are unsure if calling G_Printf() is valid at the moment of this object destruction
+		constexpr const char *tag = "CollisionTopNodeCache::~CollisionTopNodeCache()";
+		printf( "%s: Hit rate: %.3lf, avg. top node: %d\n", tag, hitRate, avgTopNode );
+	}
+
+	int GetTopNode( const float *traceStart, const float *traceMins, const float *traceMaxs, const float *traceEnd ) const;
+
+	int GetTopNode( const Vec3 &absMins, const Vec3 &absMaxs ) const {
+		return GetTopNode( absMins.Data(), absMaxs.Data() );
+	}
+
+	int GetTopNode( const float *absMins, const float *absMaxs ) const {
+		if( profileHits ) {
+			total++;
+		}
+		if( WithinCachedBounds( absMins, absMaxs ) ) {
+			if( profileHits ) {
+				hits++;
+			}
+			return cachedNode;
+		}
+
+		SaveCachedBounds( absMins, absMaxs );
+		cachedNode = trap_CM_FindTopNodeForBox( cachedForMins, cachedForMaxs );
+		if( profileHits ) {
+			// The CM call must not return leaves
+			assert( cachedNode >= 0 );
+			nodeValuesSum += cachedNode;
+		}
+		return cachedNode;
+	}
+};
+
+extern CollisionTopNodeCache collisionTopNodeCache;
+
+class ReachChainWalker {
+protected:
+	const AiAasRouteCache *const routeCache;
+	int targetAreaNum { -1 };
+	int startAreaNums[2] { 0, 0 };
+	int numStartAreas { -1 };
+	// Step temporaries that might be useful
+	int lastTravelTime { 0 };
+	int lastReachNum { 0 };
+
+	virtual bool Accept( int reachNum, const aas_reachability_t &reach, int travelTime ) = 0;
+public:
+	void SetAreaNums( const int *startAreaNums_, int numStartAreas_, int targetAreaNum_ ) {
+		Vector2Copy( startAreaNums_, startAreaNums );
+		this->numStartAreas = numStartAreas_;
+		this->targetAreaNum = targetAreaNum_;
+	}
+
+	void SetAreaNums( const AiEntityPhysicsState &physicsState, int targetAreaNum_ ) {
+		numStartAreas = physicsState.PrepareRoutingStartAreas( startAreaNums );
+		this->targetAreaNum = targetAreaNum_;
+	}
+
+	explicit ReachChainWalker( const AiAasRouteCache *routeCache_ )
+		: routeCache( routeCache_ ) {}
+
+	virtual bool Exec();
+};
+
 int TravelTimeWalkingOrFallingShort( const AiAasRouteCache *routeCache, int fromAreaNum, int toAreaNum );
+
+/**
+ * Serves for candidate spots selection.
+ * Tracing a straight line between two points fails in stairs-like environment way too often.
+ * This routine uses extremely coarse arc approximation which still should be sufficient
+ * to avoid the mentioned failure in some environment kinds.
+ */
+bool TraceArcInSolidWorld( const vec3_t from, const vec3_t to );
+
+void DirToKeyInput( const Vec3 &desiredDir, const vec3_t actualForwardDir, const vec3_t actualRightDir, BotInput *input );
 
 #endif

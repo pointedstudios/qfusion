@@ -22,8 +22,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../qcommon/net.h"
 #include "../qalgo/Links.h"
 
-#undef min
-#undef max
 #include <new>
 #include <algorithm>
 
@@ -31,7 +29,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 * Cmd_ConsoleSay_f
 */
 static void Cmd_ConsoleSay_f( void ) {
-	G_ChatMsg( NULL, NULL, false, "%s", trap_Cmd_Args() );
+	ChatPrintHelper chatPrintHelper( "%s", trap_Cmd_Args() );
+	chatPrintHelper.PrintToEverybody();
 }
 
 
@@ -200,8 +199,11 @@ class GIPFilter {
 	enum { NUM_V6_GROUPS = 15 };
 	enum { ILLEGAL_GROUP = ~0u };
 
-	// Initialize lazily
-	Entry *entries;
+	/**
+	 * Entries are initialized lazily.
+	 * @warning this value must be set before the constructor body execution {@code Clear() call}.
+	 */
+	Entry *entries { nullptr };
 
 	// Using a hash map is trivial, unfortunately it does not work for wildcard filters.
 	// (a hash for a given value varies depending of the filter mask).
@@ -1290,9 +1292,6 @@ void G_AddServerCommands( void ) {
 
 	trap_Cmd_AddCommand( "dumpASapi", G_asDumpAPI_f );
 
-	trap_Cmd_AddCommand( "listratings", G_ListRatings_f );
-	trap_Cmd_AddCommand( "listraces", G_ListRaces_f );
-
 	trap_Cmd_AddCommand( "listlocations", Cmd_ListLocations_f );
 }
 
@@ -1318,9 +1317,6 @@ void G_RemoveCommands( void ) {
 #endif
 
 	trap_Cmd_RemoveCommand( "dumpASapi" );
-
-	trap_Cmd_RemoveCommand( "listratings" );
-	trap_Cmd_RemoveCommand( "listraces" );
 
 	trap_Cmd_RemoveCommand( "listlocations" );
 }

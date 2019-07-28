@@ -41,9 +41,6 @@ static inline void CopySwappingYZ( const float *from, float *to ) {
 	to[2] = from[1];
 }
 
-// TODO: Hints are ignored at this stage.
-// Trying to use G_LevelMalloc() for ALLOC_PERM hints leads to enormous required level pool size for building the mesh.
-// (Mesh building should be performed only on developer machines).
 static inline void *CustomAlloc( size_t size, int actualHint, int tmpAllocHint ) {
 	return G_Malloc( size );
 }
@@ -103,18 +100,6 @@ AiNavMeshManager::AiNavMeshManager()
 
 constexpr const uint32_t PRECOMPUTED_FILE_VERSION = 0x1337B001;
 
-// PrecomputedFileReader/Writer rely on G_LevelMalloc() by default,
-// while the rest of code uses G_Malloc for reasons explained above.
-// We have to supply our own allocation facilities compatible with the rest of code.
-
-static void *PrecomputedIOAlloc( size_t size ) {
-	return G_Malloc( size );
-}
-
-static void PrecomputedIOFree( void *ptr ) {
-	G_Free( ptr );
-}
-
 static const char *MakePrecomputedFilePath( char *buffer, size_t bufferSize, const char *mapName ) {
 	Q_snprintfz( buffer, bufferSize, "ai/%s.navmesh", mapName );
 	return buffer;
@@ -133,7 +118,7 @@ AiNavMeshManager::~AiNavMeshManager() {
 		char filePath[MAX_QPATH];
 		MakePrecomputedFilePath( filePath, sizeof( filePath ), level.mapname );
 		constexpr const char *writerTag = "PrecomputedFileWriter@AiNavMeshManager";
-		AiPrecomputedFileWriter writer( writerTag, PRECOMPUTED_FILE_VERSION, PrecomputedIOAlloc, PrecomputedIOFree );
+		AiPrecomputedFileWriter writer( writerTag, PRECOMPUTED_FILE_VERSION );
 		if( writer.BeginWriting( filePath ) ) {
 			if( writer.WriteLengthAndData( dataToSave, (uint32_t)dataToSaveSize ) ) {
 				G_Printf( "Precomputed nav mesh has been saved successfully to %s\n", filePath );
@@ -155,11 +140,11 @@ AiNavMeshManager::~AiNavMeshManager() {
 	}
 
 	if( polyCenters ) {
-		G_LevelFree( polyCenters );
+		G_Free( polyCenters );
 	}
 
 	if( polyBounds ) {
-		G_LevelFree( polyBounds );
+		G_Free( polyBounds );
 	}
 }
 
@@ -449,13 +434,13 @@ struct NavMeshInputTris {
 void NavMeshInputTris::ForceClear() {
 	numVertices = 0;
 	if( vertices ) {
-		G_LevelFree( vertices );
+		G_Free( vertices );
 		vertices = nullptr;
 	}
 
 	numTris = 0;
 	if( tris ) {
-		G_LevelFree( tris );
+		G_Free( tris );
 		tris = nullptr;
 	}
 
@@ -583,8 +568,7 @@ bool AasNavMeshInputTrisSource::BuildTris( NavMeshInputTris *tris ) {
 	// To prepare vertices input, just copy AAS vertices (they are already indexed) swapping Z and Y components
 
 	// We think there is no need to check the result for nullity as it fails with game error on allocation failure.
-	// BufferBuilder methods also rely on this G_LevelMalloc() behavior.
-	float *const trisVertices = ( float * )G_LevelMalloc( sizeof( float ) * 3 * aasWorld->NumVertexes() );
+	float *const trisVertices = ( float * )G_Malloc( sizeof( float ) * 3 * aasWorld->NumVertexes() );
 	for( int i = 0, j = 0; i < numAasVertices; ++i, j += 3 ) {
 		trisVertices[j + 0] = aasVertices[i][0];
 		trisVertices[j + 1] = aasVertices[i][2];
@@ -660,10 +644,11 @@ bool AasNavMeshInputTrisSource::BuildTris( NavMeshInputTris *tris ) {
 			edgeIndexNum += 2;
 			// Stop before the last edge that encloses edges chain in a ring,
 			// otherwise the last triangle will be degenerate.
-			const int edgeIndexNumBound = edgeIndexNum + face.numedges - 1;
+			const int edgeIndexNumBound = edgeIndexNum + face.numedges - 2;
 			for(; edgeIndexNum < edgeIndexNumBound; ++edgeIndexNum ) {
 				// Concat the current edge to the previous one in the hull, adding 2 vertices
-				const auto *currEdge = aasEdges + abs( aasEdgeIndex[ edgeIndexNum ] );
+				int edgeNum = abs( aasEdgeIndex[edgeIndexNum] );
+				const auto *currEdge = aasEdges + edgeNum;
 				if( VectorCompare( aasVertices[lastInChainVertexNum], aasVertices[currEdge->v[0]] ) ) {
 					trisIndicesBuilder.Add( currEdge->v[0] );
 					trisIndicesBuilder.Add( currEdge->v[1] );
@@ -985,8 +970,8 @@ bool AiNavMeshManager::InitNavMeshFromData( unsigned char *data, int dataSize ) 
 	const float *vertices = tile->verts;
 	const dtPoly *polys = tile->polys;
 	// Never returns on failure
-	polyCenters = (float *)G_LevelMalloc( 3 * sizeof( float ) * numPolys );
-	polyBounds = (float *)G_LevelMalloc( 6 * sizeof( float ) * numPolys );
+	polyCenters = (float *)G_Malloc( 3 * sizeof( float ) * numPolys );
+	polyBounds = (float *)G_Malloc( 6 * sizeof( float ) * numPolys );
 
 	for( unsigned i = 0; i < numPolys; ++i ) {
 		float *mins = polyBounds + i * 6;
@@ -1023,7 +1008,7 @@ bool AiNavMeshManager::Load( const char *mapName ) {
 	int dataSize = 0;
 
 	constexpr const char *readerTag = "PrecomputedFileReader@AiNavMeshManager";
-	AiPrecomputedFileReader reader( readerTag, PRECOMPUTED_FILE_VERSION, PrecomputedIOAlloc, PrecomputedIOFree );
+	AiPrecomputedFileReader reader( readerTag, PRECOMPUTED_FILE_VERSION );
 	const auto loadingStatus = reader.BeginReading( filePath );
 	if( loadingStatus == AiPrecomputedFileReader::SUCCESS ) {
 		if( reader.ReadLengthAndData( (uint8_t **)&data, (uint32_t *)&dataSize ) ) {

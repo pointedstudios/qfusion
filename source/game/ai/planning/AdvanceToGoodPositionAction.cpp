@@ -1,25 +1,25 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-void BotAdvanceToGoodPositionActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
-	self->ai->botRef->GetMiscTactics().PreferAttackRatherThanRun();
+void AdvanceToGoodPositionActionRecord::Activate() {
+	BotActionRecord::Activate();
+	Self()->GetMiscTactics().PreferAttackRatherThanRun();
 	// Set a hint for weapon selection
-	self->ai->botRef->GetMiscTactics().willAdvance = true;
-	self->ai->botRef->SetNavTarget( &navTarget );
+	Self()->GetMiscTactics().willAdvance = true;
+	Self()->SetNavTarget( &navSpot );
 }
 
-void BotAdvanceToGoodPositionActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
-	self->ai->botRef->ResetNavTarget();
+void AdvanceToGoodPositionActionRecord::Deactivate() {
+	BotActionRecord::Deactivate();
+	Self()->ResetNavTarget();
 }
 
-AiBaseActionRecord::Status BotAdvanceToGoodPositionActionRecord::CheckStatus( const WorldState &currWorldState ) const {
+AiActionRecord::Status AdvanceToGoodPositionActionRecord::UpdateStatus( const WorldState &currWorldState ) {
 	if( !CheckCommonCombatConditions( currWorldState ) ) {
 		return INVALID;
 	}
 
-	if( ( navTarget.Origin() - self->s.origin ).SquaredLength() < TACTICAL_SPOT_RADIUS * TACTICAL_SPOT_RADIUS ) {
+	if( ( navSpot.Origin() - Self()->Origin() ).SquaredLength() < TACTICAL_SPOT_RADIUS * TACTICAL_SPOT_RADIUS ) {
 		return COMPLETED;
 	}
 
@@ -27,7 +27,7 @@ AiBaseActionRecord::Status BotAdvanceToGoodPositionActionRecord::CheckStatus( co
 }
 
 
-PlannerNode *BotAdvanceToGoodPositionAction::TryApply( const WorldState &worldState ) {
+PlannerNode *AdvanceToGoodPositionAction::TryApply( const WorldState &worldState ) {
 	if( worldState.EnemyOriginVar().Ignore() ) {
 		Debug( "Enemy is ignored in the given world state\n" );
 		return nullptr;
@@ -41,7 +41,7 @@ PlannerNode *BotAdvanceToGoodPositionAction::TryApply( const WorldState &worldSt
 		return nullptr;
 	}
 
-	const float offensiveness = self->ai->botRef->GetEffectiveOffensiveness();
+	const float offensiveness = Self()->GetEffectiveOffensiveness();
 	float actionPenalty = 1.0f;
 	Vec3 spotOrigin( 0, 0, 0 );
 
@@ -149,14 +149,14 @@ PlannerNode *BotAdvanceToGoodPositionAction::TryApply( const WorldState &worldSt
 		}
 	}
 
-	int travelTimeMillis = self->ai->botRef->CheckTravelTimeMillis( worldState.BotOriginVar().Value(), spotOrigin );
+	int travelTimeMillis = Self()->CheckTravelTimeMillis( worldState.BotOriginVar().Value(), spotOrigin );
 	if( !travelTimeMillis ) {
 		Debug( "Warning: can't find travel time from the bot origin to the spot origin in the given world state\n" );
 		return nullptr;
 	}
 
-	unsigned selectedEnemiesInstanceId = self->ai->botRef->GetSelectedEnemies().InstanceId();
-	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( self, spotOrigin, selectedEnemiesInstanceId ) );
+	unsigned selectedEnemiesInstanceId = Self()->GetSelectedEnemies().InstanceId();
+	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( Self(), spotOrigin, selectedEnemiesInstanceId ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}

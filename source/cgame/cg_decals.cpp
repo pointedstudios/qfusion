@@ -18,6 +18,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 #include "cg_local.h"
+#include "../ref_gl/r_frontend.h"
 
 #define MAX_DECALS          512
 #define MAX_DECAL_VERTS     64
@@ -145,7 +146,7 @@ int CG_SpawnDecal( const vec3_t origin, const vec3_t dir, float orient, float ra
 	RotatePointAroundVector( axis[2], axis[0], axis[1], orient );
 	CrossProduct( axis[0], axis[2], axis[1] );
 
-	numfragments = trap_R_GetClippedFragments( origin, radius, axis, // clip it
+	numfragments = R_GetClippedFragments( origin, radius, axis, // clip it
 											   MAX_DECAL_VERTS, verts, MAX_DECAL_FRAGMENTS, fragments );
 
 	// no valid fragments
@@ -197,8 +198,8 @@ int CG_SpawnDecal( const vec3_t origin, const vec3_t dir, float orient, float ra
 	VectorScale( axis[2], radius, axis[2] );
 
 	dietime = cg.time + die * 1000;
-	fadefreq = 0.001f / min( fadetime, die );
-	fadetime = cg.time + ( die - min( fadetime, die ) ) * 1000;
+	fadefreq = 0.001f / std::min( fadetime, die );
+	fadetime = cg.time + ( die - std::min( fadetime, die ) ) * 1000;
 
 	for( i = 0, fr = fragments; i < numfragments; i++, fr++ ) {
 		if( fr->numverts > MAX_DECAL_VERTS ) {
@@ -280,6 +281,6 @@ void CG_AddDecals( void ) {
 				*( int * )poly->colors[i] = *( int * )color;
 		}
 
-		trap_R_AddPolyToScene( poly );
+		RF_AddPolyToScene( poly );
 	}
 }

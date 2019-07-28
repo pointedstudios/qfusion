@@ -4,8 +4,7 @@
 #include "../ai_local.h"
 #include "../static_vector.h"
 
-class BotRoamingManager
-{
+class BotRoamingManager {
 	// Note: very large values lead to all spots being considered as visited
 	// during the first VISITED_SPOT_EXPIRATION_TIME millis of the level time.
 	// Even if TryResetAllSpotsDisabledState() fills visitedAt by zero,
@@ -13,12 +12,12 @@ class BotRoamingManager
 	static constexpr unsigned VISITED_SPOT_EXPIRATION_TIME = 10 * 1000;
 
 	int64_t *visitedAt;
-	edict_t *self;
-	Vec3 tmpSpotOrigin;
-	Vec3 cachedSpotOrigin;
-	int64_t spotSelectedAt;
-	int currTacticalSpotNum;
-	unsigned numVisitedSpots;
+	Bot *const bot;
+	Vec3 tmpSpotOrigin { 0, 0, 0 };
+	Vec3 cachedSpotOrigin { 0, 0, 0 };
+	int64_t spotSelectedAt { 0 };
+	int currTacticalSpotNum { -1 };
+	unsigned numVisitedSpots { 0 };
 	const class TacticalSpotsRegistry *tacticalSpotsRegistry;
 	const class AiAasWorld *aasWorld;
 
@@ -26,11 +25,11 @@ class BotRoamingManager
 
 	const Vec3 &GetRoamingSpot();
 
-	inline bool IsTemporarilyDisabled( unsigned spotNum ) const {
+	bool IsTemporarilyDisabled( unsigned spotNum ) const {
 		return MillisSinceVisited( spotNum, level.time ) < VISITED_SPOT_EXPIRATION_TIME;
 	}
 
-	inline bool IsTemporarilyDisabled( unsigned spotNum, int64_t levelTime ) const {
+	bool IsTemporarilyDisabled( unsigned spotNum, int64_t levelTime ) const {
 		return MillisSinceVisited( spotNum, levelTime ) < VISITED_SPOT_EXPIRATION_TIME;
 	}
 
@@ -38,33 +37,34 @@ class BotRoamingManager
 	// Non-negative return values are feasible
 	int TrySuggestTacticalSpot();
 	// Non-negative return values are feasible
-	int TryFindReachableSpot( const Candidates &candidateSpots, int travelFlags, const int *fromAreaNums, int numFromAreas );
+	int TryFindReachableSpot( const Candidates &candidateSpots, const int *fromAreaNums, int numFromAreas );
 	// Positive return values are feasible
-	int TryFindReachableArea( const Candidates &candidateAreas, int travelFlags, const int *fromAreaNums, int numFromAreas );
+	int TryFindReachableArea( const Candidates &candidateAreas, const int *fromAreaNums, int numFromAreas );
 	void TryResetAllSpotsDisabledState();
 	// Positive return values are feasible
 	int TrySuggestRandomAasArea();
 	int TrySuggestNearbyAasArea();
 	bool IsFeasibleArea( const aas_area_t &area, const aas_areasettings_t &areaSettings );
 
-	inline void ClearVisitedSpots();
+	void ClearVisitedSpots();
 public:
-	BotRoamingManager( edict_t *self_ );
+	explicit BotRoamingManager( Bot *bot_ );
+
 	~BotRoamingManager() {
-		G_LevelFree( visitedAt );
+		G_Free( visitedAt );
 	}
 
-	inline uint64_t MillisSinceVisited( unsigned spotNum ) const {
+	uint64_t MillisSinceVisited( unsigned spotNum ) const {
 		assert( level.time >= visitedAt[spotNum] );
 		return (uint64_t)( level.time - visitedAt[spotNum] );
 	}
 
-	inline uint64_t MillisSinceVisited( unsigned spotNum, int64_t levelTime ) const {
+	uint64_t MillisSinceVisited( unsigned spotNum, int64_t levelTime ) const {
 		assert( levelTime >= visitedAt[spotNum] );
 		return (uint64_t)( levelTime - visitedAt[spotNum] );
 	}
 
-	inline void DisableSpotsInRadius( const Vec3 &origin, float radius ) {
+	void DisableSpotsInRadius( const Vec3 &origin, float radius ) {
 		DisableSpotsInRadius( origin.Data(), radius );
 	}
 
@@ -73,9 +73,7 @@ public:
 	// All calls during a single frame are guaranteed to return the same result
 	const Vec3 &GetCachedRoamingSpot();
 
-	inline void CheckSpotsProximity() {
-		DisableSpotsInRadius( self->s.origin, 96.0f );
-	}
+	void CheckSpotsProximity();
 };
 
 #endif

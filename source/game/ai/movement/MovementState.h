@@ -142,16 +142,29 @@ class alignas ( 2 )BotWeaponJumpMovementState : protected BotAerialMovementState
 	int16_t jumpTarget[3];
 	int16_t fireTarget[3];
 	int16_t originAtStart[3];
+	// Sometimes bots cannot manage to look at the ground and get blocked.
+	// This is a timer that allows resetting of this movement state in this case.
+	uint16_t millisToTriggerJumpLeft;
 public:
+	int8_t weapon;
 	bool hasPendingWeaponJump : 1;
 	bool hasTriggeredWeaponJump : 1;
 	bool hasCorrectedWeaponJump : 1;
-	int8_t weapon: 5;
 
 	BotWeaponJumpMovementState()
-		: hasPendingWeaponJump( false ), hasTriggeredWeaponJump( false ), hasCorrectedWeaponJump( false ) {}
+		: millisToTriggerJumpLeft( 0 )
+		, weapon( 0 )
+		, hasPendingWeaponJump( false )
+		, hasTriggeredWeaponJump( false )
+		, hasCorrectedWeaponJump( false ) {}
 
-	inline void Frame( unsigned frameTime ) {}
+	inline void Frame( unsigned frameTime ) {
+		if( millisToTriggerJumpLeft >= frameTime ) {
+			millisToTriggerJumpLeft -= frameTime;
+		} else {
+			millisToTriggerJumpLeft = 0;
+		}
+	}
 
 	inline Vec3 JumpTarget() const { return GetUnpacked4uVec( jumpTarget ); }
 	inline Vec3 FireTarget() const { return GetUnpacked4uVec( fireTarget ); }
@@ -169,20 +182,16 @@ public:
 		hasCorrectedWeaponJump = false;
 	}
 
-	inline void Activate( const Vec3 &jumpTarget_,
-						  const Vec3 &fireTarget_,
-						  const Vec3 &originAtStart_,
-						  unsigned timeoutPeriod,
-						  int weapon_,
-						  int64_t levelTime = level.time ) {
+	inline void Activate( const Vec3 &jumpTarget_, const Vec3 &fireTarget_, const Vec3 &originAtStart_, int weapon_ ) {
 		SetPacked4uVec( jumpTarget_, jumpTarget );
 		SetPacked4uVec( fireTarget_, fireTarget );
 		SetPacked4uVec( originAtStart_, originAtStart );
+		millisToTriggerJumpLeft = 384u;
 		hasPendingWeaponJump = true;
 		hasTriggeredWeaponJump = false;
 		hasCorrectedWeaponJump = false;
-		assert( weapon_ < 32 );
-		this->weapon = weapon_;
+		assert( weapon_ > 0 && weapon_ < 32 );
+		this->weapon = (int8_t)weapon_;
 	}
 };
 

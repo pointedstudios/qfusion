@@ -5,6 +5,7 @@
 #include "../navigation/AasRouteCache.h"
 #include "../static_vector.h"
 #include "../bot.h"
+#include "../../../qalgo/Links.h"
 
 class TacticalSpotsRegistry
 {
@@ -27,37 +28,29 @@ public:
 		const edict_t *originEntity;
 		vec3_t origin;
 		float searchRadius;
-		AiAasRouteCache *routeCache;
+		const AiAasRouteCache *routeCache;
 		int originAreaNum;
-		int preferredTravelFlags;
-		int allowedTravelFlags;
 	public:
-		OriginParams( const edict_t *originEntity_, float searchRadius_, AiAasRouteCache *routeCache_ )
+		OriginParams( const edict_t *originEntity_, float searchRadius_, const AiAasRouteCache *routeCache_ )
 			: originEntity( originEntity_ ), searchRadius( searchRadius_ ), routeCache( routeCache_ ) {
 			VectorCopy( originEntity_->s.origin, this->origin );
 			const AiAasWorld *aasWorld = AiAasWorld::Instance();
 			originAreaNum = aasWorld->IsLoaded() ? aasWorld->FindAreaNum( originEntity ) : 0;
-			preferredTravelFlags = Bot::PREFERRED_TRAVEL_FLAGS;
-			allowedTravelFlags = Bot::ALLOWED_TRAVEL_FLAGS;
 		}
 
-		OriginParams( const vec3_t origin_, float searchRadius_, AiAasRouteCache *routeCache_ )
+		OriginParams( const vec3_t origin_, float searchRadius_, const AiAasRouteCache *routeCache_ )
 			: originEntity( nullptr ), searchRadius( searchRadius_ ), routeCache( routeCache_ ) {
 			VectorCopy( origin_, this->origin );
 			const AiAasWorld *aasWorld = AiAasWorld::Instance();
 			originAreaNum = aasWorld->IsLoaded() ? aasWorld->FindAreaNum( origin ) : 0;
-			preferredTravelFlags = Bot::PREFERRED_TRAVEL_FLAGS;
-			allowedTravelFlags = Bot::ALLOWED_TRAVEL_FLAGS;
 		}
 
 		OriginParams( const vec3_t origin_, const edict_t *originEntity_,
-					  float searchRadius_, AiAasRouteCache *routeCache_ )
+					  float searchRadius_, const AiAasRouteCache *routeCache_ )
 			: originEntity( originEntity_ ), searchRadius( searchRadius_ ), routeCache( routeCache_ ) {
 			VectorCopy( origin_, this->origin );
 			const AiAasWorld *aasWorld = AiAasWorld::Instance();
 			originAreaNum = aasWorld->IsLoaded() ? aasWorld->FindAreaNum( originEntity ) : 0;
-			preferredTravelFlags = Bot::PREFERRED_TRAVEL_FLAGS;
-			allowedTravelFlags = Bot::ALLOWED_TRAVEL_FLAGS;
 		}
 
 		inline Vec3 MinBBoxBounds( float minHeightAdvantage = 0.0f ) const {
@@ -90,7 +83,28 @@ public:
 		bool operator<( const SpotAndScore &that ) const { return score > that.score; }
 	};
 
+	struct OriginAndScore {
+		Vec3 origin;
+		float score;
+		int16_t tag { -1 };
+		uint16_t spotNum { std::numeric_limits<uint16_t>::max() };
+
+		OriginAndScore( const float *origin_, float score_ ) : origin( origin_ ), score( score_ ) {}
+		OriginAndScore( const Vec3 &origin_, float score_ ) : origin( origin_ ), score( score_ ) {}
+
+		static OriginAndScore ForArea( const aas_area_t *aasAreas, int areaNum ) {
+			Vec3 origin( aasAreas[areaNum].center );
+			origin.Z() = aasAreas[areaNum].mins[2] + 8.0f;
+			OriginAndScore result( origin, 1.0f );
+			result.tag = areaNum;
+			return result;
+		}
+
+		bool operator<( const OriginAndScore &that ) const { return score > that.score; }
+	};
+
 	typedef StaticVector<SpotAndScore, MAX_SPOTS> SpotsAndScoreVector;
+	typedef StaticVector<OriginAndScore, MAX_SPOTS> OriginAndScoreVector;
 private:
 	class TemporariesAllocator {
 		// These values should be allocated, cached and used as buffers for spots query/problem params solving.
@@ -98,14 +112,75 @@ private:
 		SpotsQueryVector *query { new( G_Malloc( sizeof( SpotsQueryVector ) ) )SpotsQueryVector };
 		bool *excludedSpotsMask { (bool *)G_Malloc( sizeof( bool ) * MAX_SPOTS ) };
 
-		struct SpotsAndScoreCacheEntry {
-			SpotsAndScoreCacheEntry *next { nullptr };
-			// TODO: Should we just use a standard alginment for StaticVector?
-			SpotsAndScoreVector data;
+		template <typename V>
+		class VectorCache {
+			struct Entry {
+				Entry *next { nullptr };
+				Entry *prev { nullptr };
+				V data;
+			};
+			Entry *freeHead { nullptr };
+			Entry *usedHead { nullptr };
+			Entry *usedTail { nullptr };
+		public:
+			~VectorCache() {
+				if( usedHead ) {
+					const char *tag = "TacticalSpotsRegistry::TemporariesAllocator::VectorCache<?>~()";
+					AI_FailWith( tag, "A user has not released resources" );
+				}
+				Entry *nextEntry;
+				for( auto *entry = freeHead; entry; entry = nextEntry ) {
+					nextEntry = entry->next;
+					entry->~Entry();
+					G_Free( entry );
+				}
+			}
+
+			V &GetNextCleanVector() {
+				// It's better to use generic link utilities even if maintaining
+				// a double-linked list adds some overhead that is however
+				// negligible both from memory and execution speed sides.
+				// We win a lot by caching these allocated results anyway compared to naive malloc calls.
+				if( freeHead ) {
+					auto *const unlinked = ::Unlink( freeHead, &freeHead );
+					::Link( unlinked, &usedHead );
+					if( !usedTail ) {
+						usedTail = unlinked;
+					}
+					auto &data = unlinked->data;
+					data.clear();
+					return data;
+				}
+
+				auto *newEntry = new( G_Malloc( sizeof( Entry ) ) )Entry;
+				::Link( newEntry, &usedHead );
+				if( !usedTail ) {
+					usedTail = newEntry;
+				}
+				return newEntry->data;
+			}
+
+			void Release() {
+				if( !usedTail ) {
+					assert( !usedHead );
+					return;
+				}
+
+				// Merge used list tail and free list head
+				assert( !usedTail->next );
+				usedTail->next = freeHead;
+				if( freeHead ) {
+					assert( !freeHead->prev );
+					freeHead->prev = usedTail;
+				}
+
+				freeHead = usedHead;
+				usedHead = usedTail = nullptr;
+			}
 		};
 
-		SpotsAndScoreCacheEntry *freeHead { nullptr };
-		SpotsAndScoreCacheEntry *usedHead { nullptr };
+		VectorCache<SpotsAndScoreVector> spotAndScoreVectorsCache;
+		VectorCache<OriginAndScoreVector> originAndScoreVectorsCache;
 	public:
 		// TODO: We do not require explicit releasing of query vector, this is error-prone...
 		SpotsQueryVector &GetCleanQueryVector() {
@@ -118,9 +193,17 @@ private:
 			return excludedSpotsMask;
 		}
 
-		SpotsAndScoreVector &GetNextCleanSpotsAndScoreVector();
+		SpotsAndScoreVector &GetNextCleanSpotsAndScoreVector() {
+			return spotAndScoreVectorsCache.GetNextCleanVector();
+		}
+		OriginAndScoreVector &GetNextCleanOriginAndScoreVector() {
+			return originAndScoreVectorsCache.GetNextCleanVector();
+		}
 
-		void Release();
+		void Release() {
+			spotAndScoreVectorsCache.Release();
+			originAndScoreVectorsCache.Release();
+		}
 
 		~TemporariesAllocator();
 	} temporariesAllocator;
@@ -136,12 +219,15 @@ private:
 	// ...
 	// 255 if spot origins and bounds are completely visible for each other
 	uint8_t *spotVisibilityTable { nullptr };
-	// For i-th spot element # i * numSpots + j contains AAS travel time to j-th spot.
-	// If the value is zero, j-th spot is not reachable from i-th one (we conform to AAS time encoding).
-	// Non-zero value is a travel time in seconds^-2 (we conform to AAS time encoding).
-	// Non-zero does not guarantee the spot is reachable for some picked bot
-	// (these values are calculated using shared AI route cache and bots have individual one for blocked paths handling).
-	uint16_t *spotTravelTimeTable { nullptr };
+	// Contains a 2-dimensional array of travel time pairs ("from spot to area", "from area to spot").
+	// An every cell has two values and the total number of short elements is 2 * numAreas * numSpots.
+	// An outer index corresponds to an area number.
+	// This is for CPU cache utilization efficiency (usually many spots are tested against the same area).
+	// Travel times are computed using a shared AAS route cache and Bot::ALLOWED_TRAVEL_FLAGS.
+	// Thus a path might not exist for a particular bot as individual route caches usually have additional restrictions.
+	// Regardless of that values of this table are very useful for cutting off
+	// non-feasible spots/areas before making expensive actual routing calls.
+	uint16_t *spotsAndAreasTravelTimeTable { nullptr };
 
 	unsigned numSpots { 0 };
 
@@ -185,8 +271,7 @@ private:
 			this->numSpots = numSpots_;
 		}
 
-		virtual const SpotsQueryVector &FindSpotsInRadius( const OriginParams &originParams,
-														   uint16_t *insideSpotNum ) const;
+		virtual SpotsQueryVector &FindSpotsInRadius( const OriginParams &originParams, uint16_t *insideSpotNum ) const;
 
 		virtual uint16_t *GetCellSpotsList( unsigned gridCellNum, uint16_t *numCellSpots ) const = 0;
 	};
@@ -208,8 +293,7 @@ private:
 		bool Load( class AiPrecomputedFileReader &reader );
 		void Save( class AiPrecomputedFileWriter &writer );
 
-		const SpotsQueryVector &FindSpotsInRadius( const OriginParams &originParams,
-												   uint16_t *insideSpotNum ) const override;
+		SpotsQueryVector &FindSpotsInRadius( const OriginParams &originParams, uint16_t *insideSpotNum ) const override;
 
 		uint16_t *GetCellSpotsList( unsigned gridCellNum, uint16_t *numCellSpots ) const override;
 	};
@@ -224,7 +308,7 @@ private:
 
 			~GridSpotsArray() {
 				if( data != internalBuffer ) {
-					G_LevelFree( data );
+					G_Free( data );
 				}
 			}
 
@@ -262,7 +346,7 @@ private:
 	bool TryLoadPrecomputedData( const char *mapname );
 	void SavePrecomputedData( const char *mapname );
 
-	const SpotsQueryVector &FindSpotsInRadius( const OriginParams &originParams, uint16_t *insideSpotNum ) const {
+	SpotsQueryVector &FindSpotsInRadius( const OriginParams &originParams, uint16_t *insideSpotNum ) const {
 		return spotsGrid.FindSpotsInRadius( originParams, insideSpotNum );
 	}
 public:
@@ -272,6 +356,8 @@ public:
 	static void Shutdown();
 
 	inline bool IsLoaded() const { return spots != nullptr && numSpots > 0; }
+
+	const TacticalSpot *Spots() const { return spots; }
 
 	static inline const TacticalSpotsRegistry *Instance() {
 		return ( instance && instance->IsLoaded() ) ? instance : nullptr;
@@ -283,6 +369,18 @@ public:
 		VectorSet( maxs, +2, +2, +2 );
 		VectorAdd( mins, playerbox_stand_mins, mins );
 		VectorAdd( maxs, playerbox_stand_maxs, maxs );
+	}
+
+	int TravelTimeFromAreaToSpot( int areaNum, int spotNum ) const {
+		assert( (unsigned)areaNum < (unsigned)AiAasWorld::Instance()->NumAreas() );
+		assert( (unsigned)spotNum < (unsigned)numSpots );
+		return spotsAndAreasTravelTimeTable[2 * ( areaNum * numSpots + spotNum ) + 1];
+	}
+
+	int TravelTimeFromSpotToArea( int spotNum, int areaNum ) const {
+		assert( (unsigned)areaNum < (unsigned)AiAasWorld::Instance()->NumAreas() );
+		assert( (unsigned)spotNum < (unsigned)numSpots );
+		return spotsAndAreasTravelTimeTable[2 * ( areaNum * numSpots + spotNum ) + 0];
 	}
 };
 

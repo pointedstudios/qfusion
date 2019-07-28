@@ -24,6 +24,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define OV_EXCLUDE_STATIC_CALLBACKS
 
 #include "snd_decoder.h"
+#include "../qcommon/qcommon.h"
 #include <vorbis/vorbisfile.h>
 
 #ifdef VORBISLIB_RUNTIME
@@ -72,7 +73,7 @@ dllfunc_t oggvorbisfuncs[] =
 void SNDOGG_Shutdown( bool verbose ) {
 #ifdef VORBISLIB_RUNTIME
 	if( vorbisLibrary ) {
-		trap_UnloadLibrary( &vorbisLibrary );
+		Com_UnloadLibrary( &vorbisLibrary );
 	}
 #endif
 }
@@ -86,7 +87,7 @@ bool SNDOGG_Init( bool verbose ) {
 		SNDOGG_Shutdown( verbose );
 	}
 
-	vorbisLibrary = trap_LoadLibrary( LIBVORBISFILE_LIBNAME, oggvorbisfuncs );
+	vorbisLibrary = Com_LoadSysLibrary( LIBVORBISFILE_LIBNAME, oggvorbisfuncs );
 	if( !vorbisLibrary ) {
 		if( verbose ) {
 			Com_Printf( "Couldn't load %s\n", LIBVORBISFILE_LIBNAME );
@@ -135,16 +136,16 @@ static void decoder_ogg_stream_shutdown( snd_stream_t *stream ) {
 static size_t ovcb_read( void *ptr, size_t size, size_t nb, void *datasource ) {
 	intptr_t filenum = (intptr_t) datasource;
 
-	return trap_FS_Read( ptr, size * nb, (int) filenum ) / size;
+	return FS_Read( ptr, size * nb, (int) filenum ) / size;
 }
 
 static int ovcb_seek( void *datasource, ogg_int64_t offset, int whence ) {
 	intptr_t filenum = (intptr_t) datasource;
 
 	switch( whence ) {
-		case SEEK_SET: return trap_FS_Seek( (int) filenum, (int) offset, FS_SEEK_SET );
-		case SEEK_CUR: return trap_FS_Seek( (int) filenum, (int) offset, FS_SEEK_CUR );
-		case SEEK_END: return trap_FS_Seek( (int) filenum, (int) offset, FS_SEEK_END );
+		case SEEK_SET: return FS_Seek( (int) filenum, (int) offset, FS_SEEK_SET );
+		case SEEK_CUR: return FS_Seek( (int) filenum, (int) offset, FS_SEEK_CUR );
+		case SEEK_END: return FS_Seek( (int) filenum, (int) offset, FS_SEEK_END );
 	}
 
 	return 0;
@@ -153,14 +154,14 @@ static int ovcb_seek( void *datasource, ogg_int64_t offset, int whence ) {
 static int ovcb_close( void *datasource ) {
 	intptr_t filenum = (intptr_t) datasource;
 
-	trap_FS_FCloseFile( (int) filenum );
+	FS_FCloseFile( (int) filenum );
 	return 0;
 }
 
 static long ovcb_tell( void *datasource ) {
 	intptr_t filenum = (intptr_t) datasource;
 
-	return trap_FS_Tell( (int) filenum );
+	return FS_Tell( (int) filenum );
 }
 
 /**
@@ -202,19 +203,19 @@ void *decoder_ogg_load( const char *filename, snd_info_t *info ) {
 	char *buffer;
 	ov_callbacks callbacks = { ovcb_read, ovcb_seek, ovcb_close, ovcb_tell };
 
-	trap_FS_FOpenFile( filename, &filenum, FS_READ | FS_NOSIZE );
+	FS_FOpenFile( filename, &filenum, FS_READ | FS_NOSIZE );
 	if( !filenum ) {
 		return NULL;
 	}
 
-	if( trap_FS_IsUrl( filename ) ) {
+	if( FS_IsUrl( filename ) ) {
 		callbacks.seek_func = NULL;
 		callbacks.tell_func = NULL;
 	}
 
 	if( qov_open_callbacks( (void *) (intptr_t) filenum, &vorbisfile, NULL, 0, callbacks ) < 0 ) {
 		Com_Printf( "Could not open %s for reading\n", filename );
-		trap_FS_FCloseFile( filenum );
+		FS_FCloseFile( filenum );
 		qov_clear( &vorbisfile );
 		return NULL;
 	}
@@ -272,13 +273,13 @@ snd_stream_t *decoder_ogg_open( const char *filename, bool *delay ) {
 		return NULL;
 	}
 
-	stream->isUrl = trap_FS_IsUrl( filename );
+	stream->isUrl = FS_IsUrl( filename );
 	stream->ptr = S_Malloc( sizeof( snd_ogg_stream_t ) );
 
 	ogg_stream = (snd_ogg_stream_t *)stream->ptr;
 	ogg_stream->vorbisfile = NULL;
 
-	trap_FS_FOpenFile( filename, &ogg_stream->filenum, FS_READ | FS_NOSIZE );
+	FS_FOpenFile( filename, &ogg_stream->filenum, FS_READ | FS_NOSIZE );
 	if( !ogg_stream->filenum ) {
 		decoder_ogg_stream_shutdown( stream );
 		return NULL;
@@ -315,7 +316,7 @@ bool decoder_ogg_cont_open( snd_stream_t *stream ) {
 
 	if( qov_open_callbacks( (void *) (intptr_t) ogg_stream->filenum, ogg_stream->vorbisfile, NULL, 0, callbacks ) < 0 ) {
 		Com_Printf( "Couldn't open .ogg file for reading\n" );
-		trap_FS_FCloseFile( ogg_stream->filenum );
+		FS_FCloseFile( ogg_stream->filenum );
 		return false;
 	}
 
@@ -369,7 +370,7 @@ void decoder_ogg_close( snd_stream_t *stream ) {
 		qov_clear( ogg_stream->vorbisfile ); // Does FS_FCloseFile
 		S_Free( ogg_stream->vorbisfile );
 	} else if( ogg_stream->filenum ) {
-		trap_FS_FCloseFile( ogg_stream->filenum );
+		FS_FCloseFile( ogg_stream->filenum );
 	}
 	ogg_stream->vorbisfile = NULL;
 	ogg_stream->filenum = 0;
@@ -388,27 +389,27 @@ bool decoder_ogg_reset( snd_stream_t *stream ) {
 	// can't use ov_pcm_seek on .ogv files because of
 	// https://trac.xiph.org/ticket/1486
 	// so just seek to the beginning of the file
-	return trap_FS_Seek( ogg_stream->filenum, 0, FS_SEEK_SET ) == 0 ? true : false;
+	return FS_Seek( ogg_stream->filenum, 0, FS_SEEK_SET ) == 0 ? true : false;
 }
 
 bool decoder_ogg_eof( snd_stream_t *stream ) {
 	snd_ogg_stream_t *ogg_stream = (snd_ogg_stream_t *)stream->ptr;
 
-	return trap_FS_Eof( ogg_stream->filenum );
+	return FS_Eof( ogg_stream->filenum );
 }
 
 int decoder_ogg_tell( snd_stream_t *stream ) {
 	snd_ogg_stream_t *ogg_stream = (snd_ogg_stream_t *)stream->ptr;
-	return trap_FS_Tell( ogg_stream->filenum );
+	return FS_Tell( ogg_stream->filenum );
 }
 
 int decoder_ogg_seek( snd_stream_t *stream, int offset, int whence ) {
 	snd_ogg_stream_t *ogg_stream = (snd_ogg_stream_t *)stream->ptr;
 
 	switch( whence ) {
-		case SEEK_SET: return trap_FS_Seek( ogg_stream->filenum, offset, FS_SEEK_SET );
-		case SEEK_CUR: return trap_FS_Seek( ogg_stream->filenum, offset, FS_SEEK_CUR );
-		case SEEK_END: return trap_FS_Seek( ogg_stream->filenum, offset, FS_SEEK_END );
+		case SEEK_SET: return FS_Seek( ogg_stream->filenum, offset, FS_SEEK_SET );
+		case SEEK_CUR: return FS_Seek( ogg_stream->filenum, offset, FS_SEEK_CUR );
+		case SEEK_END: return FS_Seek( ogg_stream->filenum, offset, FS_SEEK_END );
 	}
 
 	return -1;

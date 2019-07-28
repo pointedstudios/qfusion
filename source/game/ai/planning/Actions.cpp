@@ -3,62 +3,28 @@
 #include "../ai_ground_trace_cache.h"
 #include "../combat/TacticalSpotsRegistry.h"
 
-typedef WorldState::SatisfyOp SatisfyOp;
+BotActionRecord::BotActionRecord( PoolBase *pool_, Bot *self_, const char *name_ )
+	: AiActionRecord( pool_, self_, name_ ) {}
 
-// These methods really belong to the bot logic, not the generic AI ones
+BotAction::BotAction( BotPlanningModule *module_, const char *name_ )
+	: AiAction( module_->bot, name_ ), module( module_ ) {}
 
-const short *WorldState::GetSniperRangeTacticalSpot() {
-	return self->ai->botRef->tacticalSpotsCache.GetSniperRangeTacticalSpot( BotOriginData(), EnemyOriginData() );
+void BotActionRecord::Activate() {
+	AiActionRecord::Activate();
+	Self()->GetMiscTactics().Clear();
 }
 
-const short *WorldState::GetFarRangeTacticalSpot() {
-	return self->ai->botRef->tacticalSpotsCache.GetFarRangeTacticalSpot( BotOriginData(), EnemyOriginData() );
+void BotActionRecord::Deactivate() {
+	AiActionRecord::Deactivate();
+	Self()->GetMiscTactics().Clear();
 }
 
-const short *WorldState::GetMiddleRangeTacticalSpot() {
-	return self->ai->botRef->tacticalSpotsCache.GetMiddleRangeTacticalSpot( BotOriginData(), EnemyOriginData() );
-}
-
-const short *WorldState::GetCloseRangeTacticalSpot() {
-	return self->ai->botRef->tacticalSpotsCache.GetCloseRangeTacticalSpot( BotOriginData(), EnemyOriginData() );
-}
-
-const short *WorldState::GetCoverSpot() {
-	return self->ai->botRef->tacticalSpotsCache.GetCoverSpot( BotOriginData(), EnemyOriginData() );
-}
-
-const short *WorldState::GetRunAwayTeleportOrigin() {
-	return self->ai->botRef->tacticalSpotsCache.GetRunAwayTeleportOrigin( BotOriginData(), EnemyOriginData() );
-}
-
-const short *WorldState::GetRunAwayJumppadOrigin() {
-	return self->ai->botRef->tacticalSpotsCache.GetRunAwayJumppadOrigin( BotOriginData(), EnemyOriginData() );
-}
-
-const short *WorldState::GetRunAwayElevatorOrigin() {
-	return self->ai->botRef->tacticalSpotsCache.GetRunAwayElevatorOrigin( BotOriginData(), EnemyOriginData() );
-}
-
-inline const BotWeightConfig &BotBaseAction::WeightConfig() const {
-	return self->ai->botRef->WeightConfig();
-}
-
-void BotBaseActionRecord::Activate() {
-	AiBaseActionRecord::Activate();
-	self->ai->botRef->GetMiscTactics().Clear();
-}
-
-void BotBaseActionRecord::Deactivate() {
-	AiBaseActionRecord::Deactivate();
-	self->ai->botRef->GetMiscTactics().Clear();
-}
-
-bool BotCombatActionRecord::CheckCommonCombatConditions( const WorldState &currWorldState ) const {
+bool CombatActionRecord::CheckCommonCombatConditions( const WorldState &currWorldState ) const {
 	if( currWorldState.EnemyOriginVar().Ignore() ) {
 		Debug( "Enemy is not specified\n" );
 		return false;
 	}
-	if( self->ai->botRef->GetSelectedEnemies().InstanceId() != selectedEnemiesInstanceId ) {
+	if( Self()->GetSelectedEnemies().InstanceId() != selectedEnemiesInstanceId ) {
 		Debug( "New enemies have been selected\n" );
 		return false;
 	}
@@ -70,17 +36,17 @@ BotScriptActionRecord::~BotScriptActionRecord() {
 }
 
 void BotScriptActionRecord::Activate() {
-	BotBaseActionRecord::Activate();
+	BotActionRecord::Activate();
 	GENERIC_asActivateScriptActionRecord( scriptObject );
 }
 
 void BotScriptActionRecord::Deactivate() {
-	BotBaseActionRecord::Deactivate();
+	BotActionRecord::Deactivate();
 	GENERIC_asDeactivateScriptActionRecord( scriptObject );
 }
 
-AiBaseActionRecord::Status BotScriptActionRecord::CheckStatus( const WorldState &currWorldState ) const {
-	return (AiBaseActionRecord::Status)GENERIC_asCheckScriptActionRecordStatus( scriptObject, currWorldState );
+AiActionRecord::Status BotScriptActionRecord::UpdateStatus( const WorldState &currWorldState ) {
+	return (AiActionRecord::Status)GENERIC_asUpdateScriptActionRecordStatus( scriptObject, currWorldState );
 }
 
 PlannerNode *BotScriptAction::TryApply( const WorldState &worldState ) {

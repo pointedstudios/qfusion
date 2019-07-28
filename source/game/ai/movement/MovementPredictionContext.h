@@ -6,7 +6,7 @@ class BaseMovementAction;
 #include "BotInput.h"
 #include "MovementState.h"
 #include "NavMeshQueryCache.h"
-#include "SameFloorClusterAreasCache.h"
+#include "FloorClusterAreasCache.h"
 #include "EnvironmentTraceCache.h"
 
 struct MovementActionRecord {
@@ -70,7 +70,7 @@ class BotMovementModule;
 
 class MovementPredictionContext : public MovementPredictionConstants
 {
-	friend class BotTriggerPendingWeaponJumpMovementAction;
+	friend class FallbackMovementAction;
 
 	Bot *const bot;
 	BotMovementModule *const module;
@@ -96,7 +96,8 @@ public:
 		static inline HitWhileRunningTestResult Failure() { return HitWhileRunningTestResult(); }
 	};
 
-	BotSameFloorClusterAreasCache sameFloorClusterAreasCache;
+	SameFloorClusterAreasCache sameFloorClusterAreasCache;
+	NextFloorClusterAreasCache nextFloorClusterAreasCache;
 	BotNavMeshQueryCache navMeshQueryCache;
 private:
 	struct PredictedMovementAction {
@@ -117,7 +118,9 @@ private:
 	StaticVector<PredictedMovementAction, MAX_PREDICTED_STATES> predictedMovementActions;
 	StaticVector<BotMovementState, MAX_PREDICTED_STATES> botMovementStatesStack;
 	StaticVector<player_state_t, MAX_PREDICTED_STATES> playerStatesStack;
-	StaticVector<signed char, MAX_PREDICTED_STATES> pendingWeaponsStack;
+
+	StaticVector<PredictedMovementAction, MAX_PREDICTED_STATES> goodEnoughPath;
+	int travelTimeForGoodEnoughPath { std::numeric_limits<int>::max() };
 
 	template <typename T, unsigned N>
 	class CachesStack
@@ -177,10 +180,8 @@ private:
 		}
 	};
 
-	CachesStack<Ai::ReachChainVector, MAX_PREDICTED_STATES> reachChainsCachesStack;
 	CachesStack<BotInput, MAX_PREDICTED_STATES> defaultBotInputsCachesStack;
 	CachesStack<HitWhileRunningTestResult, MAX_PREDICTED_STATES> mayHitWhileRunningCachesStack;
-	CachesStack<bool, MAX_PREDICTED_STATES> canSafelyKeepHighSpeedCachesStack;
 	StaticVector<EnvironmentTraceCache, MAX_PREDICTED_STATES> environmentTestResultsStack;
 
 	// We have decided to keep the frametime hardcoded.
@@ -303,14 +304,11 @@ public:
 	inline int NavTargetAasAreaNum() const;
 	inline bool IsInNavTargetArea() const;
 
-	bool CanSafelyKeepHighSpeed();
-
 	inline unsigned DefaultFrameTime() const;
 
-	const Ai::ReachChainVector &NextReachChain();
 	inline EnvironmentTraceCache &TraceCache();
-	inline EnvironmentTraceCache::ObstacleAvoidanceResult TryAvoidFullHeightObstacles( float correctionFraction );
-	inline EnvironmentTraceCache::ObstacleAvoidanceResult TryAvoidJumpableObstacles( float correctionFraction );
+	inline ObstacleAvoidanceResult TryAvoidFullHeightObstacles( float correctionFraction );
+	inline ObstacleAvoidanceResult TryAvoidJumpableObstacles( float correctionFraction );
 
 	// Do not return boolean value, avoid extra branching. Checking results if necessary is enough.
 	void NextReachNumAndTravelTimeToNavTarget( int *reachNum, int *travelTimeToNavTarget );
@@ -350,18 +348,31 @@ public:
 
 	inline void SaveActionOnStack( BaseMovementAction *action );
 
-	void StopTruncatingStackAt( unsigned frameIndex );
-
 	// Frame index is restricted to topOfStack or topOfStack + 1
 	inline void MarkSavepoint( BaseMovementAction *markedBy, unsigned frameIndex );
 
+	inline const char *ActiveActionName() const;
+
 	inline void SetPendingRollback();
 	inline void RollbackToSavepoint();
-	inline void SetPendingWeapon( int weapon );
 	inline void SaveSuggestedActionForNextFrame( BaseMovementAction *action );
 	inline unsigned MillisAheadForFrameStart( unsigned frameIndex ) const;
 
+	void CompleteOrSaveGoodEnoughPath( int minTravelTimeSoFar, unsigned penaltyMillis = 0 );
+
 	class BaseMovementAction *GetCachedActionAndRecordForCurrTime( MovementActionRecord *record_ );
+
+	class BaseMovementAction *TryCheckAndLerpActions( PredictedMovementAction *prevAction,
+													  PredictedMovementAction *nextAction,
+													  MovementActionRecord *record_ );
+
+	class BaseMovementAction *LerpActionRecords( PredictedMovementAction *prevAction,
+		                                         PredictedMovementAction *nextAction,
+		                                         MovementActionRecord *record_ );
+
+	bool CheckPredictedOrigin( PredictedMovementAction *prevAction, PredictedMovementAction *nextAction, float frac );
+	bool CheckPredictedVelocity( PredictedMovementAction *prevAction, PredictedMovementAction *nextAction, float frac );
+	bool CheckPredictedAngles( PredictedMovementAction *prevAction, PredictedMovementAction *nextAction, float frac );
 
 	void SetDefaultBotInput();
 

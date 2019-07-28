@@ -520,10 +520,10 @@ void UI_Main::gamepadStickCursorMove( int frameTimeMsec ) {
 
 	float sx = sticks[0] * ( ( float )( fabsf( sticks[0] ) > threshold ) );
 	sx += sticks[2] * ( ( float )( fabsf( sticks[2] ) > threshold ) );
-	clamp( sx, -1.0f, 1.0f );
+	Q_clamp( sx, -1.0f, 1.0f );
 	float sy = sticks[1] * ( ( float )( fabsf( sticks[1] ) > threshold ) );
 	sy += sticks[3] * ( ( float )( fabsf( sticks[3] ) > threshold ) );
-	clamp( sy, -1.0f, 1.0f );
+	Q_clamp( sy, -1.0f, 1.0f );
 
 	static float x, y;
 	if( !sx && !sy ) {

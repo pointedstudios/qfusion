@@ -20,9 +20,9 @@
 // client.h -- primary header for client
 
 #include "../qcommon/qcommon.h"
-#include "../ref_gl/r_public.h"
+#include "../cgame/ref.h"
 #include "../cgame/cg_public.h"
-#include "../ftlib/ftlib_public.h"
+#include "../ftlib/ftlib.h"
 #include "../matchmaker/mm_rating.h"
 #include "snd_public.h"
 #include "../qcommon/steam.h"
@@ -32,6 +32,16 @@
 #include "keys.h"
 #include "console.h"
 #include "l10n.h"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdlib>
+#include <functional>
+#include <limits>
+#include <memory>
+#include <new>
+#include <utility>
 
 typedef struct shader_s shader_t;
 typedef struct qfontface_s qfontface_t;
@@ -48,6 +58,8 @@ typedef struct {
 	int counts[100];
 } cl_timedemo_t;
 
+struct cin_yuv_s;
+
 typedef struct {
 	void *h;
 	int width, height;
@@ -61,7 +73,7 @@ typedef struct {
 	int64_t pauseTime;
 	uint8_t *pic;
 	int aspect_numerator, aspect_denominator;
-	ref_yuv_t *cyuv;
+	cin_yuv_s *cyuv;
 	float framerate;
 } cl_cintematics_t;
 
@@ -69,7 +81,7 @@ typedef struct {
 // the client_state_t structure is wiped completely at every
 // server map change
 //
-typedef struct {
+typedef struct client_state_s {
 	int timeoutcount;
 
 	cl_timedemo_t timedemo;
@@ -87,7 +99,6 @@ typedef struct {
 	uint8_t *frames_areabits;
 
 	cmodel_state_t *cms;
-	cmodel_state_t *sound_cms;      // a separated collison model instance for sound if it needs thread safety
 
 	// the client maintains its own idea of view angles, which are
 	// sent to the server each frame.  It is cleared to 0 upon entering each level.
@@ -294,10 +305,6 @@ typedef struct {
 
 	purelist_t *purelist;
 
-	mm_uuid_t mm_session;
-	mm_uuid_t mm_ticket;
-	clientRating_t *ratings;
-
 	char session[MAX_INFO_VALUE];
 
 	void *wakelock;
@@ -359,7 +366,7 @@ void CL_Init( void );
 void CL_Quit( void );
 
 void CL_UpdateClientCommandsToServer( msg_t *msg );
-void CL_AddReliableCommand( /*const*/ char *cmd );
+void CL_AddReliableCommand( const char *cmd );
 void CL_Netchan_Transmit( msg_t *msg );
 void CL_SendMessagesToServer( bool sendNow );
 void CL_RestartTimeDeltas( int newTimeDelta );
@@ -423,18 +430,13 @@ bool CL_GameModule_IsTouchDown( int id );
 //
 void CL_SoundModule_Init( bool verbose );
 void CL_SoundModule_Shutdown( bool verbose );
-void CL_SoundModule_BeginRegistration( void );
-void CL_SoundModule_EndRegistration( void );
 void CL_SoundModule_StopAllSounds( bool clear, bool stopMusic );
-void CL_SoundModule_Clear( void );
 void CL_SoundModule_SetEntitySpatilization( int entNum, vec3_t origin, vec3_t velocity );
-void CL_SoundModule_Update( const vec3_t origin, const vec3_t velocity, const mat3_t axis, const char *identity, bool avidump );
-void CL_SoundModule_Activate( bool activate );
 struct sfx_s *CL_SoundModule_RegisterSound( const char *sample );
 void CL_SoundModule_StartFixedSound( struct sfx_s *sfx, const vec3_t origin, int channel, float fvol, float attenuation );
 void CL_SoundModule_StartRelativeSound( struct sfx_s *sfx, int entnum, int channel, float fvol, float attenuation );
 void CL_SoundModule_StartGlobalSound( struct sfx_s *sfx, int channel, float fvol );
-void CL_SoundModule_StartLocalSoundByName( const char *s );
+void CL_SoundModule_StartLocalSoundByName( const char *s, float fvol );
 void CL_SoundModule_StartLocalSound( struct sfx_s *sfx, float fvol );
 void CL_SoundModule_AddLoopSound( struct sfx_s *sfx, int entnum, float fvol, float attenuation );
 void CL_SoundModule_RawSamples( unsigned int samples, unsigned int rate,
@@ -447,14 +449,6 @@ unsigned int CL_SoundModule_GetPositionedRawSamplesLength( int entnum );
 void CL_SoundModule_StartBackgroundTrack( const char *intro, const char *loop, int mode );
 void CL_SoundModule_StopBackgroundTrack( void );
 void CL_SoundModule_LockBackgroundTrack( bool lock );
-void CL_SoundModule_BeginAviDemo( void );
-void CL_SoundModule_StopAviDemo( void );
-
-void CL_Mumble_Init( void );
-void CL_Mumble_Link( void );
-void CL_Mumble_Unlink( void );
-void CL_Mumble_Update( const vec3_t origin, const mat3_t axis, const char *identity );
-void CL_Mumble_Shutdown( void );
 
 //
 // cl_ui.c
@@ -578,16 +572,16 @@ qfontface_t *SCR_RegisterFont( const char *family, int style, unsigned int size 
 qfontface_t *SCR_RegisterSpecialFont( const char *family, int style, unsigned int size );
 size_t SCR_FontSize( qfontface_t *font );
 size_t SCR_FontHeight( qfontface_t *font );
-size_t SCR_strWidth( const char *str, qfontface_t *font, size_t maxlen, int flags );
-size_t SCR_StrlenForWidth( const char *str, qfontface_t *font, size_t maxwidth, int flags );
+size_t SCR_strWidth( const char *str, qfontface_t *font, size_t maxlen, int flags = 0 );
+size_t SCR_StrlenForWidth( const char *str, qfontface_t *font, size_t maxwidth, int flags = 0 );
 int SCR_FontUnderline( qfontface_t *font, int *thickness );
 size_t SCR_FontAdvance( qfontface_t *font );
 size_t SCR_FontXHeight( qfontface_t *font );
 fdrawchar_t SCR_SetDrawCharIntercept( fdrawchar_t intercept );
-int SCR_DrawString( int x, int y, int align, const char *str, qfontface_t *font, vec4_t color, int flags );
-size_t SCR_DrawStringWidth( int x, int y, int align, const char *str, size_t maxwidth, qfontface_t *font, vec4_t color, int flags );
-void SCR_DrawClampString( int x, int y, const char *str, int xmin, int ymin, int xmax, int ymax, qfontface_t *font, vec4_t color, int flags );
-int SCR_DrawMultilineString( int x, int y, const char *str, int halign, int maxwidth, int maxlines, qfontface_t *font, vec4_t color, int flags );
+int SCR_DrawString( int x, int y, int align, const char *str, qfontface_t *font, vec4_t color, int flags = 0 );
+size_t SCR_DrawStringWidth( int x, int y, int align, const char *str, size_t maxwidth, qfontface_t *font, vec4_t color, int flags = 0 );
+void SCR_DrawClampString( int x, int y, const char *str, int xmin, int ymin, int xmax, int ymax, qfontface_t *font, vec4_t color, int flags = 0 );
+int SCR_DrawMultilineString( int x, int y, const char *str, int halign, int maxwidth, int maxlines, qfontface_t *font, vec4_t color, int flags = 0 );
 void SCR_DrawRawChar( int x, int y, wchar_t num, qfontface_t *font, vec4_t color );
 void SCR_DrawClampChar( int x, int y, wchar_t num, int xmin, int ymin, int xmax, int ymax, qfontface_t *font, vec4_t color );
 void SCR_DrawFillRect( int x, int y, int w, int h, vec4_t color );
@@ -602,30 +596,6 @@ void CL_AddNetgraph( void );
 
 extern float scr_con_current;
 extern float scr_conlines;       // lines of console to display
-
-extern ref_export_t re;     // interface to refresh .dll
-
-//
-// cl_mm.c
-//
-//extern cvar_t *cl_mmserver;
-
-void CL_MM_Init( void );
-void CL_MM_Shutdown( bool logout );
-void CL_MM_Frame( void );
-bool CL_MM_CanConnect( void );
-bool CL_MM_WaitForLogin( void );
-
-bool CL_MM_Initialized( void );
-bool CL_MM_Connect( const netadr_t *address );
-
-// exported to UI
-bool CL_MM_Login( const char *user, const char *password );
-bool CL_MM_Logout( bool force );
-int CL_MM_GetLoginState( void );
-size_t CL_MM_GetLastErrorMessage( char *buffer, size_t buffer_size );
-size_t CL_MM_GetProfileURL( char *buffer, size_t buffer_size, bool rml );
-size_t CL_MM_GetBaseWebURL( char *buffer, size_t buffer_size );
 
 //
 // sys import

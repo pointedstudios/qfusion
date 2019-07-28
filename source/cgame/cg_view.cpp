@@ -19,6 +19,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "cg_local.h"
+#include "../client/client.h"
+#include "../ref_gl/r_frontend.h"
 
 // cg_view.c -- player rendering positioning
 
@@ -77,7 +79,7 @@ bool CG_ChaseStep( int step ) {
 	}
 	
 	if( !cgs.demoPlaying ) {
-		trap_Cmd_ExecuteText( EXEC_NOW, step > 0 ? "chasenext" : "chaseprev" );
+		Cbuf_ExecuteText( EXEC_NOW, step > 0 ? "chasenext" : "chaseprev" );
 		return true;
 	}
 
@@ -88,7 +90,7 @@ bool CG_ChaseStep( int step ) {
 * CG_AddLocalSounds
 */
 static void CG_AddLocalSounds( void ) {
-	static bool postmatchsound_set = false, demostream = false, background = false;
+	static bool postmatchsilence_set = false, demostream = false, background = false;
 	static unsigned lastSecond = 0;
 
 	// add local announces
@@ -110,7 +112,7 @@ static void CG_AddLocalSounds( void ) {
 
 			if( remainingSeconds != lastSecond ) {
 				if( 1 + remainingSeconds < 4 ) {
-					struct sfx_s *sound = trap_S_RegisterSound( va( S_ANNOUNCER_COUNTDOWN_COUNT_1_to_3_SET_1_to_2, 1 + remainingSeconds, 1 ) );
+					struct sfx_s *sound = SoundSystem::Instance()->RegisterSound( va( S_ANNOUNCER_COUNTDOWN_COUNT_1_to_3_SET_1_to_2, 1 + remainingSeconds, 1 ) );
 					CG_AddAnnouncerEvent( sound, false );
 				}
 
@@ -124,30 +126,25 @@ static void CG_AddLocalSounds( void ) {
 	// add sounds from announcer
 	CG_ReleaseAnnouncerEvents();
 
-	// if in postmatch, play postmatch song
+	// Stop background music in postmatch state
 	if( GS_MatchState() >= MATCH_STATE_POSTMATCH ) {
-		if( !postmatchsound_set && !demostream ) {
-			CG_ShowQuickMenu( 1 );
-
-			trap_S_StartBackgroundTrack( S_PLAYLIST_POSTMATCH, NULL, 3 ); // loop random track from the playlist
-			postmatchsound_set = true;
+		if( !postmatchsilence_set && !demostream ) {
+			SoundSystem::Instance()->StopBackgroundTrack();
+			postmatchsilence_set = true;
 			background = false;
 		}
 	} else {
 		if( cgs.demoPlaying && cgs.demoAudioStream && !demostream ) {
-			trap_S_StartBackgroundTrack( cgs.demoAudioStream, NULL, 0 );
+			SoundSystem::Instance()->StartBackgroundTrack( cgs.demoAudioStream, NULL, 0 );
 			demostream = true;
 		}
 
-		if( postmatchsound_set ) {
-			CG_ShowQuickMenu( 0 );
-
-			trap_S_StopBackgroundTrack();
-			postmatchsound_set = false;
+		if( postmatchsilence_set ) {
+			postmatchsilence_set = false;
 			background = false;
 		}
 
-		if( ( !postmatchsound_set && !demostream ) && !background ) {
+		if( ( !postmatchsilence_set && !demostream ) && !background ) {
 			CG_StartBackgroundTrack();
 			background = true;
 		}
@@ -193,7 +190,7 @@ static void CG_FlashGameWindow( void ) {
 	}
 
 	if( flash ) {
-		trap_VID_FlashWindow( cg_flashWindowCount->integer );
+		VID_FlashWindow( cg_flashWindowCount->integer );
 	}
 }
 
@@ -233,7 +230,7 @@ void CG_AddKickAngles( vec3_t viewangles ) {
 		uptime = ( (float)cg.kickangles[i].kicktime ) * 0.5f;
 		delta = 1.0f - ( fabs( time - uptime ) / uptime );
 
-		//CG_Printf("Kick Delta:%f\n", delta );
+		//Com_Printf("Kick Delta:%f\n", delta );
 		if( delta > 1.0f ) {
 			delta = 1.0f;
 		}
@@ -396,11 +393,11 @@ void CG_StartKickAnglesEffect( vec3_t source, float knockback, float radius, int
 
 		side = DotProduct( v, right );
 		cg.kickangles[kicknum].v_roll = kick * side * 0.3;
-		clamp( cg.kickangles[kicknum].v_roll, -20, 20 );
+		Q_clamp( cg.kickangles[kicknum].v_roll, -20, 20 );
 
 		side = -DotProduct( v, forward );
 		cg.kickangles[kicknum].v_pitch = kick * side * 0.3;
-		clamp( cg.kickangles[kicknum].v_pitch, -20, 20 );
+		Q_clamp( cg.kickangles[kicknum].v_pitch, -20, 20 );
 
 		cg.kickangles[kicknum].timestamp = cg.time;
 		ftime = (float)time * delta;
@@ -492,12 +489,12 @@ void CG_StartColorBlendEffect( float r, float g, float b, float a, int time ) {
 */
 void CG_AddEntityToScene( entity_t *ent ) {
 	if( ent->model && ( !ent->boneposes || !ent->oldboneposes ) ) {
-		if( trap_R_SkeletalGetNumBones( ent->model, NULL ) ) {
+		if( R_SkeletalGetNumBones( ent->model, NULL ) ) {
 			CG_SetBoneposesForTemporaryEntity( ent );
 		}
 	}
 
-	trap_R_AddEntityToScene( ent );
+	RF_AddEntityToScene( ent );
 }
 
 //============================================================================
@@ -574,7 +571,8 @@ static int CG_RenderFlags( void ) {
 		rdflags |= RDF_FLIPPED;
 	}
 
-	if( GS_MatchState() >= MATCH_STATE_POSTMATCH ) {
+	// Blur screen during the postmatch with the single exception (race uses some match state hacks IIRC)
+	if( !GS_RaceGametype() && GS_MatchState() >= MATCH_STATE_POSTMATCH ) {
 		rdflags |= RDF_BLURRED;
 	}
 
@@ -661,8 +659,8 @@ static void CG_ThirdPersonOffsetView( cg_viewdef_t *view ) {
 	vec3_t maxs = { 4, 4, 4 };
 
 	if( !cg_thirdPersonAngle || !cg_thirdPersonRange ) {
-		cg_thirdPersonAngle = trap_Cvar_Get( "cg_thirdPersonAngle", "0", CVAR_ARCHIVE );
-		cg_thirdPersonRange = trap_Cvar_Get( "cg_thirdPersonRange", "70", CVAR_ARCHIVE );
+		cg_thirdPersonAngle = Cvar_Get( "cg_thirdPersonAngle", "0", CVAR_ARCHIVE );
+		cg_thirdPersonRange = Cvar_Get( "cg_thirdPersonRange", "70", CVAR_ARCHIVE );
 	}
 
 	// calc exact destination
@@ -744,7 +742,7 @@ bool CG_SwitchChaseCamMode( void ) {
 			if( realSpec ) {
 				if( ++chaseCam.mode >= CAM_MODES ) {
 					// if exceeds the cycle, start free fly
-					trap_Cmd_ExecuteText( EXEC_NOW, "camswitch" );
+					Cbuf_ExecuteText( EXEC_NOW, "camswitch" );
 					chaseCam.mode = 0;
 				}
 				return true;
@@ -757,7 +755,7 @@ bool CG_SwitchChaseCamMode( void ) {
 	}
 
 	if( realSpec && ( CG_DemoCam_IsFree() || cg.frame.playerState.pmove.pm_type == PM_SPECTATOR ) ) {
-		trap_Cmd_ExecuteText( EXEC_NOW, "camswitch" );
+		Cbuf_ExecuteText( EXEC_NOW, "camswitch" );
 		return true;
 	}
 
@@ -779,7 +777,7 @@ static void CG_UpdateChaseCam( void ) {
 		const int delay = 250;
 
 		usercmd_t cmd;
-		trap_NET_GetUserCmd( trap_NET_GetCurrentUserCmdNum() - 1, &cmd );
+		NET_GetUserCmd( NET_GetCurrentUserCmdNum() - 1, &cmd );
 
 		if( cmd.buttons & BUTTON_ATTACK ) {
 			if( CG_SwitchChaseCamMode() ) {
@@ -851,7 +849,7 @@ static void CG_SetupViewDef( cg_viewdef_t *view, int type ) {
 	} else if( view->type == VIEWDEF_CAMERA ) {
 		CG_DemoCam_GetViewDef( view );
 	} else {
-		module_Error( "CG_SetupView: Invalid view type %i\n", view->type );
+		Com_Error( ERR_DROP, "CG_SetupView: Invalid view type %i\n", view->type );
 	}
 
 	//
@@ -989,10 +987,10 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 
 			if( cg.time >= cg.frame.serverTime ) {
 				cg.xerpSmoothFrac = (double)( cg.time - cg.frame.serverTime ) / (double)( cgs.extrapolationTime );
-				clamp( cg.xerpSmoothFrac, 0.0f, 1.0f );
+				Q_clamp( cg.xerpSmoothFrac, 0.0f, 1.0f );
 			} else {
 				cg.xerpSmoothFrac = (double)( cg.frame.serverTime - cg.time ) / (double)( cgs.extrapolationTime );
-				clamp( cg.xerpSmoothFrac, -1.0f, 0.0f );
+				Q_clamp( cg.xerpSmoothFrac, -1.0f, 0.0f );
 				cg.xerpSmoothFrac = 1.0f - cg.xerpSmoothFrac;
 			}
 
@@ -1008,20 +1006,21 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 
 	if( cg_showClamp->integer ) {
 		if( cg.lerpfrac > 1.0f ) {
-			CG_Printf( "high clamp %f\n", cg.lerpfrac );
+			Com_Printf( "high clamp %f\n", cg.lerpfrac );
 		} else if( cg.lerpfrac < 0.0f ) {
-			CG_Printf( "low clamp  %f\n", cg.lerpfrac );
+			Com_Printf( "low clamp  %f\n", cg.lerpfrac );
 		}
 	}
 
-	clamp( cg.lerpfrac, 0.0f, 1.0f );
+	Q_clamp( cg.lerpfrac, 0.0f, 1.0f );
 
+	const bool dumpAudio = CL_WriteAvi() && cls.demo.avi_audio;
 	if( !cgs.configStrings[CS_WORLDMODEL][0] ) {
 		CG_AddLocalSounds();
 
-		trap_R_DrawStretchPic( 0, 0, cgs.vidWidth, cgs.vidHeight, 0, 0, 1, 1, colorBlack, cgs.shaderWhite );
+		RF_DrawStretchPic( 0, 0, cgs.vidWidth, cgs.vidHeight, 0, 0, 1, 1, colorBlack, cgs.shaderWhite );
 
-		trap_S_Update( vec3_origin, vec3_origin, axis_identity, cgs.clientInfo[cgs.playerNum].name );
+		SoundSystem::Instance()->Update( vec3_origin, vec3_origin, axis_identity, dumpAudio );
 
 		return;
 	}
@@ -1030,7 +1029,7 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 	if( !cgs.demoPlaying ) {
 		if( ISREALSPECTATOR() && !cg.firstFrame ) {
 			if( !cgs.gameMenuRequested ) {
-				trap_Cmd_ExecuteText( EXEC_NOW, "gamemenu\n" );
+				Cbuf_ExecuteText( EXEC_NOW, "gamemenu\n" );
 			}
 			cgs.gameMenuRequested = true;
 		}
@@ -1042,18 +1041,18 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 
 	if( cg_fov->modified ) {
 		if( cg_fov->value < MIN_FOV ) {
-			trap_Cvar_ForceSet( cg_fov->name, STR_TOSTR( MIN_FOV ) );
+			Cvar_ForceSet( cg_fov->name, STR_TOSTR( MIN_FOV ) );
 		} else if( cg_fov->value > MAX_FOV ) {
-			trap_Cvar_ForceSet( cg_fov->name, STR_TOSTR( MAX_FOV ) );
+			Cvar_ForceSet( cg_fov->name, STR_TOSTR( MAX_FOV ) );
 		}
 		cg_fov->modified = false;
 	}
 
 	if( cg_zoomfov->modified ) {
 		if( cg_zoomfov->value < MIN_ZOOMFOV ) {
-			trap_Cvar_ForceSet( cg_zoomfov->name, STR_TOSTR( MIN_ZOOMFOV ) );
+			Cvar_ForceSet( cg_zoomfov->name, STR_TOSTR( MIN_ZOOMFOV ) );
 		} else if( cg_zoomfov->value > MAX_ZOOMFOV ) {
-			trap_Cvar_ForceSet( cg_zoomfov->name, STR_TOSTR( MAX_ZOOMFOV ) );
+			Cvar_ForceSet( cg_zoomfov->name, STR_TOSTR( MAX_ZOOMFOV ) );
 		}
 		cg_zoomfov->modified = false;
 	}
@@ -1069,7 +1068,7 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 
 	CG_ClearFragmentedDecals();
 
-	trap_R_ClearScene();
+	RF_ClearScene();
 
 	if( CG_DemoCam_Update() ) {
 		CG_SetupViewDef( &cg.view, CG_DemoCam_GetViewType() );
@@ -1087,7 +1086,6 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 	CG_AddViewWeapon( &cg.weapon );
 	CG_AddLocalEntities();
 	CG_AddParticles();
-	CG_AddDlights();
 	CG_AddShadeBoxes();
 	CG_AddDecals();
 	CG_AddPolys();
@@ -1112,14 +1110,19 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 		rd->fov_y *= v;
 	}
 
+	if( cg.quickmenu_timeout_at && cg.quickmenu_timeout_at < cg.time ) {
+		cg.quickmenu_timeout_at = 0;
+		CG_ShowQuickMenu( 0 );
+	}
+
 	CG_AddLocalSounds();
 	CG_SetSceneTeamColors(); // update the team colors in the renderer
 
-	trap_R_RenderScene( &cg.view.refdef );
+	RF_RenderScene( &cg.view.refdef );
 
 	cg.oldAreabits = true;
 
-	trap_S_Update( cg.view.origin, cg.view.velocity, cg.view.axis, cgs.clientInfo[cgs.playerNum].name );
+	SoundSystem::Instance()->Update( cg.view.origin, cg.view.velocity, cg.view.axis, dumpAudio );
 
 	CG_Draw2D();
 

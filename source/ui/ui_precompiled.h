@@ -6,14 +6,6 @@
 #include "../gameshared/q_dynvar.h"
 #include "../gameshared/gs_ref.h"
 
-// few fixes regarding Quake and std compatibility
-#ifdef min
-	#undef min
-#endif
-#ifdef max
-	#undef max
-#endif
-
 // STD
 #include <string>
 #include <new>

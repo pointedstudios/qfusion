@@ -1,6 +1,7 @@
 #include "TacticalSpotsRegistry.h"
 #include "../ai_precomputed_file_handler.h"
 #include "../bot.h"
+#include "../../../qalgo/Links.h"
 
 typedef TacticalSpotsRegistry::SpotsQueryVector SpotsQueryVector;
 
@@ -36,7 +37,7 @@ class TacticalSpotsBuilder {
 	int spotsCapacity { 0 };
 
 	uint8_t *spotVisibilityTable { nullptr };
-	uint16_t *spotTravelTimeTable { nullptr };
+	uint16_t *spotsAndAreasTravelTimeTable { nullptr };
 
 	TacticalSpotsRegistry::SpotsGridBuilder gridBuilder;
 
@@ -74,7 +75,7 @@ class TacticalSpotsBuilder {
 
 	void PickTacticalSpots();
 	void ComputeMutualSpotsVisibility();
-	void ComputeMutualSpotsReachability();
+	void ComputeTravelTimeTable();
 public:
 	explicit TacticalSpotsBuilder( TacticalSpotsRegistry *registry ): gridBuilder( registry ) {}
 
@@ -101,6 +102,14 @@ bool TacticalSpotsRegistry::Load( const char *mapname ) {
 
 constexpr const uint32_t PRECOMPUTED_DATA_VERSION = 0x1337A001;
 
+static void *SpotsAlloc( size_t size ) {
+	return G_Malloc( size );
+}
+
+static void SpotsFree( void *p ) {
+	G_Free( p );
+}
+
 static const char *MakePrecomputedFilePath( char *buffer, size_t bufferSize, const char *mapName ) {
 	Q_snprintfz( buffer, bufferSize, "ai/%s.spots", mapName );
 	return buffer;
@@ -112,7 +121,8 @@ bool TacticalSpotsRegistry::TryLoadPrecomputedData( const char *mapName ) {
 
 	constexpr const char *function = "TacticalSpotsRegistry::TryLoadPrecomputedData()";
 
-	AiPrecomputedFileReader reader( "PrecomputedFileReader@TacticalSpotsRegistry", PRECOMPUTED_DATA_VERSION );
+	AiPrecomputedFileReader reader( "PrecomputedFileReader@TacticalSpotsRegistry",
+									PRECOMPUTED_DATA_VERSION, SpotsAlloc, SpotsFree );
 
 	uint32_t dataLength;
 	uint8_t *data;
@@ -137,9 +147,11 @@ bool TacticalSpotsRegistry::TryLoadPrecomputedData( const char *mapName ) {
 		return false;
 	}
 
-	spotTravelTimeTable = (uint16_t *)data;
-	if( dataLength / sizeof( uint16_t ) != numSpots * numSpots ) {
-		G_Printf( S_COLOR_RED "%s: Travel time table size does not match the number of spots\n", function );
+	const int numAasAreas = AiAasWorld::Instance()->NumAreas();
+
+	spotsAndAreasTravelTimeTable = (uint16_t *)data;
+	if( ( dataLength / sizeof( uint16_t ) ) != 2 * numSpots * numAasAreas ) {
+		G_Printf( S_COLOR_RED "%s: Travel time table size does not match the number of spots and areas\n", function );
 		return false;
 	}
 
@@ -155,7 +167,6 @@ bool TacticalSpotsRegistry::TryLoadPrecomputedData( const char *mapName ) {
 	}
 
 	// Byte swap and validate tactical spots
-	const int numAasAreas = AiAasWorld::Instance()->NumAreas();
 	for( unsigned i = 0; i < numSpots; ++i ) {
 		auto &spot = spots[i];
 		spot.aasAreaNum = LittleLong( spot.aasAreaNum );
@@ -172,8 +183,8 @@ bool TacticalSpotsRegistry::TryLoadPrecomputedData( const char *mapName ) {
 	}
 
 	// Byte swap and travel times
-	for( unsigned i = 0; i < numSpots; ++i ) {
-		spotTravelTimeTable[i] = LittleShort( spotTravelTimeTable[i] );
+	for( unsigned i = 0; i < numSpots * numAasAreas; ++i ) {
+		spotsAndAreasTravelTimeTable[i] = LittleShort( spotsAndAreasTravelTimeTable[i] );
 	}
 
 	// Spot visibility does not need neither byte swap nor validation being just an unsigned byte
@@ -250,7 +261,8 @@ void TacticalSpotsRegistry::SavePrecomputedData( const char *mapName ) {
 	char fileName[MAX_QPATH];
 	MakePrecomputedFilePath( fileName, sizeof( fileName ), mapName );
 
-	AiPrecomputedFileWriter writer( "PrecomputedFileWriter@TacticalSpotsRegistry", PRECOMPUTED_DATA_VERSION );
+	AiPrecomputedFileWriter writer( "PrecomputedFileWriter@TacticalSpotsRegistry",
+									PRECOMPUTED_DATA_VERSION, SpotsAlloc, SpotsFree );
 	if( !writer.BeginWriting( fileName ) ) {
 		return;
 	}
@@ -273,22 +285,25 @@ void TacticalSpotsRegistry::SavePrecomputedData( const char *mapName ) {
 	}
 
 	// Prevent using byte-swapped spots
-	G_LevelFree( spots );
+	G_Free( spots );
 	spots = nullptr;
 
-	// Byte swap travel times
-	static_assert( sizeof( *spotTravelTimeTable ) == 2, "LittleShort() is not applicable" );
-	for( unsigned i = 0, end = numSpots * numSpots; i < end; ++i )
-		spotTravelTimeTable[i] = LittleShort( spotTravelTimeTable[i] );
+	const int numAreas = AiAasWorld::Instance()->NumAreas();
 
-	dataLength = numSpots * numSpots * sizeof( *spotTravelTimeTable );
-	if( !writer.WriteLengthAndData( (const uint8_t *)spotTravelTimeTable, dataLength ) ) {
+	// Byte swap travel times
+	static_assert( sizeof( *spotsAndAreasTravelTimeTable ) == 2, "LittleShort() is not applicable" );
+	for( unsigned i = 0, end = 2 * numSpots * numAreas; i < end; ++i ) {
+		spotsAndAreasTravelTimeTable[i] = LittleShort( spotsAndAreasTravelTimeTable[i] );
+	}
+
+	dataLength = 2 * numSpots * numAreas * sizeof( *spotsAndAreasTravelTimeTable );
+	if( !writer.WriteLengthAndData( (const uint8_t *)spotsAndAreasTravelTimeTable, dataLength ) ) {
 		return;
 	}
 
 	// Prevent using byte-swapped travel times table
-	G_LevelFree( spotTravelTimeTable );
-	spotTravelTimeTable = nullptr;
+	G_Free( spotsAndAreasTravelTimeTable );
+	spotsAndAreasTravelTimeTable = nullptr;
 
 	static_assert( sizeof( *spotVisibilityTable ) == 1, "Byte swapping is required" );
 	dataLength = numSpots * numSpots * sizeof( *spotVisibilityTable );
@@ -297,7 +312,7 @@ void TacticalSpotsRegistry::SavePrecomputedData( const char *mapName ) {
 	}
 
 	// Release the data for conformance with the rest of the saved data
-	G_LevelFree( spotVisibilityTable );
+	G_Free( spotVisibilityTable );
 	spotVisibilityTable = nullptr;
 
 	spotsGrid.Save( writer );
@@ -326,7 +341,7 @@ void TacticalSpotsRegistry::PrecomputedSpotsGrid::Save( AiPrecomputedFileWriter 
 	}
 
 	// Prevent using byte-swapped grid list offsets
-	G_LevelFree( gridListOffsets );
+	G_Free( gridListOffsets );
 	gridListOffsets = nullptr;
 
 	dataLength = sizeof( uint16_t ) * ( NumGridCells() + numSpots );
@@ -335,7 +350,7 @@ void TacticalSpotsRegistry::PrecomputedSpotsGrid::Save( AiPrecomputedFileWriter 
 	}
 
 	// Prevent using byte-swapped grid spots lists
-	G_LevelFree( gridSpotsLists );
+	G_Free( gridSpotsLists );
 	gridSpotsLists = nullptr;
 }
 
@@ -359,13 +374,13 @@ TacticalSpotsRegistry::~TacticalSpotsRegistry() {
 
 	numSpots = 0;
 	if( spots ) {
-		G_LevelFree( spots );
+		G_Free( spots );
 	}
 	if( spotVisibilityTable ) {
-		G_LevelFree( spotVisibilityTable );
+		G_Free( spotVisibilityTable );
 	}
-	if( spotTravelTimeTable ) {
-		G_LevelFree( spotTravelTimeTable );
+	if( spotsAndAreasTravelTimeTable ) {
+		G_Free( spotsAndAreasTravelTimeTable );
 	}
 }
 
@@ -373,7 +388,7 @@ void TacticalSpotsBuilder::ComputeMutualSpotsVisibility() {
 	G_Printf( "Computing mutual tactical spots visibility (it might take a while)...\n" );
 
 	unsigned uNumSpots = (unsigned)numSpots;
-	spotVisibilityTable = (unsigned char *)G_LevelMalloc( uNumSpots * uNumSpots );
+	spotVisibilityTable = (unsigned char *)G_Malloc( uNumSpots * uNumSpots );
 
 	float *mins = vec3_origin;
 	float *maxs = vec3_origin;
@@ -444,51 +459,54 @@ void TacticalSpotsBuilder::ComputeMutualSpotsVisibility() {
 	}
 }
 
-void TacticalSpotsBuilder::ComputeMutualSpotsReachability() {
-	G_Printf( "Computing mutual tactical spots reachability (it might take a while)...\n" );
+void TacticalSpotsBuilder::ComputeTravelTimeTable() {
+	G_Printf( "Computing mutual travel time between spots and areas (it might take a while)...\n" );
 
-	unsigned uNumSpots = (unsigned)numSpots;
-	spotTravelTimeTable = (unsigned short *)G_LevelMalloc( sizeof( unsigned short ) * uNumSpots * uNumSpots );
-	const int flags = Bot::ALLOWED_TRAVEL_FLAGS;
-	AiAasRouteCache *routeCache = AiAasRouteCache::Shared();
-	// Note: spots reachabilities are not reversible
-	// (for spots two A and B reachabilies A->B and B->A might differ, including being invalid, non-existent)
-	// Thus we have to find a reachability for each possible pair of spots
-	for( unsigned i = 0; i < uNumSpots; ++i ) {
-		const int currAreaNum = spots[i].aasAreaNum;
-		for( unsigned j = 0; j < i; ++j ) {
-			const int testedAreaNum = spots[j].aasAreaNum;
-			const int travelTime = routeCache->TravelTimeToGoalArea( currAreaNum, testedAreaNum, flags );
-			// AAS uses short for travel time computation. If one changes it, this assertion might be triggered.
-			assert( travelTime <= std::numeric_limits<unsigned short>::max() );
-			spotTravelTimeTable[i * numSpots + j] = (unsigned short)travelTime;
+	const auto *const aasWorld = AiAasWorld::Instance();
+	const auto *const aasAreaSettings = aasWorld->AreaSettings();
+	const auto *const routeCache = AiAasRouteCache::Shared();
+	const int numAreas = aasWorld->NumAreas();
+	const int travelFlags = Bot::ALLOWED_TRAVEL_FLAGS;
+	constexpr int maxVal = std::numeric_limits<uint16_t>::max();
+	constexpr auto badAreaFlags = AREA_DISABLED;
+	constexpr auto badAreaContents = AREACONTENTS_LAVA | AREACONTENTS_SLIME | AREACONTENTS_DONOTENTER;
+
+	spotsAndAreasTravelTimeTable = (uint16_t *)G_Malloc( 2 *  sizeof( uint16_t ) * numSpots * numAreas );
+
+	int rowOffset = 0;
+	for( int areaNum = 0; areaNum < numAreas; ++areaNum ) {
+		// Filter out bad areas (this covers the dummy zero area too)
+		const auto &areaSettings = aasAreaSettings[areaNum];
+		if( ( areaSettings.areaflags & badAreaFlags ) || ( areaSettings.contents & badAreaContents ) ) {
+			std::fill_n( spotsAndAreasTravelTimeTable + rowOffset, 2 * numSpots, 0 );
+			rowOffset += 2 * numSpots;
+			continue;
 		}
-		// Set the lowest feasible travel time value for traveling from the curr spot to the curr spot itself.
-		spotTravelTimeTable[i * numSpots + i] = 1;
-		for( unsigned j = i + 1; j < uNumSpots; ++j ) {
-			const int testedAreaNum = spots[j].aasAreaNum;
-			const int travelTime = routeCache->TravelTimeToGoalArea( currAreaNum, testedAreaNum, flags );
-			assert( travelTime <= std::numeric_limits<unsigned short>::max() );
-			spotTravelTimeTable[i * numSpots + j] = (unsigned short)travelTime;
+		for( int spotNum = 0; spotNum < numSpots; ++spotNum ) {
+			const int spotAreaNum = spots[spotNum].aasAreaNum;
+			int spotToAreaTime = routeCache->TravelTimeToGoalArea( spotAreaNum, areaNum, travelFlags );
+			int areaToSpotTime = routeCache->TravelTimeToGoalArea( areaNum, spotAreaNum, travelFlags );
+			spotsAndAreasTravelTimeTable[rowOffset++] = (uint16_t)std::min( spotToAreaTime, maxVal );
+			spotsAndAreasTravelTimeTable[rowOffset++] = (uint16_t)std::min( areaToSpotTime, maxVal );
 		}
 	}
 }
 
 TacticalSpotsBuilder::~TacticalSpotsBuilder() {
 	if( candidateAreas ) {
-		G_LevelFree( candidateAreas );
+		G_Free( candidateAreas );
 	}
 	if ( candidatePoints ) {
-		G_LevelFree( candidatePoints );
+		G_Free( candidatePoints );
 	}
 	if( spots ) {
-		G_LevelFree( spots );
+		G_Free( spots );
 	}
 	if( spotVisibilityTable ) {
-		G_LevelFree( spotVisibilityTable );
+		G_Free( spotVisibilityTable );
 	}
-	if( spotTravelTimeTable ) {
-		G_LevelFree( spotTravelTimeTable );
+	if( spotsAndAreasTravelTimeTable ) {
+		G_Free( spotsAndAreasTravelTimeTable );
 	}
 }
 
@@ -499,7 +517,7 @@ bool TacticalSpotsBuilder::Build() {
 
 	PickTacticalSpots();
 	ComputeMutualSpotsVisibility();
-	ComputeMutualSpotsReachability();
+	ComputeTravelTimeTable();
 	return true;
 }
 
@@ -862,10 +880,10 @@ T *TacticalSpotsBuilder::AllocItem( T **items, int *numItems, int *itemsCapacity
 	} else {
 		*itemsCapacity = ( 3 * ( *itemsCapacity ) ) / 2;
 	}
-	T *newData = (T *)G_LevelMalloc( sizeof( T ) * ( *itemsCapacity ) );
+	T *newData = (T *)G_Malloc( sizeof( T ) * ( *itemsCapacity ) );
 	if( *items ) {
 		memcpy( newData, *items, sizeof( T ) * ( *numItems ) );
-		G_LevelFree( *items );
+		G_Free( *items );
 	}
 	*items = newData;
 	return ( *items ) + ( *numItems )++;
@@ -883,8 +901,8 @@ void TacticalSpotsBuilder::CopyTo( TacticalSpotsRegistry *registry ) {
 	registry->spotVisibilityTable = this->spotVisibilityTable;
 	this->spotVisibilityTable = nullptr;
 
-	registry->spotTravelTimeTable = this->spotTravelTimeTable;
-	this->spotTravelTimeTable = nullptr;
+	registry->spotsAndAreasTravelTimeTable = this->spotsAndAreasTravelTimeTable;
+	this->spotsAndAreasTravelTimeTable = nullptr;
 
 	registry->needsSavingPrecomputedData = true;
 }
@@ -919,8 +937,8 @@ void TacticalSpotsRegistry::BaseSpotsGrid::SetupGridParams() {
 	}
 }
 
-const SpotsQueryVector &TacticalSpotsRegistry::BaseSpotsGrid::FindSpotsInRadius( const OriginParams &originParams,
-																				 uint16_t *insideSpotNum ) const {
+SpotsQueryVector &TacticalSpotsRegistry::BaseSpotsGrid::FindSpotsInRadius( const OriginParams &originParams,
+																		   uint16_t *insideSpotNum ) const {
 
 	vec3_t boxMins, boxMaxs;
 	VectorCopy( originParams.origin, boxMins );
@@ -935,8 +953,8 @@ const SpotsQueryVector &TacticalSpotsRegistry::BaseSpotsGrid::FindSpotsInRadius(
 	unsigned maxCellDimIndex[3];
 	for( int i = 0; i < 3; ++i ) {
 		// Clamp box bounds by world bounds
-		clamp( boxMins[i], worldMins[i], worldMaxs[i] );
-		clamp( boxMaxs[i], worldMins[i], worldMaxs[i] );
+		Q_clamp( boxMins[i], worldMins[i], worldMaxs[i] );
+		Q_clamp( boxMaxs[i], worldMins[i], worldMaxs[i] );
 
 		// Convert box bounds to relative
 		boxMins[i] -= worldMins[i];
@@ -994,15 +1012,15 @@ const SpotsQueryVector &TacticalSpotsRegistry::BaseSpotsGrid::FindSpotsInRadius(
 
 TacticalSpotsRegistry::PrecomputedSpotsGrid::~PrecomputedSpotsGrid() {
 	if( gridListOffsets ) {
-		G_LevelFree( gridListOffsets );
+		G_Free( gridListOffsets );
 	}
 	if( gridSpotsLists ) {
-		G_LevelFree( gridSpotsLists );
+		G_Free( gridSpotsLists );
 	}
 }
 
-const SpotsQueryVector &TacticalSpotsRegistry::PrecomputedSpotsGrid::FindSpotsInRadius( const OriginParams &originParams,
-																						uint16_t *insideSpotNum ) const {
+SpotsQueryVector &TacticalSpotsRegistry::PrecomputedSpotsGrid::FindSpotsInRadius( const OriginParams &originParams,
+																				  uint16_t *insideSpotNum ) const {
 	if( !IsLoaded() ) {
 		AI_FailWith( "PrecomputedSpotsGrid::FindSpotsInRadius()", "The grid has not been loaded\n" );
 	}
@@ -1026,7 +1044,7 @@ TacticalSpotsRegistry::SpotsGridBuilder::SpotsGridBuilder( TacticalSpotsRegistry
 	: BaseSpotsGrid( parent_ ) {
 	SetupGridParams();
 
-	gridSpotsArrays = ( GridSpotsArray ** )( G_LevelMalloc( NumGridCells() * sizeof( GridSpotsArray * ) ) );
+	gridSpotsArrays = ( GridSpotsArray ** )( G_Malloc( NumGridCells() * sizeof( GridSpotsArray * ) ) );
 }
 
 TacticalSpotsRegistry::SpotsGridBuilder::~SpotsGridBuilder() {
@@ -1034,10 +1052,10 @@ TacticalSpotsRegistry::SpotsGridBuilder::~SpotsGridBuilder() {
 		for( unsigned i = 0, end = NumGridCells(); i < end; ++i ) {
 			if( gridSpotsArrays[i] ) {
 				gridSpotsArrays[i]->~GridSpotsArray();
-				G_LevelFree( gridSpotsArrays[i] );
+				G_Free( gridSpotsArrays[i] );
 			}
 		}
-		G_LevelFree( gridSpotsArrays );
+		G_Free( gridSpotsArrays );
 	}
 }
 
@@ -1064,7 +1082,7 @@ void TacticalSpotsRegistry::SpotsGridBuilder::AddSpotToGridList( unsigned gridCe
 		return;
 	}
 
-	array = new( G_LevelMalloc( sizeof( GridSpotsArray ) ) )GridSpotsArray;
+	array = new( G_Malloc( sizeof( GridSpotsArray ) ) )GridSpotsArray;
 	array->AddSpot( spotNum );
 	gridSpotsArrays[gridCellNum] = array;
 }
@@ -1075,10 +1093,10 @@ void TacticalSpotsRegistry::SpotsGridBuilder::GridSpotsArray::AddSpot( uint16_t 
 		return;
 	}
 
-	uint16_t *newData = (uint16_t *)G_LevelMalloc( sizeof( uint16_t ) * ( this->capacity + 16 ) );
+	uint16_t *newData = (uint16_t *)G_Malloc( sizeof( uint16_t ) * ( this->capacity + 16 ) );
 	memcpy( newData, this->data, sizeof( uint16_t ) * this->size );
 	if( this->data != internalBuffer ) {
-		G_LevelFree( this->data );
+		G_Free( this->data );
 	}
 
 	if( this->capacity > MAX_SPOTS_PER_QUERY ) {
@@ -1104,18 +1122,18 @@ void TacticalSpotsRegistry::SpotsGridBuilder::CopyTo( PrecomputedSpotsGrid *prec
 	// Should not really happen if it is used as intended,
 	// but calling CopyTo() with an initialized grid as an argument is legal
 	if( precomputedGrid->gridListOffsets ) {
-		G_LevelFree( precomputedGrid->gridListOffsets );
+		G_Free( precomputedGrid->gridListOffsets );
 	}
 	if( precomputedGrid->gridSpotsLists ) {
-		G_LevelFree( precomputedGrid->gridSpotsLists );
+		G_Free( precomputedGrid->gridSpotsLists );
 	}
 
 	precomputedGrid->numSpots = this->numSpots;
 	precomputedGrid->spots = this->spots;
 
 	unsigned totalNumCells = NumGridCells();
-	precomputedGrid->gridListOffsets = (uint32_t *)G_LevelMalloc( sizeof( uint32_t ) * totalNumCells );
-	precomputedGrid->gridSpotsLists = (uint16_t *)G_LevelMalloc( sizeof( uint16_t ) * ( totalNumCells + numSpots ) );
+	precomputedGrid->gridListOffsets = (uint32_t *)G_Malloc( sizeof( uint32_t ) * totalNumCells );
+	precomputedGrid->gridSpotsLists = (uint16_t *)G_Malloc( sizeof( uint16_t ) * ( totalNumCells + numSpots ) );
 
 	uint16_t *listPtr = precomputedGrid->gridSpotsLists;
 	// For each cell of all possible cells
@@ -1141,48 +1159,7 @@ void TacticalSpotsRegistry::SpotsGridBuilder::CopyTo( PrecomputedSpotsGrid *prec
 	}
 }
 
-typedef TacticalSpotsRegistry::SpotsAndScoreVector SpotsAndScoreVector;
-
-SpotsAndScoreVector &TacticalSpotsRegistry::TemporariesAllocator::GetNextCleanSpotsAndScoreVector() {
-	if( freeHead ) {
-		auto &result = freeHead->data;
-		auto *nextFree = freeHead->next;
-		freeHead->next = usedHead;
-		usedHead = freeHead;
-		freeHead = nextFree;
-		result.clear();
-		return result;
-	}
-
-	auto *newEntry = new( G_Malloc( sizeof( SpotsAndScoreCacheEntry ) ) )SpotsAndScoreCacheEntry;
-	newEntry->next = usedHead;
-	usedHead = newEntry;
-	return usedHead->data;
-}
-
-void TacticalSpotsRegistry::TemporariesAllocator::Release() {
-	// Copy from used to free list... todo... figure out how to do it in a single step
-	for( auto *entry = usedHead; entry; entry = entry->next ) {
-		entry->next = freeHead;
-		freeHead = entry;
-	}
-
-	usedHead = nullptr;
-	// TODO: do a cleanup of spots query vector/excluded spots mask?
-}
-
 TacticalSpotsRegistry::TemporariesAllocator::~TemporariesAllocator() {
-	if( usedHead ) {
-		AI_FailWith( "TacticalSpotsRegistry::TemporariesAllocator::~()", "A user has not released resources" );
-	}
-
-	SpotsAndScoreCacheEntry *nextEntry;
-	for( auto *entry = usedHead; entry; entry = nextEntry ) {
-		nextEntry = entry->next;
-		entry->~SpotsAndScoreCacheEntry();
-		G_Free( entry );
-	}
-
 	query->~StaticVector();
 	G_Free( query );
 	G_Free( excludedSpotsMask );

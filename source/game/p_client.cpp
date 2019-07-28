@@ -643,11 +643,7 @@ void G_ClientRespawn( edict_t *self, bool ghost ) {
 	GClip_LinkEntity( self );
 
 	// let the gametypes perform their changes
-	if( game.asEngine != NULL ) {
-		GT_asCallPlayerRespawn( self, old_team, self->s.team );
-	} else {
-		G_Gametype_GENERIC_ClientRespawn( self, old_team, self->s.team );
-	}
+	GT_asCallPlayerRespawn( self, old_team, self->s.team );
 
 	AI_Respawn( self );
 }
@@ -1101,7 +1097,7 @@ void ClientUserinfoChanged( edict_t *ent, char *userinfo ) {
 	// set name, it's validated and possibly changed first
 	Q_strncpyz( oldname, cl->netname, sizeof( oldname ) );
 	G_SetName( ent, Info_ValueForKey( userinfo, "name" ) );
-	if( oldname[0] && Q_stricmp( oldname, cl->netname ) && !CheckFlood( ent, false ) ) {
+	if( oldname[0] && Q_stricmp( oldname, cl->netname ) && !ChatHandlersChain::Instance()->DetectFlood( ent, false ) ) {
 		G_PrintMsg( NULL, "%s%s is now known as %s%s\n", oldname, S_COLOR_WHITE, cl->netname, S_COLOR_WHITE );
 	}
 	if( !Info_SetValueForKey( userinfo, "name", cl->netname ) ) {
@@ -1205,6 +1201,8 @@ void ClientUserinfoChanged( edict_t *ent, char *userinfo ) {
 	G_UpdateMMPlayerInfoString( PLAYERNUM( ent ) );
 
 	G_Gametype_ScoreEvent( cl, "userinfochanged", oldname );
+	
+	ChatHandlersChain::Instance()->OnUserInfoChanged( ent );
 }
 
 
@@ -1312,11 +1310,8 @@ void ClientDisconnect( edict_t *ent, const char *reason ) {
 		return;
 	}
 
-	// always report in RACE mode
-	if( GS_RaceGametype()
-		|| ( ent->r.client->team != TEAM_SPECTATOR && ( GS_MatchState() == MATCH_STATE_PLAYTIME || GS_MatchState() == MATCH_STATE_POSTMATCH ) ) ) {
-		G_AddPlayerReport( ent, GS_MatchState() == MATCH_STATE_POSTMATCH );
-	}
+	StatsowFacade::Instance()->OnClientDisconnected( ent );
+	ChatHandlersChain::Instance()->ResetForClient( ENTNUM( ent ) - 1 );
 
 	for( team = TEAM_PLAYERS; team < GS_MAX_TEAMS; team++ )
 		G_Teams_UnInvitePlayer( team, ent );
@@ -1476,7 +1471,7 @@ void ClientThink( edict_t *ent, usercmd_t *ucmd, int timeDelta ) {
 		// add smoothing to timeDelta between the last few ucmds and a small fine-tuning nudge.
 		nudge = fixedNudge + g_antilag_timenudge->integer;
 		timeDelta += nudge;
-		clamp( timeDelta, -g_antilag_maxtimedelta->integer, 0 );
+		Q_clamp( timeDelta, -g_antilag_maxtimedelta->integer, 0 );
 
 		// smooth using last valid deltas
 		i = client->timeDeltasHead - 6;
@@ -1505,7 +1500,7 @@ void ClientThink( edict_t *ent, usercmd_t *ucmd, int timeDelta ) {
 #endif
 	}
 
-	clamp( client->timeDelta, -g_antilag_maxtimedelta->integer, 0 );
+	Q_clamp( client->timeDelta, -g_antilag_maxtimedelta->integer, 0 );
 
 	// update activity if he touched any controls
 	if( ucmd->forwardmove != 0 || ucmd->sidemove != 0 || ucmd->upmove != 0 || ( ucmd->buttons & ~BUTTON_BUSYICON ) != 0
@@ -1543,6 +1538,11 @@ void ClientThink( edict_t *ent, usercmd_t *ucmd, int timeDelta ) {
 	memset( &pm, 0, sizeof( pmove_t ) );
 	pm.playerState = &client->ps;
 	pm.cmd = *ucmd;
+
+	// A grand hack to disable occasional ladder usage for bots/AI beings without intrusive changes to bot code
+	if( ent->ai ) {
+		pm.skipLadders = true;
+	}
 
 	// perform a pmove
 	Pmove( &pm );
@@ -1627,6 +1627,7 @@ void ClientThink( edict_t *ent, usercmd_t *ucmd, int timeDelta ) {
 	//
 	if( client->ps.pmove.pm_type == PM_NORMAL ) {
 		client->level.stats.had_playtime = true;
+		StatsowFacade::Instance()->OnClientHadPlaytime( client );
 	}
 
 	// generating plrkeys (optimized for net communication)
@@ -1653,13 +1654,13 @@ void G_ClientThink( edict_t *ent ) {
 		if( ent->s.team >= TEAM_PLAYERS && ent->s.team < GS_MAX_TEAMS ) {
 			if( ent->r.client->ps.inventory[POWERUP_SHELL] > 0 ) {
 				ent->r.client->resp.instashieldCharge -= ( game.frametime * 0.001f ) * 60.0f;
-				clamp( ent->r.client->resp.instashieldCharge, 0, INSTA_SHIELD_MAX );
+				Q_clamp( ent->r.client->resp.instashieldCharge, 0, INSTA_SHIELD_MAX );
 				if( ent->r.client->resp.instashieldCharge == 0 ) {
 					ent->r.client->ps.inventory[POWERUP_SHELL] = 0;
 				}
 			} else {
 				ent->r.client->resp.instashieldCharge += ( game.frametime * 0.001f ) * 20.0f;
-				clamp( ent->r.client->resp.instashieldCharge, 0, INSTA_SHIELD_MAX );
+				Q_clamp( ent->r.client->resp.instashieldCharge, 0, INSTA_SHIELD_MAX );
 			}
 		}
 	}

@@ -8,9 +8,14 @@ void WalkCarefullyAction::PlanPredictionStep( Context *context ) {
 	// Ramp/stairs areas and areas not in floor clusters are exceptions
 	// (these kinds of areas are still troublesome for bot movement).
 	BaseMovementAction *suggestedAction = &DefaultBunnyAction();
-	if( bot->ForceCombatKindOfMovement() ) {
+	auto *const combatMovementAction = &module->combatDodgeSemiRandomlyToTargetAction;
+	auto *const savedCombatNextAction = combatMovementAction->allowFailureUsingThatAsNextAction;
+	if( bot->ShouldSkinBunnyInFavorOfCombatMovement() ) {
 		// Do not try bunnying first and start from this combat action directly
-		suggestedAction = &module->combatDodgeSemiRandomlyToTargetAction;
+		if( !combatMovementAction->IsDisabledForPlanning() ) {
+			combatMovementAction->allowFailureUsingThatAsNextAction = &DefaultBunnyAction();
+			suggestedAction = combatMovementAction;
+		}
 	} else if( bot->Skill() < 0.33f ) {
 		const auto *aasWorld = AiAasWorld::Instance();
 		const int currGroundedAreaNum = context->CurrGroundedAasAreaNum();
@@ -81,6 +86,7 @@ void WalkCarefullyAction::PlanPredictionStep( Context *context ) {
 		if( entityPhysicsState.waterType & hazardContentsMask ) {
 			Debug( "Cannot apply action: the bot is already in hazard contents\n" );
 			SwitchOrRollback( context, suggestedAction );
+			return;
 		}
 	} else {
 		// Prevent touching a water if not bot is not already walking in it
@@ -175,7 +181,6 @@ void WalkCarefullyAction::PlanPredictionStep( Context *context ) {
 	}
 
 	if( !( hazardSidesNum + gapSidesNum ) ) {
-		context->cannotApplyAction = true;
 		context->actionSuggestedByAction = suggestedAction;
 		Debug( "Cannot apply action: there are just two walls from both sides, no gap or hazard\n" );
 		// If this block condition held a frame ago, save predicted results
@@ -190,6 +195,11 @@ void WalkCarefullyAction::PlanPredictionStep( Context *context ) {
 	if( hazardSidesNum ) {
 		context->record->botInput.SetWalkButton( true );
 	}
+
+	// If the suggested action was unused, restore its next action
+	if( suggestedAction == combatMovementAction ) {
+		combatMovementAction->allowFailureUsingThatAsNextAction = savedCombatNextAction;
+	}
 }
 
 void WalkCarefullyAction::CheckPredictionStepResults( Context *context ) {
@@ -198,9 +208,16 @@ void WalkCarefullyAction::CheckPredictionStepResults( Context *context ) {
 		return;
 	}
 
-	if( context->cannotApplyAction && context->shouldRollback ) {
-		Debug( "A prediction step has lead to rolling back, the action will be disabled for planning\n" );
+	if( context->shouldRollback ) {
 		this->isDisabledForPlanning = true;
+		return;
+	}
+
+	if( context->cannotApplyAction ) {
+		// Reset this flag to avoid triggering an assertion.
+		// SwitchOrStop() is primarily called in PlanPredictionStep() that's why the assertion itself should be kept
+		context->cannotApplyAction = false;
+		SwitchOrStop( context, &DefaultBunnyAction() );
 		return;
 	}
 

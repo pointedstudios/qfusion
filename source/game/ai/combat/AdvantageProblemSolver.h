@@ -44,9 +44,11 @@ public:
 private:
 	const ProblemParams &problemParams;
 
-	SpotsAndScoreVector &CheckOriginVisibility( SpotsAndScoreVector &candidateSpots, int maxSpots );
+	SpotsAndScoreVector &CheckOriginVisibility( SpotsAndScoreVector &candidateSpots );
 
-	void SortByVisAndOtherFactors( SpotsAndScoreVector &spots );
+	SpotsAndScoreVector &ApplyVisAndOtherFactors( SpotsAndScoreVector &spots );
+
+	SpotsQueryVector &FilterByVisTables( SpotsQueryVector &spotsFromQuery );
 
 	SpotsAndScoreVector &SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) override;
 public:

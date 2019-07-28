@@ -322,7 +322,7 @@ void UiFacade::MouseMove( int context, int frameTime, int dx, int dy ) {
 			scaledDelta = Q_sign( deltas[i] );
 		}
 		mouseXY[i] += scaledDelta;
-		clamp( mouseXY[i], 0, bounds[i] );
+		Q_clamp( mouseXY[i], 0, bounds[i] );
 	}
 
 	messagePipe.MouseMove( context, GetInputModifiers() );

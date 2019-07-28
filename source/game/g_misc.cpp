@@ -84,7 +84,7 @@ void ThrowClientHead( edict_t *self, int damage ) {
 	self->flags |= FL_NO_KNOCKBACK;
 
 	self->movetype = MOVETYPE_BOUNCE;
-	VelocityForDamage( max( damage, 50 ), vd );
+	VelocityForDamage( std::max( damage, 50 ), vd );
 	VectorAdd( self->velocity, vd, self->velocity );
 
 	G_AddEvent( self, EV_GIB, 0, false );
@@ -386,7 +386,7 @@ void SP_func_wall( edict_t *self ) {
 //QUAKED func_static (0 .5 .8) ?
 //Static non-solid bspmodel. Can be used for conditional walls and models.
 //-------- KEYS --------
-//model2 : path/name of model to include (eg: models/mapobjects/bitch/fembotbig.md3).
+//model2 : path/name of model to include
 //origin : alternate method of setting XYZ origin of .md3 model included with entity (See Notes).
 //light : constantLight radius of .md3 model included with entity. Has no effect on the entity's brushes (default 0).
 //color : constantLight color of .md3 model included with entity. Has no effect on the entity's brushes (default 1 1 1).
@@ -628,8 +628,8 @@ static void func_explosive_spawn( edict_t *self, edict_t *other, edict_t *activa
 void SP_func_explosive( edict_t *self ) {
 	G_InitMover( self );
 
-	self->projectileInfo.maxDamage = max( self->dmg, 1 );
-	self->projectileInfo.minDamage = min( self->dmg, 1 );
+	self->projectileInfo.maxDamage = std::max( self->dmg, 1 );
+	self->projectileInfo.minDamage = std::min( self->dmg, 1 );
 	self->projectileInfo.maxKnockback = self->projectileInfo.maxDamage;
 	self->projectileInfo.minKnockback = self->projectileInfo.minDamage;
 	self->projectileInfo.stun = self->projectileInfo.maxDamage * 100;
@@ -956,7 +956,7 @@ void SP_misc_particles( edict_t *ent ) {
 
 	if( st.radius > 0 ) {
 		ent->particlesInfo.spread = st.radius;
-		clamp( ent->particlesInfo.spread, 0, 255 );
+		Q_clamp( ent->particlesInfo.spread, 0, 255 );
 	}
 
 	ent->think = SP_misc_particles_finish;

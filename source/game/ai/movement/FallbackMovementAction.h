@@ -3,10 +3,9 @@
 
 #include "BaseMovementAction.h"
 
-class MovementFallback;
+class MovementScript;
 
-class FallbackMovementAction : public BaseMovementAction
-{
+class FallbackMovementAction : public BaseMovementAction {
 	struct ClosestTriggerProblemParams {
 	private:
 		vec3_t origin;
@@ -37,40 +36,39 @@ class FallbackMovementAction : public BaseMovementAction
 
 	void SetupNavTargetAreaMovement( MovementPredictionContext *context );
 	void SetupLostNavTargetMovement( MovementPredictionContext *context );
-	MovementFallback *TryFindMovementFallback( MovementPredictionContext *context );
-	MovementFallback *TryFindAasBasedFallback( MovementPredictionContext *context );
+	MovementScript *TryFindMovementFallback( MovementPredictionContext *context );
+	MovementScript *TryFindAasBasedFallback( MovementPredictionContext *context );
 
-	MovementFallback *TryFindWalkReachFallback( MovementPredictionContext *context,
+	MovementScript *TryFindWalkReachFallback( MovementPredictionContext *context,
 												   const aas_reachability_t &nextReach );
 
-	MovementFallback *TryFindWalkOffLedgeReachFallback( MovementPredictionContext *context,
+	MovementScript *TryFindWalkOffLedgeReachFallback( MovementPredictionContext *context,
 														   const aas_reachability_t &nextReach );
 
-	MovementFallback *TryFindJumpLikeReachFallback( MovementPredictionContext *context,
+	MovementScript *TryFindJumpLikeReachFallback( MovementPredictionContext *context,
 													   const aas_reachability_t &nextReach );
 
-	MovementFallback *TryFindStairsFallback( MovementPredictionContext *context );
-	bool TrySetupInclinedFloorMovement( MovementPredictionContext *context, int rampAreaNum );
-	MovementFallback *TryFindRampFallback( MovementPredictionContext *context, int rampAreaNum, int forbiddenAreaNum = 0 );
-	MovementFallback *TryFindLostNavTargetFallback( MovementPredictionContext *context );
-	MovementFallback *TryFindNearbyRampAreasFallback( MovementPredictionContext *context );
-	MovementFallback *TryFindWalkableTriggerFallback( MovementPredictionContext *context );
+	MovementScript *TryFindStairsFallback( MovementPredictionContext *context );
+	MovementScript *TryFindRampFallback( MovementPredictionContext *context, int rampAreaNum, int forbiddenAreaNum = 0 );
+	MovementScript *TryFindLostNavTargetFallback( MovementPredictionContext *context );
+	MovementScript *TryFindNearbyRampAreasFallback( MovementPredictionContext *context );
+	MovementScript *TryFindWalkableTriggerFallback( MovementPredictionContext *context );
 
-	MovementFallback *TryFindJumpFromLavaFallback( MovementPredictionContext *context ) {
+	MovementScript *TryFindJumpFromLavaFallback( MovementPredictionContext *context ) {
 		return TryFindJumpToSpotFallback( context, false );
 	}
 
-	MovementFallback *TryFindJumpAdvancingToTargetFallback( MovementPredictionContext *context );
+	MovementScript *TryFindJumpAdvancingToTargetFallback( MovementPredictionContext *context );
 
-	MovementFallback *TryFindJumpToSpotFallback( MovementPredictionContext *context, bool testTravelTime );
+	MovementScript *TryFindJumpToSpotFallback( MovementPredictionContext *context, bool testTravelTime );
 
-	MovementFallback *TryNodeBasedFallbacksLeft( MovementPredictionContext *context );
+	MovementScript *TryNodeBasedFallbacksLeft( MovementPredictionContext *context );
 
-	MovementFallback *TryShortcutOtherFallbackByJumping( MovementPredictionContext *context,
+	MovementScript *TryShortcutOtherFallbackByJumping( MovementPredictionContext *context,
 															const vec3_t initialTarget,
 															int initialTargetAreaNum = 0 );
 
-	MovementFallback *TryShortcutOtherFallbackByJumping( MovementPredictionContext *context,
+	MovementScript *TryShortcutOtherFallbackByJumping( MovementPredictionContext *context,
 															int initialTargetAreaNum );
 public:
 	DECLARE_MOVEMENT_ACTION_CONSTRUCTOR( FallbackMovementAction, COLOR_RGB( 0, 0, 0 ) ) {}

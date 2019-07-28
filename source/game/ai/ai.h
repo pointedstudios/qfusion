@@ -97,7 +97,6 @@ void AI_NavEntityReached( edict_t *ent );
 
 void        AI_Think( edict_t *self );
 void        G_FreeAI( edict_t *ent );
-void        G_SpawnAI( edict_t *ent, float skillLevel = 0.1f );
 ai_type     AI_GetType( const ai_handle_t *ai );
 void        AI_TouchedEntity( edict_t *self, edict_t *ent );
 void        AI_DamagedEntity( edict_t *self, edict_t *ent, int damage );
@@ -106,6 +105,7 @@ void        AI_Knockback( edict_t *self, edict_t *attacker, const vec3_t basedir
 
 void        AI_RegisterEvent( edict_t *ent, int event, int parm );
 
+bool        AI_CanSpawnBots();
 void        AI_SpawnBot( const char *team );
 void        AI_RemoveBot( const char *name );
 void        AI_RemoveBots();

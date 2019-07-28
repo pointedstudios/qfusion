@@ -1,4 +1,6 @@
 #include "GoalEntities.h"
+#include "../static_vector.h"
+#include "../../../qalgo/Links.h"
 
 float NavEntity::CostInfluence() const {
 	// Usually these kinds of nav entities are CTF flags or bomb spots,
@@ -73,6 +75,24 @@ bool NavEntity::IsTopTierItem( const float *overriddenEntityWeights ) const {
 	return false;
 }
 
+bool NavEntity::IsTopTierWeapon() const {
+	const auto *item = ent->item;
+	if( !item ) {
+		return false;
+	}
+
+	if( item->type != IT_WEAPON ) {
+		return false;
+	}
+
+	// Consider all other weapons top-tier ones
+	static_assert( WEAP_NONE < WEAP_GUNBLADE, "" );
+	static_assert( WEAP_GUNBLADE < WEAP_MACHINEGUN, "" );
+	static_assert( WEAP_MACHINEGUN < WEAP_RIOTGUN, "" );
+	static_assert( WEAP_RIOTGUN < WEAP_GRENADELAUNCHER, "" );
+	return item->tag > WEAP_GRENADELAUNCHER;
+}
+
 int64_t NavEntity::SpawnTime() const {
 	if( !ent->r.inuse ) {
 		return 0;
@@ -145,93 +165,102 @@ int64_t NavEntity::Timeout() const {
 	return std::numeric_limits<int64_t>::max();
 }
 
-NavEntitiesRegistry NavEntitiesRegistry::instance;
+static StaticVector<NavEntitiesRegistry, 1> instanceHolder;
+NavEntitiesRegistry *NavEntitiesRegistry::instance = nullptr;
 
 void NavEntitiesRegistry::Init() {
-	unsigned i;
+	assert( !instance );
+	instance = new( instanceHolder.unsafe_grow_back() )NavEntitiesRegistry;
+}
 
-	memset( navEntities, 0, sizeof( navEntities ) );
-	memset( entityToNavEntity, 0, sizeof( entityToNavEntity ) );
-
-	freeNavEntity = navEntities;
-	headnode.id = -1;
-	headnode.ent = game.edicts;
-	headnode.aasAreaNum = 0;
-	headnode.prev = &headnode;
-	headnode.next = &headnode;
-
-	for( i = 0; i < sizeof( navEntities ) / sizeof( navEntities[0] ) - 1; i++ ) {
-		navEntities[i].id = i;
-		navEntities[i].next = &navEntities[i + 1];
+void NavEntitiesRegistry::Shutdown() {
+	if( instance ) {
+		instanceHolder.clear();
+		instance = nullptr;
 	}
-	navEntities[i].id = i;
-	navEntities[i].next = NULL;
+}
 
-	for( int clientEnt = 1; clientEnt <= gs.maxclients; ++clientEnt )
+NavEntitiesRegistry::NavEntitiesRegistry() {
+	const size_t lookupTableSize = sizeof( NavEntity * ) * MAX_EDICTS;
+	const size_t storageSize = STORAGE_STRIDE * MAX_NAVENTS;
+	static_assert( lookupTableSize, "The assumption on alignment of remaining bytes is broken" );
+
+	auto *const mem = (uint8_t *)G_Malloc( storageSize + lookupTableSize );
+	entityToNavEntity = (NavEntity **)mem;
+	navEntsStorage = mem + lookupTableSize;
+
+	memset( entityToNavEntity, 0, lookupTableSize );
+
+	// Always add nav entities for clients
+	// (despite requiring special handling in Update() they are expected to be always present)
+	for( int clientEnt = 1; clientEnt <= gs.maxclients; ++clientEnt ) {
 		AddNavEntity( game.edicts + clientEnt, 0, NavEntityFlags::REACH_ON_EVENT | NavEntityFlags::MOVABLE );
+	}
 }
 
 void NavEntitiesRegistry::Update() {
 	const auto *aasWorld = AiAasWorld::Instance();
-	auto *navEntitiesRegistry = NavEntitiesRegistry::Instance();
-
-	for( auto it = navEntitiesRegistry->begin(), end = navEntitiesRegistry->end(); it != end; ++it ) {
-		NavEntity *navEnt = *it;
+	for( auto *navEnt = activeNavEntsHead; navEnt; navEnt = navEnt->Next() ) {
 		if( ( navEnt->flags & NavEntityFlags::MOVABLE ) != NavEntityFlags::NONE ) {
+			// Isn't it an obvious cheating?
+			// So far only teammates are set as nav targets sometimes among all clients.
+			navEnt->origin.Set( navEnt->ent->s.origin );
 			navEnt->aasAreaNum = aasWorld->FindAreaNum( navEnt->ent->s.origin );
 		}
 	}
 }
 
-NavEntity *NavEntitiesRegistry::AllocNavEntity() {
-	if( !freeNavEntity ) {
-		return nullptr;
+NavEntity::NavEntity( const edict_t *ent_, int aasAreaNum_, NavEntityFlags flags_ )
+	: NavTarget( aasAreaNum_, ent_->s.origin )
+	, ent( ent_ )
+	, entityId( (int)( ent_ - game.edicts ) )
+	, flags( flags_ ) {
+
+	// Try providing sane debug messages
+	const char *const className = ent->classname ? ent->classname : "";
+	int locationTag = G_MapLocationTAGForOrigin( ent->s.origin );
+	if( !locationTag ) {
+		const char *location = trap_GetConfigString( CS_LOCATIONS + locationTag );
+		Q_snprintfz( name, MAX_NAME_LEN, "%s(ent#=%d)@%s", className, ENTNUM( ent ), location );
+		return;
 	}
 
-	NavEntity *navEntity = freeNavEntity;
-	freeNavEntity = navEntity->next;
+	if( ( flags & NavEntityFlags::MOVABLE ) != NavEntityFlags::NONE ) {
+		if( ENTNUM( ent ) <= gs.maxclients ) {
+			Q_snprintfz( name, NavEntity::MAX_NAME_LEN, "%s(ent#=%d)@client", className, ENTNUM( ent ) );
+		} else {
+			Q_snprintfz( name, NavEntity::MAX_NAME_LEN, "%s(ent#=%d)@movable", className, ENTNUM( ent ) );
+		}
+		return;
+	}
 
-	navEntity->prev = &headnode;
-	navEntity->next = headnode.next;
-	navEntity->next->prev = navEntity;
-	navEntity->prev->next = navEntity;
+	auto x = (int)ent->s.origin[0];
+	auto y = (int)ent->s.origin[1];
+	auto z = (int)ent->s.origin[2];
+	Q_snprintfz( name, NavEntity::MAX_NAME_LEN, "%s(ent#=%d)@{%d %d %d}", className, ENTNUM( ent ), x, y, z );
+}
+
+NavEntity *NavEntitiesRegistry::AddNavEntity( edict_t *ent, int aasAreaNum, NavEntityFlags flags ) {
+	assert( ent );
+	const auto num = (int)( ent - game.edicts );
+	assert( !entityToNavEntity[num]);
+
+	void *const mem = navEntsStorage + num * STORAGE_STRIDE;
+	auto *const navEntity = new( mem )NavEntity( ent, aasAreaNum, flags );
+
+	entityToNavEntity[num] = navEntity;
+	::Link( navEntity, &activeNavEntsHead );
 
 	return navEntity;
 }
 
-NavEntity *NavEntitiesRegistry::AddNavEntity( edict_t *ent, int aasAreaNum, NavEntityFlags flags ) {
-	NavEntity *navEntity = AllocNavEntity();
-
-	if( navEntity ) {
-		int entNum = ENTNUM( ent );
-		navEntity->ent = ent;
-		navEntity->id = entNum;
-		navEntity->aasAreaNum = aasAreaNum;
-		navEntity->origin = Vec3( ent->s.origin );
-		navEntity->flags = flags;
-		Q_snprintfz( navEntity->name, NavEntity::MAX_NAME_LEN, "%s(ent#=%d)", ent->classname, entNum );
-		entityToNavEntity[entNum] = navEntity;
-		return navEntity;
-	}
-
-	constexpr const char *format = S_COLOR_RED "Can't allocate a nav. entity for %s @ %.3f %.3f %.3f\n";
-	G_Printf( format, ent->classname, ent->s.origin[0], ent->s.origin[1], ent->s.origin[2] );
-	return nullptr;
-}
-
 void NavEntitiesRegistry::RemoveNavEntity( NavEntity *navEntity ) {
-	edict_t *ent = navEntity->ent;
+	assert( navEntity );
+	const auto num = (int)( navEntity->ent - game.edicts );
+	assert( entityToNavEntity[num] );
 
-	FreeNavEntity( navEntity );
-	entityToNavEntity[ENTNUM( ent )] = nullptr;
-}
+	::Unlink( navEntity, &activeNavEntsHead );
+	entityToNavEntity[num] = nullptr;
 
-void NavEntitiesRegistry::FreeNavEntity( NavEntity *navEntity ) {
-	// remove from linked active list
-	navEntity->prev->next = navEntity->next;
-	navEntity->next->prev = navEntity->prev;
-
-	// insert into linked free list
-	navEntity->next = freeNavEntity;
-	freeNavEntity = navEntity;
+	navEntity->~NavEntity();
 }

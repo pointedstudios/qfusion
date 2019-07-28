@@ -19,15 +19,16 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "../qas_precompiled.h"
+#include "../qas_local.h"
 #include "addon_string.h"
 #include "addon_cvar.h"
+#include "../../qcommon/cvar.h"
 
 //#define CVAR_FORCESET
 
 // CLASS: Cvar
 void objectCVar_Constructor( asstring_t *name, asstring_t *value, unsigned int flags, ascvar_t *self ) {
-	self->cvar = trap_Cvar_Get( name->buffer, value->buffer, flags );
+	self->cvar = Cvar_Get( name->buffer, value->buffer, flags );
 }
 
 void objectCVar_CopyConstructor( ascvar_t *other, ascvar_t *self ) {
@@ -39,7 +40,7 @@ static void objectCVar_Reset( ascvar_t *self ) {
 		return;
 	}
 
-	trap_Cvar_Set( self->cvar->name, self->cvar->dvalue );
+	Cvar_Set( self->cvar->name, self->cvar->dvalue );
 }
 
 static void objectCVar_setS( asstring_t *str, ascvar_t *self ) {
@@ -47,7 +48,7 @@ static void objectCVar_setS( asstring_t *str, ascvar_t *self ) {
 		return;
 	}
 
-	trap_Cvar_Set( self->cvar->name, str->buffer );
+	Cvar_Set( self->cvar->name, str->buffer );
 }
 
 static void objectCVar_setF( float value, ascvar_t *self ) {
@@ -55,7 +56,7 @@ static void objectCVar_setF( float value, ascvar_t *self ) {
 		return;
 	}
 
-	trap_Cvar_SetValue( self->cvar->name, value );
+	Cvar_SetValue( self->cvar->name, value );
 }
 
 static void objectCVar_setI( int value, ascvar_t *self ) {
@@ -72,7 +73,7 @@ static void objectCVar_forceSetS( asstring_t *str, ascvar_t *self ) {
 		return;
 	}
 
-	trap_Cvar_ForceSet( self->cvar->name, str->buffer );
+	Cvar_ForceSet( self->cvar->name, str->buffer );
 }
 
 static void objectCVar_forceSetF( float value, ascvar_t *self ) {
@@ -80,15 +81,15 @@ static void objectCVar_forceSetF( float value, ascvar_t *self ) {
 		return;
 	}
 
-	trap_Cvar_ForceSet( self->cvar->name, va( "%f", value ) );
+	Cvar_ForceSet( self->cvar->name, va( "%f", value ) );
 }
 
 static void objectCVar_forceSetI( int value, ascvar_t *self ) {
-	objectCVar_forceSetF( (float)value, self );
+	CVar_forceSetF( (float)value, self );
 }
 
 static void objectCVar_forceSetD( double value, ascvar_t *self ) {
-	objectCVar_forceSetF( (float)value, self );
+	CVar_forceSetF( (float)value, self );
 }
 #endif
 

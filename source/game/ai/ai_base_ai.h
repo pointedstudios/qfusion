@@ -1,7 +1,7 @@
 #ifndef QFUSION_AI_BASE_AI_H
 #define QFUSION_AI_BASE_AI_H
 
-#include "ai_frame_aware_updatable.h"
+#include "AIComponent.h"
 #include "planning/GoalEntities.h"
 #include "navigation/AasWorld.h"
 #include "navigation/AasRouteCache.h"
@@ -237,49 +237,49 @@ public:
 	}
 };
 
-class Ai : public AiFrameAwareUpdatable
-{
+class AiPlanner;
+
+class Ai : public AiFrameAwareComponent {
 	friend class AiManager;
 	friend class AiBaseTeam;
 	friend class AiSquad;
 	friend class AiSquadBasedTeam;
 	friend class AiObjectiveBasedTeam;
 	friend class BasePlanner;
-	friend class AiBaseAction;
-	friend class AiBaseActionRecord;
-	friend class AiBaseGoal;
+	friend class AiAction;
+	friend class AiActionRecord;
+	friend class AiGoal;
 
 protected:
 	edict_t *const self;
-	// Must be set in a subclass constructor. A subclass manages memory for its brain
+	// Must be set in a subclass constructor. A subclass manages memory for its planner
 	// (it either has it as an intrusive member of allocates it on heap)
 	// and provides a reference to it to this base class via this pointer.
-	class BasePlanner *basePlanner;
+	AiPlanner *planner { nullptr };
 	// Must be set in a subclass constructor.
 	// A subclass should decide whether a shared or separated route cache should be used.
 	// A subclass should destroy the cache instance if necessary.
-	AiAasRouteCache *routeCache;
+	AiAasRouteCache *routeCache { nullptr };
 	// A cached reference to an AAS world, set by this class
 	AiAasWorld *aasWorld;
 	// Must be set in a subclass constructor. Can be arbitrary changed later.
 	// Can point to external (predicted) entity physics state during movement planning.
-	AiEntityPhysicsState *entityPhysicsState;
+	AiEntityPhysicsState *entityPhysicsState { nullptr };
 
 	// Preferred and allowed travel flags
 	int travelFlags[2];
 	ArrayRange<int> travelFlagsRange;
 
 	int64_t blockedTimeoutAt;
-	int64_t prevThinkAt;
-	int64_t lastNavTargetReachedAt;
+	int64_t prevThinkAt { 0 };
+	int64_t lastNavTargetReachedAt { 0 };
 
 	vec3_t angularViewSpeed;
 
 	// An actually used nav target, be it a nav entity or a spot
-	NavTarget *navTarget;
-	const NavTarget *lastReachedNavTarget;
-	// A storage navTarget might point to in case when it is just a spot and not a nav entity
-	NavTarget localNavTargetStorage;
+	const NavTarget *navTarget { nullptr };
+	const NavTarget *lastReachedNavTarget { nullptr };
+	NavSpot localNavSpotStorage { NavSpot::Dummy() };
 
 	// Negative  = enemy
 	// Zero      = ignore (don't attack)
@@ -306,40 +306,17 @@ protected:
 		prevThinkAt = level.time;
 	}
 public:
-	static constexpr unsigned MAX_REACH_CACHED = 20;
-	struct alignas ( 2 )ReachAndTravelTime {
-private:
-		// Split an integer value in two parts to allow 2-byte alignment
-		uint16_t reachNumHiPart;
-		uint16_t reachNumLoPart;
-
-public:
-		// AAS travel time to a nav target in centiseconds (seconds ^-2).
-		// Do not confuse with travel time required to pass the reach. itself.
-		// The intrinsic reach. travel time can be retrieved from the reach. properties addressed by the reachNum.
-		short aasTravelTimeToTarget;
-
-		ReachAndTravelTime( int reachNum_, short aasTravelTimeToTarget_ )
-		{
-			this->reachNumHiPart = (uint16_t)( (unsigned)reachNum_ >> 16 );
-			this->reachNumLoPart = (uint16_t)( (unsigned)reachNum_ & 0xFFFF );
-			this->aasTravelTimeToTarget = aasTravelTimeToTarget_;
-		}
-
-		int ReachNum() const { return (int)( ( reachNumHiPart << 16 ) | reachNumLoPart ); }
-	};
-	static_assert( sizeof( ReachAndTravelTime ) == 6, "" );
-
-	typedef StaticVector<ReachAndTravelTime, MAX_REACH_CACHED> ReachChainVector;
+	static constexpr float DEFAULT_YAW_SPEED = 330.0f;
+	static constexpr float DEFAULT_PITCH_SPEED = 170.0f;
 
 	Ai( edict_t *self_
-	  , BasePlanner *planner_
+	  , AiPlanner *planner_
 	  , AiAasRouteCache *routeCache_
 	  , AiEntityPhysicsState *entityPhysicsState_
 	  , int preferredAasTravelFlags_
 	  , int allowedAasTravelFlags_
-	  , float yawSpeed = 330.0f
-	  , float pitchSpeed = 170.0f );
+	  , float yawSpeed = DEFAULT_YAW_SPEED
+	  , float pitchSpeed = DEFAULT_PITCH_SPEED );
 
 	inline bool IsGhosting() const { return G_ISGHOSTING( self ); }
 
@@ -385,13 +362,14 @@ public:
 
 	void ResetNavigation();
 
-	inline void SetNavTarget( NavTarget *navTarget_ ) {
+	inline void SetNavTarget( const NavTarget *navTarget_ ) {
 		this->navTarget = navTarget_;
 		OnNavTargetSet();
 	}
 
 	inline void SetNavTarget( const Vec3 &navTargetOrigin, float reachRadius ) {
-		localNavTargetStorage.SetToTacticalSpot( navTargetOrigin, reachRadius );
+		localNavSpotStorage.Set( navTargetOrigin, reachRadius, NavTargetFlags::REACH_ON_RADIUS );
+		this->navTarget = &localNavSpotStorage;
 		OnNavTargetSet();
 	}
 
@@ -452,11 +430,6 @@ protected:
 
 	virtual Vec3 GetNewViewAngles( const vec3_t oldAngles, const Vec3 &desiredDirection,
 								   unsigned frameTime, float angularSpeedMultiplier ) const;
-
-	void UpdateReachChain( const ReachChainVector &oldReachChain,
-						   ReachChainVector *currReachChain,
-						   const AiEntityPhysicsState &state ) const;
-
 private:
 	float GetChangedAngle( float oldAngle, float desiredAngle, unsigned frameTime,
 						   float angularSpeedMultiplier, int angleIndex ) const;

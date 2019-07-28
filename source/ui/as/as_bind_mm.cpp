@@ -55,24 +55,26 @@ public:
 	}
 
 	asstring_t *getProfileURL( bool rml ) const {
-		char buffer[2048];
-
-		trap::MM_GetProfileURL( buffer, sizeof( buffer ), rml ? true : false );
-		return ASSTR( buffer );
+		const char *s;
+		if( rml ) {
+			s = trap::MM_GetProfileRmlUrl().data();
+		} else {
+			s = trap::MM_GetProfileWebUrl().data();
+		}
+		// We can get the length from the string_view as well but let's just ignore that.
+		// librocket/ui ascript removal is planned anyway.
+		// a use of string_view is primarily for improvement of the corresponding /client code.
+		return ASSTR( s );
 	}
 
 	asstring_t *getBaseWebURL() const {
-		char buffer[2048];
-
-		trap::MM_GetBaseWebURL( buffer, sizeof( buffer ) );
-		return ASSTR( buffer );
+		const char *s = trap::MM_GetBaseWebUrl().data();
+		return ASSTR( s );
 	}
 
 	asstring_t *getLastError( void ) const {
-		char buffer[2048];
-
-		trap::MM_GetLastErrorMessage( buffer, sizeof( buffer ) );
-		return ASSTR( buffer );
+		const char *s = trap::MM_GetLastErrorMessage().data();
+		return ASSTR( s );
 	}
 
 	void update( void ) {

@@ -4,40 +4,36 @@
 #include <tuple>
 #include "ai_local.h"
 #include "static_vector.h"
+#include "../../qalgo/hash.h"
 
 void GT_asRegisterScriptWeightConfig( class AiWeightConfig *weightConfig, const edict_t *configOwner );
 void GT_asReleaseScriptWeightConfig( class AiWeightConfig *weightConfig, const edict_t *configOwner );
 void GENERIC_asGetScriptWeightConfigVarValueProps( const void *scriptObject, float *value, float *minValue, float *maxValue, float *defaultValue );
 void GENERIC_asSetScriptWeightConfigVarValue( void *scriptObject, float value );
 
-class AiBaseWeigthConfigVarGroup;
-class AiBaseWeightConfigVar;
+class AiWeightConfigVar;
 class AiScriptWeightConfigVar;
 class AiScriptWeightConfigVarGroup;
 
 // This accepts the exact type as as template parameter to make accessors operate on the exact child type.
 template <typename Child>
-class AiWeightConfigVarGroupChild
-{
-	friend class AiBaseWeightConfigVarGroup;
-	friend class AiBaseWeightConfigVar;
-
+class AiWeightConfigVarGroupChild {
+	friend class AiWeightConfigVarGroup;
+	friend class AiWeightConfigVar;
 protected:
 	const char *name;
-	Child *nextSibling;
-	Child *nextInHashBin;
-	unsigned nameHash;
-	unsigned nameLength : 31;
+	Child *nextSibling { nullptr };
+	Child *nextInHashBin { nullptr };
+	uint32_t nameHash;
+	uint32_t nameLength : 31;
 	bool isTouched : 1;
 
-	AiWeightConfigVarGroupChild( const char *name_ )
-		: name( name_ ),
-		nextSibling( nullptr ),
-		nextInHashBin( nullptr ) {
-		unsigned length;
-		GetHashAndLength( name_, &nameHash, &length );
-		nameLength = length;
-		isTouched = false;
+	explicit AiWeightConfigVarGroupChild( const char *name_ ) : name( name_ ) {
+		unsigned hash, length;
+		std::tie( hash, length ) = GetHashAndLength( name_ );
+		this->nameHash = hash;
+		this->nameLength = length;
+		this->isTouched = false;
 	}
 
 public:
@@ -49,9 +45,8 @@ public:
 	unsigned NameLength() const { return nameLength; }
 };
 
-class AiBaseWeightConfigVarGroup : public AiWeightConfigVarGroupChild<AiBaseWeightConfigVarGroup>
-{
-	friend class AiBaseWeightConfigVar;
+class AiWeightConfigVarGroup : public AiWeightConfigVarGroupChild<AiWeightConfigVarGroup> {
+	friend class AiWeightConfigVar;
 
 	template <typename T>
 	void LinkItem( T *item, T **linkedItemsHead, T ***hashBins, unsigned *numItems );
@@ -63,19 +58,19 @@ class AiBaseWeightConfigVarGroup : public AiWeightConfigVarGroupChild<AiBaseWeig
 	T *GetItemByName( const char *name_, unsigned nameHash_, T *linkedItemsHead, T **hashBins, unsigned numItems );
 
 	template <typename T>
-	T *GetItemByPath( const char *path, T * ( AiBaseWeightConfigVarGroup::*getByNameMethod )( const char *, unsigned ) );
+	T *GetItemByPath( const char *path, T * ( AiWeightConfigVarGroup::*getByNameMethod )( const char *, unsigned ) );
 
 	template <typename T>
 	void AddScriptItem( const char *name_, void *scriptObject, T **allocatedItemsHead );
 
 protected:
-	AiBaseWeightConfigVarGroup *childGroupsHead;
-	AiBaseWeightConfigVar *childVarsHead;
+	AiWeightConfigVarGroup *childGroupsHead { nullptr };
+	AiWeightConfigVar *childVarsHead { nullptr };
 
 	// If there are few child items, hash bins are not allocated and a corresponding list should be used for searching.
 	// We use a hash and not a trie because its a natural arppoach for already linked node-like items.
-	AiBaseWeightConfigVarGroup **groupsHashBins;
-	AiBaseWeightConfigVar **varsHashBins;
+	AiWeightConfigVarGroup **groupsHashBins { nullptr };
+	AiWeightConfigVar **varsHashBins { nullptr };
 
 	// Vars and groups defined and used in native code are intended
 	// to be declared as members of this class subtypes, so no extra memory management is nessessary.
@@ -83,54 +78,46 @@ protected:
 	// Thus we have to allocate these vars via G_Malloc() and link to these lists for further freeing via G_Free().
 	// Do not bother about performance because this is done only
 	// when bot enters the game and sane count of script groups/vars is low.
-	AiScriptWeightConfigVarGroup *allocatedGroupsHead;
-	AiScriptWeightConfigVar *allocatedVarsHead;
+	AiScriptWeightConfigVarGroup *allocatedGroupsHead { nullptr };
+	AiScriptWeightConfigVar *allocatedVarsHead { nullptr };
 
 	// 4 bytes are likely to be lost due to alignment of consequent instances of this class
-	unsigned numChildVars;
-	unsigned numChildGroups;
+	unsigned numChildVars { 0 };
+	unsigned numChildGroups { 0 };
 
 	// This should be enough for any sane configs.
 	static constexpr const auto NUM_HASH_BINS = 59;
 	static constexpr const auto MIN_HASH_ITEMS = 4;
 
-	void LinkGroup( AiBaseWeightConfigVarGroup *childGroup );
-	void LinkVar( AiBaseWeightConfigVar *childVar );
+	void LinkGroup( AiWeightConfigVarGroup *childGroup );
+	void LinkVar( AiWeightConfigVar *childVar );
 
 	bool Parse( const char *data, const char **restOfTheData );
 	int ParseNextEntry( const char *data, const char **nextData );
 	bool Write( int fileHandle, int depth ) const;
 
 public:
-	inline AiBaseWeightConfigVarGroup( AiBaseWeightConfigVarGroup *parent, const char *name_ )
-		: AiWeightConfigVarGroupChild( name_ ),
-		childGroupsHead( nullptr ),
-		childVarsHead( nullptr ),
-		groupsHashBins( nullptr ),
-		varsHashBins( nullptr ),
-		allocatedGroupsHead( nullptr ),
-		allocatedVarsHead( nullptr ),
-		numChildVars( 0 ),
-		numChildGroups( 0 ) {
+	inline AiWeightConfigVarGroup( AiWeightConfigVarGroup *parent, const char *name_ )
+		: AiWeightConfigVarGroupChild( name_ ) {
 		if( parent ) {
 			parent->LinkGroup( this );
 		}
 	}
 
-	virtual ~AiBaseWeightConfigVarGroup();
+	virtual ~AiWeightConfigVarGroup();
 
 	// Exposed for script interface.
-	AiBaseWeightConfigVarGroup *GetGroupByName( const char *name_, unsigned nameHash_ = 0 );
-	AiBaseWeightConfigVar *GetVarByName( const char *name_, unsigned nameHash_ = 0 );
+	AiWeightConfigVarGroup *GetGroupByName( const char *name_, unsigned nameHash_ = 0 );
+	AiWeightConfigVar *GetVarByName( const char *name_, unsigned nameHash_ = 0 );
 
-	inline AiBaseWeightConfigVarGroup *GroupsListHead() { return childGroupsHead; }
-	inline const AiBaseWeightConfigVarGroup *GroupsListHead() const { return childGroupsHead; }
-	inline AiBaseWeightConfigVar *VarsListHead() { return childVarsHead; }
-	inline const AiBaseWeightConfigVar *VarsListHead() const { return childVarsHead; }
+	AiWeightConfigVarGroup *GroupsListHead() { return childGroupsHead; }
+	const AiWeightConfigVarGroup *GroupsListHead() const { return childGroupsHead; }
+	AiWeightConfigVar *VarsListHead() { return childVarsHead; }
+	const AiWeightConfigVar *VarsListHead() const { return childVarsHead; }
 
 	// Note: groups and vars do not share namespace
-	virtual AiBaseWeightConfigVarGroup *GetGroupByPath( const char *path );
-	virtual AiBaseWeightConfigVar *GetVarByPath( const char *path );
+	virtual AiWeightConfigVarGroup *GetGroupByPath( const char *path );
+	virtual AiWeightConfigVar *GetVarByPath( const char *path );
 
 	void AddScriptVar( const char *name_, void *scriptObject );
 	void AddScriptGroup( const char *name_, void *scriptObject );
@@ -140,10 +127,10 @@ public:
 	void CheckTouched( const char *parentName = nullptr );
 	void Touch( const char *parentName = nullptr );
 
-	void CopyValues( const AiBaseWeightConfigVarGroup &that );
+	void CopyValues( const AiWeightConfigVarGroup &that );
 
-	bool operator==( const AiBaseWeightConfigVarGroup &that ) const;
-	inline bool operator!=( const AiBaseWeightConfigVarGroup &that ) const { return !( *this == that ); }
+	bool operator==( const AiWeightConfigVarGroup &that ) const;
+	bool operator!=( const AiWeightConfigVarGroup &that ) const { return !( *this == that ); }
 };
 
 inline char *G_Strdup( const char *str ) {
@@ -153,113 +140,108 @@ inline char *G_Strdup( const char *str ) {
 	return mem;
 }
 
-class AiNativeWeightConfigVarGroup : public AiBaseWeightConfigVarGroup
-{
+class AiNativeWeightConfigVarGroup : public AiWeightConfigVarGroup {
 public:
-	AiNativeWeightConfigVarGroup( AiBaseWeightConfigVarGroup *parent, const char *name_ )
-		: AiBaseWeightConfigVarGroup( parent, name_ ) {}
+	AiNativeWeightConfigVarGroup( AiWeightConfigVarGroup *parent, const char *name_ )
+		: AiWeightConfigVarGroup( parent, name_ ) {}
 };
 
-class AiScriptWeightConfigVarGroup : public AiBaseWeightConfigVarGroup
-{
-	friend class AiBaseWeightConfigVarGroup;
+class AiScriptWeightConfigVarGroup : public AiWeightConfigVarGroup {
+	friend class AiWeightConfigVarGroup;
 	void *scriptObject;
-	AiScriptWeightConfigVarGroup *nextAllocated;
-
+	AiScriptWeightConfigVarGroup *nextAllocated { nullptr };
 public:
-	AiScriptWeightConfigVarGroup( AiBaseWeightConfigVarGroup *parent, const char *name_, void *scriptObject_ )
-		: AiBaseWeightConfigVarGroup( parent, G_Strdup( name_ ) ),
-		scriptObject( scriptObject_ ),
-		nextAllocated( nullptr ) {}
+	AiScriptWeightConfigVarGroup( AiWeightConfigVarGroup *parent, const char *name_, void *scriptObject_ )
+		: AiWeightConfigVarGroup( parent, G_Strdup( name_ ) ), scriptObject( scriptObject_ ) {
+		(void)( scriptObject );
+	}
 
-	~AiScriptWeightConfigVarGroup() {
+	~AiScriptWeightConfigVarGroup() override {
 		G_Free( const_cast<char *>( name ) );
 	}
 
 	AiScriptWeightConfigVarGroup( const AiScriptWeightConfigVarGroup &that ) = delete;
 	const AiScriptWeightConfigVarGroup &operator=( const AiScriptWeightConfigVarGroup &that ) = delete;
 	AiScriptWeightConfigVarGroup( AiScriptWeightConfigVarGroup &&that ) = delete;
-	inline AiScriptWeightConfigVarGroup &operator=( AiScriptWeightConfigVarGroup &&that ) = delete;
+	AiScriptWeightConfigVarGroup &operator=( AiScriptWeightConfigVarGroup &&that ) = delete;
 };
 
-class AiBaseWeightConfigVar : public AiWeightConfigVarGroupChild<AiBaseWeightConfigVar>
-{
-	friend class AiBaseWeightConfigVarGroup;
-
+class AiWeightConfigVar : public AiWeightConfigVarGroupChild<AiWeightConfigVar> {
+	friend class AiWeightConfigVarGroup;
 public:
-	inline AiBaseWeightConfigVar( AiBaseWeightConfigVarGroup *parent, const char *name_ )
+	AiWeightConfigVar( AiWeightConfigVarGroup *parent, const char *name_ )
 		: AiWeightConfigVarGroupChild( name_ ) {
 		if( parent ) {
 			parent->LinkVar( this );
 		}
 	}
 
-	virtual ~AiBaseWeightConfigVar() {}
+	virtual ~AiWeightConfigVar() {}
 
 	virtual void GetValueProps( float *value_, float *minValue_, float *maxValue_, float *defaultValue_ ) const = 0;
 	virtual void SetValue( float value_ ) = 0;
 
-	inline void ResetToDefaultValues() {
+	void ResetToDefaultValues() {
 		float value, minValue, maxValue, defaultValue;
 		GetValueProps( &value, &minValue, &maxValue, &defaultValue );
 		SetValue( defaultValue );
 		isTouched = false;
 	}
 
-	inline void Touch( const char *parentName = nullptr ) {
-		// TODO: Show full name somehow?
-		if( isTouched ) {
-			if( parentName ) {
-				G_Printf( S_COLOR_YELLOW "WARNING: var %s in group %s is already touched\n", name, parentName );
-			} else {
-				G_Printf( S_COLOR_YELLOW "WARNING: var %s has been already touched\n", name );
-			}
-		}
-		isTouched = true;
-	}
-
-	inline void CheckTouched( const char *parentName = nullptr ) {
+	void Touch( const char *parentName = nullptr ) {
 		if( !isTouched ) {
-			if( parentName ) {
-				G_Printf( S_COLOR_YELLOW "WARNING: var %s in group %s has not been touched\n", name, parentName );
-			} else {
-				G_Printf( S_COLOR_YELLOW "WARNING: var %s has not been touched\n", name );
-			}
+			isTouched = true;
+			return;
 		}
-		isTouched = false;
+		// TODO: Show full name somehow?
+		if( parentName ) {
+			G_Printf( S_COLOR_YELLOW "WARNING: var %s in group %s is already touched\n", name, parentName );
+		} else {
+			G_Printf( S_COLOR_YELLOW "WARNING: var %s has been already touched\n", name );
+		}
 	}
 
-	inline bool operator==( const AiBaseWeightConfigVar &that ) const {
+	void CheckTouched( const char *parentName = nullptr ) {
+		if( isTouched ) {
+			isTouched = false;
+			return;
+		}
+		if( parentName ) {
+			G_Printf( S_COLOR_YELLOW "WARNING: var %s in group %s has not been touched\n", name, parentName );
+		} else {
+			G_Printf( S_COLOR_YELLOW "WARNING: var %s has not been touched\n", name );
+		}
+	}
+
+	bool operator==( const AiWeightConfigVar &that ) const {
 		float thisValue, thatValue;
 		float dummy[3];
 		this->GetValueProps( &thisValue, dummy + 0, dummy + 1, dummy + 2 );
 		that.GetValueProps( &thatValue, dummy + 0, dummy + 1, dummy + 2 );
-		return fabs( (double)thisValue - (double)thatValue ) < 0.000001;
+		return std::fabs( (double)thisValue - (double)thatValue ) < 0.000001;
 	}
 
-	inline bool operator!=( const AiBaseWeightConfigVar &that ) const { return !( *this == that ); }
+	bool operator!=( const AiWeightConfigVar &that ) const { return !( *this == that ); }
 };
 
 // We do not want to even mention script weight config vars in the native code.
 // The only operation needed is to set a var value, and this can be done by name.
-class AiNativeWeightConfigVar : AiBaseWeightConfigVar
-{
+class AiNativeWeightConfigVar : AiWeightConfigVar {
 	float minValue;
 	float maxValue;
 	float defaultValue;
 	float value;
-
 public:
-	AiNativeWeightConfigVar( AiBaseWeightConfigVarGroup *parent,
+	AiNativeWeightConfigVar( AiWeightConfigVarGroup *parent,
 							 const char *name_,
 							 float minValue_,
 							 float maxValue_,
 							 float defaultValue_ )
-		: AiBaseWeightConfigVar( parent, name_ ),
-		minValue( minValue_ ),
-		maxValue( maxValue_ ),
-		defaultValue( defaultValue_ ),
-		value( defaultValue_ ) {
+		: AiWeightConfigVar( parent, name_ )
+		, minValue( minValue_ )
+		, maxValue( maxValue_ )
+		, defaultValue( defaultValue_ )
+		, value( defaultValue_ ) {
 #ifdef _DEBUG
 		if( minValue >= maxValue ) {
 			AI_FailWith( "AiNativeWeightConfigVar()", "%s: minValue %f >= maxValue %f\n", name, minValue, maxValue );
@@ -273,10 +255,10 @@ public:
 #endif
 	}
 
-	inline operator float() const { return value; }
-	inline float MinValue() const { return minValue; }
-	inline float MaxValue() const { return maxValue; }
-	inline float DefaultValue() const { return defaultValue; }
+	operator float() const { return value; }
+	float MinValue() const { return minValue; }
+	float MaxValue() const { return maxValue; }
+	float DefaultValue() const { return defaultValue; }
 
 	void GetValueProps( float *value_, float *minValue_, float *maxValue_, float *defaultValue_ ) const override {
 		*value_ = this->value;
@@ -284,22 +266,21 @@ public:
 		*maxValue_ = this->maxValue;
 		*defaultValue_ = this->defaultValue;
 	}
+
 	void SetValue( float value_ ) override {
 		this->value = value_;
 	}
 };
 
-class AiScriptWeightConfigVar : public AiBaseWeightConfigVar
-{
-	friend class AiBaseWeightConfigVarGroup;
+class AiScriptWeightConfigVar : public AiWeightConfigVar {
+	friend class AiWeightConfigVarGroup;
 	void *scriptObject;
-	AiScriptWeightConfigVar *nextAllocated;
-
+	AiScriptWeightConfigVar *nextAllocated { nullptr };
 public:
-	AiScriptWeightConfigVar( AiBaseWeightConfigVarGroup *parent, const char *name_, void *scriptObject_ )
-		: AiBaseWeightConfigVar( parent, G_Strdup( name_ ) ), scriptObject( scriptObject_ ), nextAllocated( nullptr ) {}
+	AiScriptWeightConfigVar( AiWeightConfigVarGroup *parent, const char *name_, void *scriptObject_ )
+		: AiWeightConfigVar( parent, G_Strdup( name_ ) ), scriptObject( scriptObject_ ) {}
 
-	~AiScriptWeightConfigVar() {
+	~AiScriptWeightConfigVar() override {
 		G_Free( const_cast<char *>( name ) );
 	}
 
@@ -316,18 +297,16 @@ public:
 	}
 };
 
-class AiWeightConfig : protected AiBaseWeightConfigVarGroup
-{
+class AiWeightConfig : protected AiWeightConfigVarGroup {
 	const edict_t *owner;
 	bool isRegisteredInScript;
 
 	bool LoadFromData( const char *data );
 
 	inline const char *SkipRootInPath( const char *path ) const;
-
 protected:
-	inline const AiBaseWeightConfigVarGroup *Root() const { return this; }
-	inline AiBaseWeightConfigVarGroup *Root() { return this; }
+	const AiWeightConfigVarGroup *Root() const { return this; }
+	AiWeightConfigVarGroup *Root() { return this; }
 
 	// Must be called in child constructor after all child native objects have been constructed
 	void RegisterInScript() {
@@ -335,12 +314,11 @@ protected:
 		isRegisteredInScript = true;
 	}
 
-	AiBaseWeightConfigVarGroup *GetGroupByPath( const char *path ) override;
-	AiBaseWeightConfigVar *GetVarByPath( const char *path ) override;
-
+	AiWeightConfigVarGroup *GetGroupByPath( const char *path ) override;
+	AiWeightConfigVar *GetVarByPath( const char *path ) override;
 public:
-	AiWeightConfig( const edict_t *owner_ )
-		: AiBaseWeightConfigVarGroup( nullptr, "Weights" ),
+	explicit AiWeightConfig( const edict_t *owner_ )
+		: AiWeightConfigVarGroup( nullptr, "Weights" ),
 		owner( owner_ ),
 		isRegisteredInScript( false ) {}
 
@@ -353,27 +331,26 @@ public:
 	bool Load( const char *filename );
 	bool Save( const char *filename );
 
-	inline bool Save( int fileHandle ) {
-		return AiBaseWeightConfigVarGroup::Write( fileHandle, 0 );
+	bool Save( int fileHandle ) {
+		return AiWeightConfigVarGroup::Write( fileHandle, 0 );
 	}
 
-	using AiBaseWeightConfigVarGroup::ResetToDefaultValues;
+	using AiWeightConfigVarGroup::ResetToDefaultValues;
 
 	// We have to do these wrappers since AiBaseWeightConfigVarGroup is not a public type of `this` (and `that`)
-	inline void CopyValues( const AiWeightConfig &that ) {
-		AiBaseWeightConfigVarGroup::CopyValues( that );
+	void CopyValues( const AiWeightConfig &that ) {
+		AiWeightConfigVarGroup::CopyValues( that );
 	}
 
-	inline bool operator==( const AiWeightConfig &that ) { return AiBaseWeightConfigVarGroup::operator==( that ); }
-	inline bool operator!=( const AiWeightConfig &that ) { return AiBaseWeightConfigVarGroup::operator!=( that ); }
+	bool operator==( const AiWeightConfig &that ) { return AiWeightConfigVarGroup::operator==( that ); }
+	bool operator!=( const AiWeightConfig &that ) { return AiWeightConfigVarGroup::operator!=( that ); }
 };
 
 // If we have two linked chains of items that are supposed
 // to have the same length and same corresponding item names and to be iterated and checked in parallel,
 // this class provides a reusable way to do it
 template <typename T1, typename T2>
-class ZippedItemChainsIterator
-{
+class ZippedItemChainsIterator {
 	T1 first;
 	T2 second;
 	const char *tag;
@@ -395,10 +372,8 @@ class ZippedItemChainsIterator
 	}
 
 public:
-	inline ZippedItemChainsIterator( T1 firstChainHead, T2 secondChainHead, const char *tag_ )
-		: first( firstChainHead ),
-		second( secondChainHead ),
-		tag( tag_ ) {
+	ZippedItemChainsIterator( T1 firstChainHead, T2 secondChainHead, const char *tag_ )
+		: first( firstChainHead ), second( secondChainHead ), tag( tag_ ) {
 		CheckMatch();
 	}
 

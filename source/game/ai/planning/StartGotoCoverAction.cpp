@@ -1,7 +1,7 @@
 #include "PlanningLocal.h"
 #include "../bot.h"
 
-PlannerNode *BotStartGotoCoverAction::TryApply( const WorldState &worldState ) {
+PlannerNode *StartGotoCoverAction::TryApply( const WorldState &worldState ) {
 	if( !CheckCommonRunAwayPreconditions( worldState ) ) {
 		return nullptr;
 	}
@@ -28,7 +28,7 @@ PlannerNode *BotStartGotoCoverAction::TryApply( const WorldState &worldState ) {
 	}
 
 	Vec3 spotOrigin = worldState.CoverSpotVar().Value();
-	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( self ) );
+	PlannerNodePtr plannerNode = NewNodeForRecord( pool.New( Self() ) );
 	if( !plannerNode ) {
 		return nullptr;
 	}
@@ -39,14 +39,14 @@ PlannerNode *BotStartGotoCoverAction::TryApply( const WorldState &worldState ) {
 	plannerNode.WorldState().HasPendingCoverSpotVar().SetValue( true ).SetIgnore( false );
 	// Set nav target to the tactical spot
 	plannerNode.WorldState().NavTargetOriginVar().SetValue( spotOrigin );
-	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().NavTargetOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().NavTargetOriginVar().SetIgnore( false );
 	// Set pending origin to the tactical spot
 	plannerNode.WorldState().PendingOriginVar().SetValue( spotOrigin );
-	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( WorldState::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
+	plannerNode.WorldState().PendingOriginVar().SetSatisfyOp( OriginVar::SatisfyOp::EQ, GOAL_PICKUP_ACTION_RADIUS );
 	plannerNode.WorldState().PendingOriginVar().SetIgnore( false );
 
-	unsigned similarWorldStateInstanceId = self->ai->botRef->NextSimilarWorldStateInstanceId();
+	unsigned similarWorldStateInstanceId = Self()->NextSimilarWorldStateInstanceId();
 	plannerNode.WorldState().SimilarWorldStateInstanceIdVar().SetValue( similarWorldStateInstanceId ).SetIgnore( false );
 
 	return plannerNode.PrepareActionResult();

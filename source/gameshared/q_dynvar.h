@@ -23,10 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "q_arch.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //==========================================================
 //
 //DYNVARS (dynamic variables)
@@ -61,9 +57,5 @@ typedef dynvar_set_status_t ( *dynvar_setter_f )( void *val );
 // listener function signature
 // called by Dynvar_SetValue, after the setter function returned with DYNVAR_SET_OK
 typedef void ( *dynvar_listener_f )( void *val );
-
-#ifdef __cplusplus
-};
-#endif
 
 #endif // GAME_QDYNVAR_H

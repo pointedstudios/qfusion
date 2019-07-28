@@ -171,9 +171,9 @@ void BaseMovementAction::CheckPredictionStepResults( Context *context ) {
 	// If misc tactics flag "rush headless" is set, areas occupied by enemies are never excluded from routing
 	const auto *routeCache = bot->RouteCache();
 	// Check the new origin condition first to cut off early
-	if( routeCache->AreaTemporarilyDisabled( newAasAreaNum ) ) {
-		if( !routeCache->AreaTemporarilyDisabled( oldAasAreaNum ) ) {
-			Debug( "A prediction step has lead to entering a temporarily excluded from routing, should rollback\n" );
+	if( routeCache->AreaDisabled( newAasAreaNum ) ) {
+		if( !routeCache->AreaDisabled( oldAasAreaNum ) ) {
+			Debug( "A prediction step has lead to entering a disabled for routing area, should rollback\n" );
 			return;
 		}
 	}

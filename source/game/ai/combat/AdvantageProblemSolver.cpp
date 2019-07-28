@@ -1,14 +1,38 @@
 #include "AdvantageProblemSolver.h"
 #include "SpotsProblemSolversLocal.h"
+#include "../navigation/AasElementsMask.h"
 
 int AdvantageProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
+	volatile TemporariesCleanupGuard cleanupGuard( this );
+
 	uint16_t insideSpotNum;
-	const SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
-	SpotsAndScoreVector &candidateSpots = SelectCandidateSpots( spotsFromQuery );
-	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( candidateSpots, insideSpotNum );
-	SpotsAndScoreVector &visCheckedSpots = CheckOriginVisibility( reachCheckedSpots, maxSpots );
-	SortByVisAndOtherFactors( visCheckedSpots );
-	return CleanupAndCopyResults( visCheckedSpots, spots, maxSpots );
+	SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
+	// Cut off some raw spots from query by vis tables
+	SpotsQueryVector &filteredByVisTablesSpots = FilterByVisTables( spotsFromQuery );
+	// This should be cheap as well
+	SpotsAndScoreVector &candidateSpots = SelectCandidateSpots( filteredByVisTablesSpots );
+	// Cut off expensive routing calls for spots that a-priori do not have a feasible travel time
+	SpotsAndScoreVector &filteredByReachTablesSpots = FilterByReachTables( candidateSpots );
+
+	// Now cast rays in a collision world... it's actually cheaper than pathfinding.
+	// Make sure we select not less than 5 candidates if possible even if maxSpots is lesser.
+	SpotsAndScoreVector &visCheckedSpots = SortAndTakeNBestIfOptimizingAggressively(
+		CheckOriginVisibility( filteredByReachTablesSpots ), std::max( 5, maxSpots ) );
+
+	// Apply enemy influence... this is not that expensive
+	SpotsAndScoreVector &enemyCheckedSpots = SortAndTakeNBestIfOptimizingAggressively(
+		ApplyEnemiesInfluence( visCheckedSpots ), std::max( 5, maxSpots ) );
+
+	// Make sure we select not less than 3 candidates if possible even if maxSpots is lesser
+	SpotsAndScoreVector &sortedCandidates = ApplyVisAndOtherFactors( enemyCheckedSpots );
+
+	// Should be always sorted before the last selection call
+	std::sort( sortedCandidates.begin(), sortedCandidates.end() );
+
+	SpotsAndScoreVector &finalCandidates = TakeNBestIfOptimizingAggressively( sortedCandidates, std::max( 3, maxSpots ) );
+
+	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( finalCandidates, maxSpots );
+	return MakeResultsFilteringByProximity( reachCheckedSpots, spots, maxSpots );
 }
 
 SpotsAndScoreVector &AdvantageProblemSolver::SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) {
@@ -68,72 +92,84 @@ SpotsAndScoreVector &AdvantageProblemSolver::SelectCandidateSpots( const SpotsQu
 	return result;
 }
 
-SpotsAndScoreVector &AdvantageProblemSolver::CheckOriginVisibility( SpotsAndScoreVector &reachCheckedSpots,
-																	int maxSpots ) {
-	edict_t *passent = const_cast<edict_t*>( originParams.originEntity );
-	edict_t *keepVisibleEntity = const_cast<edict_t *>( problemParams.keepVisibleEntity );
-	Vec3 entityOrigin( problemParams.keepVisibleOrigin );
-	// If not only origin but an entity too is supplied
-	if( keepVisibleEntity ) {
-		// Its a good idea to add some offset from the ground
-		entityOrigin.Z() += 0.66f * keepVisibleEntity->r.maxs[2];
+TacticalSpotsRegistry::SpotsQueryVector &AdvantageProblemSolver::FilterByVisTables( SpotsQueryVector &spotsFromQuery ) {
+	int keepVisibleAreaNum = 0;
+	Vec3 keepVisibleOrigin( problemParams.keepVisibleOrigin );
+	if( const auto *keepVisibleEntity = problemParams.keepVisibleEntity ) {
+		keepVisibleOrigin.Z() += 0.66f * keepVisibleEntity->r.maxs[2];
+		if( const auto *ai = keepVisibleEntity->ai ) {
+			if( const auto *bot = ai->botRef ) {
+				int areaNums[2] { 0, 0 };
+				bot->EntityPhysicsState()->PrepareRoutingStartAreas( areaNums );
+				keepVisibleAreaNum = areaNums[0];
+			}
+		}
 	}
 
-	// Copy to locals for faster access
+	const auto *const spots = tacticalSpotsRegistry->spots;
+	const auto *const aasWorld = AiAasWorld::Instance();
+	if( !keepVisibleAreaNum ) {
+		keepVisibleAreaNum = aasWorld->FindAreaNum( keepVisibleOrigin );
+	}
+
+	// Decompress an AAS areas vis row for the area of the "keep visible origin/entity"
+	const auto *keepVisEntRow = aasWorld->DecompressAreaVis( keepVisibleAreaNum, AasElementsMask::TmpAreasVisRow() );
+
+	unsigned numKeptSpots = 0;
+	// Filter spots in-place
+	for( auto spotNum: spotsFromQuery ) {
+		const auto spotAreaNum = spots[spotNum].aasAreaNum;
+		// Check whether the keep visible entity/origin is considered visible from the spot.
+		// Generally speaking the visibility relation should not be symmetric
+		// but the AAS area table vis computations are made only against a solid collision world.
+		// Consider the entity non-visible from spot if the spot is not considered visible from the entity.
+		if( !keepVisEntRow[spotAreaNum] ) {
+			continue;
+		}
+
+		// Store spot num in-place
+		spotsFromQuery[numKeptSpots++] = spotNum;
+	}
+
+	spotsFromQuery.truncate( numKeptSpots );
+	return spotsFromQuery;
+}
+
+SpotsAndScoreVector &AdvantageProblemSolver::CheckOriginVisibility( SpotsAndScoreVector &reachCheckedSpots ) {
+	edict_t *passent = const_cast<edict_t*>( originParams.originEntity );
+	edict_t *keepVisibleEntity = const_cast<edict_t *>( problemParams.keepVisibleEntity );
+	Vec3 keepVisibleOrigin( problemParams.keepVisibleOrigin );
+	if( keepVisibleEntity ) {
+		// Its a good idea to add some offset from the ground
+		keepVisibleOrigin.Z() += 0.66f * keepVisibleEntity->r.maxs[2];
+	}
+
 	const edict_t *gameEdicts = game.edicts;
 	const auto *const spots = tacticalSpotsRegistry->spots;
-	const auto *aasWorld = AiAasWorld::Instance();
-
+	const float spotZOffset = -playerbox_stand_mins[2] + playerbox_stand_viewheight;
 	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
-
-	int originLeafNums[4], topNode;
-	Vec3 mins( originParams.origin );
-	Vec3 maxs( originParams.origin );
-	// We need some small and feasible box for BoxLeafNums() call,
-	// player bounds are not obligatory but suit this purpose well
-	mins += playerbox_stand_mins;
-	maxs += playerbox_stand_maxs;
-	const int numOriginLeafs = trap_CM_BoxLeafnums( mins.Data(), maxs.Data(), originLeafNums, 4, &topNode );
 
 	trace_t trace;
 	for( const SpotAndScore &spotAndScore : reachCheckedSpots ) {
-		const auto &spot = spots[spotAndScore.spotNum];
-		// Use area leaf nums for PVS tests
-		for( int i = 0; i < numOriginLeafs; ++i ) {
-			auto *areaLeafNums = aasWorld->AreaMapLeafsList( spot.aasAreaNum ) + 1;
-			for( int j = 0; j < areaLeafNums[-1]; ++j ) {
-				if( trap_CM_LeafsInPVS( originLeafNums[i], areaLeafNums[j] ) ) {
-					goto pvsTestPassed;
-				}
-			}
-		}
-
-		continue;
-pvsTestPassed:
-
 		//.Spot origins are dropped to floor (only few units above)
 		// Check whether we can hit standing on this spot (having the gun at viewheight)
 		Vec3 from( spots[spotAndScore.spotNum].origin );
-		from.Z() += -playerbox_stand_mins[2] + playerbox_stand_viewheight;
-		G_Trace( &trace, from.Data(), nullptr, nullptr, entityOrigin.Data(), passent, MASK_AISOLID );
+		from.Z() += spotZOffset;
+		G_Trace( &trace, from.Data(), nullptr, nullptr, keepVisibleOrigin.Data(), passent, MASK_AISOLID );
 		if( trace.fraction != 1.0f && gameEdicts + trace.ent != keepVisibleEntity ) {
 			continue;
 		}
 
 		result.push_back( spotAndScore );
-		// Stop immediately after we have reached the needed spots count
-		if( result.size() == maxSpots ) {
-			break;
-		}
 	}
 
 	return result;
 }
 
-void AdvantageProblemSolver::SortByVisAndOtherFactors( SpotsAndScoreVector &result ) {
+SpotsAndScoreVector &AdvantageProblemSolver::ApplyVisAndOtherFactors( SpotsAndScoreVector &result ) {
 	const unsigned resultSpotsSize = result.size();
 	if( resultSpotsSize <= 1 ) {
-		return;
+		return result;
 	}
 
 	const Vec3 origin( originParams.origin );
@@ -175,7 +211,7 @@ void AdvantageProblemSolver::SortByVisAndOtherFactors( SpotsAndScoreVector &resu
 
 		// The maximum possible visibility score for a pair of spots is 255
 		float visFactor = visibilitySum / ( ( result.size() - 1 ) * 255.0f );
-		visFactor = 1.0f / Q_RSqrt( visFactor );
+		visFactor = SQRTFAST( visFactor );
 		score *= visFactor;
 
 		float heightOverOrigin = testedSpot.absMins[2] - originZ - minHeightAdvantageOverOrigin;
@@ -186,11 +222,11 @@ void AdvantageProblemSolver::SortByVisAndOtherFactors( SpotsAndScoreVector &resu
 		float heightOverEntityFactor = BoundedFraction( heightOverEntity, searchRadius - minHeightAdvantageOverEntity );
 		score = ApplyFactor( score, heightOverEntityFactor, heightOverEntityInfluence );
 
-		float originDistance = 1.0f / Q_RSqrt( 0.001f + DistanceSquared( testedSpot.origin, origin.Data() ) );
+		float originDistance = SQRTFAST( 0.001f + DistanceSquared( testedSpot.origin, origin.Data() ) );
 		float originDistanceFactor = ComputeDistanceFactor( originDistance, originWeightFalloffDistanceRatio, searchRadius );
 		score = ApplyFactor( score, originDistanceFactor, originDistanceInfluence );
 
-		float entityDistance = 1.0f / Q_RSqrt( 0.001f + DistanceSquared( testedSpot.origin, entityOrigin.Data() ) );
+		float entityDistance = SQRTFAST( 0.001f + DistanceSquared( testedSpot.origin, entityOrigin.Data() ) );
 		entityDistance -= minSpotDistanceToEntity;
 		float entityDistanceFactor = ComputeDistanceFactor( entityDistance,
 															entityWeightFalloffDistanceRatio,
@@ -200,6 +236,5 @@ void AdvantageProblemSolver::SortByVisAndOtherFactors( SpotsAndScoreVector &resu
 		result[i].score = score;
 	}
 
-	// Sort results so best score spots are first
-	std::stable_sort( result.begin(), result.end() );
+	return result;
 }
