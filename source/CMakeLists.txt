@@ -62,7 +62,12 @@ set(LIBROCKET_DIR ${CMAKE_HOME_DIRECTORY}/../third-party/libRocket)
 set(LIBROCKET_INCLUDE_DIR ${LIBROCKET_DIR}/Include)
 set(LIBROCKET_SOURCE_DIR ${LIBROCKET_DIR}/Source)
 
-set(CEF_DIR ${CMAKE_HOME_DIRECTORY}/../third-party/cef)
+if (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND "${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
+    set(CEF_DIR "${CMAKE_HOME_DIRECTORY}/../third-party/cef/linux_x64")
+else()
+    message(FATAL_ERROR "CEF engine support is not added yet for this platform")
+endif()
+
 set(CEF_INCLUDE_DIR ${CEF_DIR})
 set(CEF_LINK_DIR ${CEF_DIR}/libcef_dll_wrapper)
 add_subdirectory(${CEF_DIR} ${CEF_DIR})
