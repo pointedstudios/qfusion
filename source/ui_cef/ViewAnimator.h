@@ -18,6 +18,8 @@ struct ViewAnimFrame {
 	vec3_t origin;
 	unsigned timestamp;
 
+	virtual ~ViewAnimFrame() = default;
+
 	/**
 	 * Tests whether this and "that" frames have the same fields (excluding the timestamp).
 	 * @note Don't be scared by "virtual", it is going be called at most once per frame.

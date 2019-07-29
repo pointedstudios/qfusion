@@ -9,6 +9,11 @@
 #include "include/cef_v8.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include <algorithm>
+#include <functional>
+#include <utility>
+#include <memory>
+
 class WswCefRenderProcessHandler;
 
 class WswCefV8Handler;
@@ -74,6 +79,8 @@ public:
 							CefRefPtr<CefV8Context> context_,
 							CefRefPtr<CefV8Value> callback_,
 							const CefString &method_ );
+
+	virtual ~PendingCallbackRequest() = default;
 
 	int Id() const { return id; }
 
@@ -141,6 +148,8 @@ protected:
 public:
 	explicit PendingRequestLauncher( WswCefV8Handler *parent_, const CefString &method_ );
 
+	virtual ~PendingRequestLauncher() = default;
+
 	const CefString &Method() const { return method; }
 	PendingRequestLauncher *Next() { return next; }
 	const std::string &LogTag() const { return logTag; }
@@ -193,6 +202,7 @@ protected:
 	}
 public:
 	CallbackRequestHandler( WswCefClient *parent_, const CefString &method_ );
+	virtual ~CallbackRequestHandler() = default;
 
 	CallbackRequestHandler *Next() { return next; }
 	const CefString &Method() { return method; }
