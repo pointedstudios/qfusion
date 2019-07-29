@@ -118,7 +118,7 @@ ViewAnimFrame *CameraAnimParser::ParseFrame( ObjectFieldsGetter &fieldsGetter,
 	}
 
 	if( !fieldsGetter.ContainsField( fovField ) ) {
-		assert( frame->fov == CameraAnimFrame::DEFAULT_FOV );
+		assert( frame->fov == DEFAULT_FOV );
 		return frame;
 	}
 

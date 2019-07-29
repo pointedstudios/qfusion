@@ -238,7 +238,8 @@ public:
 		isRendererDeviceLost = true;
 	}
 
-	void OnRendererDeviceObtained() {
+	void OnRendererDeviceAcquired( int width, int height ) {
+		// TODO: Handle resizing properly!
 		wasRendererDeviceLost = true;
 		isRendererDeviceLost = false;
 	}

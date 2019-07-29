@@ -2,6 +2,8 @@
 #include "ObjectFieldsGetter.h"
 #include "ViewAnimParser.h"
 
+#include "../../gameshared/q_shared.h"
+
 static const CefString modelField( "model" );
 static const CefString skinField( "skin" );
 static const CefString shaderField( "shader" );

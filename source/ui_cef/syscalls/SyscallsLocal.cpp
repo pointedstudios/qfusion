@@ -1,9 +1,10 @@
 #include "SyscallsLocal.h"
+#include "../../qcommon/qcommon.h"
 
 void DirectoryWalker::Exec( const char *dir_ ) {
-	int totalFiles = api->FS_GetFileList( dir_, extension, nullptr, 0, 0, 0 );
+	int totalFiles = FS_GetFileList( dir_, extension, nullptr, 0, 0, 0 );
 	for( int startAtFile = 0; startAtFile < totalFiles; ) {
-		int numFiles = api->FS_GetFileList( dir_, extension, buffer, sizeof( buffer ), startAtFile, totalFiles );
+		int numFiles = FS_GetFileList( dir_, extension, buffer, sizeof( buffer ), startAtFile, totalFiles );
 		if( !numFiles ) {
 			// Go to next start file on failure
 			startAtFile++;

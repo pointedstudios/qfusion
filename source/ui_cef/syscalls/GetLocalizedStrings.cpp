@@ -1,5 +1,7 @@
 #include "SyscallsLocal.h"
 
+#include "../../client/l10n.h"
+
 bool GetLocalizedStringsRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 													CefRefPtr<CefV8Value> &retVal,
 													CefString &exception ) {
@@ -51,7 +53,7 @@ void GetLocalizedStringsRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> br
 	std::string raw;
 	while( reader.HasNext() ) {
 		reader >> raw;
-		const char *localized = api->L10n_TranslateString( raw.c_str() );
+		const char *localized = L10n_TranslateString( "ui", raw.c_str() );
 		if( !localized ) {
 			localized = "";
 		}

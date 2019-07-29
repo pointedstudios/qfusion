@@ -7,12 +7,6 @@
 #include "RendererCompositionProxy.h"
 
 #include "../gameshared/q_math.h"
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
 
 #include <string>
 #include <include/cef_render_handler.h>
@@ -99,13 +93,12 @@ class UiFacade {
 
 	BrowserProcessLogger logger;
 public:
-	static bool Init( int argc, char **argv, void *hInstance, int width_, int height_,
-					  int demoProtocol_, const char *demoExtension_, const char *basePath_ );
-
 	static void Shutdown() {
 		delete instance;
 		instance = nullptr;
 	}
+
+	static void InitOrAcquireDevice();
 
 	static UiFacade *Instance() { return instance; }
 
@@ -142,6 +135,8 @@ public:
 		messagePipe.MouseSet( context, mx, my, showCursor );
 	}
 
+	void ForceMenuOn();
+
 	void ForceMenuOff() {
 		messagePipe.ForceMenuOff();
 	}
@@ -150,12 +145,31 @@ public:
 		messagePipe.ShowQuickMenu( show );
 	}
 
-	void OnRendererDeviceLost() {
-		rendererCompositionProxy.OnRendererDeviceLost();
+	bool HaveQuickMenu() {
+		return false;
 	}
 
-	void OnRendererDeviceObtained() {
-		rendererCompositionProxy.OnRendererDeviceObtained();
+	bool TouchEvent( int context, int id, int type, int x, int y ) {
+		// Unsupported!
+		return false;
+	}
+
+	bool IsTouchDown( int context, int id ) {
+		// Unsupported!
+		return false;
+	}
+
+	void CancelTouches( int context ) {}
+
+	void AddToServerList( const char *adr, const char *info ) {
+		// TODO: This is kept just to provide some procedure address
+		// Ask UI/frontend folks what do they expect
+	}
+
+	static void OnRendererDeviceLost() {
+		if( instance ) {
+			instance->rendererCompositionProxy.OnRendererDeviceLost();
+		}
 	}
 
 	void StartShowingWorldModel( const char *name, bool blurred, bool looping, const std::vector<ViewAnimFrame> &frames ) {

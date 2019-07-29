@@ -34,6 +34,7 @@ end of unit intermissions
 
 #include "client.h"
 #include "../ref_gl/r_frontend.h"
+#include "../ui_cef/UiFacade.h"
 
 float scr_con_current;    // aproaches scr_conlines at scr_conspeed
 float scr_con_previous;
@@ -513,14 +514,14 @@ void SCR_ShutdownScreen( void ) {
 */
 void SCR_EnableQuickMenu( bool enable ) {
 	cls.quickmenu = enable;
-	CL_UIModule_ShowQuickMenu( cls.quickmenu );
+	UiFacade::Instance()->ShowQuickMenu( cls.quickmenu );
 }
 
 /*
 * SCR_IsQuickMenuShown
 */
 bool SCR_IsQuickMenuShown( void ) {
-	return cls.quickmenu && CL_UIModule_HaveQuickMenu();
+	return cls.quickmenu && UiFacade::Instance()->HaveQuickMenu();
 }
 
 /*
@@ -581,7 +582,7 @@ static void SCR_DrawNotify( void ) {
 * SCR_BeginLoadingPlaque
 */
 void SCR_BeginLoadingPlaque( void ) {
-	CL_UIModule_ForceMenuOff();
+	UiFacade::Instance()->ForceMenuOff();
 
 	CL_SoundModule_StopAllSounds( true, true );
 

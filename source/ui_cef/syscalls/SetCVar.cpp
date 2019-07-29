@@ -1,5 +1,7 @@
 #include "SyscallsLocal.h"
 
+#include "../../qcommon/qcommon.h"
+
 bool SetCVarRequestLauncher::StartExec( const CefV8ValueList &arguments,
 										CefRefPtr<CefV8Value> &retval,
 										CefString &exception ) {
@@ -56,9 +58,9 @@ void SetCVarRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, Messa
 
 	bool forced = false;
 	if( force ) {
-		forced = ( api->Cvar_ForceSet( name.c_str(), value.c_str() ) ) != nullptr;
+		forced = ( Cvar_ForceSet( name.c_str(), value.c_str() ) ) != nullptr;
 	} else {
-		api->Cvar_Set( name.c_str(), value.c_str() );
+		Cvar_Set( name.c_str(), value.c_str() );
 	}
 
 	auto outgoing( NewMessage() );

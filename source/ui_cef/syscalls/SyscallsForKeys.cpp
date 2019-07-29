@@ -1,5 +1,8 @@
 #include "SyscallsLocal.h"
 
+#include "../../qcommon/qcommon.h"
+#include "../../client/keys.h"
+
 void RequestForKeysHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
 	const int id = reader.NextInt();
 
@@ -24,11 +27,11 @@ void RequestForKeysHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, Messa
 // Its cleaner to define it here than bloat subclass one-liners with lambdas
 
 const char *GetKeyBindingsRequestHandler::GetForKey( int key ) {
-	return api->Key_GetBindingBuf( key );
+	return Key_GetBindingBuf( key );
 }
 
 const char *GetKeyNamesRequestHandler::GetForKey( int key ) {
-	return api->Key_KeynumToString( key );
+	return Key_KeynumToString( key );
 }
 
 static const auto keyPrinter = []( CefStringBuilder &sb, MessageReader &reader ) {

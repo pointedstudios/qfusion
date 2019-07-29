@@ -1,5 +1,7 @@
 #include "SyscallsLocal.h"
 
+#include "../../qcommon/qcommon.h"
+
 bool ExecuteCmdRequestLauncher::StartExec( const CefV8ValueList &arguments,
 										   CefRefPtr<CefV8Value> &retval,
 										   CefString &exception ) {
@@ -52,7 +54,7 @@ void ExecuteCmdRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, Me
 	const int id = reader.NextInt();
 	reader >> whence >> text;
 
-	api->Cmd_ExecuteText( whence, text.c_str() );
+	Cbuf_ExecuteText( whence, text.c_str() );
 
 	auto outgoing( NewMessage() );
 	MessageWriter::WriteSingleInt( outgoing, id );

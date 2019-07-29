@@ -2,6 +2,8 @@
 #include "ObjectFieldsGetter.h"
 #include "ViewAnimParser.h"
 
+#include "../../qcommon/qcommon.h"
+
 static const CefString mapField( "map" );
 static const CefString blurredField( "blurred" );
 static const CefString seqField( "animSeq" );
@@ -92,7 +94,7 @@ void DrawWorldModelRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser
 	mapPath += map;
 
 	// Validate map presence. This is tricky as "ui" map is not listed in the maplist.
-	if( api->FS_FileMTime( mapPath.c_str() ) <= 0 ) {
+	if( FS_FileMTime( mapPath.c_str() ) <= 0 ) {
 		MessageWriter::WriteSingleString( outgoing, "no such map " + mapPath );
 		browser->SendProcessMessage( PID_RENDERER, outgoing );
 	}

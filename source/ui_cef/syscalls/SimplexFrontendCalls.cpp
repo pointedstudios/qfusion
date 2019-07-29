@@ -4,6 +4,7 @@
 #include "../V8Handler.h"
 #include "../RenderProcessHandler.h"
 
+#include "../../gameshared/q_shared.h"
 #include "../../gameshared/q_comref.h"
 #include "../../server/server.h"
 

@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../qcommon/asyncstream.h"
 #include "../qalgo/hash.h"
 #include "../ref_gl/r_frontend.h"
+#include "../ui_cef/UiFacade.h"
 
 #include <random>
 
@@ -687,7 +688,6 @@ static void CL_EndRegistration( void ) {
 	cls.registrationOpen = false;
 
 	FTLIB_TouchAllFonts();
-	CL_UIModule_TouchAllAssets();
 	RF_EndRegistration();
 	SoundSystem::Instance()->EndRegistration();
 }
@@ -1747,7 +1747,7 @@ void CL_SetClientState( int state ) {
 		case CA_DISCONNECTED:
 			Con_Close();
 			CL_UIModule_Refresh( true, true );
-			CL_UIModule_ForceMenuOn();
+			UiFacade::Instance()->ForceMenuOn();
 			//CL_UIModule_MenuMain ();
 			CL_SetKeyDest( key_menu );
 			//SCR_UpdateScreen();
@@ -1756,7 +1756,7 @@ void CL_SetClientState( int state ) {
 		case CA_CONNECTING:
 			cls.cgameActive = false;
 			Con_Close();
-			CL_UIModule_ForceMenuOff();
+			UiFacade::Instance()->ForceMenuOff();
 			CL_SoundModule_StopBackgroundTrack();
 			SoundSystem::Instance()->Clear();
 			CL_SetKeyDest( key_game );
@@ -1774,7 +1774,7 @@ void CL_SetClientState( int state ) {
 			CL_EndRegistration();
 			Con_Close();
 			CL_UIModule_Refresh( false, false );
-			CL_UIModule_ForceMenuOff();
+			UiFacade::Instance()->ForceMenuOff();
 			CL_SetKeyDest( key_game );
 			//SCR_UpdateScreen();
 			CL_AddReliableCommand( "svmotd 1" );
@@ -1822,7 +1822,7 @@ void CL_InitMedia( void ) {
 	SCR_EnableQuickMenu( false );
 
 	// load user interface
-	CL_UIModule_Init();
+	UiFacade::InitOrAcquireDevice();
 
 	// check memory integrity
 	Mem_DebugCheckSentinelsGlobal();
@@ -1847,7 +1847,8 @@ void CL_ShutdownMedia( void ) {
 	CL_GameModule_Shutdown();
 
 	// shutdown user interface
-	CL_UIModule_OnRendererDeviceLost();
+	// TODO: Should be an instance method as a presence of an initialized instance is guaranteed?
+	UiFacade::OnRendererDeviceLost();
 
 	SCR_ShutDownConsoleMedia();
 
@@ -1884,9 +1885,7 @@ void CL_RestartMedia( void ) {
 	// register console font and background
 	SCR_RegisterConsoleMedia();
 
-	CL_UIModule_ForceMenuOff();
-
-	CL_UIModule_TouchAllAssets();
+	UiFacade::Instance()->ForceMenuOff();
 
 	// check memory integrity
 	Mem_DebugCheckSentinelsGlobal();
@@ -2950,7 +2949,7 @@ void CL_Init( void ) {
 
 	CL_InitMedia();
 
-	CL_UIModule_ForceMenuOn();
+	UiFacade::Instance()->ForceMenuOn();
 
 	// check for update
 	CL_CheckForUpdate();
@@ -2990,7 +2989,7 @@ void CL_Shutdown( void ) {
 		cls.servername = NULL;
 	}
 
-	CL_UIModule_Shutdown();
+	UiFacade::Shutdown();
 	CL_GameModule_Shutdown();
 	CL_SoundModule_Shutdown( true );
 	CL_ShutdownInput();

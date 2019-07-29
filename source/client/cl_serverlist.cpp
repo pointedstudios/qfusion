@@ -378,7 +378,7 @@ void CL_ParseStatusMessage( const socket_t *socket, const netadr_t *address, msg
 
 	if( pingserver && pingserver->pingTimeStamp ) { // valid ping
 		int64_t ping = Sys_Milliseconds() - pingserver->pingTimeStamp;
-		CL_UIModule_AddToServerList( adrString, va( "\\\\ping\\\\%" PRIi64 "%s", ping, s ) );
+		//CL_UIModule_AddToServerList( adrString, va( "\\\\ping\\\\%" PRIi64 "%s", ping, s ) );
 		pingserver->pingTimeStamp = 0;
 		pingserver->lastValidPing = Com_DaysSince1900();
 		return;
@@ -387,12 +387,12 @@ void CL_ParseStatusMessage( const socket_t *socket, const netadr_t *address, msg
 	// assume LAN response
 	if( NET_IsLANAddress( address ) && ( localQueryTimeStamp + LAN_SERVER_PINGING_TIMEOUT > Sys_Milliseconds() ) ) {
 		int64_t ping = Sys_Milliseconds() - localQueryTimeStamp;
-		CL_UIModule_AddToServerList( adrString, va( "\\\\ping\\\\%" PRIi64 "%s", ping, s ) );
+		//CL_UIModule_AddToServerList( adrString, va( "\\\\ping\\\\%" PRIi64 "%s", ping, s ) );
 		return;
 	}
 
 	// add the server info, but ignore the ping, cause it's not valid
-	CL_UIModule_AddToServerList( adrString, s );
+	//CL_UIModule_AddToServerList( adrString, s );
 }
 
 /*
@@ -483,7 +483,7 @@ void CL_ParseGetServersResponse( const socket_t *socket, const netadr_t *address
 		if( server->masterServerUpdateSeq == masterServerUpdateSeq
 			&& !( server->isLocal && Com_ServerState() )
 			&& NET_StringToAddress( server->address, &adr ) ) {
-			CL_UIModule_AddToServerList( server->address, "\\\\EOT" );
+			//CL_UIModule_AddToServerList( server->address, "\\\\EOT" );
 		}
 
 		server = server->pnext;

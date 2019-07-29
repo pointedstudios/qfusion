@@ -127,6 +127,25 @@ file(GLOB CGAME_SOURCES
 		"../gameshared/*.cpp"
 		)
 
+include_directories(${CEF_INCLUDE_DIR})
+link_directories(${CEF_LINK_DIR})
+
+file(GLOB UI_CEF_HEADERS "../ui_cef/*.h")
+file(GLOB UI_CEF_SOURCES
+		"../ui_cef/BrowserProcessHandler.cpp"
+		"../ui_cef/CefApp.cpp"
+		"../ui_cef/CefClient.cpp"
+		"../ui_cef/Ipc.cpp"
+		"../ui_cef/Logger.cpp"
+		"../ui_cef/MessagePipe.cpp"
+		"../ui_cef/ScreenState.cpp"
+		"../ui_cef/RendererCompositionProxy.cpp"
+		"../ui_cef/RenderProcessHandler.cpp"
+		"../ui_cef/V8Handler.cpp"
+		"../ui_cef/ViewAnimator.cpp"
+		"../ui_cef/UiFacade.cpp"
+		"../ui_cef/syscalls/*.cpp")
+
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 	file(GLOB CLIENT_PLATFORM_HEADERS
 		"../win32/resource.h"
@@ -285,8 +304,8 @@ else()
 	set_source_files_properties("../../third-party/sqlite-amalgamation/sqlite3.c" PROPERTIES COMPILE_FLAGS "-fno-fast-math")
 endif()
 
-add_executable(${QFUSION_CLIENT_NAME} ${CLIENT_BINARY_TYPE} ${CLIENT_HEADERS} ${CLIENT_PLATFORM_HEADERS} ${CLIENT_COMMON_SOURCES} ${CLIENT_PLATFORM_SOURCES} ${REF_GL_HEADERS} ${REF_GL_COMMON_SOURCES} ${REF_GL_PLATFORM_SOURCES} ${FTLIB_SOURCES} ${CIN_SOURCES} ${CGAME_HEADERS} ${CGAME_SOURCES} ${BUNDLE_RESOURCES})
-add_dependencies(${QFUSION_CLIENT_NAME} angelwrap game snd_openal_soft ui_cef)
+add_executable(${QFUSION_CLIENT_NAME} ${CLIENT_BINARY_TYPE} ${CLIENT_HEADERS} ${CLIENT_PLATFORM_HEADERS} ${CLIENT_COMMON_SOURCES} ${CLIENT_PLATFORM_SOURCES} ${REF_GL_HEADERS} ${REF_GL_COMMON_SOURCES} ${REF_GL_PLATFORM_SOURCES} ${FTLIB_SOURCES} ${CIN_SOURCES} ${CGAME_HEADERS} ${CGAME_SOURCES} ${UI_CEF_HEADERS} ${UI_CEF_SOURCES} ${BUNDLE_RESOURCES})
+add_dependencies(${QFUSION_CLIENT_NAME} angelwrap game snd_openal_soft wsw_ui_process)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set_target_properties(${QFUSION_CLIENT_NAME} PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${QFUSION_MAC_INFO_PLIST})
@@ -308,5 +327,5 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     add_custom_command(TARGET ${QFUSION_CLIENT_NAME} POST_BUILD COMMAND ${COPY_DYLIBS})
 endif()
 
-target_link_libraries(${QFUSION_CLIENT_NAME} PRIVATE ${CURL_LIBRARY} ${ZLIB_LIBRARY} ${JPEG_LIBRARIES} ${PNG_LIBRARIES} ${REF_GL_PLATFORM_LIBRARIES} ${OGG_LIBRARY} ${VORBIS_LIBRARIES} ${THEORA_LIBRARY} ${FREETYPE_LIBRARIES} ${CLIENT_PLATFORM_LIBRARIES} snd_openal_soft)
+target_link_libraries(${QFUSION_CLIENT_NAME} PRIVATE ${CURL_LIBRARY} ${ZLIB_LIBRARY} ${JPEG_LIBRARIES} ${PNG_LIBRARIES} ${REF_GL_PLATFORM_LIBRARIES} ${OGG_LIBRARY} ${VORBIS_LIBRARIES} ${THEORA_LIBRARY} ${FREETYPE_LIBRARIES} ${CLIENT_PLATFORM_LIBRARIES} snd_openal_soft libcef_dll_wrapper)
 qf_set_output_dir(${QFUSION_CLIENT_NAME} "")

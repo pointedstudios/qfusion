@@ -450,33 +450,8 @@ void CL_SoundModule_StartBackgroundTrack( const char *intro, const char *loop, i
 void CL_SoundModule_StopBackgroundTrack( void );
 void CL_SoundModule_LockBackgroundTrack( bool lock );
 
-//
-// cl_ui.c
-//
-void CL_UIModule_Init( void );
-void CL_UIModule_Shutdown( void );
-void CL_UIModule_OnRendererDeviceLost( void );
-void CL_UIModule_OnRendererDeviceObtained( void );
-void CL_UIModule_TouchAllAssets( void );
-void CL_UIModule_Keydown( int key );
-void CL_UIModule_Keyup( int key );
-void CL_UIModule_KeydownQuick( int key );
-void CL_UIModule_KeyupQuick( int key );
-void CL_UIModule_CharEvent( wchar_t key );
-bool CL_UIModule_TouchEvent( int id, touchevent_t type, int x, int y );
-bool CL_UIModule_TouchEventQuick( int id, touchevent_t type, int x, int y );
-bool CL_UIModule_IsTouchDown( int id );
-bool CL_UIModule_IsTouchDownQuick( int id );
-void CL_UIModule_CancelTouches( void );
 void CL_UIModule_Refresh( bool backGround, bool showCursor );
 void CL_UIModule_UpdateConnectScreen( bool backGround );
-void CL_UIModule_ForceMenuOn( void );
-void CL_UIModule_ForceMenuOff( void );
-void CL_UIModule_ShowQuickMenu( bool show );
-bool CL_UIModule_HaveQuickMenu( void );
-void CL_UIModule_AddToServerList( const char *adr, const char *info );
-void CL_UIModule_MouseMove( int frameTime, int dx, int dy );
-void CL_UIModule_MouseSet( int mx, int my, bool showCursor );
 
 //
 // cl_serverlist.c

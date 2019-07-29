@@ -1,6 +1,7 @@
 #include "UiFacade.h"
-#include "Api.h"
 #include "CefClient.h"
+
+#include "../ref_gl/r_frontend.h"
 
 #include <memory>
 
@@ -25,7 +26,7 @@ RendererCompositionProxy::RendererCompositionProxy( UiFacade *parent_ ): parent(
 }
 
 inline void RendererCompositionProxy::RegisterChromiumBufferShader() {
-	chromiumShader = api->R_RegisterRawPic( "chromiumBufferShader", parent->width, parent->height, chromiumBuffer, 4 );
+	chromiumShader = R_RegisterRawPic( "chromiumBufferShader", parent->width, parent->height, chromiumBuffer, 4 );
 }
 
 inline void RendererCompositionProxy::ResetBackground() {
@@ -210,8 +211,8 @@ void RendererCompositionProxy::Refresh( int64_t time, bool showCursor, bool back
 	const int height = parent->height;
 
 	// Ok it seems we have to touch these shaders every frame as they are invalidated on map loading
-	whiteShader = api->R_RegisterPic( "$whiteimage" );
-	cursorShader = api->R_RegisterPic( "gfx/ui/cursor.tga" );
+	whiteShader = R_RegisterPic( "$whiteimage" );
+	cursorShader = R_RegisterPic( "gfx/ui/cursor.tga" );
 
 	if( background ) {
 		CheckAndDrawBackground( time, width, height, blurWorldModel );
@@ -229,14 +230,14 @@ void RendererCompositionProxy::Refresh( int64_t time, bool showCursor, bool back
 	// TODO: Avoid drawning of UI overlay at all if there is nothing to show!
 	// The only reliable way of doing that is adding syscalls...
 	vec4_t color = { 1.0f, 1.0f, 1.0f, 1.0f };
-	api->R_DrawStretchPic( 0, 0, width, height, 0.0f, 0.0f, 1.0f, 1.0f, color, chromiumShader );
+	RF_DrawStretchPic( 0, 0, width, height, 0.0f, 0.0f, 1.0f, 1.0f, color, chromiumShader );
 
 	// Draw items that are intended to be put in front of the Chromium buffer
 	drawnItemsRegistry.DrawPositiveZItems( time );
 
 	if( showCursor ) {
 		int cursorX = parent->mouseXY[0], cursorY = parent->mouseXY[1];
-		api->R_DrawStretchPic( cursorX, cursorY, 32, 32, 0.0f, 0.0f, 1.0f, 1.0f, color, cursorShader );
+		RF_DrawStretchPic( cursorX, cursorY, 32, 32, 0.0f, 0.0f, 1.0f, 1.0f, color, cursorShader );
 	}
 
 	wasRendererDeviceLost = isRendererDeviceLost;
@@ -245,10 +246,10 @@ void RendererCompositionProxy::Refresh( int64_t time, bool showCursor, bool back
 void RendererCompositionProxy::CheckAndDrawBackground( int64_t time, int width, int height, bool blurred ) {
 	if( hasPendingWorldModel ) {
 		if( !hasStartedWorldModelLoading ) {
-			api->R_RegisterWorldModel( pendingWorldModel.c_str() );
+			RF_RegisterWorldModel( pendingWorldModel.c_str() );
 			hasStartedWorldModelLoading = true;
 		} else {
-			if( api->R_RegisterModel( pendingWorldModel.c_str() ) ) {
+			if( R_RegisterModel( pendingWorldModel.c_str() ) ) {
 				hasSucceededWorldModelLoading = true;
 			}
 			hasPendingWorldModel = false;
@@ -260,7 +261,7 @@ void RendererCompositionProxy::CheckAndDrawBackground( int64_t time, int width, 
 		DrawWorldModel( time, width, height, blurWorldModel );
 	} else {
 		// Draw a fullscreen black quad... we are unsure if the renderer clears default framebuffer
-		api->R_DrawStretchPic( 0, 0, width, height, 0.0f, 0.0f, 1.0f, 1.0f, colorBlack, whiteShader );
+		RF_DrawStretchPic( 0, 0, width, height, 0.0f, 0.0f, 1.0f, 1.0f, colorBlack, whiteShader );
 	}
 }
 
@@ -285,10 +286,10 @@ void RendererCompositionProxy::DrawWorldModel( int64_t time, int width, int heig
 	rdf.scissor_width = width;
 	rdf.scissor_height = height;
 
-	api->R_ClearScene();
-	api->R_RenderScene( &rdf );
+	RF_ClearScene();
+	RF_RenderScene( &rdf );
 	if( blurred ) {
-		api->R_BlurScreen();
+		RF_BlurScreen();
 	}
 }
 
@@ -326,7 +327,7 @@ void RendererCompositionProxy::DrawnAliasModel::DrawSelf( int64_t time ) {
 	int w = viewportDimensions[0];
 	int h = viewportDimensions[1];
 	vec4_t color = { entity.color[0] / 255.0f, entity.color[1] / 255.0f, entity.color[2] / 255.0f, entity.color[3] / 255.0f };
-	api->R_DrawStretchPic( x, y, w, h, 0.0, 0.0f, 1.0f, 1.0f, color, api->R_RegisterPic( "$whiteimage") );
+	RF_DrawStretchPic( x, y, w, h, 0.0, 0.0f, 1.0f, 1.0f, color, R_RegisterPic( "$whiteimage") );
 }
 
 RendererCompositionProxy::Drawn2DImage::Drawn2DImage( RendererCompositionProxy *parent_,
@@ -340,5 +341,5 @@ void RendererCompositionProxy::Drawn2DImage::DrawSelf( int64_t time ) {
 	int y = viewportTopLeft[1];
 	int w = viewportDimensions[0];
 	int h = viewportDimensions[1];
-	api->R_DrawStretchPic( x, y, w, h, 0.0f, 0.0f, 1.0f, 1.0f, colorWhite, api->R_RegisterPic( shaderName.c_str() ) );
+	RF_DrawStretchPic( x, y, w, h, 0.0f, 0.0f, 1.0f, 1.0f, colorWhite, R_RegisterPic( shaderName.c_str() ) );
 }

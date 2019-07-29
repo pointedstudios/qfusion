@@ -1,5 +1,8 @@
 #include "SyscallsLocal.h"
 
+#include "../../qcommon/qcommon.h"
+#include "../../gameshared/q_cvar.h"
+
 static const std::map<CefString, int> cvarFlagNamesTable = {
 	{ "archive"       , CVAR_ARCHIVE },
 	{ "userinfo"      , CVAR_USERINFO },
@@ -78,7 +81,7 @@ void GetCVarRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, Messa
 		reader >> flags;
 	}
 
-	cvar_t *var = api->Cvar_Get( name.c_str(), value.c_str(), flags );
+	cvar_t *var = Cvar_Get( name.c_str(), value.c_str(), flags );
 
 	auto outgoing( NewMessage() );
 	MessageWriter writer( outgoing );

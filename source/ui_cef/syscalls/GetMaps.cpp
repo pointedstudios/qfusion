@@ -1,5 +1,7 @@
 #include "SyscallsLocal.h"
 
+#include "../../qcommon/qcommon.h"
+
 bool GetMapsRequestLauncher::StartExec( const CefV8ValueList &jsArgs, CefRefPtr<CefV8Value> &retVal, CefString &ex ) {
 	return DefaultSingleArgStartExecImpl( jsArgs, retVal, ex );
 }
@@ -11,7 +13,7 @@ public:
 	bool Next( const char **shortName, const char **fullName ) {
 		// TODO: These all APIs are horribly inefficient...
 		// Transfer an ownership of dynamically allocated strings instead
-		if( !api->ML_GetMapByNum( index++, buffer, sizeof( buffer ) ) ) {
+		if( !ML_GetMapByNum( index++, buffer, sizeof( buffer ) ) ) {
 			return false;
 		}
 		*shortName = buffer;

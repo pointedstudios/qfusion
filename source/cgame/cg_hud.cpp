@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "cg_local.h"
 #include "../client/client.h"
 #include "../ref_gl/r_frontend.h"
+#include "../ui_cef/UiFacade.h"
 
 #define TEAM_OWN    ( GS_MAX_TEAMS + 1 )
 #define TEAM_ENEMY  ( GS_MAX_TEAMS + 2 )
@@ -582,7 +583,7 @@ static int CG_GetQuickMenuState( const void *parameter ) {
 		return 2;
 	}
 
-	if( CL_UIModule_HaveQuickMenu() ) {
+	if( UiFacade::Instance()->HaveQuickMenu() ) {
 		return 1;
 	}
 

@@ -1,5 +1,7 @@
 #include "SyscallsLocal.h"
 
+#include "../../qcommon/qcommon.h"
+
 bool GetGametypesRequestLauncher::StartExec( const CefV8ValueList &jsArgs, CefRefPtr<CefV8Value> &retVal, CefString &ex ) {
 	return DefaultSingleArgStartExecImpl( jsArgs, retVal, ex );
 }
@@ -33,14 +35,14 @@ void GametypesRetrievalHelper::ConsumeEntry( const char *p, size_t, const char *
 	path += ".gtd";
 
 	int fp;
-	int fileSize = api->FS_FOpenFile( path.c_str(), &fp, FS_READ );
+	int fileSize = FS_FOpenFile( path.c_str(), &fp, FS_READ );
 	if( fileSize <= 0 ) {
 		return;
 	}
 
 	std::unique_ptr<char[]> buffer( new char[fileSize + 1u] );
-	int readResult = api->FS_Read( buffer.get(), (size_t)fileSize, fp );
-	api->FS_FCloseFile( fp );
+	int readResult = FS_Read( buffer.get(), (size_t)fileSize, fp );
+	FS_FCloseFile( fp );
 	if( readResult != fileSize ) {
 		return;
 	}

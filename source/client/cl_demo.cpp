@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "client.h"
 #include "../ref_gl/r_frontend.h"
+#include "../ui_cef/UiFacade.h"
 
 static void CL_PauseDemo( bool paused );
 
@@ -407,7 +408,7 @@ static void CL_StartDemo( const char *demoname, bool pause_on_stop ) {
 	Cbuf_ExecuteText( EXEC_NOW, "killserver\n" );
 	CL_Disconnect( NULL );
 	// wsw: Medar: fix for menu getting stuck on screen when starting demo, but maybe there is better fix out there?
-	CL_UIModule_ForceMenuOff();
+	UiFacade::Instance()->ForceMenuOff();
 
 	memset( &cls.demo, 0, sizeof( cls.demo ) );
 

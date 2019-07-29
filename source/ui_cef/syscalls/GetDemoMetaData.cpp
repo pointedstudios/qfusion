@@ -1,4 +1,5 @@
 #include "SyscallsLocal.h"
+#include "../../client/client.h"
 
 bool GetDemoMetaDataRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 												CefRefPtr<CefV8Value> &retVal,
@@ -66,13 +67,13 @@ static DemoMetaData GetDemoMetaData( const std::string &path ) {
 	std::unique_ptr<char[]> allocationHolder;
 	char *metaData = localBuffer;
 
-	size_t realSize = api->CL_ReadDemoMetaData( path.c_str(), localBuffer, sizeof( localBuffer ) );
+	size_t realSize = CL_ReadDemoMetaData( path.c_str(), localBuffer, sizeof( localBuffer ) );
 	if( realSize > sizeof( localBuffer ) ) {
 		std::unique_ptr<char[]> allocated( new char[realSize] );
 		metaData = allocated.get();
 
 		// Check whether we have read the same data (might have been modified)
-		if( api->CL_ReadDemoMetaData( path.c_str(), metaData, realSize ) != realSize ) {
+		if( CL_ReadDemoMetaData( path.c_str(), metaData, realSize ) != realSize ) {
 			return DemoMetaData();
 		}
 

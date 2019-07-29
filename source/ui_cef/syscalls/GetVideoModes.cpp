@@ -1,5 +1,8 @@
 #include "SyscallsLocal.h"
 
+#include "../../client/vid.h"
+#include "../../qcommon/qcommon.h"
+
 bool GetVideoModesRequestLauncher::StartExec( const CefV8ValueList &arguments,
 											  CefRefPtr<CefV8Value> &retval,
 											  CefString &exception ) {
@@ -13,11 +16,11 @@ class VideoModesSource {
 	bool wasCurrModeListed { false };
 public:
 	VideoModesSource()
-		: currWidth( (int)api->Cvar_Value( "vid_width" ) ),
-		  currHeight( (int)api->Cvar_Value( "vid_height" ) ) {}
+		: currWidth( (int)Cvar_Value( "vid_width" ) ),
+		  currHeight( (int)Cvar_Value( "vid_height" ) ) {}
 
 	bool Next( int *width, int *height ) {
-		if( api->VID_GetModeInfo( width, height, index++ ) ) {
+		if( VID_GetModeInfo( width, height, index++ ) ) {
 			if( *width == currWidth && *height == currHeight ) {
 				wasCurrModeListed = true;
 			}

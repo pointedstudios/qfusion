@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // cl.input.c  -- builds an intended movement command to send to the server
 
 #include "client.h"
+#include "../ui_cef/UiFacade.h"
 
 static bool in_initialized = false;
 
@@ -37,7 +38,7 @@ static void CL_CreateNewUserCommand( int realMsec );
 */
 void CL_MouseSet( int mx, int my, bool showCursor ) {
 	if( cls.key_dest == key_menu ) {
-		CL_UIModule_MouseSet( mx, my, showCursor );
+		UiFacade::Instance()->MouseSet( 0, mx, my, showCursor );
 	}
 }
 
@@ -51,12 +52,12 @@ void CL_TouchEvent( int id, touchevent_t type, int x, int y, int64_t time ) {
 			bool toQuickMenu = false;
 
 			if( SCR_IsQuickMenuShown() && !CL_GameModule_IsTouchDown( id ) ) {
-				if( CL_UIModule_IsTouchDownQuick( id ) ) {
+				if( UiFacade::Instance()->IsTouchDown( 1, id ) ) {
 					toQuickMenu = true;
 				}
 
 				// if the quick menu has consumed the touch event, don't send the event to the game
-				toQuickMenu |= CL_UIModule_TouchEventQuick( id, type, x, y );
+				toQuickMenu |= UiFacade::Instance()->TouchEvent( 1, id, type, x, y );
 			}
 
 			if( !toQuickMenu ) {
@@ -73,7 +74,7 @@ void CL_TouchEvent( int id, touchevent_t type, int x, int y, int64_t time ) {
 			break;
 
 		case key_menu:
-			CL_UIModule_TouchEvent( id, type, x, y );
+			UiFacade::Instance()->TouchEvent( 0, id, type, x, y );
 			break;
 
 		default:
@@ -98,7 +99,8 @@ void CL_ClearInputState( void ) {
 			Con_TouchEvent( false, -1, -1 );
 			break;
 		case key_menu:
-			CL_UIModule_CancelTouches();
+			UiFacade::Instance()->CancelTouches( 0 );
+			UiFacade::Instance()->CancelTouches( 1 );
 		default:
 			break;
 	}
@@ -118,7 +120,7 @@ static void CL_UpdateGameInput( int frameTime ) {
 	CL_GameModule_InputFrame( frameTime );
 
 	if( cls.key_dest == key_menu ) {
-		CL_UIModule_MouseMove( frameTime, mx, my );
+		UiFacade::Instance()->MouseMove( 0, frameTime, mx, my );
 	} else {
 		CL_GameModule_MouseMove( mx, my );
 	}

@@ -2,18 +2,10 @@
 #define UI_CEF_VIEW_ANIMATOR_H
 
 #include "../gameshared/q_math.h"
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
 
 #include <vector>
 
 struct ViewAnimFrame {
-	static constexpr float DEFAULT_FOV = 90.0f;
-
 	quat_t rotation;
 	vec3_t origin;
 	unsigned timestamp;
@@ -32,9 +24,11 @@ struct ViewAnimFrame {
 	}
 };
 
-struct CameraAnimFrame final: public ViewAnimFrame {
-	static constexpr float DEFAULT_FOV = 90.0f;
+#ifndef DEFAULT_FOV
+#define DEFAULT_FOV 100
+#endif
 
+struct CameraAnimFrame final: public ViewAnimFrame {
 	float fov { DEFAULT_FOV };
 
 	bool TimeUnawareEquals( const ViewAnimFrame *that ) const override  {

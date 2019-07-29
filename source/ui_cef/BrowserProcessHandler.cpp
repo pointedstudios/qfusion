@@ -1,7 +1,7 @@
 #include "BrowserProcessHandler.h"
 #include "CefApp.h"
 #include "CefClient.h"
-#include "Api.h"
+#include "../qcommon/qcommon.h"
 
 class WswCefResourceHandler;
 
@@ -97,7 +97,7 @@ class WswCefResourceHandler: public CefResourceHandler {
 public:
 	~WswCefResourceHandler() override {
 		if( filePointer >= 0 ) {
-			api->FS_FCloseFile( filePointer );
+			FS_FCloseFile( filePointer );
 		}
 	}
 
@@ -416,7 +416,7 @@ void OpenFileTask::Execute() {
 	CEF_REQUIRE_FILE_THREAD();
 
 	int filePointer = -1;
-	int maybeFileSize = api->FS_FOpenFile( filePath.c_str(), &filePointer, FS_READ );
+	int maybeFileSize = FS_FOpenFile( filePath.c_str(), &filePointer, FS_READ );
 	NotifyOfResult( filePointer, maybeFileSize );
 }
 
@@ -432,13 +432,13 @@ void ReadChunkTask::Execute() {
 	CEF_REQUIRE_FILE_THREAD();
 
 	if( seekTo >= 0 ) {
-		if( api->FS_Seek( filePointer, seekTo, FS_SEEK_SET ) < 0 ) {
+		if( FS_Seek( filePointer, seekTo, FS_SEEK_SET ) < 0 ) {
 			NotifyOfResult( -1 );
 			return;
 		}
 	}
 
-	int result = api->FS_Read( buffer, (size_t)bytesToRead, filePointer );
+	int result = FS_Read( buffer, (size_t)bytesToRead, filePointer );
 	NotifyOfResult( result );
 }
 

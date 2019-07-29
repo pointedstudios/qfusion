@@ -1,10 +1,11 @@
 #include "UiFacade.h"
 #include "CefApp.h"
 #include "CefClient.h"
-#include "Api.h"
 #include "ScreenState.h"
 
+#include "../qcommon/qcommon.h"
 #include "../gameshared/q_keycodes.h"
+#include "../client/keys.h"
 
 void BrowserProcessLogger::SendLogMessage( cef_log_severity_t severity, const char *format, va_list va ) {
 	// Make sure we always have a room for trailing ^7\n that is added on successful string formatting
@@ -44,24 +45,10 @@ void BrowserProcessLogger::SendLogMessage( cef_log_severity_t severity, const ch
 	*endp++ = '\n';
 	*endp++ = '\0';
 
-	api->Print( buffer );
+	Com_Printf( "%s", buffer );
 }
 
 UiFacade *UiFacade::instance = nullptr;
-
-bool UiFacade::Init( int argc, char **argv, void *hInstance, int width_, int height_,
-					 int demoProtocol_, const char *demoExtension_, const char *basePath_ ) {
-	// Create an instance first.
-	// It is expected to be present when various CEF initialization callbacks are fired.
-	instance = new UiFacade( width_, height_, demoProtocol_, demoExtension_, basePath_ );
-
-	if( !InitCef( argc, argv, hInstance, width_, height_ ) ) {
-		delete instance;
-		return false;
-	}
-
-	return true;
-}
 
 bool UiFacade::InitCef( int argc, char **argv, void *hInstance, int width, int height ) {
 	CefMainArgs mainArgs( argc, argv );
@@ -73,15 +60,15 @@ bool UiFacade::InitCef( int argc, char **argv, void *hInstance, int width, int h
 	settings.multi_threaded_message_loop = false;
 	settings.external_message_pump = true;
 #ifndef PUBLIC_BUILD
-	settings.log_severity = api->Cvar_Value( "developer ") ? LOGSEVERITY_VERBOSE : LOGSEVERITY_DEFAULT;
+	settings.log_severity = Cvar_Value( "developer ") ? LOGSEVERITY_VERBOSE : LOGSEVERITY_DEFAULT;
 #else
-	settings.log_severity = api->Cvar_Value( "developer" ) ? LOGSEVERITY_VERBOSE : LOGSEVERITY_DISABLE;
+	settings.log_severity = Cvar_Value( "developer" ) ? LOGSEVERITY_VERBOSE : LOGSEVERITY_DISABLE;
 #endif
 
 	char pathBuffer[4096 + 64];
-	ssize_t pathLen = api->FS_GetRealPath( ".", pathBuffer, sizeof( pathBuffer ) );
+	ssize_t pathLen = FS_GetRealPath( ".", pathBuffer, sizeof( pathBuffer ) );
 	if( pathLen < 0 ) {
-		api->Print( S_COLOR_RED "Can't get full real path of the current path\n" );
+		Com_Printf( S_COLOR_RED "Can't get full real path of the current path\n" );
 		return false;
 	}
 
@@ -89,7 +76,7 @@ bool UiFacade::InitCef( int argc, char **argv, void *hInstance, int width, int h
 	char *const pathSuffix = pathBuffer + pathLen;
 
 	// TODO: Make sure it's arch/platform-compatible!
-	strncpy( pathSuffix, "/ui_cef_process.x86_64", 64 );
+	strncpy( pathSuffix, "/wsw_ui_process.x86_64", 64 );
 	CefString( &settings.browser_subprocess_path ).FromASCII( pathBuffer );
 	strncpy( pathSuffix, "/cef_resources/", 64 );
 	CefString( &settings.resources_dir_path ).FromASCII( pathBuffer );
@@ -111,26 +98,27 @@ UiFacade::UiFacade( int width_, int height_, int demoProtocol_, const char *demo
 	, basePath( basePath_ )
 	, messagePipe( this )
 	, rendererCompositionProxy( this ) {
-	api->Cmd_AddCommand( "menu_force", &MenuForceHandler );
-	api->Cmd_AddCommand( "menu_open", &MenuOpenHandler );
-	api->Cmd_AddCommand( "menu_modal", &MenuModalHandler );
-	api->Cmd_AddCommand( "menu_close", &MenuCloseHandler );
+	Cmd_AddCommand( "menu_force", &MenuForceHandler );
+	Cmd_AddCommand( "menu_open", &MenuOpenHandler );
+	Cmd_AddCommand( "menu_modal", &MenuModalHandler );
+	Cmd_AddCommand( "menu_close", &MenuCloseHandler );
 
-	menu_sensitivity = api->Cvar_Get( "menu_sensitivity", "1.0", CVAR_ARCHIVE );
-	menu_mouseAccel = api->Cvar_Get( "menu_mouseAccel", "0.5", CVAR_ARCHIVE );
+	menu_sensitivity = Cvar_Get( "menu_sensitivity", "1.0", CVAR_ARCHIVE );
+	menu_mouseAccel = Cvar_Get( "menu_mouseAccel", "0.5", CVAR_ARCHIVE );
 }
 
 UiFacade::~UiFacade() {
 	CefShutdown();
 
-	api->Cmd_RemoveCommand( "menu_force" );
-	api->Cmd_RemoveCommand( "menu_open" );
-	api->Cmd_RemoveCommand( "menu_modal" );
-	api->Cmd_RemoveCommand( "menu_close" );
+	Cmd_RemoveCommand( "menu_force" );
+	Cmd_RemoveCommand( "menu_open" );
+	Cmd_RemoveCommand( "menu_modal" );
+	Cmd_RemoveCommand( "menu_close" );
 }
 
 void UiFacade::MenuCommand() {
-	messagePipe.ExecuteCommand( api->Cmd_Argc(), api->Cmd_Argv );
+	typedef const char *( *GetArgFun )(int);
+	messagePipe.ExecuteCommand( Cmd_Argc(), (GetArgFun)Cmd_Argc );
 }
 
 void UiFacade::RegisterBrowser( CefRefPtr<CefBrowser> browser_ ) {
@@ -198,25 +186,25 @@ void UiFacade::UpdateConnectScreen( const char *serverName, const char *rejectMe
 uint32_t UiFacade::GetInputModifiers() const {
 	// TODO: Precache for a frame?
 	uint32_t result = 0;
-	if( api->Key_IsDown( K_LCTRL ) || api->Key_IsDown( K_RCTRL ) ) {
+	if( Key_IsDown( K_LCTRL ) || Key_IsDown( K_RCTRL ) ) {
 		result |= EVENTFLAG_CONTROL_DOWN;
 	}
-	if( api->Key_IsDown( K_LALT ) || api->Key_IsDown( K_RALT ) ) {
+	if( Key_IsDown( K_LALT ) || Key_IsDown( K_RALT ) ) {
 		result |= EVENTFLAG_ALT_DOWN;
 	}
-	if( api->Key_IsDown( K_LSHIFT ) || api->Key_IsDown( K_RSHIFT ) ) {
+	if( Key_IsDown( K_LSHIFT ) || Key_IsDown( K_RSHIFT ) ) {
 		result |= EVENTFLAG_SHIFT_DOWN;
 	}
-	if( api->Key_IsDown( K_CAPSLOCK ) ) {
+	if( Key_IsDown( K_CAPSLOCK ) ) {
 		result |= EVENTFLAG_CAPS_LOCK_ON;
 	}
-	if( api->Key_IsDown( K_MOUSE1 ) ) {
+	if( Key_IsDown( K_MOUSE1 ) ) {
 		result |= EVENTFLAG_LEFT_MOUSE_BUTTON;
 	}
-	if( api->Key_IsDown( K_MOUSE2 ) ) {
+	if( Key_IsDown( K_MOUSE2 ) ) {
 		result |= EVENTFLAG_RIGHT_MOUSE_BUTTON;
 	}
-	if( api->Key_IsDown( K_MOUSE3 ) ) {
+	if( Key_IsDown( K_MOUSE3 ) ) {
 		result |= EVENTFLAG_MIDDLE_MOUSE_BUTTON;
 	}
 	return result;
@@ -297,13 +285,13 @@ void UiFacade::MouseMove( int context, int frameTime, int dx, int dy ) {
 
 	if( menu_sensitivity->modified ) {
 		if( menu_sensitivity->value <= 0.0f || menu_sensitivity->value > 10.0f ) {
-			api->Cvar_ForceSet( menu_sensitivity->name, "1.0" );
+			Cvar_ForceSet( menu_sensitivity->name, "1.0" );
 		}
 	}
 
 	if( menu_mouseAccel->modified ) {
 		if( menu_mouseAccel->value < 0.0f || menu_mouseAccel->value > 1.0f ) {
-			api->Cvar_ForceSet( menu_mouseAccel->name, "0.5" );
+			Cvar_ForceSet( menu_mouseAccel->name, "0.5" );
 		}
 	}
 
@@ -326,4 +314,10 @@ void UiFacade::MouseMove( int context, int frameTime, int dx, int dy ) {
 	}
 
 	messagePipe.MouseMove( context, GetInputModifiers() );
+}
+
+void UiFacade::ForceMenuOn() {
+	// TODO: This is what it used to be, there should be a more direct approach. Fails currently.
+	//Cbuf_ExecuteText( EXEC_NOW, "menu_force 1" );
+	Com_Printf( S_COLOR_RED "UiFacade::ForceMenuOn(): STUB!\n" );
 }
