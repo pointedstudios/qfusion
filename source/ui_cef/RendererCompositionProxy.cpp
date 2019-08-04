@@ -21,12 +21,21 @@ void RendererCompositionProxy::StartShowingWorldModel( const char *name, bool bl
 	hasSucceededWorldModelLoading = false;
 }
 
-RendererCompositionProxy::RendererCompositionProxy( UiFacade *parent_ ): parent( parent_ ) {
-	chromiumBuffer = new uint8_t[parent->width * parent->height * 4];
+RendererCompositionProxy::RendererCompositionProxy( UiFacade *parent_ )
+	: parent( parent_ ), width( parent_->Width() ), height( parent_->Height() ) {
+	ResizeBuffer();
+}
+
+inline void RendererCompositionProxy::ResizeBuffer() {
+	delete chromiumBuffer;
+	const size_t numBytes = width * height * 4;
+	chromiumBuffer = new uint8_t[numBytes];
+	// Clear the image data so no junk is drawn on screen for a fraction of a second
+	::memset( chromiumBuffer, 0, numBytes );
 }
 
 inline void RendererCompositionProxy::RegisterChromiumBufferShader() {
-	chromiumShader = R_RegisterRawPic( "chromiumBufferShader", parent->width, parent->height, chromiumBuffer, 4 );
+	chromiumShader = R_RegisterRawPic( "chromiumBufferShader", width, height, chromiumBuffer, 4 );
 }
 
 inline void RendererCompositionProxy::ResetBackground() {
@@ -167,9 +176,6 @@ void RendererCompositionProxy::DrawnItemsRegistry::HalfSpaceDrawList::BuildSorte
 
 void RendererCompositionProxy::UpdateChromiumBuffer( const CefRenderHandler::RectList &dirtyRects,
 													 const void *buffer, int w, int h ) {
-	assert( this->parent->width == w );
-	assert( this->parent->height == h );
-
 	// Note: we currently HAVE to maintain a local copy of the buffer...
 	// TODO: Avoid that and supply data directly to GPU if the shader is not invalidated
 
@@ -206,9 +212,6 @@ void RendererCompositionProxy::Refresh( int64_t time, bool showCursor, bool back
 		wasRendererDeviceLost = true;
 		return;
 	}
-
-	const int width = parent->width;
-	const int height = parent->height;
 
 	// Ok it seems we have to touch these shaders every frame as they are invalidated on map loading
 	whiteShader = R_RegisterPic( "$whiteimage" );
@@ -342,4 +345,18 @@ void RendererCompositionProxy::Drawn2DImage::DrawSelf( int64_t time ) {
 	int w = viewportDimensions[0];
 	int h = viewportDimensions[1];
 	RF_DrawStretchPic( x, y, w, h, 0.0f, 0.0f, 1.0f, 1.0f, colorWhite, R_RegisterPic( shaderName.c_str() ) );
+}
+
+void RendererCompositionProxy::OnRendererDeviceAcquired( int newWidth, int newHeight ) {
+	wasRendererDeviceLost = isRendererDeviceLost;
+	isRendererDeviceLost = false;
+
+	if( width == newWidth && height == newHeight ) {
+		return;
+	}
+
+	width = newWidth;
+	height = newHeight;
+
+	ResizeBuffer();
 }

@@ -20,7 +20,9 @@ struct skinfile_s;
 class RendererCompositionProxy {
 	UiFacade *const parent;
 
-	uint8_t *chromiumBuffer;
+	int width;
+	int height;
+	uint8_t *chromiumBuffer { nullptr };
 
 	struct shader_s *whiteShader { nullptr };
 	struct shader_s *cursorShader { nullptr };
@@ -209,8 +211,13 @@ class RendererCompositionProxy {
 	DrawnItemsRegistry drawnItemsRegistry;
 
 	bool StopDrawingItem( int drawnItemHandle, const std::type_info &itemTypeInfo );
+
+	inline void ResizeBuffer();
 public:
 	explicit RendererCompositionProxy( UiFacade *parent_ );
+
+	int Width() const { return width; }
+	int Height() const { return height; }
 
 	~RendererCompositionProxy() {
 		delete chromiumBuffer;
@@ -238,11 +245,7 @@ public:
 		isRendererDeviceLost = true;
 	}
 
-	void OnRendererDeviceAcquired( int width, int height ) {
-		// TODO: Handle resizing properly!
-		wasRendererDeviceLost = true;
-		isRendererDeviceLost = false;
-	}
+	void OnRendererDeviceAcquired( int newWidth, int newHeight );
 };
 
 #endif

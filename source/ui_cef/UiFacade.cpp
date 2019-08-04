@@ -323,7 +323,7 @@ void UiFacade::ForceMenuOn() {
 }
 
 void UiFacade::OnRendererDeviceAcquired( int newWidth, int newHeight ) {
-	rendererCompositionProxy.OnRendererDeviceAcquired( width, height );
+	rendererCompositionProxy.OnRendererDeviceAcquired( newWidth, newHeight );
 	if( width == newWidth && height == newHeight ) {
 		return;
 	}

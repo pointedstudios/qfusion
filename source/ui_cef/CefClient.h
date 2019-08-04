@@ -9,21 +9,17 @@
 #include "include/cef_render_handler.h"
 
 class WswCefRenderHandler: public CefRenderHandler {
-	const int width;
-	const int height;
 	RendererCompositionProxy *const rendererCompositionProxy;
 
 	void FillRect( CefRect &rect ) {
 		rect.x = 0;
 		rect.y = 0;
-		rect.width = width;
-		rect.height = height;
+		rect.width = rendererCompositionProxy->Width();
+		rect.height = rendererCompositionProxy->Height();
 	}
 public:
 	explicit WswCefRenderHandler( UiFacade *facade )
-		: width( facade->width )
-		, height( facade->height )
-		, rendererCompositionProxy( &facade->rendererCompositionProxy ) {}
+		: rendererCompositionProxy( &facade->rendererCompositionProxy ) {}
 
 	bool GetRootScreenRect( CefRefPtr<CefBrowser> browser, CefRect& rect ) override {
 		FillRect( rect );
@@ -37,8 +33,6 @@ public:
 
 	void OnPaint( CefRefPtr<CefBrowser> browser, PaintElementType type, const RectList& dirtyRects,
 				  const void* buffer, int width_, int height_ ) override {
-		assert( width_ == this->width );
-		assert( height_ == this->height );
 		rendererCompositionProxy->UpdateChromiumBuffer( dirtyRects, buffer, width_, height_ );
 	}
 

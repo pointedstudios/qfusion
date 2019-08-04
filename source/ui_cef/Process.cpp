@@ -67,7 +67,7 @@ void RF_GetScissor( int *, int *, int *, int * ) { Stub(); }
 void RF_ResetScissor() { Stub(); }
 
 shader_t *R_RegisterPic( const char * ) { Stub(); }
-shader_t *R_RegisterRawPic( const char *, int, int, uint8_t *, int ) { Stub(); }
+shader_t *R_RegisterRawPic( const char *, int, int, uint8_t *, int, bool ) { Stub(); }
 shader_t *R_RegisterRawAlphaMask( const char *, int, int, uint8_t * ) { Stub(); }
 shader_t *R_RegisterLevelshot( const char *, shader_t *, bool * ) { Stub(); }
 shader_t *R_RegisterSkin( const char * ) { Stub(); }
