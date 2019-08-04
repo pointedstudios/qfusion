@@ -27,8 +27,7 @@ void UiFacade::InitOrAcquireDevice() {
 	const int height = viddef.height;
 
 	if( instance ) {
-		instance->rendererCompositionProxy.OnRendererDeviceAcquired( width, height );
-		// TODO: Send CefBrowserHost::WasResized() if needed! Update width/height!
+		instance->OnRendererDeviceAcquired( width, height );
 		return;
 	}
 

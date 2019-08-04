@@ -321,3 +321,18 @@ void UiFacade::ForceMenuOn() {
 	//Cbuf_ExecuteText( EXEC_NOW, "menu_force 1" );
 	Com_Printf( S_COLOR_RED "UiFacade::ForceMenuOn(): STUB!\n" );
 }
+
+void UiFacade::OnRendererDeviceAcquired( int newWidth, int newHeight ) {
+	rendererCompositionProxy.OnRendererDeviceAcquired( width, height );
+	if( width == newWidth && height == newHeight ) {
+		return;
+	}
+
+	// Update these fields first
+	this->width = newWidth;
+	this->height = newHeight;
+	this->mouseXY[0] = this->mouseXY[1] = 0;
+
+	// This call may perform an implicit access to this instance
+	browser->GetHost()->WasResized();
+}

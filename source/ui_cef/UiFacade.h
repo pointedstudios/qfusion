@@ -48,8 +48,8 @@ class UiFacade {
 	CefRefPtr<CefBrowser> browser;
 	WswCefRenderHandler *renderHandler;
 
-	const int width;
-	const int height;
+	int width;
+	int height;
 
 	MainScreenState *thisFrameScreenState { nullptr };
 
@@ -92,6 +92,8 @@ class UiFacade {
 	struct cvar_s *menu_mouseAccel { nullptr };
 
 	BrowserProcessLogger logger;
+
+	void OnRendererDeviceAcquired( int newWidth, int newHeight );
 public:
 	static void Shutdown() {
 		delete instance;
