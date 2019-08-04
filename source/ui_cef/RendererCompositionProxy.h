@@ -28,10 +28,9 @@ class RendererCompositionProxy {
 	struct shader_s *cursorShader { nullptr };
 	struct shader_s *chromiumShader { nullptr };
 
-	std::string pendingWorldModel;
 	CameraAnimator worldCameraAnimator;
 
-	bool hasPendingWorldModel { false };
+	bool isDrawingWorldModel { false };
 	bool hasStartedWorldModelLoading { false };
 	bool hasSucceededWorldModelLoading { false };
 
@@ -42,9 +41,9 @@ class RendererCompositionProxy {
 	bool wasRendererDeviceLost { false };
 	bool isRendererDeviceLost { false };
 
-	void DrawWorldModel( int64_t time, int width, int height, bool blurred = false );
+	void DrawWorldModel( int64_t time, bool blurred = false );
 
-	void CheckAndDrawBackground( int64_t time, int width, int height, bool blurred = false );
+	void CheckAndDrawBackground( int64_t time, bool blurred = false );
 
 	inline void ResetBackground();
 

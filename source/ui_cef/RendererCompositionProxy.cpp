@@ -5,22 +5,6 @@
 
 #include <memory>
 
-void RendererCompositionProxy::StartShowingWorldModel( const char *name, bool blurred, bool looping,
-													   const std::vector<ViewAnimFrame> &frames ) {
-	if( looping ) {
-		worldCameraAnimator.ResetWithLoop( frames.data(), frames.data() + frames.size() );
-	} else {
-		worldCameraAnimator.ResetWithSequence( frames.data(), frames.data() + frames.size() );
-	}
-
-	blurWorldModel = blurred;
-
-	pendingWorldModel.assign( name );
-	hasPendingWorldModel = true;
-	hasStartedWorldModelLoading = false;
-	hasSucceededWorldModelLoading = false;
-}
-
 RendererCompositionProxy::RendererCompositionProxy( UiFacade *parent_ )
 	: parent( parent_ ), width( parent_->Width() ), height( parent_->Height() ) {
 	ResizeBuffer();
@@ -39,8 +23,7 @@ inline void RendererCompositionProxy::RegisterChromiumBufferShader() {
 }
 
 inline void RendererCompositionProxy::ResetBackground() {
-	pendingWorldModel.clear();
-	hasPendingWorldModel = false;
+	isDrawingWorldModel = false;
 	hasStartedWorldModelLoading = false;
 	hasSucceededWorldModelLoading = false;
 }
@@ -218,7 +201,7 @@ void RendererCompositionProxy::Refresh( int64_t time, bool showCursor, bool back
 	cursorShader = R_RegisterPic( "gfx/ui/cursor.tga" );
 
 	if( background ) {
-		CheckAndDrawBackground( time, width, height, blurWorldModel );
+		CheckAndDrawBackground( time, blurWorldModel );
 		hadOwnBackground = true;
 	} else if( hadOwnBackground ) {
 		ResetBackground();
@@ -246,29 +229,43 @@ void RendererCompositionProxy::Refresh( int64_t time, bool showCursor, bool back
 	wasRendererDeviceLost = isRendererDeviceLost;
 }
 
-void RendererCompositionProxy::CheckAndDrawBackground( int64_t time, int width, int height, bool blurred ) {
-	if( hasPendingWorldModel ) {
-		if( !hasStartedWorldModelLoading ) {
-			RF_RegisterWorldModel( pendingWorldModel.c_str() );
-			hasStartedWorldModelLoading = true;
-		} else {
-			if( R_RegisterModel( pendingWorldModel.c_str() ) ) {
-				hasSucceededWorldModelLoading = true;
-			}
-			hasPendingWorldModel = false;
+void RendererCompositionProxy::CheckAndDrawBackground( int64_t time, bool blurred ) {
+	constexpr const char *worldModelName = "maps/ui.bsp";
+
+	if( !hasStartedWorldModelLoading ) {
+		RF_RegisterWorldModel( worldModelName );
+		hasStartedWorldModelLoading = true;
+	} else if( !hasSucceededWorldModelLoading ) {
+		if( R_RegisterModel( worldModelName ) ) {
+			hasSucceededWorldModelLoading = true;
+
+			// TODO...
+			CameraAnimFrame frame1;
+			VectorSet( frame1.origin, 302, -490, 120 );
+			Vector4Set( frame1.rotation, 0, 0, 0, 1 );
+			frame1.fov = 100;
+			frame1.timestamp = 0;
+			CameraAnimFrame frame2;
+			frame2.origin[0] = 333;
+			frame2.timestamp = 10000;
+			CameraAnimFrame frame3 = frame1;
+			frame3.timestamp = 20000;
+			CameraAnimFrame frames[3] = { frame1, frame2, frame3 };
+			worldCameraAnimator.ResetWithLoop( frames, frames + 3 );
 		}
 	}
 
 	if( hasSucceededWorldModelLoading ) {
-		worldCameraAnimator.Refresh( time );
-		DrawWorldModel( time, width, height, blurWorldModel );
+		DrawWorldModel( time, blurWorldModel );
 	} else {
 		// Draw a fullscreen black quad... we are unsure if the renderer clears default framebuffer
 		RF_DrawStretchPic( 0, 0, width, height, 0.0f, 0.0f, 1.0f, 1.0f, colorBlack, whiteShader );
 	}
 }
 
-void RendererCompositionProxy::DrawWorldModel( int64_t time, int width, int height, bool blurred ) {
+void RendererCompositionProxy::DrawWorldModel( int64_t time, bool blurred ) {
+	worldCameraAnimator.Refresh( time );
+
 	refdef_t rdf;
 	memset( &rdf, 0, sizeof( rdf ) );
 	rdf.areabits = nullptr;

@@ -30,7 +30,6 @@ class WswCefV8Handler: public CefV8Handler {
 	GetLocalizedStringsRequestLauncher getLocalizedStrings;
 	GetKeyBindingsRequestLauncher getKeyBindings;
 	GetKeyNamesRequestLauncher getKeyNames;
-	DrawWorldModelRequestLauncher drawWorldModel;
 	StartDrawingModelRequestLauncher startDrawingModel;
 	StopDrawingModelRequestLauncher stopDrawingModel;
 	StartDrawingImageRequestLauncher startDrawingImage;
@@ -66,7 +65,6 @@ public:
 		, getLocalizedStrings( this )
 		, getKeyBindings( this )
 		, getKeyNames( this )
-		, drawWorldModel( this )
 		, startDrawingModel( this )
 		, stopDrawingModel( this )
 		, startDrawingImage( this )

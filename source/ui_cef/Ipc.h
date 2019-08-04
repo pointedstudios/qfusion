@@ -98,7 +98,6 @@ public:
 	static const CefString getLocalizedStrings;
 	static const CefString getKeyBindings;
 	static const CefString getKeyNames;
-	static const CefString drawWorldModel;
 	static const CefString startDrawingModel;
 	static const CefString stopDrawingModel;
 	static const CefString startDrawingImage;
@@ -289,8 +288,6 @@ DERIVE_REQUEST_FOR_KEYS_HANDLER( GetKeyBindingsRequest, PendingCallbackRequest::
 DERIVE_PENDING_CALLBACK_REQUEST( GetKeyNamesRequest, PendingCallbackRequest::getKeyNames );
 DERIVE_REQUEST_FOR_KEYS_LAUNCHER( GetKeyNamesRequest, PendingCallbackRequest::getKeyNames );
 DERIVE_REQUEST_FOR_KEYS_HANDLER( GetKeyNamesRequest, PendingCallbackRequest::getKeyNames );
-
-DERIVE_REQUEST_IPC_HELPERS( DrawWorldModelRequest, PendingCallbackRequest::drawWorldModel );
 
 DERIVE_REQUEST_IPC_HELPERS( StartDrawingModelRequest, PendingCallbackRequest::startDrawingModel );
 DERIVE_REQUEST_IPC_HELPERS( StartDrawingImageRequest, PendingCallbackRequest::startDrawingImage );

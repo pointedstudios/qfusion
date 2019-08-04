@@ -28,7 +28,6 @@ const CefString PendingCallbackRequest::getMaps( "getMaps" );
 const CefString PendingCallbackRequest::getLocalizedStrings( "getLocalizedStrings" );
 const CefString PendingCallbackRequest::getKeyBindings( "getKeyBindings" );
 const CefString PendingCallbackRequest::getKeyNames( "getKeyNames" );
-const CefString PendingCallbackRequest::drawWorldModel( "drawWorldModel" );
 const CefString PendingCallbackRequest::startDrawingModel( "startDrawingModel" );
 const CefString PendingCallbackRequest::stopDrawingModel( "stopDrawingModel" );
 const CefString PendingCallbackRequest::startDrawingImage( "startDrawingImage" );

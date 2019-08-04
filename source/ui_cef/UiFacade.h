@@ -174,10 +174,6 @@ public:
 		}
 	}
 
-	void StartShowingWorldModel( const char *name, bool blurred, bool looping, const std::vector<ViewAnimFrame> &frames ) {
-		rendererCompositionProxy.StartShowingWorldModel( name, blurred, looping, frames );
-	}
-
 	int StartDrawingModel( const ModelDrawParams &params ) {
 		return rendererCompositionProxy.StartDrawingModel( params );
 	}

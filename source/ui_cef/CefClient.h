@@ -69,7 +69,6 @@ class WswCefClient: public CefClient, public CefLifeSpanHandler, public CefConte
 	GetLocalizedStringsRequestHandler getLocalizedStrings;
 	GetKeyBindingsRequestHandler getKeyBindings;
 	GetKeyNamesRequestHandler getKeyNames;
-	DrawWorldModelRequestHandler drawWorldModel;
 	StartDrawingModelRequestHandler startDrawingModel;
 	StopDrawingModelRequestHandler stopDrawingModel;
 	StartDrawingImageRequestHandler startDrawingImage;
@@ -94,7 +93,6 @@ public:
 		, getLocalizedStrings( this )
 		, getKeyBindings( this )
 		, getKeyNames( this )
-		, drawWorldModel( this )
 		, startDrawingModel( this )
 		, stopDrawingModel( this )
 		, startDrawingImage( this )
