@@ -23,7 +23,6 @@ inline void RendererCompositionProxy::RegisterChromiumBufferShader() {
 }
 
 inline void RendererCompositionProxy::ResetBackground() {
-	isDrawingWorldModel = false;
 	hasStartedWorldModelLoading = false;
 	hasSucceededWorldModelLoading = false;
 }
@@ -231,27 +230,13 @@ void RendererCompositionProxy::Refresh( int64_t time, bool showCursor, bool back
 
 void RendererCompositionProxy::CheckAndDrawBackground( int64_t time, bool blurred ) {
 	constexpr const char *worldModelName = "maps/ui.bsp";
-
 	if( !hasStartedWorldModelLoading ) {
 		RF_RegisterWorldModel( worldModelName );
 		hasStartedWorldModelLoading = true;
 	} else if( !hasSucceededWorldModelLoading ) {
 		if( R_RegisterModel( worldModelName ) ) {
 			hasSucceededWorldModelLoading = true;
-
-			// TODO...
-			CameraAnimFrame frame1;
-			VectorSet( frame1.origin, 302, -490, 120 );
-			Vector4Set( frame1.rotation, 0, 0, 0, 1 );
-			frame1.fov = 100;
-			frame1.timestamp = 0;
-			CameraAnimFrame frame2;
-			frame2.origin[0] = 333;
-			frame2.timestamp = 10000;
-			CameraAnimFrame frame3 = frame1;
-			frame3.timestamp = 20000;
-			CameraAnimFrame frames[3] = { frame1, frame2, frame3 };
-			worldCameraAnimator.ResetWithLoop( frames, frames + 3 );
+			SetupDefaultCamera();
 		}
 	}
 
@@ -261,6 +246,24 @@ void RendererCompositionProxy::CheckAndDrawBackground( int64_t time, bool blurre
 		// Draw a fullscreen black quad... we are unsure if the renderer clears default framebuffer
 		RF_DrawStretchPic( 0, 0, width, height, 0.0f, 0.0f, 1.0f, 1.0f, colorBlack, whiteShader );
 	}
+}
+
+void RendererCompositionProxy::SetupDefaultCamera() {
+	// This is a copy-paste from map_ui.pk3 CSS
+	vec3_t origin { 302.0f, -490.0f, 120.0f };
+	vec3_t angles { 0, -240, 0 };
+
+	angles[1] += 1.0f;
+	CameraAnimFrame frame1( CameraAnimFrame::FromLookAngles( origin, angles, 90.0f, 0 ) );
+
+	angles[1] -= 2.0f;
+	origin[0] += 3.0f;
+	origin[1] += 3.0f;
+	CameraAnimFrame frame2( CameraAnimFrame::FromLookAngles( origin, angles, 95.0f, 30000 ) );
+	CameraAnimFrame frame3 = frame1;
+	frame3.timestamp = 60000;
+	CameraAnimFrame frames[3] = { frame1, frame2, frame3 };
+	worldCameraAnimator.ResetWithLoop( frames, frames + 3 );
 }
 
 void RendererCompositionProxy::DrawWorldModel( int64_t time, bool blurred ) {
@@ -274,9 +277,10 @@ void RendererCompositionProxy::DrawWorldModel( int64_t time, bool blurred ) {
 	rdf.width = width;
 	rdf.height = height;
 
-	VectorCopy( worldCameraAnimator.Origin(), rdf.vieworg );
-	Matrix3_Copy( worldCameraAnimator.Axis(), rdf.viewaxis );
-	rdf.fov_x = worldCameraAnimator.Fov();
+	const CameraAnimParams &params = worldCameraAnimator.GetAnimatedProperty();
+	VectorCopy( params.origin, rdf.vieworg );
+	Matrix3_Copy( params.axis, rdf.viewaxis );
+	rdf.fov_x = params.fov;
 	rdf.fov_y = CalcFov( rdf.fov_x, width, height );
 	AdjustFov( &rdf.fov_x, &rdf.fov_y, rdf.width, rdf.height, false );
 	rdf.time = time;
@@ -305,8 +309,8 @@ RendererCompositionProxy::NativelyDrawnItem::NativelyDrawnItem( RendererComposit
 RendererCompositionProxy::DrawnAliasModel::DrawnAliasModel( RendererCompositionProxy *parent_,
 															const ModelDrawParams &drawParams )
 	: NativelyDrawnItem( parent_, drawParams ) {
-	const ViewAnimFrame *animBegin = drawParams.AnimFrames().data();
-	const ViewAnimFrame *animEnd = animBegin + drawParams.AnimFrames().size();
+	const ModelAnimFrame *animBegin = drawParams.AnimFrames().data();
+	const ModelAnimFrame *animEnd = animBegin + drawParams.AnimFrames().size();
 	if( drawParams.IsAnimLooping() ) {
 		animator.ResetWithLoop( animBegin, animEnd );
 	} else {

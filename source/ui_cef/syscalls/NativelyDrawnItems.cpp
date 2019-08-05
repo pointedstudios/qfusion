@@ -1,8 +1,13 @@
 #include "SyscallsLocal.h"
 #include "ObjectFieldsGetter.h"
-#include "ViewAnimParser.h"
 
 #include "../../gameshared/q_shared.h"
+
+static const CefString originField( "origin" );
+static const CefString anglesField( "angles" );
+static const CefString lookAtField( "lookAt" );
+static const CefString timestampField( "timestamp" );
+static const CefString fovField( "fov" );
 
 static const CefString modelField( "model" );
 static const CefString skinField( "skin" );
@@ -13,6 +18,234 @@ static const CefString dimensionsField( "dimensions" );
 static const CefString zIndexField( "zIndex" );
 static const CefString loopField( "cameraAnimLoop" );
 static const CefString seqField( "cameraAnimSeq" );
+
+/**
+ * A helper for parsing and validation view anim frames from a JS array.
+ * @todo this came from removal of generalization for camera frames and could be merged with request launcher code.
+ */
+class ModelAnimParser {
+	std::vector<ModelAnimFrame> framesStorage;
+	CefRefPtr<CefV8Value> &framesArray;
+	const ModelAnimFrame *prevFrame { nullptr };
+	bool ValidateNewFrame( const ModelAnimFrame *newFrame, int index, CefString &exception );
+protected:
+	const CefString &scope;
+
+	ModelAnimFrame *ParseFrame( ObjectFieldsGetter &getter, int index, CefString &ex, const CefString &scope );
+
+	/**
+	 * Allocates a new ModelAnimFrame object that is writable.
+	 * Appends it to the ModelAnimFrames list.
+	 * @note the ModelAnimFrame address is only guaranteed to be valid for the current ParseModelAnimFrame() step.
+	 */
+	ModelAnimFrame *AllocNextFrame() {
+		// Pushing an item first is important... data() returns null for an empty container
+		framesStorage.emplace_back( ModelAnimFrame() );
+		return framesStorage.data() + framesStorage.size() - 1;
+	}
+	/**
+	 * Returns the first ModelAnimFrame in the parsed ModelAnimFrames list (if any).
+	 * @note the ModelAnimFrame address might change after next {@code AllocNextModelAnimFrame()} calls.
+	 */
+	ModelAnimFrame *FirstFrame() {
+		return framesStorage.data();
+	}
+	/**
+	 * Returns the last ModelAnimFrame in the parsed ModelAnimFrames list (if any).
+	 * @note the ModelAnimFrame address might change after next {@code AllocNextModelAnimFrame()} calls.
+	 */
+	ModelAnimFrame *LastFrame() {
+		return !framesStorage.empty() ? framesStorage.data() + framesStorage.size() - 1 : nullptr;
+	}
+public:
+	ModelAnimParser( CefRefPtr<CefV8Value> &framesArray_, const CefString &scope_ )
+		: framesArray( framesArray_ ), scope( scope_ ) {}
+
+	bool Parse( bool expectLooping, CefString &exception );
+
+	const std::vector<ModelAnimFrame> &Frames() { return framesStorage; }
+};
+
+static CefRefPtr<CefV8Value> FindAnimField( ObjectFieldsGetter &paramsGetter,
+											const CefString &seqFieldName,
+											const CefString &loopFieldName,
+											const CefString **animFieldName,
+											CefString &exception );
+
+bool ModelAnimParser::Parse( bool looping, CefString &exception ) {
+	const int arrayLength = framesArray->GetArrayLength();
+	if( !arrayLength ) {
+		exception = "No anim frames are specified";
+		return false;
+	}
+
+	for( int i = 0, end = arrayLength; i < end; ++i ) {
+		auto elemValue( framesArray->GetValue( i ) );
+		if( !elemValue->IsObject() ) {
+			exception = "A value of `" + scope.ToString() + "` array element #" + std::to_string( i ) + " is not an object";
+			return false;
+		}
+
+		// TODO: Get rid of allocations here
+		CefString fieldScope = scope.ToString() + "[" + std::to_string( i ) + "]";
+
+		ObjectFieldsGetter getter( elemValue );
+		ModelAnimFrame *newFrame = ParseFrame( getter, i, exception, fieldScope );
+		if( !newFrame ) {
+			return false;
+		}
+
+		if( !ValidateNewFrame( newFrame, i, exception ) ) {
+			return false;
+		}
+	}
+
+	if( looping ) {
+		const auto *firstFrame = FirstFrame();
+		const auto *lastFrame = LastFrame();
+		if( firstFrame == lastFrame ) {
+			return true;
+		}
+
+		if( !TimeUnawareEquals( *firstFrame, *lastFrame ) ) {
+			exception = "The first and last loop frames must have equal fields (except the timestamp)";
+			return false;
+		}
+	}
+
+	return true;
+}
+
+ModelAnimFrame *ModelAnimParser::ParseFrame( ObjectFieldsGetter &getter, int index,
+											 CefString &ex, const CefString &fieldScope ) {
+	ModelAnimFrame *const frame = this->AllocNextFrame();
+	
+	// TODO: Get rid of string allocations here...
+	//CefString elemScope = scope.ToString() + "[" + std::to_string( index ) + "]";
+
+	if( !getter.GetVec3( originField, frame->origin, ex, fieldScope ) ) {
+		return nullptr;
+	}
+
+	if( !getter.GetUInt( timestampField, &frame->timestamp, ex, fieldScope ) ) {
+		return nullptr;
+	}
+
+	bool hasLookAt = getter.ContainsField( lookAtField );
+	bool hasAngles = getter.ContainsField( anglesField );
+	if( !hasLookAt && !hasAngles ) {
+		CefStringBuilder s;
+		s << "Neither `" << lookAtField << "` nor `" << anglesField << "` are present in the frame #" << index;
+		ex = s.ReleaseOwnership();
+		return nullptr;
+	}
+
+	if( hasLookAt && hasAngles ) {
+		CefStringBuilder s;
+		s << "Both `" << lookAtField << "` and `" << anglesField << "` are present in the frame #" << index;
+		ex = s.ReleaseOwnership();
+		return nullptr;
+	}
+
+	vec3_t tmp;
+	if( hasAngles ) {
+		if( !getter.GetVec3( anglesField, tmp, ex, scope ) ) {
+			return nullptr;
+		}
+		mat3_t m;
+		AnglesToAxis( tmp, m );
+		Quat_FromMatrix3( m, frame->rotation );
+		return frame;
+	}
+
+	if( !getter.GetVec3( lookAtField, tmp, ex, scope ) ) {
+		return nullptr;
+	}
+
+	if( DistanceSquared( tmp, frame->origin ) < 1 ) {
+		CefStringBuilder s;
+		s << originField << " and " << lookAtField << " are way too close to each other, can't produce a direction";
+		ex = s.ReleaseOwnership();
+		return nullptr;
+	}
+
+	vec3_t dir, angles;
+	mat3_t m;
+	VectorSubtract( tmp, frame->origin, dir );
+	VectorNormalize( dir );
+	VecToAngles( dir, angles );
+	AnglesToAxis( angles, m );
+	Quat_FromMatrix3( m, frame->rotation );
+	return frame;
+}
+
+bool ModelAnimParser::ValidateNewFrame( const ModelAnimFrame *newFrame, int index, CefString &exception ) {
+	if( !prevFrame ) {
+		if( newFrame->timestamp ) {
+			exception = "The timestamp must be zero for the first frame";
+			return false;
+		}
+		prevFrame = newFrame;
+		return true;
+	}
+
+	// Notice casts in the RHS... otherwise the subtraction is done on unsigned numbers
+	const int64_t delta = (int64_t)newFrame->timestamp - (int64_t)prevFrame->timestamp;
+	const char *error = nullptr;
+	if( delta <= 0 ) {
+		error = " violates monotonic increase contract";
+	} else if( delta < 16 ) {
+		error = " is way too close to the previous one (should be at least 16 millis ahead)";
+	} else if( delta > (int64_t) ( 1u << 20u ) ) {
+		error = " is way too far from the previous one (is this a numeric error?)";
+	}
+
+	if( error ) {
+		exception = "The timestamp for frame #" + std::to_string( index ) + error;
+		return false;
+	}
+
+	prevFrame = newFrame;
+	return true;
+}
+
+CefRefPtr<CefV8Value> FindAnimField( ObjectFieldsGetter &paramsGetter,
+									 const CefString &seqFieldName,
+									 const CefString &loopFieldName,
+									 const CefString **animFieldName,
+									 CefString &exception ) {
+	const bool hasSeq = paramsGetter.ContainsField( seqFieldName );
+	const bool hasLoop = paramsGetter.ContainsField( loopFieldName );
+	if( hasSeq && hasLoop ) {
+		CefStringBuilder s;
+		s << "Both " << seqFieldName << " and " << loopFieldName << " fields are present";
+		exception = s.ReleaseOwnership();
+		return nullptr;
+	}
+
+	if( !hasSeq && !hasLoop ) {
+		CefStringBuilder s;
+		s << "Neither " << seqFieldName << " nor " << loopFieldName << " fields are present";
+		exception = s.ReleaseOwnership();
+		return nullptr;
+	}
+
+	CefRefPtr<CefV8Value> result;
+	*animFieldName = nullptr;
+	if( hasSeq ) {
+		if( !paramsGetter.GetArray( seqFieldName, result, exception ) ) {
+			return nullptr;
+		}
+		*animFieldName = &seqFieldName;
+	} else {
+		if( !paramsGetter.GetArray( loopFieldName, result, exception ) ) {
+			return nullptr;
+		}
+		*animFieldName = &loopFieldName;
+	}
+
+	return result;
+}
 
 static int ParseColorComponent( const CefString::char_type *data, int component, CefString &exception ) {
 	const int ch1 = data[2 * component + 0];
@@ -158,12 +391,12 @@ bool StartDrawingModelRequestLauncher::StartExec( const CefV8ValueList &jsArgs,
 	}
 
 	const CefString *animFieldName = nullptr;
-	auto animArrayField( ViewAnimParser::FindAnimField( fieldsGetter, seqField, loopField, &animFieldName, exception ) );
+	auto animArrayField( FindAnimField( fieldsGetter, seqField, loopField, &animFieldName, exception ) );
 	if( !animArrayField ) {
 		return false;
 	}
 
-	ViewAnimParser parser( animArrayField, *animFieldName );
+	ModelAnimParser parser( animArrayField, *animFieldName );
 	const bool isAnimLooping = ( animFieldName == &loopField );
 	if( !parser.Parse( isAnimLooping, exception ) ) {
 		return false;
@@ -253,19 +486,32 @@ struct ModelDrawParamsView final: public virtual ModelDrawParams, public virtual
 	const CefString *skin { nullptr };
 	const int *colorRgba { nullptr };
 	const bool *isAnimLooping { nullptr };
-	const std::vector<ViewAnimFrame> *animFrames { nullptr };
+	const std::vector<ModelAnimFrame> *animFrames { nullptr };
 
 	const CefString &Model() const override { return CheckAndGet( model, "model" ); }
 	const CefString &Skin() const override { return CheckAndGet( skin, "skin" ); }
 	int ColorRgba() const override { return CheckAndGet( colorRgba, "colorRgba" ); }
 	bool IsAnimLooping() const override { return CheckAndGet( isAnimLooping, "isAnimLooping" ); }
-	const std::vector<ViewAnimFrame> &AnimFrames() const override { return CheckAndGet( animFrames, "animFrames" ); }
+	const std::vector<ModelAnimFrame> &AnimFrames() const override { return CheckAndGet( animFrames, "animFrames" ); }
 };
 
 struct ImageDrawParamsView final: public virtual ImageDrawParams, public virtual ItemDrawParamsView {
 	const CefString *shader { nullptr };
 	const CefString &Shader() const override { return CheckAndGet( shader, "shader" ); }
 };
+
+template <typename Frame>
+MessageReader &ReadAnim( MessageReader &reader, bool *looping, std::vector<Frame> &frames ) {
+	int numFrames;
+	reader >> *looping >> numFrames;
+	frames.reserve( (unsigned)numFrames );
+	for( int i = 0; i < numFrames; ++i ) {
+		Frame frame;
+		reader >> frame;
+		frames.emplace_back( frame );
+	}
+	return reader;
+}
 
 void StartDrawingModelRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> browser, MessageReader &reader ) {
 	CefString model, skin;
@@ -274,9 +520,9 @@ void StartDrawingModelRequestHandler::ReplyToRequest( CefRefPtr<CefBrowser> brow
 
 	reader >> model >> skin >> colorRgba >> topLeft >> dimensions >> zIndex;
 
-	std::vector<ViewAnimFrame> animFrames;
+	std::vector<ModelAnimFrame> animFrames;
 	bool isAnimLooping = false;
-	ReadCameraAnim( reader, &isAnimLooping, animFrames );
+	::ReadAnim( reader, &isAnimLooping, animFrames );
 
 	// TODO: Use SetFoo() calls from the beginning instead?
 	ModelDrawParamsView params;

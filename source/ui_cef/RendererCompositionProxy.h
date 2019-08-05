@@ -1,7 +1,7 @@
 #ifndef UI_CEF_COMPOSITOR_H
 #define UI_CEF_COMPOSITOR_H
 
-#include "ViewAnimator.h"
+#include "Animator.h"
 #include <string>
 #include <include/cef_render_handler.h>
 
@@ -30,7 +30,6 @@ class RendererCompositionProxy {
 
 	CameraAnimator worldCameraAnimator;
 
-	bool isDrawingWorldModel { false };
 	bool hasStartedWorldModelLoading { false };
 	bool hasSucceededWorldModelLoading { false };
 
@@ -44,6 +43,8 @@ class RendererCompositionProxy {
 	void DrawWorldModel( int64_t time, bool blurred = false );
 
 	void CheckAndDrawBackground( int64_t time, bool blurred = false );
+
+	void SetupDefaultCamera();
 
 	inline void ResetBackground();
 
@@ -73,7 +74,7 @@ class RendererCompositionProxy {
 
 	class DrawnAliasModel: public NativelyDrawnItem {
 		entity_t entity;
-		ViewAnimator animator;
+		ModelAnimator animator;
 		// We have to save it to be able to recover from "device lost" situation
 		std::string modelName;
 		// We have to save it to be able to recover from "device lost" situation
@@ -225,8 +226,6 @@ public:
 	void UpdateChromiumBuffer( const CefRenderHandler::RectList &dirtyRects, const void *buffer, int w, int h );
 
 	void Refresh( int64_t time, bool showCursor, bool background );
-
-	void StartShowingWorldModel( const char *name, bool blurred, bool looping, const std::vector<ViewAnimFrame> &frames );
 
 	int StartDrawingModel( const ModelDrawParams &params );
 	int StartDrawingImage( const ImageDrawParams &params );

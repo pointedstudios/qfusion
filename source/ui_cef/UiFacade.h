@@ -32,7 +32,7 @@ public:
 	virtual const CefString &Skin() const = 0;
 	virtual int ColorRgba() const  = 0;
 	virtual bool IsAnimLooping() const = 0;
-	virtual const std::vector<ViewAnimFrame> &AnimFrames() const = 0;
+	virtual const std::vector<ModelAnimFrame> &AnimFrames() const = 0;
 };
 
 class ImageDrawParams: public virtual ItemDrawParams {

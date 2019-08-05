@@ -132,6 +132,7 @@ link_directories(${CEF_LINK_DIR})
 
 file(GLOB UI_CEF_HEADERS "../ui_cef/*.h")
 file(GLOB UI_CEF_SOURCES
+		"../ui_cef/Animator.cpp"
 		"../ui_cef/BrowserProcessHandler.cpp"
 		"../ui_cef/CefApp.cpp"
 		"../ui_cef/CefClient.cpp"

@@ -134,7 +134,7 @@ public:
 	}
 };
 
-inline MessageWriter &operator<<( MessageWriter &writer, const ViewAnimFrame &frame ) {
+inline MessageWriter &operator<<( MessageWriter &writer, const ModelAnimFrame &frame ) {
 	return writer << frame.rotation << frame.origin << frame.timestamp;
 }
 
@@ -152,7 +152,7 @@ MessageWriter &WriteViewAnim( MessageWriter &writer, bool looping, const std::ve
 }
 
 
-inline MessageReader &operator>>( MessageReader &reader, ViewAnimFrame &frame ) {
+inline MessageReader &operator>>( MessageReader &reader, ModelAnimFrame &frame ) {
 	return reader >> frame.rotation >> frame.origin >> frame.timestamp;
 }
 
@@ -160,17 +160,6 @@ inline MessageReader &operator>>( MessageReader &reader, CameraAnimFrame &frame 
 	return reader >> frame.rotation >> frame.origin >> frame.timestamp >> frame.fov;
 }
 
-template <typename FrameImpl>
-MessageReader &ReadCameraAnim( MessageReader &reader, bool *looping, std::vector<FrameImpl> &frames ) {
-	int numFrames;
-	reader >> *looping >> numFrames;
-	frames.reserve( (unsigned)numFrames );
-	for( int i = 0; i < numFrames; ++i ) {
-		FrameImpl frame;
-		reader >> frame;
-		frames.emplace_back( frame );
-	}
-	return reader;
-}
+
 
 #endif
