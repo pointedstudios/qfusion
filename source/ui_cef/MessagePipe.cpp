@@ -7,6 +7,7 @@
 #include "include/cef_browser.h"
 #include <memory>
 #include "../gameshared/q_keycodes.h"
+#include "../qcommon/qcommon.h"
 
 void MessagePipe::SendProcessMessage( CefRefPtr<CefProcessMessage> message ) {
 	CefBrowser *browser = parent->GetBrowser();
@@ -94,12 +95,12 @@ void MessagePipe::CharEvent( int context, int qKey, int character,
 
 void MessagePipe::MouseSet( int context, int mx, int my, bool showCursor ) {
 	if( isReady ) {
-		mouseSetSender.AcquireAndSend( MouseSetMessage::NewPooledObject( context, mx, my, showCursor ) );
+		mouseSetSender.AcquireAndSend( new MouseSetMessage( context, mx, my, showCursor ) );
 		return;
 	}
 
 	// Allocate the message using the default heap and not the allocator (since its capacity is limited)
-	auto messagePtr = std::make_unique<MouseSetMessage>( context, mx, my, showCursor, nullptr );
+	auto messagePtr = std::make_unique<MouseSetMessage>( context, mx, my, showCursor );
 	deferredMessages.emplace_back( std::make_pair( std::move( messagePtr ), &mouseSetSender ) );
 }
 
@@ -119,24 +120,21 @@ void MessagePipe::ShowQuickMenu( bool show ) {
 	// We do not support quick menus, do we?
 }
 
-void MessagePipe::ExecuteCommand( int argc, const char *( *getArg )( int ) ) {
+void MessagePipe::ExecuteCommand() {
 	if( isReady ) {
-		auto argGetter = [=]( int argNum ) {
-			CefString s;
-			s.FromASCII( getArg( argNum ) );
-			return s;
-		};
-		gameCommandSender.AcquireAndSend( ProxyingGameCommandMessage::NewPooledObject( argc, std::move( argGetter ) ) );
+		gameCommandSender.AcquireAndSend( new UsingArgvGameCommandMessage );
 		return;
 	}
 
 	std::vector<std::string> args;
-	for( int i = 0; i < argc; ++i ) {
-		args.emplace_back( std::string( getArg( i ) ) );
+	const int numArgs = Cmd_Argc();
+	args.reserve( numArgs );
+	for( int i = 0; i < numArgs; ++i ) {
+		args.emplace_back( std::string( Cmd_Argv( i ) ) );
 	}
 
 	// Allocate the message using a default heap...
-	auto messagePtr( std::make_unique<DeferredGameCommandMessage>( std::move( args ), nullptr ) );
+	auto messagePtr( std::make_unique<DeferredGameCommandMessage>( std::move( args ) ) );
 	deferredMessages.emplace_back( std::make_pair( std::move( messagePtr ), &gameCommandSender ) );
 }
 
@@ -161,10 +159,9 @@ void MessagePipe::OnUiPageReady() {
 void MessagePipe::ConsumeScreenState( MainScreenState *currScreenState ) {
 	if( !isReady ) {
 		// This is important, either delete the state or transfer an ownership to the sender
-		currScreenState->DeleteSelf();
+		delete currScreenState;
 		return;
 	}
 
-	auto *updateMessage = UpdateScreenMessage::NewPooledObject( currScreenState );
-	updateScreenSender.AcquireAndSend( AllocatorChild::CheckShouldDelete( updateMessage ) );
+	updateScreenSender.AcquireAndSend( new UpdateScreenMessage( currScreenState ) );
 }

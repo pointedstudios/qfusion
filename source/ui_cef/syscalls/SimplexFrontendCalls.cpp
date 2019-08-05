@@ -29,44 +29,6 @@ static inline T As( Y message ) {
 	return result;
 }
 
-// We have to provide message allocators for simple messages that aren't delta compressed
-// to keep the generic message handlers interface.
-template <typename T>
-class alignas( 8 )DummyAllocator: public RawAllocator {
-	alignas( 8 ) uint8_t buffer[sizeof( T )];
-	bool inUse { false };
-public:
-	void *Alloc() override {
-		assert( !inUse );
-		inUse = true;
-		return buffer;
-	}
-
-	void Free( void *p ) override {
-		assert( p == ( void *)&buffer[0] );
-		assert( inUse );
-		inUse = false;
-	}
-};
-
-static DummyAllocator<ProxyingGameCommandMessage> proxyGameCommandMessageAllocator;
-
-typedef ProxyingGameCommandMessage::ArgGetter ArgGetter;
-
-ProxyingGameCommandMessage *ProxyingGameCommandMessage::NewPooledObject( int numArgs_, ArgGetter &&argGetter_ ) {
-	auto *allocator = &::proxyGameCommandMessageAllocator;
-	auto *result = new( allocator->Alloc() )ProxyingGameCommandMessage( numArgs_, std::move( argGetter_ ), allocator );
-	return AllocatorChild::CheckShouldDelete( result );
-}
-
-static DummyAllocator<MouseSetMessage> mouseSetMessageAllocator;
-
-MouseSetMessage *MouseSetMessage::NewPooledObject( int context, int mx, int my, bool showCursor ) {
-	auto *allocator = &::mouseSetMessageAllocator;
-	auto *result = new( allocator->Alloc() )MouseSetMessage( context, mx, my, showCursor, allocator );
-	return AllocatorChild::CheckShouldDelete( result );
-}
-
 void GameCommandSender::AcquireAndSend( SimplexMessage *genericMessage ) {
 	auto command = As<GameCommandMessage *>( genericMessage );
 
@@ -78,16 +40,11 @@ void GameCommandSender::AcquireAndSend( SimplexMessage *genericMessage ) {
 	}
 
 	SendProcessMessage( outgoing );
-	DeleteMessage( command );
+	delete command;
 }
 
 SimplexMessage *GameCommandHandler::DeserializeMessage( CefRefPtr<CefProcessMessage> &processMessage ) {
-	auto ingoingArgs( processMessage->GetArgumentList() );
-	size_t numArgs = ingoingArgs->GetSize();
-	// TODO: Rewrite in "Get next arg" style
-	return ProxyingGameCommandMessage::NewPooledObject( (int)numArgs, [=]( int argNum ) {
-		return ingoingArgs->GetString( (size_t)argNum );
-	} );
+	return new BackendGameCommandMessage( processMessage->GetArgumentList() );
 }
 
 bool GameCommandHandler::GetCodeToCall( const SimplexMessage *genericMessage, CefStringBuilder &sb ) {
@@ -116,7 +73,7 @@ void MouseSetSender::AcquireAndSend( SimplexMessage *genericMessage ) {
 	writer << mouseSet->context << mouseSet->mx << mouseSet->my << mouseSet->showCursor;
 
 	SendProcessMessage( outgoing );
-	DeleteMessage( mouseSet );
+	delete mouseSet;
 }
 
 SimplexMessage *MouseSetHandler::DeserializeMessage( CefRefPtr<CefProcessMessage> &processMessage ) {
@@ -124,7 +81,7 @@ SimplexMessage *MouseSetHandler::DeserializeMessage( CefRefPtr<CefProcessMessage
 	bool showCursor;
 	MessageReader reader( processMessage->GetArgumentList() );
 	reader >> context >> mx >> my >> showCursor;
-	return MouseSetMessage::NewPooledObject( context, mx, my, showCursor );
+	return new MouseSetMessage( context, mx, my, showCursor );
 }
 
 bool MouseSetHandler::GetCodeToCall( const SimplexMessage *genericMessage, CefStringBuilder &sb ) {
@@ -181,40 +138,24 @@ static const char *ServerStateAsParam( int state ) {
 	}
 }
 
-static ReusableItemsAllocator<UpdateScreenMessage, 2> updateScreenMessageAllocator;
-
-void UpdateScreenMessage::OnBeforeAllocatorFreeCall() {
-	if( screenState ) {
-		screenState->DeleteSelf();
-		screenState = nullptr;
-	}
-}
-
-UpdateScreenMessage *UpdateScreenMessage::NewPooledObject( MainScreenState *screenState ) {
-	auto *allocator = &::updateScreenMessageAllocator;
-	UpdateScreenMessage *message = allocator->New();
-	message->screenState = screenState;
-	return AllocatorChild::CheckShouldDelete( message );
-}
-
 UpdateScreenSender::UpdateScreenSender( MessagePipe *parent_ )
 	: SimplexMessageSender( parent_, SimplexMessage::updateScreen ) {
 	// Always initialize the previous state, so we can compute a delta without extra branching logic
-	prevState = AllocatorChild::CheckShouldDelete( MainScreenState::NewPooledObject() );
+	prevState = new MainScreenState;
 }
 
 UpdateScreenSender::~UpdateScreenSender() {
 	// It is going to be destructed within the parent pool anyway but lets arrange calls symmetrically
-	prevState->DeleteSelf();
+	delete prevState;
 }
 
 void UpdateScreenSender::SaveStateAndRelease( UpdateScreenMessage *message ) {
-	prevState->DeleteSelf();
+	delete prevState;
 	// Transfer the ownership of the screen state
 	// before the
 	prevState = message->screenState;
 	message->screenState = nullptr;
-	message->DeleteSelf();
+	delete message;
 	forceUpdate = false;
 }
 
@@ -231,7 +172,7 @@ void UpdateScreenSender::AcquireAndSend( SimplexMessage *genericMessage ) {
 	MessageWriter writer( processMessage );
 
 	// Write the main part, no reasons to use a delta encoding for it
-	writer << currState->clientState << currState->serverState << currState->showCursor << currState->background;
+	writer << currState->clientState << currState->serverState;
 
 	if( !currState->connectionState && !currState->demoPlaybackState ) {
 		SendProcessMessage( processMessage );
@@ -303,10 +244,10 @@ void UpdateScreenSender::AcquireAndSend( SimplexMessage *genericMessage ) {
 SimplexMessage *UpdateScreenHandler::DeserializeMessage( CefRefPtr<CefProcessMessage> &ingoing ) {
 	MessageReader reader( ingoing );
 
-	auto *screenState = MainScreenState::NewPooledObject();
-	auto *updateScreenMessage = UpdateScreenMessage::NewPooledObject( screenState );
+	auto *screenState = new MainScreenState;
+	auto *updateScreenMessage = new UpdateScreenMessage( screenState );
 
-	reader >> screenState->clientState >> screenState->serverState >> screenState->showCursor >> screenState->background;
+	reader >> screenState->clientState >> screenState->serverState;
 
 	if( !reader.HasNext() ) {
 		return updateScreenMessage;
@@ -316,7 +257,7 @@ SimplexMessage *UpdateScreenHandler::DeserializeMessage( CefRefPtr<CefProcessMes
 	assert( attachments & ( MainScreenState::DEMO_PLAYBACK_ATTACHMENT | MainScreenState::CONNECTION_ATTACHMENT ) );
 
 	if( attachments & MainScreenState::DEMO_PLAYBACK_ATTACHMENT ) {
-		auto *demoState = DemoPlaybackState::NewPooledObject();
+		auto *demoState = new DemoPlaybackState;
 		reader >> demoState->time >> demoState->paused;
 		if( reader.HasNext() ) {
 			reader >> demoName;
@@ -326,7 +267,7 @@ SimplexMessage *UpdateScreenHandler::DeserializeMessage( CefRefPtr<CefProcessMes
 		return updateScreenMessage;
 	}
 
-	auto *connectionState = ConnectionState::NewPooledObject();
+	auto *connectionState = new ConnectionState;
 	// Read always transmitted args
 	reader >> connectionState->connectCount >> connectionState->downloadType;
 	reader >> connectionState->downloadSpeed >> connectionState->downloadPercent;
@@ -357,8 +298,6 @@ bool UpdateScreenHandler::GetCodeToCall( const SimplexMessage *genericMessage, C
 	sb << "ui.updateScreen({ ";
 	sb << " clientState : "    << ClientStateAsParam( screenState->clientState ) << ',';
 	sb << " serverState : "    << ServerStateAsParam( screenState->serverState ) << ',';
-	sb << " showCursor : "     << screenState->showCursor << ',';
-	sb << " background : "     << screenState->background << ',';
 
 	if( !screenState->connectionState && !screenState->demoPlaybackState ) {
 		sb.ChopLast();

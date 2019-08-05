@@ -3,6 +3,12 @@
 #include "Ipc.h"
 #include "RenderProcessHandler.h"
 #include "V8Handler.h"
+#include "ScreenState.h"
+
+UpdateScreenMessage::~UpdateScreenMessage() {
+	// Gets moved and nullified in the main executable code, kept till this call at the browser process code
+	delete screenState;
+}
 
 inline RenderProcessLogger* WswCefV8Handler::Logger() {
 	return renderProcessHandler->Logger();
@@ -119,18 +125,6 @@ void SimplexMessageSender::SendProcessMessage( CefRefPtr<CefProcessMessage> mess
 	parent->SendProcessMessage( message );
 }
 
-void SimplexMessageSender::DeleteMessage( SimplexMessage *message ) {
-	// The message is either allocated using NewPooledObject()
-	// or allocated dynamically in a default heap
-	// (if the message pipe has deferred these messages transmission till the ui has signaled its ready state).
-	// If the message is allocated somewhere else, a default heap will surely detect it / crash.
-	if( message->ShouldDeleteSelf() ) {
-		message->DeleteSelf();
-	} else {
-		delete message;
-	}
-}
-
 std::string SimplexMessageHandler::DescribeException( const CefString &code, CefRefPtr<CefV8Exception> exception ) {
 	std::stringstream s;
 
@@ -161,11 +155,11 @@ void SimplexMessageHandler::Handle( CefRefPtr<CefBrowser> &browser, CefRefPtr<Ce
 	CefStringBuilder stringBuilder;
 	if( !GetCodeToCall( deserializedMessage, stringBuilder ) ) {
 		logger.Error( "%s: Cannot build code to call, looks like the message is malformed", logTag.c_str() );
-		deserializedMessage->DeleteSelf();
+		delete deserializedMessage;
 		return;
 	}
 
-	deserializedMessage->DeleteSelf();
+	delete deserializedMessage;
 
 	CefString code( stringBuilder.ReleaseOwnership() );
 

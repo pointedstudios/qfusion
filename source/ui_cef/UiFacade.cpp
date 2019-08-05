@@ -117,8 +117,7 @@ UiFacade::~UiFacade() {
 }
 
 void UiFacade::MenuCommand() {
-	typedef const char *( *GetArgFun )(int);
-	messagePipe.ExecuteCommand( Cmd_Argc(), (GetArgFun)Cmd_Argc );
+	messagePipe.ExecuteCommand();
 }
 
 void UiFacade::RegisterBrowser( CefRefPtr<CefBrowser> browser_ ) {
@@ -142,19 +141,17 @@ void UiFacade::Refresh( int64_t time, int clientState, int serverState,
 
 	// Might have been allocated in a prior UpdateConnectScreen() call this frame
 	if( !thisFrameScreenState ) {
-		thisFrameScreenState = MainScreenState::NewPooledObject();
+		thisFrameScreenState = new MainScreenState;
 	}
 
 	auto &mainState = *thisFrameScreenState;
 
 	mainState.clientState = clientState;
 	mainState.serverState = serverState;
-	mainState.background = backGround;
-	mainState.showCursor = showCursor;
 
 	mainState.demoPlaybackState = nullptr;
 	if( demoPlaying ) {
-		auto *dps = mainState.demoPlaybackState = DemoPlaybackState::NewPooledObject();
+		auto *dps = mainState.demoPlaybackState = new DemoPlaybackState;
 		dps->demoName = demoName;
 		dps->time = demoTime;
 		dps->paused = demoPaused;
@@ -171,8 +168,8 @@ void UiFacade::UpdateConnectScreen( const char *serverName, const char *rejectMe
 									float downloadPercent, int downloadSpeed,
 									int connectCount, bool backGround ) {
 	assert( !thisFrameScreenState );
-	thisFrameScreenState = MainScreenState::NewPooledObject();
-	thisFrameScreenState->connectionState = ConnectionState::NewPooledObject();
+	thisFrameScreenState = new MainScreenState;
+	thisFrameScreenState->connectionState = new ConnectionState;
 
 	auto &state = *thisFrameScreenState->connectionState;
 	state.serverName = NullToEmpty( serverName );

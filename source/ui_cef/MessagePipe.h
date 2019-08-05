@@ -51,7 +51,7 @@ public:
 	void MouseSet( int context, int mx, int my, bool showCursor );
 	void ForceMenuOff();
 	void ShowQuickMenu( bool show );
-	void ExecuteCommand( int argc, const char *( *getArg )( int ) );
+	void ExecuteCommand();
 	void OnUiPageReady();
 
 	// Acquires an ownership over this state object and sends updates if needed

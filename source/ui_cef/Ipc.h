@@ -1,7 +1,6 @@
 #ifndef UI_CEF_IPC_H
 #define UI_CEF_IPC_H
 
-#include "Allocator.h"
 #include "CefStringBuilder.h"
 #include "MessageReader.h"
 #include "MessageWriter.h"
@@ -358,11 +357,12 @@ public:                                                                      \
 DERIVE_STOP_DRAWING_ITEM_IPC_HELPERS( StopDrawingModelRequest, PendingCallbackRequest::stopDrawingModel );
 DERIVE_STOP_DRAWING_ITEM_IPC_HELPERS( StopDrawingImageRequest, PendingCallbackRequest::stopDrawingImage );
 
-class SimplexMessage: public AllocatorChild {
+class SimplexMessage {
 	const CefString &name;
 public:
-	SimplexMessage( const CefString &name_, RawAllocator *allocator_ )
-		: AllocatorChild( allocator_ ), name( name_ ) {}
+	explicit SimplexMessage( const CefString &name_ ) : name( name_ ) {}
+
+	virtual ~SimplexMessage() = default;
 
 	const CefString &Name() const { return name; }
 
@@ -383,8 +383,6 @@ protected:
 	}
 
 	void SendProcessMessage( CefRefPtr<CefProcessMessage> message );
-
-	void DeleteMessage( SimplexMessage *message );
 public:
 	const CefString &MessageName() const { return messageName; }
 
@@ -444,8 +442,7 @@ public:
  */
 class GameCommandMessage: public SimplexMessage {
 public:
-	explicit GameCommandMessage( RawAllocator *allocator_ )
-		: SimplexMessage( SimplexMessage::gameCommand, allocator_ ) {}
+	GameCommandMessage() : SimplexMessage( SimplexMessage::gameCommand ) {}
 
 	virtual int GetNumArgs() const = 0;
 
@@ -466,8 +463,7 @@ public:
 
 	ArgsList args;
 
-	DeferredGameCommandMessage( ArgsList &&args_, RawAllocator *allocator_ )
-		: GameCommandMessage( allocator_ ), args( args_ ) {}
+	explicit DeferredGameCommandMessage( ArgsList &&args_ ) : args( args_ ) {}
 
 	int GetNumArgs() const override {
 		return (int)args.size();
@@ -478,27 +474,35 @@ public:
 	}
 };
 
-/**
- * A proxy implementation of the game command interface
- * that redirects its calls to underlying data managed by some external code.
- */
-class ProxyingGameCommandMessage: public GameCommandMessage {
-public:
-	typedef std::function<CefString(int)> ArgGetter;
-private:
-	const int numArgs;
-	ArgGetter argGetter;
-public:
-	ProxyingGameCommandMessage( int numArgs_, ArgGetter &&argGetter_, RawAllocator *allocator_ )
-		: GameCommandMessage( allocator_ ), numArgs( numArgs_ ), argGetter( argGetter_ ) {}
+int Cmd_Argc();
+char *Cmd_Argv( int );
 
-	int GetNumArgs() const override { return (int)numArgs; }
-
-	CefString GetArg( int argNum ) const override {
-		return argGetter( argNum );
+class UsingArgvGameCommandMessage : public GameCommandMessage {
+public:
+	int GetNumArgs() const override {
+		return Cmd_Argc();
 	}
 
-	static ProxyingGameCommandMessage *NewPooledObject( int numArgs_, ArgGetter &&argGetter_ );
+	CefString GetArg( int argNum ) const override {
+		CefString result;
+		result.FromASCII( Cmd_Argv( argNum ) );
+		return result;
+	}
+};
+
+class BackendGameCommandMessage : public GameCommandMessage {
+	CefRefPtr<CefListValue> messageArgsList;
+public:
+	explicit BackendGameCommandMessage( CefRefPtr<CefListValue> messageArgsList_ )
+		: messageArgsList( messageArgsList_ ) {}
+
+	int GetNumArgs() const override {
+		return messageArgsList.get()->GetSize();
+	}
+
+	CefString GetArg( int argNum ) const override {
+		return messageArgsList.get()->GetString( argNum );
+	}
 };
 
 class MouseSetMessage: public SimplexMessage {
@@ -507,8 +511,8 @@ public:
 	int mx, my;
 	bool showCursor;
 
-	MouseSetMessage( int context_, int mx_, int my_, bool showCursor_, RawAllocator *allocator_ )
-		: SimplexMessage( SimplexMessage::mouseSet, allocator_ )
+	MouseSetMessage( int context_, int mx_, int my_, bool showCursor_ )
+		: SimplexMessage( SimplexMessage::mouseSet )
 		, context( context_ )
 		, mx( mx_ ), my( my_ )
 		, showCursor( showCursor_ ) {
@@ -517,8 +521,6 @@ public:
 		assert( mx >= 0 && mx < ( 1 << 16 ) );
 		assert( my >= 0 && my < ( 1 << 16 ) );
 	}
-
-	static MouseSetMessage *NewPooledObject( int context_, int mx_, int my_, bool showCursor_ );
 };
 
 struct MainScreenState;
@@ -526,20 +528,16 @@ struct ConnectionState;
 struct DemoPlaybackState;
 
 class UpdateScreenMessage: public SimplexMessage {
-	/**
-	 * @note in order to save allocations every frame, fields of a reused object are just cleaned up
-	 */
-	void OnBeforeAllocatorFreeCall() override;
 public:
 	/**
 	 * We do not want fusing MainScreenState and UpdateScreenMessage even if it's possible.
 	 */
 	MainScreenState *screenState { nullptr };
 
-	explicit UpdateScreenMessage( RawAllocator *allocator_ )
-		: SimplexMessage( SimplexMessage::updateScreen, allocator_ ) {}
+	explicit UpdateScreenMessage( MainScreenState *screenState_ )
+		: SimplexMessage( SimplexMessage::updateScreen ), screenState( screenState_ ) {}
 
-	static UpdateScreenMessage *NewPooledObject( MainScreenState *screenState );
+	~UpdateScreenMessage() override;
 };
 
 #define DERIVE_MESSAGE_SENDER( Derived, messageName )              \
