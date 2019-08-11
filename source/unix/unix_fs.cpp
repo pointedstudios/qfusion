@@ -452,7 +452,7 @@ ssize_t Sys_FS_GetRealPath( const char *path, char *buffer, size_t bufferSize ) 
 	}
 
 	// Let this call allocate its result as needed
-	char *const resolved = ::realpath( buffer, nullptr );
+	char *const resolved = ::realpath( path, nullptr );
 	if( !resolved ) {
 		return -1;
 	}

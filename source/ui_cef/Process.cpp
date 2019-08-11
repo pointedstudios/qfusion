@@ -46,6 +46,7 @@ int Cmd_Argc() { Stub(); }
 char *Cmd_Argv( int ) { Stub(); }
 char *Cmd_Args() { Stub(); }
 void Com_Printf( const char *, ... ) { Stub(); }
+void Com_Error( com_error_code_t, const char *, ... ) { Stub(); }
 bool VID_GetModeInfo( int *, int *, unsigned ) { Stub(); }
 size_t CL_ReadDemoMetaData( const char *, char *, size_t ) { Stub(); }
 void Cbuf_ExecuteText( int, const char * ) { Stub(); }

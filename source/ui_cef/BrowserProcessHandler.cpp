@@ -459,13 +459,28 @@ public:
 };
 
 void WswCefBrowserProcessHandler::OnContextInitialized() {
-	CefRefPtr<CefSchemeHandlerFactory> schemeHandlerFactory( new WswCefSchemeHandlerFactory );
-	CefRegisterSchemeHandlerFactory( "ui", "ignored domain name", schemeHandlerFactory );
+	// A nasty and ugly hack for current web assets that are build with webpack.
+	// We have to allow an access to the filesystem and supply a real path of assets.
+	// TODO: Try to resolve that at webpack level
+	// TODO: If the former failed investigate interception of filesystem requests for security reasons
+
+	const char *prefix = "file:///";
+	char realPagePath[MAX_QPATH + 16];
+	realPagePath[0] = '\0';
+	Q_strncatz( realPagePath, prefix, MAX_QPATH );
+	if( FS_GetRealPath( ".", realPagePath + ::strlen( prefix ), MAX_QPATH ) < 0 ) {
+		Com_Error( ERR_FATAL, "Failed to get a real path of UI assets" );
+	}
+
+	Q_strncatz( realPagePath, "/basewsw/ui/index.html", MAX_QPATH );
+	CefString url( realPagePath );
+
+	// CefRefPtr<CefSchemeHandlerFactory> schemeHandlerFactory( new WswCefSchemeHandlerFactory );
+	// CefRegisterSchemeHandlerFactory( "ui", "ignored domain name", schemeHandlerFactory );
 
 	CefWindowInfo info;
 	info.SetAsWindowless( 0 );
 	CefBrowserSettings settings;
 	CefRefPtr<WswCefClient> client( new WswCefClient( width, height ) );
-	CefString url( "ui://index.html" );
 	CefBrowserHost::CreateBrowserSync( info, client, url, settings, nullptr );
 }
