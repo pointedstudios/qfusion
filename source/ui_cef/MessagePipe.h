@@ -13,7 +13,6 @@ class MessagePipe {
 
 	UiFacade *parent;
 
-	MouseSetSender mouseSetSender;
 	GameCommandSender gameCommandSender;
 	UpdateScreenSender updateScreenSender;
 
@@ -31,7 +30,6 @@ class MessagePipe {
 public:
 	explicit MessagePipe( UiFacade *parent_ )
 		: parent( parent_ )
-		, mouseSetSender( this )
 		, gameCommandSender( this )
 		, updateScreenSender( this ) {}
 
@@ -48,7 +46,6 @@ public:
 	void MouseClick( int context, int button, int clicksCount, uint32_t modifiers, bool down );
 	void MouseMove( int context, uint32_t modifiers );
 
-	void MouseSet( int context, int mx, int my, bool showCursor );
 	void ForceMenuOff();
 	void ShowQuickMenu( bool show );
 	void ExecuteCommand();

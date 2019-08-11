@@ -134,7 +134,7 @@ public:
 	void MouseMove( int context, int frameTime, int dx, int dy );
 
 	void MouseSet( int context, int mx, int my, bool showCursor ) {
-		messagePipe.MouseSet( context, mx, my, showCursor );
+		// Unsupported!
 	}
 
 	void ForceMenuOn();

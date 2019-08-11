@@ -367,7 +367,6 @@ public:
 	const CefString &Name() const { return name; }
 
 	static const CefString updateScreen;
-	static const CefString mouseSet;
 	static const CefString gameCommand;
 };
 
@@ -505,24 +504,6 @@ public:
 	}
 };
 
-class MouseSetMessage: public SimplexMessage {
-public:
-	int context;
-	int mx, my;
-	bool showCursor;
-
-	MouseSetMessage( int context_, int mx_, int my_, bool showCursor_ )
-		: SimplexMessage( SimplexMessage::mouseSet )
-		, context( context_ )
-		, mx( mx_ ), my( my_ )
-		, showCursor( showCursor_ ) {
-		// Sanity checks, have already helped to spot bugs
-		assert( context == 0 || context == 1 );
-		assert( mx >= 0 && mx < ( 1 << 16 ) );
-		assert( my >= 0 && my < ( 1 << 16 ) );
-	}
-};
-
 struct MainScreenState;
 struct ConnectionState;
 struct DemoPlaybackState;
@@ -584,9 +565,6 @@ public:
 	explicit UpdateScreenHandler( WswCefV8Handler *parent_ )
 		: SimplexMessageHandler( parent_, SimplexMessage::updateScreen ) {}
 };
-
-DERIVE_MESSAGE_SENDER( MouseSet, SimplexMessage::mouseSet );
-DERIVE_MESSAGE_HANDLER( MouseSet, SimplexMessage::mouseSet );
 
 DERIVE_MESSAGE_SENDER( GameCommand, SimplexMessage::gameCommand );
 DERIVE_MESSAGE_HANDLER( GameCommand, SimplexMessage::gameCommand );

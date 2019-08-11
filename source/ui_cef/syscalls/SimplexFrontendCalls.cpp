@@ -51,7 +51,7 @@ bool GameCommandHandler::GetCodeToCall( const SimplexMessage *genericMessage, Ce
 	const auto *command = As<const GameCommandMessage *>( genericMessage );
 	int numArgs = command->GetNumArgs();
 
-	sb << "ui.onGameCommand.apply(null, [";
+	sb << "window.scriptUI.handleGameCommand([";
 	for( int i = 0; i < numArgs; ++i ) {
 		sb << '"' << command->GetArg( i ) << '"' << ',';
 	}
@@ -65,38 +65,6 @@ bool GameCommandHandler::GetCodeToCall( const SimplexMessage *genericMessage, Ce
 	return true;
 }
 
-void MouseSetSender::AcquireAndSend( SimplexMessage *genericMessage ) {
-	auto mouseSet = As<MouseSetMessage *>( genericMessage );
-	auto outgoing( NewProcessMessage() );
-
-	MessageWriter writer( outgoing );
-	writer << mouseSet->context << mouseSet->mx << mouseSet->my << mouseSet->showCursor;
-
-	SendProcessMessage( outgoing );
-	delete mouseSet;
-}
-
-SimplexMessage *MouseSetHandler::DeserializeMessage( CefRefPtr<CefProcessMessage> &processMessage ) {
-	int context, mx, my;
-	bool showCursor;
-	MessageReader reader( processMessage->GetArgumentList() );
-	reader >> context >> mx >> my >> showCursor;
-	return new MouseSetMessage( context, mx, my, showCursor );
-}
-
-bool MouseSetHandler::GetCodeToCall( const SimplexMessage *genericMessage, CefStringBuilder &sb ) {
-	auto *mouseSet = As<const MouseSetMessage *>( genericMessage );
-
-	sb << "ui.onMouseSet({ ";
-	sb << "context : "      << mouseSet->context << ',';
-	sb << "mx : "           << mouseSet->mx << ',';
-	sb << "my : "           << mouseSet->my << ',';
-	sb << "showCursor : "   << mouseSet->showCursor;
-	sb << " })";
-
-	return true;
-}
-
 static const char *DownloadTypeAsParam( int type ) {
 	switch( type ) {
 		case DOWNLOADTYPE_NONE:
@@ -106,7 +74,7 @@ static const char *DownloadTypeAsParam( int type ) {
 		case DOWNLOADTYPE_SERVER:
 			return "\"builtin\"";
 		default:
-			return "\"\"";
+			return "\"none\"";
 	}
 }
 
@@ -295,7 +263,7 @@ bool UpdateScreenHandler::GetCodeToCall( const SimplexMessage *genericMessage, C
 	const auto *message = As<const UpdateScreenMessage *>( genericMessage );
 	const auto *screenState = message->screenState;
 
-	sb << "ui.updateScreen({ ";
+	sb << "window.scriptUI.updateScreen({ ";
 	sb << " clientState : "    << ClientStateAsParam( screenState->clientState ) << ',';
 	sb << " serverState : "    << ServerStateAsParam( screenState->serverState ) << ',';
 
@@ -308,7 +276,7 @@ bool UpdateScreenHandler::GetCodeToCall( const SimplexMessage *genericMessage, C
 	if( const auto *demoState = screenState->demoPlaybackState ) {
 		sb << " demoPlayback: { ";
 		sb << " time : " << demoState->time << ',';
-		sb << " paused: " << demoState->demoName << ',';
+		sb << " paused: " << demoState->paused << ',';
 		sb << " demoName : \'" << demoState->demoName << '\'';
 		sb << " }";
 		sb << " })";
@@ -323,7 +291,7 @@ bool UpdateScreenHandler::GetCodeToCall( const SimplexMessage *genericMessage, C
 	}
 
 	if( connectionState->downloadType ) {
-		sb << " download : {";
+		sb << " downloadState : {";
 		sb << " fileName : '" << downloadFileName << "',";
 		sb << " type : '" << DownloadTypeAsParam( connectionState->downloadType ) << "',";
 		sb << " speed : '" << connectionState->downloadSpeed << ',';

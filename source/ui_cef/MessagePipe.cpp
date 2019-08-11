@@ -93,17 +93,6 @@ void MessagePipe::CharEvent( int context, int qKey, int character,
 	GetBrowserHost()->SendKeyEvent( event );
 }
 
-void MessagePipe::MouseSet( int context, int mx, int my, bool showCursor ) {
-	if( isReady ) {
-		mouseSetSender.AcquireAndSend( new MouseSetMessage( context, mx, my, showCursor ) );
-		return;
-	}
-
-	// Allocate the message using the default heap and not the allocator (since its capacity is limited)
-	auto messagePtr = std::make_unique<MouseSetMessage>( context, mx, my, showCursor );
-	deferredMessages.emplace_back( std::make_pair( std::move( messagePtr ), &mouseSetSender ) );
-}
-
 void MessagePipe::ForceMenuOff() {
 	/*
 	if( isReady ) {

@@ -36,7 +36,6 @@ class WswCefV8Handler: public CefV8Handler {
 	StopDrawingImageRequestLauncher stopDrawingImage;
 
 	GameCommandHandler gameCommandHandler;
-	MouseSetHandler mouseSetHandler;
 	UpdateScreenHandler updateScreenHandler;
 
 	std::unordered_map<int, std::shared_ptr<PendingCallbackRequest>> callbacks;
@@ -70,7 +69,6 @@ public:
 		, startDrawingImage( this )
 		, stopDrawingImage( this )
 		, gameCommandHandler( this )
-		, mouseSetHandler( this )
 		, updateScreenHandler( this )
 		, callId( 0 ) {}
 
