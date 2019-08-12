@@ -826,8 +826,6 @@ static void SNAP_BuildSnapEntitiesList( cmodel_state_t *cms, ginfo_t *gi,
 			}
 		}
 	}
-
-	list.Sort();
 }
 
 /*
@@ -923,6 +921,7 @@ void SNAP_BuildClientFrameSnap( cmodel_state_t *cms, ginfo_t *gi, int64_t frameN
 	// build up the list of visible entities
 	SnapEntNumsList list;
 	SNAP_BuildSnapEntitiesList( cms, gi, clent, org, fatvis->skyorg, fatvis->pvs, frame, list, snapHintFlags );
+	list.Sort();
 
 	if( developer->integer ) {
 		int olde = -1;
