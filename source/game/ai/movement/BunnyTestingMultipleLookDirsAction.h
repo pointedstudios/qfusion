@@ -25,7 +25,7 @@ public:
 
 class BunnyTestingSavedLookDirsAction : public BunnyTestingMultipleLookDirsAction {
 protected:
-	static constexpr auto MAX_SUGGESTED_LOOK_DIRS = 40;
+	static constexpr auto MAX_SUGGESTED_LOOK_DIRS = 32;
 
 	struct DirAndArea {
 		Vec3 dir;
@@ -51,6 +51,16 @@ protected:
 	void OnApplicationSequenceFailed( MovementPredictionContext *context, unsigned stoppedAtFrameIndex ) final;
 
 	virtual void SaveSuggestedLookDirs( MovementPredictionContext *context ) = 0;
+
+	/**
+	 * Assuming that look dirs and areas have been just saved, derives additional ones
+	 * that have the same base area (if any) but slightly rotated direction.
+	 * This method producing more data for additional attempts significantly increases
+	 * success rate of building predicted movement trajectories.
+	 * @todo this works good but the used algorithm is very basic
+	 * and this should really be implemented by descendants in their specific ways.
+	 */
+	void DeriveMoreDirsFromSavedDirs();
 
 	/**
 	 * A helper method to select best N areas that is optimized for small areas count.

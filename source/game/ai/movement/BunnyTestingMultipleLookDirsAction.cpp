@@ -14,6 +14,9 @@ void BunnyTestingSavedLookDirsAction::OnApplicationSequenceStarted( MovementPred
 	if( !currSuggestedLookDirNum ) {
 		suggestedLookDirs.clear();
 		SaveSuggestedLookDirs( context );
+		// TODO: Could be better if this gets implemented individually by each descendant.
+		// The generic version is used now just to provide a generic solution quickly at cost of being suboptimal.
+		DeriveMoreDirsFromSavedDirs();
 	}
 	if( currSuggestedLookDirNum >= suggestedLookDirs.size() ) {
 		return;
@@ -83,6 +86,37 @@ void BunnyTestingMultipleLookDirsAction::PlanPredictionStep( Context *context ) 
 	if( !SetupBunnyHopping( context->record->botInput.IntendedLookDir(), context ) ) {
 		context->SetPendingRollback();
 		return;
+	}
+}
+
+void BunnyTestingSavedLookDirsAction::DeriveMoreDirsFromSavedDirs() {
+	// TODO: See notes in the method javadoc about this very basic approach
+
+	mat3_t rotations[6];
+	Matrix3_Rotate( axis_identity, -5.0f, 0, 0, 1, rotations[0] );
+	Matrix3_Rotate( axis_identity, +5.0f, 0, 0, 1, rotations[1] );
+	Matrix3_Rotate( axis_identity, -2.5f, 0, 0, 1, rotations[2] );
+	Matrix3_Rotate( axis_identity, +2.5f, 0, 0, 1, rotations[3] );
+	Matrix3_Rotate( axis_identity, -7.5f, 0, 0, 1, rotations[4] );
+	Matrix3_Rotate( axis_identity, +7.5f, 0, 0, 1, rotations[5] );
+
+	// Save this fixed value (as the dirs array is going to grow)
+	const int lastBaseAreaIndex = suggestedLookDirs.size() - 1;
+	for( int areaIndex = 0; areaIndex <= lastBaseAreaIndex; ++areaIndex ) {
+		const auto &existing = suggestedLookDirs[areaIndex];
+		// Skip dirs that do not have a corresponding "may stop at" areas
+		// (they're usually "synthetic" and have a low chance to yield a result)
+		if( !existing.area ) {
+			continue;
+		}
+		for( const auto &rotation : rotations ) {
+			if( suggestedLookDirs.size() >= MAX_SUGGESTED_LOOK_DIRS ) {
+				break;
+			}
+			vec3_t rotated;
+			Matrix3_TransformVector( rotation, existing.dir.Data(), rotated );
+			suggestedLookDirs.emplace_back( DirAndArea( Vec3( rotated ), existing.area ) );
+		}
 	}
 }
 
