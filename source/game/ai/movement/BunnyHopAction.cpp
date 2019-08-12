@@ -161,8 +161,7 @@ bool BunnyHopAction::SetupBunnyHopping( const Vec3 &intendedLookVec, Context *co
 						context->CheatingAccelerate( velocityDir2DDotToTargetDir2D );
 					}
 				}
-				// Do not apply correction if this dot product is negative (looks like hovering in air and does not help)
-				if( velocityDir2DDotToTargetDir2D > 0 && velocityDir2DDotToTargetDir2D < STRAIGHT_MOVEMENT_DOT_THRESHOLD ) {
+				if( velocityDir2DDotToTargetDir2D < STRAIGHT_MOVEMENT_DOT_THRESHOLD ) {
 					context->CheatingCorrectVelocity( velocityDir2DDotToTargetDir2D, toTargetDir2D );
 				}
 			}
