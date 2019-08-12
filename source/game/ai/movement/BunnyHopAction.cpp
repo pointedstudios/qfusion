@@ -48,7 +48,13 @@ bool BunnyHopAction::CheckCommonBunnyHopPreconditions( Context *context ) {
 	// (looks like the bot is too high above the ground)
 	if( !context->IsInNavTargetArea() && !context->NextReachNum() ) {
 		Debug( "Cannot apply action: next reachability is undefined and bot is not in the nav target area\n" );
-		context->SetPendingRollback();
+		// This might be another router woe as many rejected trajectories seem legit.
+		// We have decided to save the trajectory if this area has been reached applying a huge penalty.
+		if( mayStopAtAreaNum ) {
+			CompleteOrSaveGoodEnoughPath( context, 9999 );
+		} else {
+			context->SetPendingRollback();
+		}
 		return false;
 	}
 
