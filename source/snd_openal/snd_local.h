@@ -370,7 +370,7 @@ public:
 	void StartGlobalSound( sfx_s *sfx, int channel, float fvol ) override;
 	void StartLocalSound( const char *name, float fvol ) override;
 	void StartLocalSound( sfx_s *sfx, float fvol ) override;
-	void AddLoopSound( sfx_s *sfx, int entNum, float fvol, int attenuation ) override;
+	void AddLoopSound( sfx_s *sfx, int entNum, float fvol, float attenuation ) override;
 
 	void RawSamples( unsigned samples, unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data, bool music ) override;
 	void PositionedRawSamples( int entNum, float fvol, float attenuation, unsigned samples,

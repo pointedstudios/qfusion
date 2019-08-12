@@ -49,7 +49,7 @@ public:
 	void StartGlobalSound( sfx_s *, int, float ) override {}
 	void StartLocalSound( const char *, float ) override {}
 	void StartLocalSound( sfx_s *, float ) override {}
-	void AddLoopSound( sfx_s *, int, float, int ) override {}
+	void AddLoopSound( sfx_s *, int, float, float ) override {}
 
 	void RawSamples( unsigned, unsigned, uint16_t, uint16_t, const uint8_t *, bool ) override {}
 	void PositionedRawSamples( int, float, float, unsigned, unsigned, uint16_t, uint16_t, const uint8_t * ) override {}
@@ -456,7 +456,7 @@ void ALSoundSystem::Clear() {
 	S_IssueClearCmd( pipe );
 }
 
-void ALSoundSystem::AddLoopSound( sfx_s *sfx, int entNum, float fvol, int attenuation ) {
+void ALSoundSystem::AddLoopSound( sfx_s *sfx, int entNum, float fvol, float attenuation ) {
 	if( sfx ) {
 		S_IssueAddLoopSoundCmd( pipe, sfx->id, entNum, fvol, attenuation );
 	}
