@@ -442,11 +442,11 @@ bool Sys_FS_RemoveDirectory( const char *path ) {
 	return ( !rmdir( path ) );
 }
 
-ssize_t Sys_FS_GetRealPath( const char *path, char *buffer, size_t bufferSize ) {
+int Sys_FS_GetRealPath( const char *path, char *buffer, size_t bufferSize ) {
 	// If the buffer is a-priori capable of storing the path, use it
 	if( bufferSize >= PATH_MAX ) {
 		if( ::realpath( path, buffer ) ) {
-			return ::strlen( buffer );
+			return (int)::strlen( buffer );
 		}
 		return -1;
 	}
@@ -467,7 +467,7 @@ ssize_t Sys_FS_GetRealPath( const char *path, char *buffer, size_t bufferSize ) 
 	// Copy the result along with the last zero byte
 	::memcpy( buffer, resolved, len + 1 );
 	::free( resolved );
-	return len;
+	return (int)len;
 }
 
 /*

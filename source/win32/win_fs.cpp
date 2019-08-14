@@ -35,6 +35,43 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #define USE_MY_DOCUMENTS
 
+// TODO: Actually use the buffer size parameter
+int Sys_FS_GetRealPath( const char *path, char* buffer, size_t bufferSize ) {
+	wchar_t wideBuffer[MAX_QPATH];
+	const int numWideChars = ::GetModuleFileNameW( NULL, wideBuffer, MAX_QPATH );
+	// Check for truncation of the content by previous call
+	if( ::GetLastError() == ERROR_INSUFFICIENT_BUFFER ) {
+		return -1;
+	}
+
+	// Check whether the supplied buffer is a-priori incapable of storing the decoded content
+	if( numWideChars >= bufferSize ) {
+		return -1;
+	}
+
+	int numUtf8Chars = 0;
+	// Compute the exact size of the decoded content
+	for( int i = 0; i < numWideChars; ++i ) {
+		numUtf8Chars += Q_WCharUtf8Length( wideBuffer[i] );
+	}
+
+	if( numUtf8Chars >= bufferSize ) {
+		return -1;
+	}
+
+	wideBuffer[numWideChars] = L'\0';
+	Q_WCharToUtf8String( wideBuffer, buffer, bufferSize );
+	buffer[numUtf8Chars] = '\0';
+
+	// TODO: What about forward slash?
+	if ( const char* lastBackSlash = ::Q_strrstr( buffer, "\\" ) ) {
+		buffer[lastBackSlash - buffer] = '\0';
+		return (int)( lastBackSlash - buffer );
+	}
+
+	return numUtf8Chars;
+}
+
 static char *findbase = NULL;
 static char *findpath = NULL;
 static size_t findpath_size = 0;

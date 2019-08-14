@@ -186,10 +186,13 @@ class ServerInfoParser {
 	bool HandleNumClients( const wsw::StringView & );
 	bool HandleNeedPass( const wsw::StringView & );
 
-	template<typename T>
+	// A generic handling routine for signed types
+	template<typename T, typename std::enable_if<std::is_signed<T>::value>::type * = nullptr>
 	inline bool HandleInteger( const wsw::StringView &, T *result ) const;
-	template<typename T, typename I>
-	inline bool ParseInteger( const char *value, T *result, I ( *func )( const char *, char **, int ) ) const;
+
+	// A generic handling routine for unsigned types
+	template<typename T, typename std::enable_if<!std::is_signed<T>::value>::type * = nullptr>
+	inline bool HandleInteger( const wsw::StringView &, T *result ) const;
 
 	template<unsigned N>
 	inline bool HandleString( const wsw::StringView &, StaticString<N> *result ) const;
@@ -442,27 +445,37 @@ bool ServerInfoParser::HandleKVPair() {
 	return true;
 }
 
-template <typename T>
+template<typename T, typename std::enable_if<std::is_signed<T>::value>::type *>
 inline bool ServerInfoParser::HandleInteger( const wsw::StringView &value, T *result ) const {
-	if( sizeof( T ) > 4 ) {
-		if( ( ( T )-1 ) != std::numeric_limits<T>::max() ) {
-			return ParseInteger<T, long long>( value.Data(), result, strtoll );
+	char *endPtr;
+	// First parse as the largest supported signed type
+	const int64_t parsed = ::strtoll( value.Data(), &endPtr, 10 );
+	// This condition checks both for overflow occurred in ::strtoll() call
+	// and for overflow in conversion to the result type.
+	if( parsed <= (int64_t)std::numeric_limits<T>::min() || parsed >= (int64_t)std::numeric_limits<T>::max() ) {
+		// That's an error for non-64 bit types for sure
+		if( sizeof( T ) != 8 ) {
+			return false;
 		}
-		return ParseInteger<T, unsigned long long>( value.Data(), result, strtoull );
+		// Check whether this is really an error for 64-byte values
+		if( errno == ERANGE ) {
+			return false;
+		}
 	}
 
-	if( ( ( T )-1 ) != std::numeric_limits<T>::max() ) {
-		return ParseInteger<T, long>( value.Data(), result, strtol );
-	}
-	return ParseInteger<T, unsigned long>( value.Data(), result, strtoul );
+	*result = (T)parsed;
+	return true;
 }
 
-template <typename T, typename I>
-bool ServerInfoParser::ParseInteger( const char *value, T *result, I ( *func )( const char *, char **, int ) ) const {
-	char *endptr;
-	I parsed = func( value, &endptr, 10 );
-
-	if( parsed == std::numeric_limits<I>::min() || parsed == std::numeric_limits<I>::max() ) {
+template<typename T, typename std::enable_if<!std::is_signed<T>::value>::type *>
+inline bool ServerInfoParser::HandleInteger( const wsw::StringView &value, T *result ) const {
+	char *endPtr;
+	// See implementation notes for the routine counterpart for signed types
+	const uint64_t parsed = ::strtoull( value.Data(), &endPtr, 10 );
+	if( parsed <= (uint64_t)std::numeric_limits<T>::min() || parsed >= (uint64_t)std::numeric_limits<T>::max() ) {
+		if( sizeof( T ) != 8 ) {
+			return false;
+		}
 		if( errno == ERANGE ) {
 			return false;
 		}

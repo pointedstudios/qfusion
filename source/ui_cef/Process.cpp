@@ -6,11 +6,23 @@
 #include "../qcommon/qcommon.h"
 #include "../ref_gl/r_frontend.h"
 
+#ifndef _WIN32
+
 int main( int argc, char **argv ) {
 	CefMainArgs args( argc, argv );
 	CefRefPtr<CefApp> app( new WswCefApp );
 	return CefExecuteProcess( args, app.get(), nullptr );
 }
+
+#else
+
+int APIENTRY wWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow ) {
+	CefMainArgs args( hInstance );
+	CefRefPtr<CefApp> app( new WswCefApp );
+	return CefExecuteProcess( args, app.get(), nullptr );
+}
+
+#endif
 
 #ifndef _MSC_VER
 void Stub() __attribute__( ( noreturn ) );
@@ -40,7 +52,7 @@ int FS_Read( void *, size_t, int ) { Stub(); }
 int FS_Seek( int, int, int ) { Stub(); }
 time_t FS_FileMTime( const char * ) { Stub(); }
 int FS_GetFileList( const char *, const char *, char *, size_t, int, int ) { Stub(); }
-ssize_t FS_GetRealPath( const char *, char *, size_t ) { Stub(); }
+int FS_GetRealPath( const char *, char *, size_t ) { Stub(); }
 bool Key_IsDown( int ) { Stub(); }
 int Cmd_Argc() { Stub(); }
 char *Cmd_Argv( int ) { Stub(); }

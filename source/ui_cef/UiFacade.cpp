@@ -51,7 +51,11 @@ void BrowserProcessLogger::SendLogMessage( cef_log_severity_t severity, const ch
 UiFacade *UiFacade::instance = nullptr;
 
 bool UiFacade::InitCef( int argc, char **argv, void *hInstance, int width, int height ) {
+#ifndef _WIN32
 	CefMainArgs mainArgs( argc, argv );
+#else
+	CefMainArgs mainArgs( (HINSTANCE)hInstance );
+#endif
 
 	CefRefPtr<WswCefApp> app( new WswCefApp( width, height ) );
 
@@ -66,7 +70,7 @@ bool UiFacade::InitCef( int argc, char **argv, void *hInstance, int width, int h
 #endif
 
 	char pathBuffer[4096 + 64];
-	ssize_t pathLen = FS_GetRealPath( ".", pathBuffer, sizeof( pathBuffer ) );
+	const int pathLen = FS_GetRealPath( ".", pathBuffer, sizeof( pathBuffer ) );
 	if( pathLen < 0 ) {
 		Com_Printf( S_COLOR_RED "Can't get full real path of the current path\n" );
 		return false;

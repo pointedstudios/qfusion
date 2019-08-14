@@ -6,6 +6,7 @@
 
 #include "MessageReader.h"
 
+#include <functional>
 #include <iostream>
 #include <sstream>
 

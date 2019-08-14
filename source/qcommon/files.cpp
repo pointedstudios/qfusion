@@ -2330,7 +2330,7 @@ bool FS_RemoveDirectory( const char *dirname ) {
 	return ( FS_RemoveAbsoluteDirectory( va_r( temp, sizeof( temp ), "%s/%s/%s", FS_WriteDirectory(), FS_GameDirectory(), dirname ) ) );
 }
 
-ssize_t FS_GetRealPath( const char *path, char *buffer, size_t bufferSize ) {
+int FS_GetRealPath( const char *path, char *buffer, size_t bufferSize ) {
 	return Sys_FS_GetRealPath( path, buffer, bufferSize );
 }
 

@@ -64,6 +64,8 @@ set(LIBROCKET_SOURCE_DIR ${LIBROCKET_DIR}/Source)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND "${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
     set(CEF_DIR "${CMAKE_HOME_DIRECTORY}/../third-party/cef/linux_x64")
+elseif (${CMAKE_SYSTEM_NAME} MATCHES "Windows" AND "${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
+    set(CEF_DIR "${CMAKE_HOME_DIRECTORY}/../third-party/cef/win_x64")
 else()
     message(FATAL_ERROR "CEF engine support is not added yet for this platform")
 endif()
