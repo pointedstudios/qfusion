@@ -16,6 +16,3 @@
 [submodule "libsrcs"]
 	path = libsrcs
 	url = https://github.com/Warsow/qfusion-libsrcs.git
-[submodule "third-party/cef"]
-	path = third-party/cef
-	url = https://github.com/Warsow/cef.git
