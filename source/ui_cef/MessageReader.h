@@ -95,6 +95,13 @@ public:
 		return *this;
 	}
 
+	MessageReader &operator>>( uint64_t &value ) {
+		unsigned hiPart, loPart;
+		*this >> hiPart >> loPart;
+		value = ( ( (uint64_t)hiPart ) << 32u ) | loPart;
+		return *this;
+	}
+
 	MessageReader &operator>>( float &value ) {
 		value = (float)ReadableArgs()->GetDouble( argNum++ );
 		return *this;

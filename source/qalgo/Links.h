@@ -181,4 +181,22 @@ inline Item *Unlink( Item *item, Item **listHeadRef ) {
 	return item;
 }
 
+/**
+ * A version of {@code Link(Item*, Item**) for linking to a list tail.
+ * @tparam Item any type that has {@code next} and {@code prev} links of the same type.
+ * @param item an item to link
+ * @param listTailRef an address of the current list tail
+ * @return the newly linked item (same as the argument) conforming to fluent API style.
+ */
+template <typename Item>
+inline Item *LinkToTail( Item *item, Item **listTailRef ) {
+	if( *listTailRef ) {
+		( *listTailRef )->next = item;
+	}
+	item->next = nullptr;
+	item->prev = *listTailRef;
+	*listTailRef = item;
+	return item;
+}
+
 #endif

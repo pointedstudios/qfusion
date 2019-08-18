@@ -788,17 +788,6 @@ PlayerInfo *ServerList::ParsePlayerInfo( msg_t *msg ) {
 	return nullptr;
 }
 
-// TODO: Generalize and lift to Links.h
-static PlayerInfo *LinkToTail( PlayerInfo *item, PlayerInfo **listTailRef ) {
-	if( *listTailRef ) {
-		( *listTailRef )->next = item;
-	}
-	item->next = nullptr;
-	item->prev = *listTailRef;
-	*listTailRef = item;
-	return item;
-}
-
 bool ServerList::ParsePlayerInfo( msg_t *msg_, PlayerInfo **listHead ) {
 	const char *chars = (const char *)( msg_->data + msg_->readcount );
 
@@ -927,16 +916,6 @@ void ServerList::OnServerAddressReceived( const netadr_t &address ) {
 	server->addressHash = hash;
 	server->hashBinIndex = binIndex;
 	::Link( server, &serversHashBins[binIndex], PolledGameServer::BIN_LINKS );
-}
-
-ServerInfo::ServerInfo() {
-	time.Clear();
-	score.Clear();
-	hasPlayerInfo = false;
-	playerInfoHead = nullptr;
-	maxClients = 0;
-	numClients = 0;
-	numBots = 0;
 }
 
 ServerList::ServerList() {
@@ -1084,119 +1063,4 @@ void ServerList::OnNewServerInfo( PolledGameServer *server, ServerInfo *newServe
 			listener->OnServerAdded( *server );
 		}
 	}
-}
-
-void MatchTime::Clear() {
-	memset( this, 0, sizeof( MatchTime ) );
-}
-
-bool MatchTime::operator==( const MatchTime &that ) const {
-	return !memcmp( this, &that, sizeof( MatchTime ) );
-}
-
-void MatchScore::Clear() {
-	scores[0].Clear();
-	scores[1].Clear();
-}
-
-bool MatchScore::operator==( const MatchScore &that ) const {
-	// Its better to do integer comparisons first, thats why there are no individual TeamScore::Equals() methods
-	for( int i = 0; i < 2; ++i ) {
-		if( this->scores[i].score != that.scores[i].score ) {
-			return false;
-		}
-	}
-
-	for( int i = 0; i < 2; ++i ) {
-		if( this->scores[i].name != that.scores[i].name ) {
-			return false;
-		}
-	}
-	return true;
-}
-
-bool PlayerInfo::operator==( const PlayerInfo &that ) const {
-	// Do these cheap comparisons first
-	if( this->score != that.score || this->ping != that.ping || this->team != that.team ) {
-		return false;
-	}
-	return this->name == that.name;
-}
-
-ServerInfo::~ServerInfo() {
-	PlayerInfo *nextInfo;
-	for( PlayerInfo *info = playerInfoHead; info; info = nextInfo ) {
-		nextInfo = info->next;
-		delete info;
-	}
-}
-
-bool ServerInfo::MatchesOld( ServerInfo *oldInfo ) {
-	if( !oldInfo ) {
-		return false;
-	}
-
-	// Test fields that are likely to change often first
-
-	if( this->time != oldInfo->time ) {
-		return false;
-	}
-
-	if( this->numClients != oldInfo->numClients ) {
-		return false;
-	}
-
-	if( this->hasPlayerInfo && oldInfo->hasPlayerInfo ) {
-		PlayerInfo *thisInfo = this->playerInfoHead;
-		PlayerInfo *thatInfo = oldInfo->playerInfoHead;
-
-		for(;; ) {
-			if( !thisInfo ) {
-				if( !thatInfo ) {
-					break;
-				}
-				return false;
-			}
-
-			if( !thatInfo ) {
-				return false;
-			}
-
-			if( *thisInfo != *thatInfo ) {
-				return false;
-			}
-
-			thisInfo++, thatInfo++;
-		}
-	} else if( this->hasPlayerInfo != oldInfo->hasPlayerInfo ) {
-		return false;
-	}
-
-	if( this->score != oldInfo->score ) {
-		return false;
-	}
-
-	if( mapname != oldInfo->mapname ) {
-		return false;
-	}
-
-	if( gametype != oldInfo->gametype ) {
-		return false;
-	}
-
-	if( this->numBots != oldInfo->numBots ) {
-		return false;
-	}
-
-	// Never changes until server restart
-
-	if( serverName != oldInfo->serverName ) {
-		return false;
-	}
-
-	if( modname != oldInfo->modname ) {
-		return false;
-	}
-
-	return this->maxClients == oldInfo->maxClients && this->needPassword == oldInfo->needPassword;
 }

@@ -47,6 +47,16 @@ public:
 		return *this;
 	}
 
+	MessageWriter &operator<<( uint64_t value ) {
+		// We are really unsure about transmission of 64-bit integers via underlying "args".
+		// Lets choose a conservative approach.
+		const auto hiPart = (int)( value >> 32u );
+		const auto loPart = (int)( value & 0xFFFFFFFFull );
+		args->SetInt( argNum++, hiPart );
+		args->SetInt( argNum++, loPart );
+		return *this;
+	}
+
 	MessageWriter &operator<<( float value ) {
 		args->SetDouble( argNum++, value );
 		return *this;

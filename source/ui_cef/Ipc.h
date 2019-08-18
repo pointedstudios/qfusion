@@ -5,6 +5,8 @@
 #include "MessageReader.h"
 #include "MessageWriter.h"
 
+#include "../client/ServerInfo.h"
+
 #include "include/cef_v8.h"
 #include "include/wrapper/cef_helpers.h"
 
@@ -367,6 +369,7 @@ public:
 	const CefString &Name() const { return name; }
 
 	static const CefString updateScreen;
+	static const CefString updateServerInfo;
 	static const CefString gameCommand;
 };
 
@@ -521,6 +524,32 @@ public:
 	~UpdateScreenMessage() override;
 };
 
+class ServerInfo;
+class LinkedServerInfo;
+
+/**
+ * This message has two descendants to actually use at frontend (the main process)
+ * and backend (the browser process) as it's convenient to deserialize it using a different representation.
+ */
+class UpdateServerInfoMessage : public SimplexMessage {
+public:
+	UpdateServerInfoMessage() : SimplexMessage( SimplexMessage::updateServerInfo ) {}
+};
+
+class FrontendServerInfoMessage: public UpdateServerInfoMessage {
+public:
+	std::vector<std::pair<uint64_t, std::unique_ptr<ServerInfo>>> serversToAdd;
+	std::vector<std::pair<uint64_t, std::unique_ptr<ServerInfo>>> serversToUpdate;
+	std::vector<uint64_t> serversToRemove;
+};
+
+class BackendServerInfoMessage : public UpdateServerInfoMessage {
+public:
+	LinkedServerInfo *serversToAddList { nullptr };
+	LinkedServerInfo *serversToUpdateList { nullptr };
+	std::vector<uint64_t> serversToRemoveList;
+};
+
 #define DERIVE_MESSAGE_SENDER( Derived, messageName )              \
 class Derived##Sender: public SimplexMessageSender {               \
 public:                                                            \
@@ -564,6 +593,34 @@ class UpdateScreenHandler: public SimplexMessageHandler {
 public:
 	explicit UpdateScreenHandler( WswCefV8Handler *parent_ )
 		: SimplexMessageHandler( parent_, SimplexMessage::updateScreen ) {}
+};
+
+class UpdateServerInfoSender: public SimplexMessageSender {
+	using ServerInfoPair = std::pair<uint64_t, std::unique_ptr<ServerInfo>>;
+
+	void WritePairsList( MessageWriter &writer, const std::vector<ServerInfoPair> &infoList );
+	void WriteIdsList( MessageWriter &writer, const std::vector<uint64_t> &idsList );
+	void WriteServerInfo( MessageWriter &writer, const ServerInfo *info );
+	void WritePlayerInfo( MessageWriter &writer, const PlayerInfo *info );
+public:
+	explicit UpdateServerInfoSender( MessagePipe *parent_ )
+		: SimplexMessageSender( parent_, SimplexMessage::updateServerInfo ) {}
+
+	void AcquireAndSend( SimplexMessage *message ) override;
+};
+
+class UpdateServerInfoHandler: public SimplexMessageHandler {
+	bool GetCodeToCall( const SimplexMessage *message, CefStringBuilder &sb ) override;
+	SimplexMessage *DeserializeMessage( CefRefPtr<CefProcessMessage> &message ) override;
+
+	void ReadIdsList( MessageReader &reader, std::vector<uint64_t> &idsList );
+	LinkedServerInfo *ReadServerInfoList( MessageReader &reader );
+	LinkedServerInfo *ReadNextServerInfo( MessageReader &reader );
+	PlayerInfo *ReadPlayerInfoList( MessageReader &reader );
+	PlayerInfo *ReadNextPlayerInfo( MessageReader &reader );
+public:
+	explicit UpdateServerInfoHandler( WswCefV8Handler *parent_ )
+		: SimplexMessageHandler( parent_, SimplexMessage::updateServerInfo ) {}
 };
 
 DERIVE_MESSAGE_SENDER( GameCommand, SimplexMessage::gameCommand );

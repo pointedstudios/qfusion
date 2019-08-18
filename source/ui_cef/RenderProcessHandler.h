@@ -3,6 +3,7 @@
 
 #include "Logger.h"
 #include "V8Handler.h"
+#include "CefApp.h"
 
 #include "include/cef_render_process_handler.h"
 

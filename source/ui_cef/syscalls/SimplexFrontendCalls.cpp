@@ -3,6 +3,7 @@
 
 #include "../V8Handler.h"
 #include "../RenderProcessHandler.h"
+#include "../BrowserServerList.h"
 
 #include "../../gameshared/q_shared.h"
 #include "../../gameshared/q_comref.h"
@@ -306,4 +307,125 @@ bool UpdateScreenHandler::GetCodeToCall( const SimplexMessage *genericMessage, C
    	sb << " })";
 
 	return true;
+}
+
+void UpdateServerInfoSender::AcquireAndSend( SimplexMessage *genericMessage ) {
+	auto *const actualMessage = As<FrontendServerInfoMessage *>( genericMessage );
+	auto processMessage( CefProcessMessage::Create( SimplexMessage::updateServerInfo ) );
+	MessageWriter writer( processMessage );
+
+	WritePairsList( writer, actualMessage->serversToAdd );
+	WritePairsList( writer, actualMessage->serversToUpdate );
+	WriteIdsList( writer, actualMessage->serversToRemove );
+
+	SendProcessMessage( processMessage );
+	delete actualMessage;
+}
+
+void UpdateServerInfoSender::WritePairsList( MessageWriter &writer, const std::vector<ServerInfoPair> &infoList ) {
+	writer << (int)infoList.size();
+	for( const auto &pair : infoList ) {
+		writer << pair.first;
+		WriteServerInfo( writer, pair.second.get() );
+	}
+}
+
+void UpdateServerInfoSender::WriteIdsList( MessageWriter &writer, const std::vector<uint64_t> &idsList ) {
+	writer << (int)idsList.size();
+	for( uint64_t id: idsList ) {
+		writer << id;
+	}
+}
+
+void UpdateServerInfoSender::WriteServerInfo( MessageWriter &writer, const ServerInfo *info ) {
+	// TODO: Write all other fields!
+	writer << info->hasPlayerInfo;
+	if( !info->hasPlayerInfo ) {
+		return;
+	}
+
+	// TODO: We should not compute this
+	int numPlayerInfos = 0;
+	for( PlayerInfo *playerInfo = info->playerInfoHead; playerInfo; playerInfo = playerInfo->next ) {
+		numPlayerInfos++;
+	}
+
+	writer << numPlayerInfos;
+	for( PlayerInfo *playerInfo = info->playerInfoHead; playerInfo; playerInfo = playerInfo->next ) {
+		WritePlayerInfo( writer, playerInfo );
+	}
+}
+
+void UpdateServerInfoSender::WritePlayerInfo( MessageWriter &writer, const PlayerInfo *info ) {
+	writer << info->name.Data();
+	writer << info->score;
+	writer << (int)info->team;
+	writer << (int)info->ping;
+}
+
+bool UpdateServerInfoHandler::GetCodeToCall( const SimplexMessage *genericMessage, CefStringBuilder &sb ) {
+	const auto *const actualMessage = As<const FrontendServerInfoMessage *>( genericMessage );
+	actualMessage->serversToRemove.data();
+	return false;
+}
+
+SimplexMessage *UpdateServerInfoHandler::DeserializeMessage( CefRefPtr<CefProcessMessage> &ingoing ) {
+	MessageReader reader( ingoing );
+	auto *const actualMessage = new BackendServerInfoMessage;
+	actualMessage->serversToAddList = ReadServerInfoList( reader );
+	actualMessage->serversToUpdateList = ReadServerInfoList( reader );
+	ReadIdsList( reader, actualMessage->serversToRemoveList );
+	return actualMessage;
+}
+
+void UpdateServerInfoHandler::ReadIdsList( MessageReader &reader, std::vector<uint64_t> &idsList ) {
+	int numIds;
+	reader >> numIds;
+	for( int i = 0; i < numIds; ++i ) {
+		uint64_t id;
+		reader >> id;
+		idsList.push_back( id );
+	}
+}
+
+// TODO: Elmiminate code duplication by using templates
+
+LinkedServerInfo *UpdateServerInfoHandler::ReadServerInfoList( MessageReader &reader ) {
+	int numItems;
+	reader >> numItems;
+	if( !numItems ) {
+		return nullptr;
+	}
+
+	LinkedServerInfo *listHead = ReadNextServerInfo( reader );
+	for( int i = 1; i < numItems; ++i ) {
+		LinkedServerInfo *nextInfo = ReadNextServerInfo( reader );
+		::Link( nextInfo, &listHead );
+	}
+
+	return listHead;
+}
+
+PlayerInfo *UpdateServerInfoHandler::ReadPlayerInfoList( MessageReader &reader ) {
+	int numItems;
+	reader >> numItems;
+	if( !numItems ) {
+		return nullptr;
+	}
+
+	PlayerInfo *listHead = ReadNextPlayerInfo( reader );
+	for( int i = 1; i < numItems; ++i ) {
+		PlayerInfo *nextInfo = ReadNextPlayerInfo( reader );
+		::Link( nextInfo, &listHead );
+	}
+
+	return listHead;
+}
+
+LinkedServerInfo *UpdateServerInfoHandler::ReadNextServerInfo( MessageReader &reader ) {
+	return nullptr;
+}
+
+PlayerInfo *UpdateServerInfoHandler::ReadNextPlayerInfo( MessageReader &reader ) {
+	return nullptr;
 }

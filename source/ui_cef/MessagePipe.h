@@ -2,19 +2,25 @@
 #define QFUSION_UIBACKENDMESSAGEPIPE_H
 
 #include "Ipc.h"
+#include "../client/ServerList.h"
 
 #include "include/cef_browser.h"
 
 struct MainScreenState;
 class UiFacade;
 
-class MessagePipe {
+class MessagePipe : public ServerListListener {
 	friend class SimplexMessageSender;
 
 	UiFacade *parent;
 
 	GameCommandSender gameCommandSender;
 	UpdateScreenSender updateScreenSender;
+	UpdateServerInfoSender updateServerInfoSender;
+
+	std::vector<std::pair<uint64_t, std::unique_ptr<ServerInfo>>> serversToAdd;
+	std::vector<std::pair<uint64_t, std::unique_ptr<ServerInfo>>> serversToUpdate;
+	std::vector<uint64_t> serversToRemove;
 
 	bool isReady { false };
 
@@ -31,7 +37,8 @@ public:
 	explicit MessagePipe( UiFacade *parent_ )
 		: parent( parent_ )
 		, gameCommandSender( this )
-		, updateScreenSender( this ) {}
+		, updateScreenSender( this )
+		, updateServerInfoSender( this ) {}
 
 	void KeyUp( int context, int qKey, int nativeScanCode, int nativeKeyCode, uint32_t modifiers ) {
 		KeyUpOrDown( context, qKey, nativeScanCode, nativeKeyCode, modifiers, false );
@@ -53,6 +60,13 @@ public:
 
 	// Acquires an ownership over this state object and sends updates if needed
 	void ConsumeScreenState( MainScreenState *state );
+
+	void OnServerAdded( const PolledGameServer &server ) override;
+	void OnServerUpdated( const PolledGameServer &server ) override;
+	void OnServerRemoved( const PolledGameServer &server ) override;
+
+	void ClearBufferedServerInfo();
+	void DumpBufferedServerInfo();
 };
 
 #endif

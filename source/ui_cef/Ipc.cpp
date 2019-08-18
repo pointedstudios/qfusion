@@ -110,6 +110,7 @@ bool PendingRequestLauncher::Commit( std::shared_ptr<PendingCallbackRequest> req
 }
 
 const CefString SimplexMessage::updateScreen( "updateScreen" );
+const CefString SimplexMessage::updateServerInfo( "updateServerInfo" );
 const CefString SimplexMessage::gameCommand( "gameCommand" );
 
 SimplexMessageHandler::SimplexMessageHandler( WswCefV8Handler *parent_, const CefString &messageName_ )

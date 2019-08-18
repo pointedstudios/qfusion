@@ -154,3 +154,32 @@ void MessagePipe::ConsumeScreenState( MainScreenState *currScreenState ) {
 
 	updateScreenSender.AcquireAndSend( new UpdateScreenMessage( currScreenState ) );
 }
+
+void MessagePipe::OnServerAdded( const PolledGameServer &server ) {
+	auto *clone = server.CurrInfo()->Clone();
+	serversToAdd.emplace_back( std::make_pair( server.InstanceId(), std::unique_ptr<ServerInfo>( clone ) ) );
+}
+
+void MessagePipe::OnServerUpdated( const PolledGameServer &server ) {
+	auto *clone = server.CurrInfo()->Clone();
+	serversToUpdate.emplace_back( std::make_pair( server.InstanceId(), std::unique_ptr<ServerInfo>( clone ) ) );
+}
+
+void MessagePipe::OnServerRemoved( const PolledGameServer &server ) {
+	serversToRemove.emplace_back( server.InstanceId() );
+}
+
+void MessagePipe::ClearBufferedServerInfo() {
+	serversToAdd.clear();
+	serversToUpdate.clear();
+	serversToRemove.clear();
+}
+
+void MessagePipe::DumpBufferedServerInfo() {
+	auto message = new FrontendServerInfoMessage;
+	// Move all collected stuff to the message
+	std::swap( this->serversToAdd, message->serversToAdd );
+	std::swap( this->serversToUpdate, message->serversToUpdate );
+	std::swap( this->serversToRemove, message->serversToRemove );
+	updateServerInfoSender.AcquireAndSend( message );
+}
