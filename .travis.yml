@@ -20,23 +20,6 @@ matrix:
     #  compiler: clang
     - os: linux
       language: c++
-      compiler: gcc-4.9
-      env: QF_ARCH=x86
-      addons:
-        apt:
-          sources:
-            - kubuntu-backports
-            - ubuntu-toolchain-r-test
-          packages:
-            - gcc-4.9
-            - g++-4.9
-            - cmake
-            - build-essential
-            - gcc-4.9-multilib
-            - g++-4.9-multilib
-            - gcc-multilib
-    - os: linux
-      language: c++
       compiler: clang
       env: QF_ARCH=x86_64
       addons:
