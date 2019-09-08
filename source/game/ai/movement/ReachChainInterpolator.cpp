@@ -201,25 +201,3 @@ bool ReachChainInterpolator::Accept( int, const aas_reachability_t &reach, int )
 
 	return continueOnSuccess;
 }
-
-int ReachChainInterpolator::SuggestStopAtAreaNum() const {
-	Vec3 pivotDir( Result() );
-
-	float bestDot = -1.01f;
-	int bestAreaNum = -1;
-
-	assert( dirs.size() == dirsAreas.size() );
-	for( int i = 0; i < dirs.size(); ++i ) {
-		float dot = pivotDir.Dot( dirs[i] );
-		if( dot > bestDot ) {
-			bestDot = dot;
-			bestAreaNum = dirsAreas[i];
-		}
-	}
-
-	// We sometimes supply zero area numbers
-	// (e.g for "synthetic" dirs that do not really correspond to areas).
-	// Just make sure we've made at least a single iteration.
-	assert( bestAreaNum >= 0 );
-	return bestAreaNum;
-}

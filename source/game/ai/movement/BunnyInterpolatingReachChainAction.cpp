@@ -32,12 +32,6 @@ void BunnyInterpolatingReachChainAction::PlanPredictionStep( Context *context ) 
 		return;
 	}
 
-	// Set this area ONCE at the sequence start.
-	// Interpolation happens at every frame, we need to have some well-defined pivot area
-	if( this->checkStopAtAreaNums.empty() ) {
-		checkStopAtAreaNums.push_back( interpolator.SuggestStopAtAreaNum() );
-	}
-
 	context->record->botInput.SetIntendedLookDir( interpolator.Result(), true );
 
 	if( !SetupBunnyHopping( context->record->botInput.IntendedLookDir(), context ) ) {
@@ -66,9 +60,6 @@ void BunnyInterpolatingChainAtStartAction::SaveSuggestedLookDirs( Context *conte
 		if( HasSavedSimilarDir( newDir ) ) {
 			continue;
 		}
-		suggestedLookDirs.emplace_back( DirAndArea( newDir, interpolator.SuggestStopAtAreaNum() ) );
-		if( suggestedLookDirs.size() == 3 ) {
-			break;
-		}
+		suggestedLookDirs.emplace_back( DirAndArea( newDir, 0 ) );
 	}
 }

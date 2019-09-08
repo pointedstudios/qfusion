@@ -22,11 +22,7 @@ void BunnyTestingSavedLookDirsAction::OnApplicationSequenceStarted( MovementPred
 		return;
 	}
 
-	const DirAndArea &currDirAndArea = suggestedLookDirs[currSuggestedLookDirNum];
-	suggestedDir = currDirAndArea.dir.Data();
-	if( currDirAndArea.area ) {
-		checkStopAtAreaNums.push_back( currDirAndArea.area );
-	}
+	suggestedDir = suggestedLookDirs[currSuggestedLookDirNum].dir.Data();
 }
 
 void BunnyTestingSavedLookDirsAction::OnApplicationSequenceFailed( MovementPredictionContext *context, unsigned ) {

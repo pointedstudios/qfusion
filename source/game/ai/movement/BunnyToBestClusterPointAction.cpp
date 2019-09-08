@@ -31,9 +31,6 @@ void BunnyToBestFloorClusterPointAction::OnApplicationSequenceStarted( MovementP
 		localDirStorage -= context->movementState->entityPhysicsState.Origin();
 		localDirStorage.Normalize();
 		suggestedDir = localDirStorage.Data();
-
-		assert( checkStopAtAreaNums.empty() );
-		checkStopAtAreaNums.push_back( areaNum );
 		return;
 	}
 
