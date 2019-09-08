@@ -162,6 +162,10 @@ bool BunnyHopAction::SetupBunnyHopping( const Vec3 &intendedLookVec, Context *co
 					}
 				}
 				if( velocityDir2DDotToTargetDir2D < STRAIGHT_MOVEMENT_DOT_THRESHOLD ) {
+					// Apply a path penalty for aircontrol abuse
+					if( velocityDir2DDotToTargetDir2D < 0 ) {
+						EnsurePathPenalty( 1000 );
+					}
 					context->CheatingCorrectVelocity( velocityDir2DDotToTargetDir2D, toTargetDir2D );
 				}
 			}
