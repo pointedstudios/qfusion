@@ -569,24 +569,42 @@ bool BunnyHopAction::TryHandlingSkimmingState( Context *context ) {
 	// The only exception is testing covered distance to prevent
 	// jumping in front of wall contacting it forever updating skim timer
 
-	// Skip all tests at start of a prediction sequence
-	if( topOfStackIndex < limit / 2 ) {
+	const float *origin = context->movementState->entityPhysicsState.Origin();
+	const float squareDistance = originAtSequenceStart.SquareDistance2DTo( origin );
+	constexpr const char *format = "Looks like the bot is stuck and is resetting the skim timer forever by jumping\n";
+	// If the bot has not covered a sufficient distance
+	if( squareDistance < SQUARE( 72 ) ) {
+		if( topOfStackIndex < limit / 3 ) {
+			context->SaveSuggestedActionForNextFrame( this );
+			return true;
+		}
+		Debug( format );
+		return false;
+	}
+
+	// Allow prediction termination in skimming state but apply a huge penalty.
+	// This is the only way to terminate prediction in the skimming state.
+	// If this is missing, many legit trajectories get rejected.
+	if( WasOnGroundThisFrame( context ) ) {
+		// The bot must be at the best reached position currently
+		if( minTravelTimeToNavTargetSoFar && context->TravelTimeToNavTarget() == minTravelTimeToNavTargetSoFar ) {
+			if( travelTimeAtSequenceStart > minTravelTimeToNavTargetSoFar ) {
+				// Apply a penalty that varies with covered distance
+				float distanceFrac = BoundedFraction( Q_Sqrt( squareDistance ), 192.0f );
+				CompleteOrSaveGoodEnoughPath( context, (unsigned)( 5000 - 3000 * distanceFrac ) );
+				return true;
+			}
+		}
+	}
+
+	// Prevent overflow. We have to perform this as the generic code path does not handle the skimming state.
+	// Otherwise an action is going to be disabled for planning entirely instead of testing another dir (if any).
+	if( topOfStackIndex < ( 3 * limit ) / 4 ) {
 		context->SaveSuggestedActionForNextFrame( this );
 		return true;
 	}
 
-	const float *origin = context->movementState->entityPhysicsState.Origin();
-	// If the bot has covered a sufficient distance
-	if( originAtSequenceStart.SquareDistance2DTo( origin ) > SQUARE( 72 ) ) {
-		// Prevent overflow as the termination code path is unreachable in skimming state.
-		// Otherwise an action is going to be disabled for planning entirely instead of testing another dir (if any).
-		if( topOfStackIndex < limit - 1 ) {
-			context->SaveSuggestedActionForNextFrame( this );
-			return true;
-		}
-	}
-
-	Debug( "Looks like the bot is stuck and is resetting the skim timer forever by jumping\n" );
+	Debug( format );
 	return false;
 }
 
@@ -639,6 +657,7 @@ void BunnyHopAction::CheckPredictionStepResults( Context *context ) {
 		if( !TryHandlingSkimmingState( context ) ) {
 			context->SetPendingRollback();
 		}
+		// Note: the call above may now terminate prediction as well
 		return;
 	}
 
