@@ -562,21 +562,31 @@ inline bool BunnyHopAction::IsSkimmingInAGivenState( const Context *context ) co
 bool BunnyHopAction::TryHandlingSkimmingState( Context *context ) {
 	Assert( IsSkimmingInAGivenState( context ) );
 
-	// Skip tests while skimming
+	const auto topOfStackIndex = context->topOfStackIndex;
+	constexpr auto limit = MovementPredictionContext::MAX_PREDICTED_STATES;
+
+	// Skip most tests while skimming
 	// The only exception is testing covered distance to prevent
 	// jumping in front of wall contacting it forever updating skim timer
-	if( this->SequenceDuration( context ) < 400 ) {
+
+	// Skip all tests at start of a prediction sequence
+	if( topOfStackIndex < limit / 2 ) {
 		context->SaveSuggestedActionForNextFrame( this );
 		return true;
 	}
 
-	if( originAtSequenceStart.SquareDistance2DTo( context->movementState->entityPhysicsState.Origin() ) > SQUARE( 128 ) ) {
-		context->SaveSuggestedActionForNextFrame( this );
-		return true;
+	const float *origin = context->movementState->entityPhysicsState.Origin();
+	// If the bot has covered a sufficient distance
+	if( originAtSequenceStart.SquareDistance2DTo( origin ) > SQUARE( 72 ) ) {
+		// Prevent overflow as the termination code path is unreachable in skimming state.
+		// Otherwise an action is going to be disabled for planning entirely instead of testing another dir (if any).
+		if( topOfStackIndex < limit - 1 ) {
+			context->SaveSuggestedActionForNextFrame( this );
+			return true;
+		}
 	}
 
 	Debug( "Looks like the bot is stuck and is resetting the skim timer forever by jumping\n" );
-	context->SaveSuggestedActionForNextFrame( this );
 	return false;
 }
 
