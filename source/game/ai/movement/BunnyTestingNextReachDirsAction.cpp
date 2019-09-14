@@ -1,9 +1,9 @@
-#include "BunnyStraighteningReachChainAction.h"
+#include "BunnyTestingNextReachDirsAction.h"
 #include "MovementLocal.h"
 #include "FloorClusterAreasCache.h"
 #include "../ai_manager.h"
 
-BunnyStraighteningReachChainAction::BunnyStraighteningReachChainAction( BotMovementModule *module_ )
+BunnyTestingNextReachDirsAction::BunnyTestingNextReachDirsAction( BotMovementModule *module_ )
 	: BunnyTestingSavedLookDirsAction( module_, NAME, COLOR_RGB( 0, 192, 0 ) ) {
 	supportsObstacleAvoidance = false;
 	// The constructor cannot be defined in the header due to this bot member access
@@ -11,7 +11,7 @@ BunnyStraighteningReachChainAction::BunnyStraighteningReachChainAction( BotMovem
 	maxSuggestedLookDirs = MAX_SUGGESTED_LOOK_DIRS;
 }
 
-void BunnyStraighteningReachChainAction::BeforePlanning() {
+void BunnyTestingNextReachDirsAction::BeforePlanning() {
 	BunnyTestingSavedLookDirsAction::BeforePlanning();
 	// We plan to allow varying bot skill dynamically.
 	// This value should be recomputed every planning frame.
@@ -50,8 +50,8 @@ void BunnyStraighteningReachChainAction::BeforePlanning() {
 	maxSuggestedLookDirs = std::min( maxSuggestedLookDirs, (unsigned)MAX_SUGGESTED_LOOK_DIRS );
 }
 
-class StraighteningReachChainWalker final : public ReachChainWalker {
-	friend class BunnyStraighteningReachChainAction;
+class NextReachDirsCollector final : public ReachChainWalker {
+	friend class BunnyTestingNextReachDirsAction;
 
 	Context *const context;
 	const AiAasWorld *const aasWorld;
@@ -71,7 +71,7 @@ class StraighteningReachChainWalker final : public ReachChainWalker {
 
 	inline bool CheckForStairsCluster( int areaNum );
 public:
-	StraighteningReachChainWalker( const Bot *bot_, Context *context_, AreaAndScore *candidates_, unsigned maxCandidates_ )
+	NextReachDirsCollector( const Bot *bot_, Context *context_, AreaAndScore *candidates_, unsigned maxCandidates_ )
 		: ReachChainWalker( context_->RouteCache() )
 		, context( context_ )
 		, aasWorld( AiAasWorld::Instance() )
@@ -101,7 +101,7 @@ public:
 	bool Accept( int, const aas_reachability_t &reach, int ) override;
 };
 
-void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context ) {
+void BunnyTestingNextReachDirsAction::SaveSuggestedLookDirs( Context *context ) {
 	Assert( suggestedLookDirs.empty() );
 
 	if( context->IsInNavTargetArea() ) {
@@ -109,19 +109,19 @@ void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context
 	}
 
 	AreaAndScore candidates[MAX_SUGGESTED_LOOK_DIRS];
-	StraighteningReachChainWalker walker( bot, context, candidates, MAX_SUGGESTED_LOOK_DIRS );
-	if( !walker.Exec() ) {
+	NextReachDirsCollector collector( bot, context, candidates, MAX_SUGGESTED_LOOK_DIRS );
+	if( !collector.Exec() ) {
 		Debug( "Can't find areas for straightening a look dir\n" );
 	}
 
-	SaveCandidateAreaDirs( context, candidates, candidates + walker.numCandidates );
+	SaveCandidateAreaDirs( context, candidates, candidates + collector.numCandidates );
 	Assert( suggestedLookDirs.size() <= maxSuggestedLookDirs );
 
-	if( !walker.lastReachNum ) {
+	if( !collector.lastReachNum ) {
 		return;
 	}
 
-	const auto &stoppedAtReach = AiAasWorld::Instance()->Reachabilities()[walker.lastReachNum];
+	const auto &stoppedAtReach = AiAasWorld::Instance()->Reachabilities()[collector.lastReachNum];
 	const auto travelType = stoppedAtReach.traveltype & TRAVELTYPE_MASK;
 	if( travelType != TRAVEL_TELEPORT && travelType != TRAVEL_JUMPPAD && travelType != TRAVEL_ELEVATOR ) {
 		return;
@@ -145,7 +145,7 @@ void BunnyStraighteningReachChainAction::SaveSuggestedLookDirs( Context *context
 	suggestedLookDirs.emplace_back( DirAndArea( toTriggerDir, 0 ) );
 }
 
-inline bool StraighteningReachChainWalker::CheckForStairsCluster( int areaNum ) {
+inline bool NextReachDirsCollector::CheckForStairsCluster( int areaNum ) {
 	// Skip if a stairs cluster has been already met
 	// (limiting to a single handled stairs cluster is satisfactory)
 	if( metStairsClusterNum ) {
@@ -170,7 +170,7 @@ inline bool StraighteningReachChainWalker::CheckForStairsCluster( int areaNum ) 
 	return false;
 }
 
-bool StraighteningReachChainWalker::Accept( int, const aas_reachability_t &reach, int ) {
+bool NextReachDirsCollector::Accept( int, const aas_reachability_t &reach, int ) {
 	const auto travelType = ( reach.traveltype & TRAVELTYPE_MASK );
 	if( travelType != TRAVEL_WALK && travelType != TRAVEL_WALKOFFLEDGE ) {
 		// Interrupt walking reach chain at this

@@ -27,7 +27,7 @@ void BunnyToBestNavMeshPointAction::SaveSuggestedLookDirs( MovementPredictionCon
 	int areaNum = AiAasWorld::Instance()->FindAreaNum( point );
 	// That action is executed prior to this one.
 	// Tests for these areas have failed if control flow reaches THIS action
-	const auto &failedSuggestions = module->bunnyStraighteningReachChainAction.suggestedLookDirs;
+	const auto &failedSuggestions = module->bunnyTestingNextReachDirsAction.suggestedLookDirs;
 	// If we have already tested this area (and have failed)
 	for( const DirAndArea &oldSuggestion: failedSuggestions ) {
 		if( oldSuggestion.area == areaNum ) {
