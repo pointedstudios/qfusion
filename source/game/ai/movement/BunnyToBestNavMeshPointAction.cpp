@@ -4,7 +4,7 @@
 
 BunnyToBestNavMeshPointAction::BunnyToBestNavMeshPointAction( BotMovementModule *module_ )
 	: BunnyTestingSavedLookDirsAction( module_, NAME, COLOR_RGB( 255, 170, 0 ) ) {
-	suggestedAction = &module->walkOrSlideInterpolatingReachChainAction;
+	suggestedAction = &module->fallbackMovementAction;
 }
 
 void BunnyToBestNavMeshPointAction::SaveSuggestedLookDirs( MovementPredictionContext *context ) {

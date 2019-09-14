@@ -315,10 +315,6 @@ inline BaseMovementAction &BaseMovementAction::DefaultBunnyAction() {
 	return module->bunnyToStairsOrRampExitAction;
 }
 
-inline BaseMovementAction &BaseMovementAction::FallbackBunnyAction() {
-	return module->walkOrSlideInterpolatingReachChainAction;
-}
-
 inline FlyUntilLandingAction &BaseMovementAction::FlyUntilLandingAction() {
 	return module->flyUntilLandingAction;
 }

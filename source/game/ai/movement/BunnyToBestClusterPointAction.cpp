@@ -4,7 +4,7 @@
 BunnyToBestFloorClusterPointAction::BunnyToBestFloorClusterPointAction( BotMovementModule *module_ )
 	: BunnyTestingMultipleLookDirsAction( module_, NAME, COLOR_RGB( 255, 0, 255 ) ) {
 	supportsObstacleAvoidance = false;
-	suggestedAction = &module->bunnyInterpolatingChainAtStartAction;
+	suggestedAction = &module->bunnyStraighteningReachChainAction;
 }
 
 void BunnyToBestFloorClusterPointAction::OnApplicationSequenceStarted( MovementPredictionContext *context ) {

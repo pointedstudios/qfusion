@@ -10,14 +10,12 @@
 #include "LandOnSavedAreasAction.h"
 #include "RidePlatformAction.h"
 #include "BunnyToStairsOrRampExitAction.h"
-#include "BunnyInterpolatingReachChainAction.h"
 #include "BunnyStraighteningReachChainAction.h"
 #include "BunnyToBestClusterPointAction.h"
 #include "BunnyToBestNavMeshPointAction.h"
 #include "CampASpotAction.h"
 #include "CombatDodgeToTargetAction.h"
 #include "FallbackMovementAction.h"
-#include "WalkOrSlideInterpolatingAction.h"
 #include "WeaponJumpActions.h"
 
 #include "FallDownScript.h"
@@ -147,10 +145,7 @@ class BotMovementModule {
 	BunnyToStairsOrRampExitAction bunnyToStairsOrRampExitAction;
 	BunnyStraighteningReachChainAction bunnyStraighteningReachChainAction;
 	BunnyToBestFloorClusterPointAction bunnyToBestFloorClusterPointAction;
-	BunnyInterpolatingChainAtStartAction bunnyInterpolatingChainAtStartAction;
-	BunnyInterpolatingReachChainAction bunnyInterpolatingReachChainAction;
 	BunnyToBestNavMeshPointAction bunnyToBestNavMeshPointAction;
-	WalkOrSlideInterpolatingReachChainAction walkOrSlideInterpolatingReachChainAction;
 	CombatDodgeSemiRandomlyToTargetAction combatDodgeSemiRandomlyToTargetAction;
 	ScheduleWeaponJumpAction scheduleWeaponJumpAction;
 	TryTriggerWeaponJumpAction tryTriggerWeaponJumpAction;

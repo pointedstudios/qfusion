@@ -43,7 +43,6 @@ protected:
 	inline BaseMovementAction &DummyAction();
 	inline BaseMovementAction &DefaultWalkAction();
 	inline BaseMovementAction &DefaultBunnyAction();
-	inline BaseMovementAction &FallbackBunnyAction();
 	inline class FlyUntilLandingAction &FlyUntilLandingAction();
 	inline class LandOnSavedAreasAction &LandOnSavedAreasAction();
 
