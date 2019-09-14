@@ -11,6 +11,7 @@
 #include "RidePlatformAction.h"
 #include "BunnyToStairsOrRampExitAction.h"
 #include "BunnyTestingNextReachDirsAction.h"
+#include "BunnyToBestVisibleReachAction.h"
 #include "BunnyToBestClusterPointAction.h"
 #include "BunnyToBestNavMeshPointAction.h"
 #include "CampASpotAction.h"
@@ -97,14 +98,11 @@ class BotMovementModule {
 	friend class FlyUntilLandingAction;
 	friend class CampASpotMovementAction;
 	friend class WalkCarefullyAction;
-	friend class GenericRunBunnyingAction;
 	friend class BunnyToStairsOrRampExitAction;
 	friend class BunnyTestingNextReachDirsAction;
+	friend class BunnyToBestVisibleReachAction;
 	friend class BunnyToBestFloorClusterPointAction;
-	friend class BunnyInterpolatingChainAtStartAction;
-	friend class BunnyInterpolatingReachChainAction;
 	friend class BunnyToBestNavMeshPointAction;
-	friend class WalkOrSlideInterpolatingReachChainAction;
 	friend class CombatDodgeSemiRandomlyToTargetAction;
 	friend class ScheduleWeaponJumpAction;
 	friend class TryTriggerWeaponJumpAction;
@@ -144,6 +142,7 @@ class BotMovementModule {
 	WalkCarefullyAction walkCarefullyAction;
 	BunnyToStairsOrRampExitAction bunnyToStairsOrRampExitAction;
 	BunnyTestingNextReachDirsAction bunnyTestingNextReachDirsAction;
+	BunnyToBestVisibleReachAction bunnyToBestVisibleReachAction;
 	BunnyToBestFloorClusterPointAction bunnyToBestFloorClusterPointAction;
 	BunnyToBestNavMeshPointAction bunnyToBestNavMeshPointAction;
 	CombatDodgeSemiRandomlyToTargetAction combatDodgeSemiRandomlyToTargetAction;

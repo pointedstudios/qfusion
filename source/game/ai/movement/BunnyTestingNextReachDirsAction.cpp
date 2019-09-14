@@ -7,7 +7,7 @@ BunnyTestingNextReachDirsAction::BunnyTestingNextReachDirsAction( BotMovementMod
 	: BunnyTestingSavedLookDirsAction( module_, NAME, COLOR_RGB( 0, 192, 0 ) ) {
 	supportsObstacleAvoidance = false;
 	// The constructor cannot be defined in the header due to this bot member access
-	suggestedAction = &module->bunnyToBestNavMeshPointAction;
+	suggestedAction = &module->bunnyToBestVisibleReachAction;
 	maxSuggestedLookDirs = MAX_SUGGESTED_LOOK_DIRS;
 }
 
