@@ -89,8 +89,19 @@ bool ReachChainWalker::Exec() {
 	assert( numStartAreas >= 0 );
 
 	lastReachNum = 0;
-	// We have to handle the first reach. separately as we start from up to 2 alternative areas
-	lastTravelTime = routeCache->PreferredRouteToGoalArea( startAreaNums, numStartAreas, targetAreaNum, &lastReachNum );
+	startAreaNum = 0;
+	lastAreaNum = 0;
+
+	// We have to handle the first reach. separately as we start from up to 2 alternative areas.
+	// Also we have to inline PreferredRouteToGoalArea() here to save the actual lastAreaNum for the initial step
+	for( int i = 0; i < numStartAreas; ++i ) {
+		lastTravelTime = routeCache->PreferredRouteToGoalArea( startAreaNums[i], targetAreaNum, &lastReachNum );
+		if( lastTravelTime ) {
+			lastAreaNum = startAreaNum = startAreaNums[i];
+			break;
+		}
+	}
+
 	if( !lastTravelTime ) {
 		return false;
 	}
@@ -109,6 +120,7 @@ bool ReachChainWalker::Exec() {
 		if( !lastTravelTime ) {
 			return false;
 		}
+		lastAreaNum = areaNum;
 		assert( (unsigned)lastReachNum < (unsigned)aasWorld->NumReach() );
 		const auto &reach = aasReach[lastReachNum];
 		if( !Accept( lastReachNum, reach, lastTravelTime ) ) {

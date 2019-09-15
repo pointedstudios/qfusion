@@ -539,6 +539,8 @@ protected:
 	int numStartAreas { -1 };
 	// Step temporaries that might be useful
 	int lastTravelTime { 0 };
+	int startAreaNum { 0 };
+	int lastAreaNum { 0 };
 	int lastReachNum { 0 };
 
 	virtual bool Accept( int reachNum, const aas_reachability_t &reach, int travelTime ) = 0;
