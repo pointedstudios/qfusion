@@ -60,9 +60,7 @@ protected:
 	// TODO: Mark as virtual in base class and mark as final here to avoid a warning about hiding parent member?
 	bool GenericCheckIsActionEnabled( MovementPredictionContext *context, BaseMovementAction *suggestedAction );
 	bool CheckCommonBunnyHopPreconditions( MovementPredictionContext *context );
-	bool SetupBunnyHopping( const Vec3 &intendedLookVec,
-							MovementPredictionContext *context,
-							float maxAccelDotThreshold = 1.0f );
+	bool SetupBunnyHopping( const Vec3 &intendedLookVec, MovementPredictionContext *context );
 	bool CanFlyAboveGroundRelaxed( const MovementPredictionContext *context ) const;
 	bool CanSetWalljump( MovementPredictionContext *context ) const;
 	void TrySetWalljump( MovementPredictionContext *context );

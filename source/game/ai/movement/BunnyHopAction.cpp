@@ -122,7 +122,7 @@ void BunnyHopAction::SetupCommonBunnyHopInput( Context *context ) {
 	}
 }
 
-bool BunnyHopAction::SetupBunnyHopping( const Vec3 &intendedLookVec, Context *context, float maxAccelDotThreshold ) {
+bool BunnyHopAction::SetupBunnyHopping( const Vec3 &intendedLookVec, Context *context ) {
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	auto *botInput = &context->record->botInput;
 
@@ -148,14 +148,13 @@ bool BunnyHopAction::SetupBunnyHopping( const Vec3 &intendedLookVec, Context *co
 				toTargetDir2D *= Q_RSqrt( toTargetDir2DSqLen );
 				float velocityDir2DDotToTargetDir2D = velocityDir2D.Dot( toTargetDir2D );
 				if( velocityDir2DDotToTargetDir2D > 0.0f ) {
-					// Apply cheating acceleration.
-					// maxAccelDotThreshold is usually 1.0f, so the "else" path gets executed.
-					// If the maxAccelDotThreshold is lesser than the dot product,
-					// a maximal possible acceleration is applied
-					// (once the velocity and target dirs match conforming to the specified maxAccelDotThreshold).
-					// This allows accelerate even faster if we have an a-priori knowledge that the action is reliable.
-					Assert( maxAccelDotThreshold >= 0.0f );
-					if( velocityDir2DDotToTargetDir2D >= maxAccelDotThreshold ) {
+					// Apply a full acceleration at the initial trajectory part.
+					// A reached dot threshold is the only extra condition.
+					// The action activation rate is still relatively low
+					// and the resulting velocity gain accumulated over real game frames is moderate.
+					// Make sure we use the maximal acceleration possible for first frames
+					// switching to the default fraction to simulate an actual resulting trajectory.
+					if( velocityDir2DDotToTargetDir2D > 0.7f && context->totalMillisAhead <= 64 ) {
 						context->CheatingAccelerate( 1.0f );
 					} else {
 						context->CheatingAccelerate( velocityDir2DDotToTargetDir2D );
