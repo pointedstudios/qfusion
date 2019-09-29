@@ -78,7 +78,7 @@ void R_DrawStretchPoly( const poly_t *poly, float x_offset, float y_offset ) {
 
 	assert( sizeof( *poly->elems ) == sizeof( elem_t ) );
 
-	if( !poly || !poly->shader ) {
+	if( !poly || !poly->numverts || !poly->shader ) {
 		return;
 	}
 

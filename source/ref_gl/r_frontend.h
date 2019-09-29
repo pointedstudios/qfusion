@@ -22,27 +22,17 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define R_FRONTEND_H
 
 #include "r_local.h"
-#include "r_cmdque.h"
 
 // sync-to-async frontend adapter
 typedef struct {
 	void            *owner;             // pointer to parent ref_frontend_t
 	void            *GLcontext;
 	unsigned        frameNum;
-	qthread_t       *thread;
-	qmutex_t        *frameLock;
-	ref_cmdpipe_t   *cmdPipe;
 	volatile bool   shutdown;
 	volatile bool   noWait;
 } ref_frontendAdapter_t;
 
 typedef struct {
-	unsigned frameNum;                  // wrapped
-	unsigned lastFrameNum;
-
-	ref_cmdbuf_t    *frames[3];         // triple-buffered
-	ref_cmdbuf_t    *frame;             // current frontend frame
-
 	void            *auxGLContext;
 
 	ref_frontendAdapter_t adapter;

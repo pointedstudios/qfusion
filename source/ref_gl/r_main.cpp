@@ -1352,11 +1352,6 @@ void R_DeferDataSync( void ) {
 
 void R_DataSync( void ) {
 	if( rf.dataSync ) {
-		if( glConfig.multithreading ) {
-			// synchronize data we might have uploaded this frame between the threads
-			// FIXME: only call this when absolutely necessary
-			qglFinish();
-		}
 		rf.dataSync = false;
 	}
 }

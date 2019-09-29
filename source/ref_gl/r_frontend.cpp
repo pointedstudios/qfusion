@@ -19,84 +19,22 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "r_local.h"
-#include "r_cmdque.h"
 #include "r_frontend.h"
 #include "../cin/cin.h"
 #include "../qcommon/qcommon.h"
 
 static ref_frontend_t rrf;
-static ref_cmdbuf_t *RF_GetNextAdapterFrame( ref_frontendAdapter_t *adapter );
 
-/*
-* RF_AdapterFrame
-*
-* Handles polling for the next frame at fixed time intervals, yielding in between.
-* If vsync is enabled, only yields if got nothing to do.
-*/
-static void RF_AdapterFrame( ref_frontendAdapter_t *adapter ) {
-	ref_cmdbuf_t *frame;
-
-	if( adapter->noWait )
-		adapter->cmdPipe->RunCmds( adapter->cmdPipe );
-	else
-		adapter->cmdPipe->WaitForCmds( adapter->cmdPipe, Q_THREADS_WAIT_INFINITE );
-
-	frame = RF_GetNextAdapterFrame( adapter );
-	if( frame ) {
-		frame->RunCmds( frame );
-	}
-}
-
-/*
-* RF_AdapterThreadProc
-*/
-static void *RF_AdapterThreadProc( void *param ) {
-	auto *adapter = (ref_frontendAdapter_t *)param;
-
-	GLimp_MakeCurrent( adapter->GLcontext, GLimp_GetWindowSurface( NULL ) );
-
-	while( !adapter->shutdown ) {
-		RF_AdapterFrame( adapter );
-	}
-
-	GLimp_MakeCurrent( NULL, NULL );
-
-	return NULL;
-}
-
-/*
-* RF_AdapterWait
-*
-* Blocks the current thread until adapter is finished processing frame and inter-frame commands.
-*/
-static void RF_AdapterWait( ref_frontendAdapter_t *adapter ) {
-	if( adapter->thread == NULL ) {
-		return;
-	}
-
-	adapter->cmdPipe->FinishCmds( adapter->cmdPipe );
-}
 
 /*
 * RF_AdapterShutdown
 */
 static void RF_AdapterShutdown( ref_frontendAdapter_t *adapter ) {
-	if( !adapter->cmdPipe ) {
-		return;
-	}
+	R_ReleaseBuiltinScreenImages();
 
-	RF_AdapterWait( adapter );
+	RB_Shutdown();
 
-	adapter->cmdPipe->Shutdown( adapter->cmdPipe );
-	adapter->cmdPipe->FinishCmds( adapter->cmdPipe );
-
-	if( adapter->thread ) {
-		adapter->shutdown = true;
-		QThread_Join( adapter->thread );
-		QMutex_Destroy( &adapter->frameLock );
-	}
-
-	RF_DestroyCmdPipe( &adapter->cmdPipe );
+	RFB_Shutdown();
 
 	if( adapter->GLcontext ) {
 		GLimp_SharedContext_Destroy( adapter->GLcontext, NULL );
@@ -111,42 +49,15 @@ static void RF_AdapterShutdown( ref_frontendAdapter_t *adapter ) {
 * RF_AdapterInit
 */
 static bool RF_AdapterInit( ref_frontendAdapter_t *adapter ) {
-	adapter->cmdPipe = RF_CreateCmdPipe( !glConfig.multithreading );
+	RB_Init();
 
-	if( glConfig.multithreading ) {
-		adapter->frameLock = QMutex_Create();
+	RFB_Init();
 
-		GLimp_EnableMultithreadedRendering( true );
+	R_InitBuiltinScreenImages();
 
-		if( !GLimp_SharedContext_Create( &adapter->GLcontext, NULL ) ) {
-			return false;
-		}
-
-		adapter->shutdown = false;
-		adapter->thread = QThread_Create( RF_AdapterThreadProc, adapter );
-		if( !adapter->thread ) {
-			GLimp_EnableMultithreadedRendering( false );
-			return false;
-		}
-	}
-
-	adapter->cmdPipe->Init( adapter->cmdPipe );
+	R_BindFrameBufferObject( 0 );
 
 	return true;
-}
-
-static ref_cmdbuf_t *RF_GetNextAdapterFrame( ref_frontendAdapter_t *adapter ) {
-	ref_cmdbuf_t *result = NULL;
-	auto *fe = (ref_frontend_t *)adapter->owner;
-
-	QMutex_Lock( adapter->frameLock );
-	if( adapter->frameNum != fe->lastFrameNum ) {
-		adapter->frameNum = fe->lastFrameNum;
-		result = fe->frames[adapter->frameNum];
-	}
-	QMutex_Unlock( adapter->frameLock );
-
-	return result;
 }
 
 rserr_t RF_Init( const char *applicationName, const char *screenshotPrefix, int startupColor,
@@ -180,23 +91,6 @@ rserr_t RF_SetMode( int x, int y, int width, int height, int displayFrequency, b
 		return err;
 	}
 
-	rrf.frameNum = rrf.lastFrameNum = 0;
-
-	if( !rrf.frame ) {
-		if( glConfig.multithreading ) {
-			int i;
-			for( i = 0; i < 3; i++ )
-				rrf.frames[i] = RF_CreateCmdBuf( false );
-		} else {
-			rrf.frame = RF_CreateCmdBuf( true );
-		}
-	}
-
-	if( glConfig.multithreading ) {
-		rrf.frame = rrf.frames[0];
-	}
-
-	rrf.frame->Clear( rrf.frame );
 	memset( rrf.customColors, 255, sizeof( rrf.customColors ) );
 
 	rrf.adapter.owner = (void *)&rrf;
@@ -214,7 +108,7 @@ rserr_t RF_SetWindow( void *hinstance, void *wndproc, void *parenthWnd ) {
 	err = GLimp_SetWindow( hinstance, wndproc, parenthWnd, &surfaceChangePending );
 
 	if( err == rserr_ok && surfaceChangePending ) {
-		rrf.adapter.cmdPipe->SurfaceChange( rrf.adapter.cmdPipe );
+		GLimp_UpdatePendingWindowSurface();
 	}
 
 	return err;
@@ -228,13 +122,6 @@ void RF_AppActivate( bool active, bool minimize, bool destroy ) {
 void RF_Shutdown( bool verbose ) {
 	RF_AdapterShutdown( &rrf.adapter );
 
-	if( glConfig.multithreading ) {
-		int i;
-		for( i = 0; i < 3; i++ )
-			RF_DestroyCmdBuf( &rrf.frames[i] );
-	} else {
-		RF_DestroyCmdBuf( &rrf.frame );
-	}
 	memset( &rrf, 0, sizeof( rrf ) );
 
 	R_Shutdown( verbose );
@@ -244,12 +131,12 @@ static void RF_CheckCvars( void ) {
 	// update gamma
 	if( r_gamma->modified ) {
 		r_gamma->modified = false;
-		rrf.adapter.cmdPipe->SetGamma( rrf.adapter.cmdPipe, r_gamma->value );
+		R_SetGamma( r_gamma->value );
 	}
 
 	if( r_texturefilter->modified ) {
 		r_texturefilter->modified = false;
-		rrf.adapter.cmdPipe->SetTextureFilter( rrf.adapter.cmdPipe, r_texturefilter->integer );
+		R_AnisotropicFilter( r_texturefilter->integer );
 	}
 
 	if( r_wallcolor->modified || r_floorcolor->modified ) {
@@ -260,18 +147,18 @@ static void RF_CheckCvars( void ) {
 
 		r_wallcolor->modified = r_floorcolor->modified = false;
 
-		rrf.adapter.cmdPipe->SetWallFloorColors( rrf.adapter.cmdPipe, wallColor, floorColor );
+		R_SetWallFloorColors( wallColor, floorColor );
 	}
 
 	if( gl_drawbuffer->modified ) {
 		gl_drawbuffer->modified = false;
-		rrf.adapter.cmdPipe->SetDrawBuffer( rrf.adapter.cmdPipe, gl_drawbuffer->string );
+		R_SetDrawBuffer( gl_drawbuffer->string );
 	}
 
 	// texturemode stuff
 	if( r_texturemode->modified ) {
 		r_texturemode->modified = false;
-		rrf.adapter.cmdPipe->SetTextureMode( rrf.adapter.cmdPipe, r_texturemode->string );
+		R_TextureMode( r_texturemode->string );
 	}
 
 	// keep r_outlines_cutoff value in sane bounds to prevent wallhacking
@@ -295,22 +182,6 @@ void RF_BeginFrame( float cameraSeparation, bool forceClear, bool forceVsync, bo
 
 	rrf.adapter.noWait = uncappedFPS;
 
-	// take the frame the backend is not busy processing
-	if( glConfig.multithreading ) {
-		QMutex_Lock( rrf.adapter.frameLock );
-		if( rrf.lastFrameNum == rrf.adapter.frameNum ) {
-			rrf.frameNum = ( rrf.adapter.frameNum + 1 ) % 3;
-		} else {
-			rrf.frameNum = 3 - ( rrf.adapter.frameNum + rrf.lastFrameNum );
-		}
-		if( rrf.frameNum == 3 ) {
-			rrf.frameNum = 1;
-		}
-		rrf.frame = rrf.frames[rrf.frameNum];
-		QMutex_Unlock( rrf.adapter.frameLock );
-	}
-
-	rrf.frame->Clear( rrf.frame );
 	rrf.cameraSeparation = cameraSeparation;
 
 	R_DataSync();
@@ -318,54 +189,47 @@ void RF_BeginFrame( float cameraSeparation, bool forceClear, bool forceVsync, bo
 	swapInterval = r_swapinterval->integer || forceVsync ? 1 : 0;
 	clamp_low( swapInterval, r_swapinterval_min->integer );
 
-	rrf.frame->BeginFrame( rrf.frame, cameraSeparation, forceClear, swapInterval );
+	R_BeginFrame( cameraSeparation, forceClear, swapInterval );
 }
 
 void RF_EndFrame( void ) {
-	R_DataSync();
-
-	rrf.frame->EndFrame( rrf.frame );
-
-	if( glConfig.multithreading ) {
-		QMutex_Lock( rrf.adapter.frameLock );
-		rrf.lastFrameNum = rrf.frameNum;
-		QMutex_Unlock( rrf.adapter.frameLock );
-	}
-
-	rrf.adapter.cmdPipe->Fence( rrf.adapter.cmdPipe );
+	R_EndFrame();
 }
 
 void RF_BeginRegistration( void ) {
 	// sync to the backend thread to ensure it's not using old assets for drawing
-	RF_AdapterWait( &rrf.adapter );
 	R_BeginRegistration();
-	rrf.adapter.cmdPipe->BeginRegistration( rrf.adapter.cmdPipe );
-	RF_AdapterWait( &rrf.adapter );
+
+	R_DeferDataSync();
+	R_DataSync();
+
+	RB_BeginRegistration();
 }
 
 void RF_EndRegistration( void ) {
-	// sync to the backend thread to ensure it's not using old assets for drawing
-	RF_AdapterWait( &rrf.adapter );
 	R_EndRegistration();
-	rrf.adapter.cmdPipe->EndRegistration( rrf.adapter.cmdPipe );
-	RF_AdapterWait( &rrf.adapter );
+
+	R_DeferDataSync();
+	R_DataSync();
+
+	RB_EndRegistration();
+
+	RFB_FreeUnusedObjects();
 }
 
 void RF_RegisterWorldModel( const char *model ) {
-	RF_AdapterWait( &rrf.adapter );
 	R_RegisterWorldModel( model );
 }
 
 void RF_ClearScene( void ) {
-	rrf.frame->ClearScene( rrf.frame );
+	R_ClearScene();
 }
 
 void RF_Finish( void ) {
-	RF_AdapterWait( &rrf.adapter );
 }
 
 void RF_AddEntityToScene( const entity_t *ent ) {
-	rrf.frame->AddEntityToScene( rrf.frame, ent );
+	R_AddEntityToScene( ent );
 }
 
 void RF_AddLightToScene( const vec3_t org, float programIntensity, float coronaIntensity, float r, float g, float b ) {
@@ -383,33 +247,33 @@ void RF_AddLightToScene( const vec3_t org, float programIntensity, float coronaI
 		return;
 	}
 
-	rrf.frame->AddLightToScene( rrf.frame, org, programIntensity, coronaIntensity, r, g, b );
+	Scene::Instance()->AddLight( org, programIntensity, coronaIntensity, r, g, b );
 }
 
 void RF_AddPolyToScene( const poly_t *poly ) {
-	rrf.frame->AddPolyToScene( rrf.frame, poly );
+	R_AddPolyToScene( poly );
 }
 
 void RF_AddLightStyleToScene( int style, float r, float g, float b ) {
-	rrf.frame->AddLightStyleToScene( rrf.frame, style, r, g, b );
+	R_AddLightStyleToScene( style, r, g, b );
 }
 
 void RF_RenderScene( const refdef_t *fd ) {
-	rrf.frame->RenderScene( rrf.frame, fd );
+	R_RenderScene( fd );
 }
 
 void RF_BlurScreen( void ) {
-	rrf.frame->BlurScreen( rrf.frame );
+	R_BlurScreen();
 }
 
 void RF_DrawStretchPic( int x, int y, int w, int h, float s1, float t1, float s2, float t2,
 						const vec4_t color, const shader_t *shader ) {
-	rrf.frame->DrawRotatedStretchPic( rrf.frame, x, y, w, h, s1, t1, s2, t2, 0, color, shader );
+	R_DrawRotatedStretchPic( x, y, w, h, s1, t1, s2, t2, 0, color, shader );
 }
 
 void RF_DrawRotatedStretchPic( int x, int y, int w, int h, float s1, float t1, float s2, float t2, float angle,
 							   const vec4_t color, const shader_t *shader ) {
-	rrf.frame->DrawRotatedStretchPic( rrf.frame, x, y, w, h, s1, t1, s2, t2, angle, color, shader );
+	R_DrawRotatedStretchPic( x, y, w, h, s1, t1, s2, t2, angle, color, shader );
 }
 
 void RF_DrawStretchRaw( int x, int y, int w, int h, int cols, int rows,
@@ -422,7 +286,7 @@ void RF_DrawStretchRaw( int x, int y, int w, int h, int cols, int rows,
 		R_UploadRawPic( rsh.rawTexture, cols, rows, data );
 	}
 
-	rrf.frame->DrawStretchRaw( rrf.frame, x, y, w, h, s1, t1, s2, t2 );
+	R_DrawStretchRaw( x, y, w, h, s1, t1, s2, t2 );
 }
 
 void RF_DrawStretchRawYUV( int x, int y, int w, int h,
@@ -431,15 +295,15 @@ void RF_DrawStretchRawYUV( int x, int y, int w, int h,
 		R_UploadRawYUVPic( rsh.rawYUVTextures, yuv );
 	}
 
-	rrf.frame->DrawStretchRawYUV( rrf.frame, x, y, w, h, s1, t1, s2, t2 );
+	R_DrawStretchRawYUV( x, y, w, h, s1, t1, s2, t2 );
 }
 
 void RF_DrawStretchPoly( const poly_t *poly, float x_offset, float y_offset ) {
-	rrf.frame->DrawStretchPoly( rrf.frame, poly, x_offset, y_offset );
+	R_DrawStretchPoly( poly, x_offset, y_offset );
 }
 
 void RF_SetScissor( int x, int y, int w, int h ) {
-	rrf.frame->SetScissor( rrf.frame, x, y, w, h );
+	R_Scissor( x, y, w, h );
 	Vector4Set( rrf.scissor, x, y, w, h );
 }
 
@@ -459,7 +323,7 @@ void RF_GetScissor( int *x, int *y, int *w, int *h ) {
 }
 
 void RF_ResetScissor( void ) {
-	rrf.frame->ResetScissor( rrf.frame );
+	R_ResetScissor();
 	Vector4Set( rrf.scissor, 0, 0, glConfig.width, glConfig.height );
 }
 
@@ -469,20 +333,32 @@ void RF_SetCustomColor( int num, int r, int g, int b ) {
 	Vector4Set( rgba, r, g, b, 255 );
 
 	if( *(int *)rgba != *(int *)rrf.customColors[num] ) {
-		rrf.adapter.cmdPipe->SetCustomColor( rrf.adapter.cmdPipe, num, r, g, b );
+		R_SetCustomColor( num, r, g, b );
 		*(int *)rrf.customColors[num] = *(int *)rgba;
 	}
 }
 
+/*
+void RF_IssueScreenShotReliableCmd( ref_cmdpipe_t *cmdpipe, const char *path, const char *name, const char *fmtstring, bool silent ) {
+	RF_IssueEnvScreenShotReliableCmd( cmdpipe, REF_PIPE_CMD_SCREEN_SHOT, path, name, fmtstring, 0, 0, glConfig.width, glConfig.height, 0, silent, true );
+}
+
+void RF_IssueEnvShotReliableCmd( ref_cmdpipe_t *cmdpipe, const char *path, const char *name, unsigned pixels ) {
+	RF_IssueEnvScreenShotReliableCmd( cmdpipe, REF_PIPE_CMD_ENV_SHOT, path, name, "", 0, 0, glConfig.width, glConfig.height, pixels, false, false );
+}
+
+void RF_IssueAviShotReliableCmd( ref_cmdpipe_t *cmdpipe, const char *path, const char *name, int x, int y, int w, int h ) {
+}*/
+
 void RF_ScreenShot( const char *path, const char *name, const char *fmtstring, bool silent ) {
 	if( RF_RenderingEnabled() ) {
-		rrf.adapter.cmdPipe->ScreenShot( rrf.adapter.cmdPipe, path, name, fmtstring, silent );
+		R_TakeScreenShot( path, name, fmtstring, 0, 0, glConfig.width, glConfig.height, silent, true );
 	}
 }
 
 void RF_EnvShot( const char *path, const char *name, unsigned pixels ) {
 	if( RF_RenderingEnabled() ) {
-		rrf.adapter.cmdPipe->EnvShot( rrf.adapter.cmdPipe, path, name, pixels );
+		R_TakeEnvShot( path, name, pixels );
 	}
 }
 
@@ -506,7 +382,6 @@ void RF_ReplaceRawSubPic( shader_t *shader, int x, int y, int width, int height,
 }
 
 void RF_BeginAviDemo( void ) {
-	RF_AdapterWait( &rrf.adapter );
 }
 
 void RF_WriteAviFrame( int frame, bool scissor ) {
@@ -539,13 +414,10 @@ void RF_WriteAviFrame( int frame, bool scissor ) {
 	Q_snprintfz( path, path_size, "%s/%s/avi/", writedir, gamedir );
 	Q_snprintfz( name, sizeof( name ), "%06i", frame );
 
-	RF_AdapterWait( &rrf.adapter );
-
-	rrf.adapter.cmdPipe->AviShot( rrf.adapter.cmdPipe, path, name, x, y, w, h );
+	R_TakeScreenShot( path, name, "", x, y, w, h, true, false );
 }
 
 void RF_StopAviDemo( void ) {
-	RF_AdapterWait( &rrf.adapter );
 }
 
 void RF_TransformVectorToScreen( const refdef_t *rd, const vec3_t in, vec2_t out ) {

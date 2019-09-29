@@ -2078,9 +2078,6 @@ image_t *R_FindImage( const char *name, const char *suffix, int flags, int minmi
 		image = NULL;
 	} else {
 		// Make sure the image is updated on all contexts.
-		if( glConfig.multithreading ) {
-			qglFinish();
-		}
 		image->loaded = true;
 	}
 
@@ -2996,23 +2993,8 @@ static void R_IssueDataSyncLoaderCmd( int id ) {
 * R_InitImageLoader
 */
 static void R_InitImageLoader( int id ) {
-	if( !glConfig.multithreading ) {
-		loader_gl_context[id] = NULL;
-		loader_gl_surface[id] = NULL;
-		return;
-	}
-
-	if( !GLimp_SharedContext_Create( &loader_gl_context[id], &loader_gl_surface[id] ) ) {
-		return;
-	}
-
-	loader_queue[id] = QBufPipe_Create( 0x40000, 1 );
-	loader_thread[id] = QThread_Create( R_ImageLoaderThreadProc, loader_queue[id] );
-
-	R_IssueInitLoaderCmd( id );
-
-	// wait for the thread to complete context setup
-	QBufPipe_Finish( loader_queue[id] );
+	loader_gl_context[id] = NULL;
+	loader_gl_surface[id] = NULL;
 }
 
 /*
