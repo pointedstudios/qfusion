@@ -1729,11 +1729,6 @@ static void RB_RenderMeshGLSL_FXAA( const shaderpass_t *pass, r_glslfeat_t progr
 	if( glConfig.ext.gpu_shader5 ) {
 		fxaa3 = true;
 	}
-#ifdef GL_ES_VERSION_2_0
-	if( glConfig.shadingLanguageVersion >= 310 ) {
-		fxaa3 = true;
-	}
-#endif
 	if( fxaa3 ) {
 		programFeatures |= GLSL_SHADER_FXAA_FXAA3;
 	}
@@ -1865,11 +1860,6 @@ void RB_RenderMeshGLSLProgrammed( const shaderpass_t *pass, int programType ) {
 	if( rb.greyscale || pass->flags & SHADERPASS_GREYSCALE ) {
 		features |= GLSL_SHADER_COMMON_GREYSCALE;
 	}
-#ifdef GL_ES_VERSION_2_0
-	if( glConfig.ext.fragment_precision_high ) {
-		features |= GLSL_SHADER_COMMON_FRAGMENT_HIGHP;
-	}
-#endif
 
 	features |= RB_BonesTransformsToProgramFeatures();
 	features |= RB_AutospriteProgramFeatures();
@@ -2310,7 +2300,6 @@ static inline const vec_t *RB_TriangleLinesColor( void ) {
 * RB_DrawOutlinedElements
 */
 void RB_DrawOutlinedElements( void ) {
-#ifndef GL_ES_VERSION_2_0
 	static shaderpass_t r_triLinesPass;
 	static vec4_t r_triLinesColor;
 	shaderpass_t *pass;
@@ -2349,7 +2338,6 @@ void RB_DrawOutlinedElements( void ) {
 	RB_SetShaderState();
 
 	RB_RenderPass( &r_triLinesPass );
-#endif
 }
 
 /*

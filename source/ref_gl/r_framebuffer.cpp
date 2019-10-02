@@ -104,15 +104,9 @@ int RFB_RegisterObject( int width, int height, bool builtin, bool depthRB, bool 
 		return 0;
 	}
 
-#ifdef GL_ES_VERSION_2_0
-	if( samples ) {
-		return 0;
-	}
-#else
 	if( samples && !glConfig.ext.framebuffer_multisample ) {
 		return 0;
 	}
-#endif
 
 	for( i = 0, fbo = r_framebuffer_objects; i < r_num_framebuffer_objects; i++, fbo++ ) {
 		if( !fbo->objectID ) {
@@ -156,20 +150,17 @@ found:
 		fbo->colorRenderBuffer = rbID;
 		qglBindRenderbufferEXT( GL_RENDERBUFFER_EXT, rbID );
 
-#ifndef GL_ES_VERSION_2_0
 		if( samples ) {
 			qglRenderbufferStorageMultisampleEXT( GL_RENDERBUFFER_EXT, samples, format, width, height );
-		} else
-#endif
-		qglRenderbufferStorageEXT( GL_RENDERBUFFER_EXT, format, width, height );
+		} else {
+			qglRenderbufferStorageEXT( GL_RENDERBUFFER_EXT, format, width, height );
+		}
 	}
-#ifndef GL_ES_VERSION_2_0
 	else {
 		// until a color texture is attached, don't enable drawing to the buffer
 		qglDrawBuffer( GL_NONE );
 		qglReadBuffer( GL_NONE );
 	}
-#endif
 
 	if( depthRB ) {
 		qglGenRenderbuffersEXT( 1, &rbID );
@@ -186,12 +177,11 @@ found:
 			format = GL_DEPTH_COMPONENT16;
 		}
 
-#ifndef GL_ES_VERSION_2_0
 		if( samples ) {
 			qglRenderbufferStorageMultisampleEXT( GL_RENDERBUFFER_EXT, samples, format, width, height );
-		} else
-#endif
-		qglRenderbufferStorageEXT( GL_RENDERBUFFER_EXT, format, width, height );
+		} else {
+			qglRenderbufferStorageEXT( GL_RENDERBUFFER_EXT, format, width, height );
+		}
 
 		if( stencilRB ) {
 			fbo->stencilRenderBuffer = rbID;
@@ -335,7 +325,6 @@ bind:
 			texture->fbo = object;
 		}
 	} else {
-#ifndef GL_ES_VERSION_2_0
 		const GLenum fboBuffers[8] = {
 			GL_COLOR_ATTACHMENT0_EXT,
 			GL_COLOR_ATTACHMENT1_EXT,
@@ -346,11 +335,9 @@ bind:
 			GL_COLOR_ATTACHMENT6_EXT,
 			GL_COLOR_ATTACHMENT7_EXT,
 		};
-#endif
 
 		attachment = GL_COLOR_ATTACHMENT0_EXT + target;
 
-#ifndef GL_ES_VERSION_2_0
 		if( target > 0 && texture ) {
 			qglDrawBuffersARB( target + 1, fboBuffers );
 		} else {
@@ -360,7 +347,6 @@ bind:
 			qglDrawBuffer( GL_COLOR_ATTACHMENT0_EXT );
 			qglReadBuffer( GL_COLOR_ATTACHMENT0_EXT );
 		}
-#endif
 
 		if( texture ) {
 			assert( !( texture->flags & IT_DEPTH ) );
@@ -588,7 +574,6 @@ void RFB_BlitObject( int src, int dest, int bitMask, int mode, int filter, int r
 	qglBindFramebufferEXT( GL_READ_FRAMEBUFFER_EXT, fbo->objectID );
 	qglBindFramebufferEXT( GL_DRAW_FRAMEBUFFER_EXT, destObj );
 
-#ifndef GL_ES_VERSION_2_0
 	if( src == 0 ) {
 		qglReadBuffer( GL_BACK );
 		qglDrawBuffer( GL_COLOR_ATTACHMENT0_EXT + drawAtt );
@@ -596,14 +581,12 @@ void RFB_BlitObject( int src, int dest, int bitMask, int mode, int filter, int r
 		qglReadBuffer( GL_COLOR_ATTACHMENT0_EXT + readAtt );
 		qglDrawBuffer( GL_COLOR_ATTACHMENT0_EXT + drawAtt );
 	}
-#endif
 
 	qglBlitFramebufferEXT( 0, 0, fbo->width, fbo->height, dx, dy, dx + dw, dy + dh, bits, filter );
 	qglBindFramebufferEXT( GL_READ_FRAMEBUFFER_EXT, 0 );
 	qglBindFramebufferEXT( GL_DRAW_FRAMEBUFFER_EXT, 0 );
 	qglBindFramebufferEXT( GL_FRAMEBUFFER_EXT, fbo->objectID );
 
-#ifndef GL_ES_VERSION_2_0
 	if( src == 0 ) {
 		qglReadBuffer( GL_BACK );
 		qglDrawBuffer( GL_BACK );
@@ -611,7 +594,6 @@ void RFB_BlitObject( int src, int dest, int bitMask, int mode, int filter, int r
 		qglReadBuffer( GL_COLOR_ATTACHMENT0_EXT );
 		qglDrawBuffer( GL_COLOR_ATTACHMENT0_EXT );
 	}
-#endif
 
 	assert( qglGetError() == GL_NO_ERROR );
 }

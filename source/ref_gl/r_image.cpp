@@ -471,9 +471,6 @@ static int R_ScaledImageSize( int width, int height, int *scaledWidth, int *scal
 	}
 
 	makePOT = !glConfig.ext.texture_non_power_of_two && !forceNPOT;
-#ifdef GL_ES_VERSION_2_0
-	makePOT = makePOT && ( ( flags & ( IT_CLAMP | IT_NOMIPMAP ) ) != ( IT_CLAMP | IT_NOMIPMAP ) );
-#endif
 	if( makePOT ) {
 		int potWidth, potHeight;
 
@@ -776,7 +773,6 @@ static void R_MipMap16( unsigned short *in, int width, int height, int rMask, in
 /*
 * R_TextureInternalFormat
 */
-#ifndef GL_ES_VERSION_2_0
 static int R_TextureInternalFormat( int samples, int flags, int pixelType ) {
 	bool sRGB = ( flags & IT_SRGB ) != 0;
 
@@ -836,7 +832,6 @@ static int R_TextureInternalFormat( int samples, int flags, int pixelType ) {
 	}
 	return GL_RGBA;
 }
-#endif
 
 /*
 * R_TextureFormat
@@ -904,11 +899,9 @@ static void R_TextureFormat( int flags, int samples, int *comp, int *format, int
 			*type = GL_UNSIGNED_BYTE;
 			*comp = *format;
 
-#ifndef GL_ES_VERSION_2_0
 			if( !( flags & IT_3D ) ) {
 				*comp = R_TextureInternalFormat( samples, flags, GL_UNSIGNED_BYTE );
 			}
-#endif
 		}
 	}
 }
@@ -967,12 +960,9 @@ static void R_SetupTexParameters( int flags, int upload_width, int upload_height
 	if( flags & IT_CLAMP ) {
 		if( glConfig.ext.texture_edge_clamp ) {
 			wrap = GL_CLAMP_TO_EDGE;
-		}
-#ifndef GL_ES_VERSION_2_0
-		else {
+		} else {
 			wrap = GL_CLAMP;
 		}
-#endif
 	}
 	qglTexParameteri( target, GL_TEXTURE_WRAP_S, wrap );
 	qglTexParameteri( target, GL_TEXTURE_WRAP_T, wrap );
@@ -1263,11 +1253,7 @@ static void R_UploadMipmapped( int ctx, uint8_t **data,
 		mipLevels = 1;
 	}
 
-#ifdef GL_ES_VERSION_2_0
-	comp = format;
-#else
 	comp = R_TextureInternalFormat( pixelSize, flags, type );
-#endif
 
 	R_SetupTexParameters( flags, scaledWidth, scaledHeight, minmipsize );
 
@@ -2363,9 +2349,6 @@ void R_GetRenderBufferSize( const int inWidth, const int inHeight,
 	width_ = height_ = limit;
 
 	npot = glConfig.ext.texture_non_power_of_two;
-#ifdef GL_ES_VERSION_2_0
-	npot = npot || ( ( flags & ( IT_CLAMP | IT_NOMIPMAP ) ) == ( IT_CLAMP | IT_NOMIPMAP ) );
-#endif
 	if( npot ) {
 		width_ = std::min( inWidth, limit );
 		height_ = std::min( inHeight, limit );

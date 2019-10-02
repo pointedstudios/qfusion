@@ -1596,7 +1596,6 @@ void R_BeginFrame( float cameraSeparation, bool forceClear, int swapInterval ) {
 
 	RB_BeginFrame();
 
-#ifndef GL_ES_VERSION_2_0
 	if( cameraSeparation && ( !glConfig.stereoEnabled || !R_IsRenderingToScreen() ) ) {
 		cameraSeparation = 0;
 	}
@@ -1611,13 +1610,11 @@ void R_BeginFrame( float cameraSeparation, bool forceClear, int swapInterval ) {
 			qglDrawBuffer( GL_BACK );
 		}
 	}
-#endif
 
 	// draw buffer stuff
 	if( rf.newDrawBuffer ) {
 		rf.newDrawBuffer = false;
 
-#ifndef GL_ES_VERSION_2_0
 		if( cameraSeparation == 0 || !glConfig.stereoEnabled ) {
 			if( Q_stricmp( rf.drawBuffer, "GL_FRONT" ) == 0 ) {
 				qglDrawBuffer( GL_FRONT );
@@ -1625,7 +1622,6 @@ void R_BeginFrame( float cameraSeparation, bool forceClear, int swapInterval ) {
 				qglDrawBuffer( GL_BACK );
 			}
 		}
-#endif
 	}
 
 	if( forceClear ) {
