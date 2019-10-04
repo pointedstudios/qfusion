@@ -78,13 +78,11 @@ void RB_BeginRegistration( void ) {
 	for( i = MAX_TEXTURE_UNITS - 1; i >= 0; i-- ) {
 		RB_SelectTextureUnit( i );
 
-		qglBindTexture( GL_TEXTURE_CUBE_MAP_ARB, 0 );
+		qglBindTexture( GL_TEXTURE_CUBE_MAP, 0 );
 		if( glConfig.ext.texture_array ) {
 			qglBindTexture( GL_TEXTURE_2D_ARRAY_EXT, 0 );
 		}
-		if( glConfig.ext.texture3D ) {
-			qglBindTexture( GL_TEXTURE_3D_EXT, 0 );
-		}
+		qglBindTexture( GL_TEXTURE_3D, 0 );
 		qglBindTexture( GL_TEXTURE_2D, 0 );
 	}
 
@@ -174,8 +172,7 @@ static void RB_SelectTextureUnit( int tmu ) {
 	}
 
 	rb.gl.currentTMU = tmu;
-	qglActiveTextureARB( tmu + GL_TEXTURE0_ARB );
-	qglClientActiveTextureARB( tmu + GL_TEXTURE0_ARB );
+	qglActiveTexture( tmu + GL_TEXTURE0 );
 }
 
 /*
@@ -388,7 +385,7 @@ void RB_SetState( int state ) {
 				qglEnable( GL_BLEND );
 			}
 
-			qglBlendFuncSeparateEXT( blendsrc, blenddst, GL_ONE, GL_ONE );
+			qglBlendFuncSeparate( blendsrc, blenddst, GL_ONE, GL_ONE );
 		} else {
 			qglDisable( GL_BLEND );
 		}
@@ -451,9 +448,9 @@ void RB_SetState( int state ) {
 	if( diff & GLSTATE_ALPHATEST ) {
 		if( glConfig.ext.multisample ) {
 			if( state & GLSTATE_ALPHATEST ) {
-				qglEnable( GL_SAMPLE_ALPHA_TO_COVERAGE_ARB );
+				qglEnable( GL_SAMPLE_ALPHA_TO_COVERAGE );
 			} else {
-				qglDisable( GL_SAMPLE_ALPHA_TO_COVERAGE_ARB );
+				qglDisable( GL_SAMPLE_ALPHA_TO_COVERAGE );
 			}
 		}
 	}
@@ -481,7 +478,7 @@ void RB_FlipFrontFace( void ) {
 */
 void RB_BindArrayBuffer( int buffer ) {
 	if( buffer != rb.gl.currentArrayVBO ) {
-		qglBindBufferARB( GL_ARRAY_BUFFER_ARB, buffer );
+		qglBindBuffer( GL_ARRAY_BUFFER, buffer );
 		rb.gl.currentArrayVBO = buffer;
 		rb.gl.lastVAttribs = 0;
 	}
@@ -492,7 +489,7 @@ void RB_BindArrayBuffer( int buffer ) {
 */
 void RB_BindElementArrayBuffer( int buffer ) {
 	if( buffer != rb.gl.currentElemArrayVBO ) {
-		qglBindBufferARB( GL_ELEMENT_ARRAY_BUFFER_ARB, buffer );
+		qglBindBuffer( GL_ELEMENT_ARRAY_BUFFER, buffer );
 		rb.gl.currentElemArrayVBO = buffer;
 	}
 }
@@ -512,10 +509,10 @@ static void RB_EnableVertexAttrib( int index, bool enable ) {
 
 	if( enable ) {
 		rb.gl.vertexAttribEnabled |= bit;
-		qglEnableVertexAttribArrayARB( index );
+		qglEnableVertexAttribArray( index );
 	} else {
 		rb.gl.vertexAttribEnabled &= ~bit;
-		qglDisableVertexAttribArrayARB( index );
+		qglDisableVertexAttribArray( index );
 	}
 }
 
@@ -918,13 +915,13 @@ static void RB_EnableVertexAttribs( void ) {
 
 	// xyz position
 	RB_EnableVertexAttrib( VATTRIB_POSITION, true );
-	qglVertexAttribPointerARB( VATTRIB_POSITION, 4, FLOAT_VATTRIB_GL_TYPE( VATTRIB_POSITION_BIT, hfa ),
+	qglVertexAttribPointer( VATTRIB_POSITION, 4, FLOAT_VATTRIB_GL_TYPE( VATTRIB_POSITION_BIT, hfa ),
 							   GL_FALSE, vbo->vertexSize, ( const GLvoid * )0 );
 
 	// normal
 	if( vattribs & VATTRIB_NORMAL_BIT ) {
 		RB_EnableVertexAttrib( VATTRIB_NORMAL, true );
-		qglVertexAttribPointerARB( VATTRIB_NORMAL, 4, FLOAT_VATTRIB_GL_TYPE( VATTRIB_NORMAL_BIT, hfa ),
+		qglVertexAttribPointer( VATTRIB_NORMAL, 4, FLOAT_VATTRIB_GL_TYPE( VATTRIB_NORMAL_BIT, hfa ),
 								   GL_FALSE, vbo->vertexSize, ( const GLvoid * )vbo->normalsOffset );
 	} else {
 		RB_EnableVertexAttrib( VATTRIB_NORMAL, false );
@@ -933,7 +930,7 @@ static void RB_EnableVertexAttribs( void ) {
 	// s-vector
 	if( vattribs & VATTRIB_SVECTOR_BIT ) {
 		RB_EnableVertexAttrib( VATTRIB_SVECTOR, true );
-		qglVertexAttribPointerARB( VATTRIB_SVECTOR, 4, FLOAT_VATTRIB_GL_TYPE( VATTRIB_SVECTOR_BIT, hfa ),
+		qglVertexAttribPointer( VATTRIB_SVECTOR, 4, FLOAT_VATTRIB_GL_TYPE( VATTRIB_SVECTOR_BIT, hfa ),
 								   GL_FALSE, vbo->vertexSize, ( const GLvoid * )vbo->sVectorsOffset );
 	} else {
 		RB_EnableVertexAttrib( VATTRIB_SVECTOR, false );
@@ -942,7 +939,7 @@ static void RB_EnableVertexAttribs( void ) {
 	// color
 	if( vattribs & VATTRIB_COLOR0_BIT ) {
 		RB_EnableVertexAttrib( VATTRIB_COLOR0, true );
-		qglVertexAttribPointerARB( VATTRIB_COLOR0, 4, GL_UNSIGNED_BYTE,
+		qglVertexAttribPointer( VATTRIB_COLOR0, 4, GL_UNSIGNED_BYTE,
 								   GL_TRUE, vbo->vertexSize, (const GLvoid * )vbo->colorsOffset[0] );
 	} else {
 		RB_EnableVertexAttrib( VATTRIB_COLOR0, false );
@@ -951,7 +948,7 @@ static void RB_EnableVertexAttribs( void ) {
 	// texture coordinates
 	if( vattribs & VATTRIB_TEXCOORDS_BIT ) {
 		RB_EnableVertexAttrib( VATTRIB_TEXCOORDS, true );
-		qglVertexAttribPointerARB( VATTRIB_TEXCOORDS, 2, FLOAT_VATTRIB_GL_TYPE( VATTRIB_TEXCOORDS_BIT, hfa ),
+		qglVertexAttribPointer( VATTRIB_TEXCOORDS, 2, FLOAT_VATTRIB_GL_TYPE( VATTRIB_TEXCOORDS_BIT, hfa ),
 								   GL_FALSE, vbo->vertexSize, ( const GLvoid * )vbo->stOffset );
 	} else {
 		RB_EnableVertexAttrib( VATTRIB_TEXCOORDS, false );
@@ -960,7 +957,7 @@ static void RB_EnableVertexAttribs( void ) {
 	if( ( vattribs & VATTRIB_AUTOSPRITE_BIT ) == VATTRIB_AUTOSPRITE_BIT ) {
 		// submit sprite point
 		RB_EnableVertexAttrib( VATTRIB_SPRITEPOINT, true );
-		qglVertexAttribPointerARB( VATTRIB_SPRITEPOINT, 4, FLOAT_VATTRIB_GL_TYPE( VATTRIB_AUTOSPRITE_BIT, hfa ),
+		qglVertexAttribPointer( VATTRIB_SPRITEPOINT, 4, FLOAT_VATTRIB_GL_TYPE( VATTRIB_AUTOSPRITE_BIT, hfa ),
 								   GL_FALSE, vbo->vertexSize, ( const GLvoid * )vbo->spritePointsOffset );
 	} else {
 		RB_EnableVertexAttrib( VATTRIB_SPRITEPOINT, false );
@@ -970,12 +967,12 @@ static void RB_EnableVertexAttribs( void ) {
 	if( ( vattribs & VATTRIB_BONES_BITS ) == VATTRIB_BONES_BITS ) {
 		// submit indices
 		RB_EnableVertexAttrib( VATTRIB_BONESINDICES, true );
-		qglVertexAttribPointerARB( VATTRIB_BONESINDICES, 4, GL_UNSIGNED_BYTE,
+		qglVertexAttribPointer( VATTRIB_BONESINDICES, 4, GL_UNSIGNED_BYTE,
 								   GL_FALSE, vbo->vertexSize, ( const GLvoid * )vbo->bonesIndicesOffset );
 
 		// submit weights
 		RB_EnableVertexAttrib( VATTRIB_BONESWEIGHTS, true );
-		qglVertexAttribPointerARB( VATTRIB_BONESWEIGHTS, 4, GL_UNSIGNED_BYTE,
+		qglVertexAttribPointer( VATTRIB_BONESWEIGHTS, 4, GL_UNSIGNED_BYTE,
 								   GL_TRUE, vbo->vertexSize, ( const GLvoid * )vbo->bonesWeightsOffset );
 	} else {
 		int i;
@@ -989,7 +986,7 @@ static void RB_EnableVertexAttribs( void ) {
 		for( i = 0; i < ( MAX_LIGHTMAPS + 1 ) / 2; i++ ) {
 			if( vattribs & lmattrbit ) {
 				RB_EnableVertexAttrib( lmattr, true );
-				qglVertexAttribPointerARB( lmattr, vbo->lmstSize[i],
+				qglVertexAttribPointer( lmattr, vbo->lmstSize[i],
 										   FLOAT_VATTRIB_GL_TYPE( VATTRIB_LMCOORDS0_BIT, hfa ),
 										   GL_FALSE, vbo->vertexSize, ( const GLvoid * )vbo->lmstOffset[i] );
 			} else {
@@ -1006,7 +1003,7 @@ static void RB_EnableVertexAttribs( void ) {
 		for( i = 0; i < ( MAX_LIGHTMAPS + 3 ) / 4; i++ ) {
 			if( vattribs & ( VATTRIB_LMLAYERS0123_BIT << i ) ) {
 				RB_EnableVertexAttrib( lmattr, true );
-				qglVertexAttribPointerARB( lmattr, 4, GL_UNSIGNED_BYTE,
+				qglVertexAttribPointer( lmattr, 4, GL_UNSIGNED_BYTE,
 										   GL_FALSE, vbo->vertexSize, ( const GLvoid * )vbo->lmlayersOffset[i] );
 			} else {
 				RB_EnableVertexAttrib( lmattr, false );
@@ -1018,14 +1015,14 @@ static void RB_EnableVertexAttribs( void ) {
 
 	if( ( vattribs & VATTRIB_INSTANCES_BITS ) == VATTRIB_INSTANCES_BITS ) {
 		RB_EnableVertexAttrib( VATTRIB_INSTANCE_QUAT, true );
-		qglVertexAttribPointerARB( VATTRIB_INSTANCE_QUAT, 4, GL_FLOAT, GL_FALSE, 8 * sizeof( vec_t ),
+		qglVertexAttribPointer( VATTRIB_INSTANCE_QUAT, 4, GL_FLOAT, GL_FALSE, 8 * sizeof( vec_t ),
 								   ( const GLvoid * )vbo->instancesOffset );
-		qglVertexAttribDivisorARB( VATTRIB_INSTANCE_QUAT, 1 );
+		qglVertexAttribDivisor( VATTRIB_INSTANCE_QUAT, 1 );
 
 		RB_EnableVertexAttrib( VATTRIB_INSTANCE_XYZS, true );
-		qglVertexAttribPointerARB( VATTRIB_INSTANCE_XYZS, 4, GL_FLOAT, GL_FALSE, 8 * sizeof( vec_t ),
+		qglVertexAttribPointer( VATTRIB_INSTANCE_XYZS, 4, GL_FLOAT, GL_FALSE, 8 * sizeof( vec_t ),
 								   ( const GLvoid * )( vbo->instancesOffset + sizeof( vec_t ) * 4 ) );
-		qglVertexAttribDivisorARB( VATTRIB_INSTANCE_XYZS, 1 );
+		qglVertexAttribDivisor( VATTRIB_INSTANCE_XYZS, 1 );
 	} else {
 		RB_EnableVertexAttrib( VATTRIB_INSTANCE_QUAT, false );
 		RB_EnableVertexAttrib( VATTRIB_INSTANCE_XYZS, false );
@@ -1052,58 +1049,16 @@ void RB_DrawElementsReal( rbDrawElements_t *de ) {
 	numInstances = de->numInstances;
 
 	if( numInstances ) {
-		if( glConfig.ext.instanced_arrays ) {
-			// the instance data is contained in vertex attributes
-			qglDrawElementsInstancedARB( rb.primitive, numElems, GL_UNSIGNED_SHORT,
-										 (GLvoid *)( firstElem * sizeof( elem_t ) ), numInstances );
+		// the instance data is contained in vertex attributes
+		qglDrawElementsInstanced( rb.primitive, numElems, GL_UNSIGNED_SHORT,
+								  (GLvoid *)( firstElem * sizeof( elem_t ) ), numInstances );
 
-			rb.stats.c_totalDraws++;
-		} else if( glConfig.ext.draw_instanced ) {
-			int i, numUInstances = 0;
-
-			// manually update uniform values for instances for currently bound program,
-			// respecting the MAX_GLSL_UNIFORM_INSTANCES limit
-			for( i = 0; i < numInstances; i += numUInstances ) {
-				numUInstances = std::min( numInstances - i, MAX_GLSL_UNIFORM_INSTANCES );
-
-				RB_SetInstanceData( numUInstances, rb.drawInstances + i );
-
-				qglDrawElementsInstancedARB( rb.primitive, numElems, GL_UNSIGNED_SHORT,
-											 (GLvoid *)( firstElem * sizeof( elem_t ) ), numUInstances );
-
-				rb.stats.c_totalDraws++;
-			}
-		} else {
-			int i;
-
-			// manually update uniform values for instances for currently bound program,
-			// one by one
-			for( i = 0; i < numInstances; i++ ) {
-				RB_SetInstanceData( 1, rb.drawInstances + i );
-
-				if( glConfig.ext.draw_range_elements ) {
-					qglDrawRangeElementsEXT( rb.primitive,
-											 firstVert, firstVert + numVerts - 1, numElems,
-											 GL_UNSIGNED_SHORT, (GLvoid *)( firstElem * sizeof( elem_t ) ) );
-				} else {
-					qglDrawElements( rb.primitive, numElems, GL_UNSIGNED_SHORT,
-									 (GLvoid *)( firstElem * sizeof( elem_t ) ) );
-				}
-
-				rb.stats.c_totalDraws++;
-			}
-		}
+		rb.stats.c_totalDraws++;
 	} else {
 		numInstances = 1;
 
-		if( glConfig.ext.draw_range_elements ) {
-			qglDrawRangeElementsEXT( rb.primitive,
-									 firstVert, firstVert + numVerts - 1, numElems,
-									 GL_UNSIGNED_SHORT, (GLvoid *)( firstElem * sizeof( elem_t ) ) );
-		} else {
-			qglDrawElements( rb.primitive, numElems, GL_UNSIGNED_SHORT,
-							 (GLvoid *)( firstElem * sizeof( elem_t ) ) );
-		}
+		qglDrawRangeElements( rb.primitive, firstVert, firstVert + numVerts - 1, numElems,
+							  GL_UNSIGNED_SHORT, (GLvoid *)( firstElem * sizeof( elem_t ) ) );
 
 		rb.stats.c_totalDraws++;
 	}
@@ -1194,25 +1149,9 @@ void RB_DrawElementsInstanced( int firstVert, int numVerts, int firstElem, int n
 	rb.drawShadowElements.firstElem = firstShadowElem;
 	rb.drawShadowElements.numInstances = 0;
 
-	// check for vertex-attrib-divisor style instancing
-	if( glConfig.ext.instanced_arrays ) {
-		if( rb.currentVBO->instancesOffset ) {
-			// static VBO's must come with their own set of instance data
-			rb.currentVAttribs |= VATTRIB_INSTANCES_BITS;
-		}
-	}
-
-	if( !( rb.currentVAttribs & VATTRIB_INSTANCES_BITS ) ) {
-		// can't use instanced arrays so we'll have to manually update
-		// the uniform state in between draw calls
-		if( rb.maxDrawInstances < numInstances ) {
-			if( rb.drawInstances ) {
-				RB_Free( rb.drawInstances );
-			}
-			rb.drawInstances = (instancePoint_t *)RB_Alloc( numInstances * sizeof( *rb.drawInstances ) );
-			rb.maxDrawInstances = numInstances;
-		}
-		memcpy( rb.drawInstances, instances, numInstances * sizeof( *instances ) );
+	if( rb.currentVBO->instancesOffset ) {
+		// static VBO's must come with their own set of instance data
+		rb.currentVAttribs |= VATTRIB_INSTANCES_BITS;
 	}
 
 	rb.drawElements.numInstances = numInstances;

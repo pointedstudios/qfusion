@@ -620,11 +620,7 @@ void R_RenderScene( const refdef_t *fd ) {
 	}
 
 	if( !( fd->rdflags & RDF_NOWORLDMODEL ) ) {
-		if( !glConfig.ext.framebuffer_multisample ) {
-			samples = 0;
-		} else {
-			samples = bound( 0, r_samples->integer, glConfig.maxFramebufferSamples );
-		}
+		samples = bound( 0, r_samples->integer, glConfig.maxFramebufferSamples );
 
 		if( glConfig.sSRGB && rsh.stf.screenTex ) {
 			rn.st = &rsh.stf;

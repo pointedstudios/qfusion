@@ -89,12 +89,12 @@ typedef enum vattribbit_e {
 typedef unsigned int vattribmask_t;
 
 #define FLOAT_VATTRIB_TYPE( vattrib,halfFloatVattribs ) \
-	( (int)( halfFloatVattribs & vattrib ) == vattrib ? GLhalfARB : float )
+	( (int)( halfFloatVattribs & vattrib ) == vattrib ? GLhalf : float )
 
 #define FLOAT_VATTRIB_GL_TYPE( vattrib,halfFloatVattribs ) \
 	( (int)( halfFloatVattribs & vattrib ) == vattrib ? GL_HALF_FLOAT : GL_FLOAT )
 
 #define FLOAT_VATTRIB_SIZE( vattrib,halfFloatVattribs ) \
-	( (int)( halfFloatVattribs & vattrib ) == vattrib ? sizeof( GLhalfARB ) : sizeof( float ) )
+	( (int)( halfFloatVattribs & vattrib ) == vattrib ? sizeof( GLhalf ) : sizeof( float ) )
 
 #endif // R_VATTRIBS_H

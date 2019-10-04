@@ -1162,15 +1162,7 @@ static void RB_RenderMeshGLSL_ShadowmapArray( const shaderpass_t *pass, r_glslfe
 	if( numShadows > 1 ) {
 		programFeatures |= GLSL_SHADER_SHADOWMAP_SHADOW2 << ( numShadows - 2 );
 	}
-	if( glConfig.ext.shadow ) {
-		programFeatures |= GLSL_SHADER_SHADOWMAP_SAMPLERS;
-	} else {
-		// pack depth into RGB triplet of the colorbuffer
-		if( glConfig.ext.rgb8_rgba8 ) {
-			// pack depth into RGB888 triplet
-			programFeatures |= GLSL_SHADER_SHADOWMAP_24BIT;
-		}
-	}
+	programFeatures |= GLSL_SHADER_SHADOWMAP_SAMPLERS;
 	if( rb.currentShadowBits && ( rb.currentModelType == mod_brush ) ) {
 		programFeatures |= GLSL_SHADER_SHADOWMAP_NORMALCHECK;
 	}
@@ -1215,9 +1207,7 @@ static void RB_RenderMeshGLSL_RGBShadow( const shaderpass_t *pass, r_glslfeat_t 
 	int program;
 	mat4_t texMatrix;
 
-	if( glConfig.ext.rgb8_rgba8 ) {
-		programFeatures |= GLSL_SHADER_RGBSHADOW_24BIT;
-	}
+	programFeatures |= GLSL_SHADER_RGBSHADOW_24BIT;
 
 	Matrix4_Identity( texMatrix );
 
@@ -2178,9 +2168,7 @@ static void RB_RenderPass( const shaderpass_t *pass ) {
 		return;
 	}
 
-	if( ( rb.renderFlags & RF_SHADOWMAPVIEW ) && !glConfig.ext.shadow ) {
-		RB_RenderMeshGLSLProgrammed( pass, GLSL_PROGRAM_TYPE_RGB_SHADOW );
-	} else if( pass->program_type ) {
+	if( pass->program_type ) {
 		RB_RenderMeshGLSLProgrammed( pass, pass->program_type );
 	} else {
 		RB_RenderMeshGLSLProgrammed( pass, GLSL_PROGRAM_TYPE_Q3A_SHADER );

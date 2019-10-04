@@ -1068,7 +1068,7 @@ static void R_SetupGL( void ) {
 		RB_FlipFrontFace();
 	}
 
-	if( ( rn.renderFlags & RF_SHADOWMAPVIEW ) && glConfig.ext.shadow ) {
+	if( ( rn.renderFlags & RF_SHADOWMAPVIEW ) ) {
 		RB_SetShaderStateMask( ~0, GLSTATE_NO_COLORWRITE );
 	}
 }
@@ -1077,7 +1077,7 @@ static void R_SetupGL( void ) {
 * R_EndGL
 */
 static void R_EndGL( void ) {
-	if( ( rn.renderFlags & RF_SHADOWMAPVIEW ) && glConfig.ext.shadow ) {
+	if( ( rn.renderFlags & RF_SHADOWMAPVIEW ) ) {
 		RB_SetShaderStateMask( ~0, 0 );
 	}
 
@@ -1665,7 +1665,7 @@ void R_EndFrame( void ) {
 
 	GLimp_EndFrame();
 
-	assert( qglGetError() == GL_NO_ERROR );
+	//assert( qglGetError() == GL_NO_ERROR );
 }
 
 //===================================================================

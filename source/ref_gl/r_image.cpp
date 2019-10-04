@@ -109,12 +109,12 @@ int R_TextureTarget( int flags, int *uploadTarget ) {
 	int target, target2;
 
 	if( flags & IT_CUBEMAP ) {
-		target = GL_TEXTURE_CUBE_MAP_ARB;
-		target2 = GL_TEXTURE_CUBE_MAP_POSITIVE_X_ARB;
+		target = GL_TEXTURE_CUBE_MAP;
+		target2 = GL_TEXTURE_CUBE_MAP_POSITIVE_X;
 	} else if( flags & IT_ARRAY ) {
 		target = target2 = GL_TEXTURE_2D_ARRAY_EXT;
 	} else if( flags & IT_3D ) {
-		target = target2 = GL_TEXTURE_3D_EXT;
+		target = target2 = GL_TEXTURE_3D;
 	} else {
 		target = target2 = GL_TEXTURE_2D;
 	}
@@ -268,17 +268,13 @@ void R_PrintImageList( const char *mask, bool ( *filter )( const char *mask, con
 		bpp = image->samples;
 		if( image->flags & IT_DEPTH ) {
 			bpp = 0; // added later
-		} else if( ( image->flags & IT_FRAMEBUFFER ) && !glConfig.ext.rgb8_rgba8 ) {
-			bpp = 2;
 		}
 
 		if( image->flags & ( IT_DEPTH | IT_DEPTHRB ) ) {
 			if( image->flags & IT_STENCIL ) {
 				bpp += 4;
-			} else if( glConfig.ext.depth24 ) {
-				bpp += 3;
 			} else {
-				bpp += 2;
+				bpp += 3;
 			}
 		}
 
@@ -458,7 +454,6 @@ static int R_ScaledImageSize( int width, int height, int *scaledWidth, int *scal
 	int maxSize;
 	int mip = 0;
 	int clampedWidth, clampedHeight;
-	bool makePOT;
 
 	if( flags & ( IT_FRAMEBUFFER | IT_DEPTH ) ) {
 		maxSize = glConfig.maxRenderbufferSize;
@@ -470,8 +465,7 @@ static int R_ScaledImageSize( int width, int height, int *scaledWidth, int *scal
 		maxSize = glConfig.maxTextureSize;
 	}
 
-	makePOT = !glConfig.ext.texture_non_power_of_two && !forceNPOT;
-	if( makePOT ) {
+	if( !forceNPOT ) {
 		int potWidth, potHeight;
 
 		for( potWidth = 1; potWidth < width; potWidth <<= 1 ) ;
@@ -776,59 +770,59 @@ static void R_MipMap16( unsigned short *in, int width, int height, int rMask, in
 static int R_TextureInternalFormat( int samples, int flags, int pixelType ) {
 	bool sRGB = ( flags & IT_SRGB ) != 0;
 
-	if( !( flags & IT_NOCOMPRESS ) && r_texturecompression->integer && glConfig.ext.texture_compression ) {
+	if( !( flags & IT_NOCOMPRESS ) && r_texturecompression->integer ) {
 		if( sRGB ) {
 			if( samples == 4 ) {
-				return GL_COMPRESSED_SRGB_ALPHA_EXT;
+				return GL_COMPRESSED_SRGB_ALPHA;
 			}
 			if( samples == 3 ) {
-				return GL_COMPRESSED_SRGB_EXT;
+				return GL_COMPRESSED_SRGB;
 			}
 			if( samples == 2 ) {
-				return GL_COMPRESSED_SLUMINANCE_EXT;
+				return GL_COMPRESSED_SLUMINANCE;
 			}
 			if( ( samples == 1 ) && !( flags & IT_ALPHAMASK ) ) {
-				return GL_COMPRESSED_SLUMINANCE_ALPHA_EXT;
+				return GL_COMPRESSED_SLUMINANCE_ALPHA;
 			}
 		} else {
 			if( samples == 4 ) {
-				return GL_COMPRESSED_RGBA_ARB;
+				return GL_COMPRESSED_RGBA;
 			}
 			if( samples == 3 ) {
-				return GL_COMPRESSED_RGB_ARB;
+				return GL_COMPRESSED_RGB;
 			}
 			if( samples == 2 ) {
-				return GL_COMPRESSED_LUMINANCE_ALPHA_ARB;
+				return GL_COMPRESSED_LUMINANCE_ALPHA;
 			}
 			if( ( samples == 1 ) && !( flags & IT_ALPHAMASK ) ) {
-				return GL_COMPRESSED_LUMINANCE_ARB;
+				return GL_COMPRESSED_LUMINANCE;
 			}
 		}
 	}
 
 	if( samples == 3 ) {
 		if( sRGB ) {
-			return GL_SRGB_EXT;
+			return GL_SRGB;
 		}
 		return GL_RGB;
 	}
 
 	if( samples == 2 ) {
 		if( sRGB ) {
-			return GL_SLUMINANCE_ALPHA_EXT;
+			return GL_SLUMINANCE_ALPHA;
 		}
 		return GL_LUMINANCE_ALPHA;
 	}
 
 	if( samples == 1 ) {
 		if( sRGB ) {
-			return ( ( flags & IT_ALPHAMASK ) ? GL_ALPHA : GL_SLUMINANCE_EXT );
+			return ( ( flags & IT_ALPHAMASK ) ? GL_ALPHA : GL_SLUMINANCE );
 		}
 		return ( ( flags & IT_ALPHAMASK ) ? GL_ALPHA : GL_LUMINANCE );
 	}
 
 	if( sRGB ) {
-		return GL_SRGB8_ALPHA8_EXT;
+		return GL_SRGB8_ALPHA8;
 	}
 	return GL_RGBA;
 }
@@ -839,34 +833,26 @@ static int R_TextureInternalFormat( int samples, int flags, int pixelType ) {
 static void R_TextureFormat( int flags, int samples, int *comp, int *format, int *type ) {
 	if( flags & IT_DEPTH ) {
 		if( flags & IT_STENCIL ) {
-			*comp = *format = GL_DEPTH_STENCIL_EXT;
-			*type = GL_UNSIGNED_INT_24_8_EXT;
+			*comp = *format = GL_DEPTH_STENCIL;
+			*type = GL_UNSIGNED_INT_24_8;
 		} else {
 			*comp = *format = GL_DEPTH_COMPONENT;
-			if( glConfig.ext.depth24 ) {
-				*type = GL_UNSIGNED_INT;
-			} else {
-				*type = GL_UNSIGNED_SHORT;
-				if( glConfig.ext.depth_nonlinear ) {
-					*comp = GL_DEPTH_COMPONENT16_NONLINEAR_NV;
-				}
-			}
+			*type = GL_UNSIGNED_INT;
 		}
 	} else if( flags & IT_FRAMEBUFFER ) {
+		*type = GL_UNSIGNED_BYTE;
 		if( samples == 4 ) {
 			*comp = *format = GL_RGBA;
-			*type = glConfig.ext.rgb8_rgba8 ? GL_UNSIGNED_BYTE : GL_UNSIGNED_SHORT_4_4_4_4;
 		} else {
 			*comp = *format = GL_RGB;
-			*type = glConfig.ext.rgb8_rgba8 ? GL_UNSIGNED_BYTE : GL_UNSIGNED_SHORT_5_6_5;
 		}
 
 		if( flags & IT_FLOAT ) {
 			*type = GL_FLOAT;
 			if( samples == 4 ) {
-				*comp = GL_RGBA16F_ARB;
+				*comp = GL_RGBA16F;
 			} else if( samples == 3 ) {
-				*comp = GL_RGB16F_ARB;
+				*comp = GL_RGB16F;
 			}
 		}
 	} else {
@@ -885,15 +871,15 @@ static void R_TextureFormat( int flags, int samples, int *comp, int *format, int
 		if( flags & IT_FLOAT ) {
 			*type = GL_FLOAT;
 			if( samples == 4 ) {
-				*comp = GL_RGBA16F_ARB;
+				*comp = GL_RGBA16F;
 			} else if( samples == 3 ) {
-				*comp = GL_RGB16F_ARB;
+				*comp = GL_RGB16F;
 			} else if( samples == 2 ) {
-				*comp = GL_LUMINANCE_ALPHA16F_ARB;
+				*comp = GL_LUMINANCE_ALPHA16F;
 			} else if( flags & IT_ALPHAMASK ) {
-				*comp = GL_ALPHA16F_ARB;
+				*comp = GL_ALPHA16F;
 			} else {
-				*comp = GL_LUMINANCE16F_ARB;
+				*comp = GL_LUMINANCE16F;
 			}
 		} else {
 			*type = GL_UNSIGNED_BYTE;
@@ -944,8 +930,8 @@ static void R_SetupTexParameters( int flags, int upload_width, int upload_height
 					mipheight = 1;
 				}
 			}
-			qglTexParameteri( target, GL_TEXTURE_MAX_LOD_SGIS, mip );
-			qglTexParameteri( target, GL_TEXTURE_MAX_LEVEL_SGIS, mip );
+			qglTexParameteri( target, GL_TEXTURE_MAX_LOD, mip );
+			qglTexParameteri( target, GL_TEXTURE_MAX_LEVEL, mip );
 		}
 	} else {
 		qglTexParameteri( target, GL_TEXTURE_MIN_FILTER, gl_filter_max );
@@ -958,19 +944,15 @@ static void R_SetupTexParameters( int flags, int upload_width, int upload_height
 
 	// clamp if required
 	if( flags & IT_CLAMP ) {
-		if( glConfig.ext.texture_edge_clamp ) {
-			wrap = GL_CLAMP_TO_EDGE;
-		} else {
-			wrap = GL_CLAMP;
-		}
+		wrap = GL_CLAMP_TO_EDGE;
 	}
 	qglTexParameteri( target, GL_TEXTURE_WRAP_S, wrap );
 	qglTexParameteri( target, GL_TEXTURE_WRAP_T, wrap );
 	if( flags & IT_3D ) {
-		qglTexParameteri( target, GL_TEXTURE_WRAP_R_EXT, wrap );
+		qglTexParameteri( target, GL_TEXTURE_WRAP_R, wrap );
 	}
 
-	if( ( flags & IT_DEPTH ) && ( flags & IT_DEPTHCOMPARE ) && glConfig.ext.shadow ) {
+	if( ( flags & IT_DEPTH ) && ( flags & IT_DEPTHCOMPARE ) ) {
 		qglTexParameteri( target, GL_TEXTURE_COMPARE_MODE_ARB, GL_COMPARE_R_TO_TEXTURE_ARB );
 		qglTexParameteri( target, GL_TEXTURE_COMPARE_FUNC_ARB, GL_LEQUAL );
 	}
@@ -1041,7 +1023,7 @@ static void R_Upload32( int ctx, uint8_t **data, int layer,
 	if( ( scaledWidth == width ) && ( scaledHeight == height ) && ( flags & IT_NOMIPMAP ) ) {
 		if( flags & ( IT_ARRAY | IT_3D ) ) {
 			for( i = 0; i < numTextures; i++, target++ )
-				qglTexSubImage3DEXT( target, 0, 0, 0, layer, scaledWidth, scaledHeight, 1, format, type, data[i] );
+				qglTexSubImage3D( target, 0, 0, 0, layer, scaledWidth, scaledHeight, 1, format, type, data[i] );
 		} else if( subImage ) {
 			for( i = 0; i < numTextures; i++, target++ )
 				qglTexSubImage2D( target, 0, x, y, scaledWidth, scaledHeight, format, type, data[i] );
@@ -1067,7 +1049,7 @@ static void R_Upload32( int ctx, uint8_t **data, int layer,
 			}
 
 			if( flags & ( IT_ARRAY | IT_3D ) ) {
-				qglTexSubImage3DEXT( target, 0, 0, 0, layer, scaledWidth, scaledHeight, 1, format, type, mip );
+				qglTexSubImage3D( target, 0, 0, 0, layer, scaledWidth, scaledHeight, 1, format, type, mip );
 			} else if( subImage ) {
 				qglTexSubImage2D( target, 0, x, y, scaledWidth, scaledHeight, format, type, mip );
 			} else {
@@ -1095,7 +1077,7 @@ static void R_Upload32( int ctx, uint8_t **data, int layer,
 					miplevel++;
 
 					if( flags & ( IT_ARRAY | IT_3D ) ) {
-						qglTexSubImage3DEXT( target, miplevel, 0, 0, layer, w, h, 1, format, type, mip );
+						qglTexSubImage3D( target, miplevel, 0, 0, layer, w, h, 1, format, type, mip );
 					} else if( subImage ) {
 						qglTexSubImage2D( target, miplevel, x, y, w, h, format, type, mip );
 					} else {
@@ -1443,7 +1425,7 @@ static bool R_LoadKTX( int ctx, image_t *image, const char *pathname ) {
 
 		// If different compression formats are added, make this more general-purpose!
 
-		if( !glConfig.ext.texture_compression || !( glConfig.ext.compressed_ETC1_RGB8_texture || glConfig.ext.ES3_compatibility ) || ( mip < 0 ) ) {
+		if( !( glConfig.ext.compressed_ETC1_RGB8_texture || glConfig.ext.ES3_compatibility ) || ( mip < 0 ) ) {
 			int inSize = ( ( ALIGN( header->pixelWidth, 4 ) * ALIGN( header->pixelHeight, 4 ) ) >> 4 ) * 8;
 			int outSize = ALIGN( header->pixelWidth * 3, 4 ) * header->pixelHeight;
 			uint8_t *in = data + sizeof( int );
@@ -1485,8 +1467,7 @@ static bool R_LoadKTX( int ctx, image_t *image, const char *pathname ) {
 				faceSize = ( ( ALIGN( scaledWidth, 4 ) * ALIGN( scaledHeight, 4 ) ) >> 4 ) * 8;
 				data += sizeof( int );
 				for( j = 0; j < numFaces; ++j ) {
-					qglCompressedTexImage2DARB( target + j, i, compressedFormat,
-												scaledWidth, scaledHeight, 0, faceSize, data );
+					qglCompressedTexImage2D( target + j, i, compressedFormat, scaledWidth, scaledHeight, 0, faceSize, data );
 					data += faceSize;
 				}
 				scaledWidth >>= 1;
@@ -1858,7 +1839,7 @@ image_t *R_Create3DImage( const char *name, int width, int height, int layers, i
 	R_TextureTarget( flags, &target );
 	R_TextureFormat( flags, samples, &comp, &format, &type );
 
-	qglTexImage3DEXT( target, 0, comp, scaledWidth, scaledHeight, layers, 0, format, type, NULL );
+	qglTexImage3D( target, 0, comp, scaledWidth, scaledHeight, layers, 0, format, type, NULL );
 
 	if( !( flags & IT_NOMIPMAP ) ) {
 		int miplevel = 0;
@@ -1871,7 +1852,7 @@ image_t *R_Create3DImage( const char *name, int width, int height, int layers, i
 			if( scaledHeight < 1 ) {
 				scaledHeight = 1;
 			}
-			qglTexImage3DEXT( target, miplevel++, comp, scaledWidth, scaledHeight, layers, 0, format, type, NULL );
+			qglTexImage3D( target, miplevel++, comp, scaledWidth, scaledHeight, layers, 0, format, type, NULL );
 		}
 	}
 
@@ -2335,7 +2316,6 @@ void R_GetRenderBufferSize( const int inWidth, const int inHeight,
 							const int inLimit, const int flags, int *outWidth, int *outHeight ) {
 	int limit;
 	int width_, height_;
-	bool npot;
 
 	// limit the texture size to either screen resolution in case we can't use FBO
 	// or hardware limits and ensure it's a POW2-texture if we don't support such textures
@@ -2348,8 +2328,7 @@ void R_GetRenderBufferSize( const int inWidth, const int inHeight,
 	}
 	width_ = height_ = limit;
 
-	npot = glConfig.ext.texture_non_power_of_two;
-	if( npot ) {
+	if( true /*npot*/ ) {
 		width_ = std::min( inWidth, limit );
 		height_ = std::min( inHeight, limit );
 	} else {
@@ -2503,14 +2482,8 @@ image_t *R_GetShadowmapTexture( int id, int viewportWidth, int viewportHeight, i
 		return NULL;
 	}
 
-	if( glConfig.ext.shadow ) {
-		// render to depthbuffer, GL_ARB_shadow path
-		flags |= IT_DEPTH;
-		samples = 1;
-	} else {
-		flags |= IT_NOFILTERING;
-		samples = 3;
-	}
+	flags |= IT_DEPTH;
+	samples = 1;
 
 	R_InitViewportTexture( &rsh.shadowmapTextures[id], "r_shadowmap", id,
 						   viewportWidth, viewportHeight, r_shadows_maxtexsize->integer,
@@ -2537,8 +2510,6 @@ static void R_InitScreenImagePair( const char *name, image_t **color, image_t **
 	int flags, colorFlags, depthFlags;
 	int width = glConfig.width >> lod;
 	int height = glConfig.height >> lod;
-
-	assert( !depth || glConfig.ext.depth_texture );
 
 	if( !glConfig.stencilBits ) {
 		stencil = false;
@@ -2594,21 +2565,19 @@ static void R_InitBuiltinScreenImageSet( refScreenTexSet_t *st, bool useFloat ) 
 	char name[128];
 	const char *postfix = useFloat ? "16f" : "";
 
-	if( glConfig.ext.depth_texture && glConfig.ext.fragment_precision_high && glConfig.ext.framebuffer_blit ) {
-		Q_snprintfz( name, sizeof( name ), "r_screenTex%s", postfix );
-		R_InitScreenImagePair( name, &st->screenTex, &st->screenDepthTex, true, useFloat, 0, ~0 );
+	Q_snprintfz( name, sizeof( name ), "r_screenTex%s", postfix );
+	R_InitScreenImagePair( name, &st->screenTex, &st->screenDepthTex, true, useFloat, 0, ~0 );
 
-		// stencil is required in the copy for depth/stencil formats to match when blitting.
-		Q_snprintfz( name, sizeof( name ), "r_screenTexCopy%s", postfix );
-		R_InitScreenImagePair( name, &st->screenTexCopy, &st->screenDepthTexCopy, true, useFloat, 0, ~0 );
-	}
+	// stencil is required in the copy for depth/stencil formats to match when blitting.
+	Q_snprintfz( name, sizeof( name ), "r_screenTexCopy%s", postfix );
+	R_InitScreenImagePair( name, &st->screenTexCopy, &st->screenDepthTexCopy, true, useFloat, 0, ~0 );
 
 	for( j = 0; j < 2; j++ ) {
 		Q_snprintfz( name, sizeof( name ), "rsh.screenPP%sCopy%i", postfix, j );
 		R_InitScreenImagePair( name, &st->screenPPCopies[j], NULL, false, useFloat, 0, ~0 );
 	}
 
-	if( !useFloat && glConfig.ext.draw_buffers ) {
+	if( !useFloat ) {
 		Q_snprintfz( name, sizeof( name ), "rsh.screenTexOverbright%s", postfix );
 		R_InitScreenImagePair( name, &st->screenOverbrightTex, NULL, false, false, 0, ~IT_FRAMEBUFFER );
 
@@ -2675,9 +2644,7 @@ static void R_ReleaseBuiltinScreenImageSet( refScreenTexSet_t *st ) {
 void R_InitBuiltinScreenImages( void ) {
 	R_InitBuiltinScreenImageSet( &rsh.st, false );
 
-	if( glConfig.ext.texture_float ) {
-		R_InitBuiltinScreenImageSet( &rsh.stf, true );
-	}
+	R_InitBuiltinScreenImageSet( &rsh.stf, true );
 }
 
 /*
