@@ -71,9 +71,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define QGL_EGL_EXT( type, name, params )
 #endif
 
-#define QGL_FUNC( type, name, params ) QGL_EXTERN type( APIENTRY * q ## name ) params;
-#define QGL_FUNC_OPT( type, name, params ) QGL_EXTERN type( APIENTRY * q ## name ) params;
-#define QGL_EXT( type, name, params ) QGL_EXTERN type( APIENTRY * q ## name ) params;
+#define QGL_FUNC( type, name, params ) QGL_FUNC_VAR( type, name, params );
+#define QGL_FUNC_OPT( type, name, params ) QGL_FUNC_VAR( type, name, params );
+#define QGL_EXT( type, name, params ) QGL_FUNC_VAR( type, name, params );
 
 #include "qgl.h"
 

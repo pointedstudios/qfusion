@@ -62,9 +62,9 @@ and Zephaniah E. Hull. Adapted by Victor Luchits for qfusion project.
 
 #define QGL_EXTERN
 
-#define QGL_FUNC( type, name, params ) type( APIENTRY * q ## name ) params;
-#define QGL_FUNC_OPT( type, name, params ) type( APIENTRY * q ## name ) params;
-#define QGL_EXT( type, name, params ) type( APIENTRY * q ## name ) params;
+#define QGL_FUNC( type, name, params ) QGL_FUNC_VAR( type, name, params );
+#define QGL_FUNC_OPT( type, name, params ) QGL_FUNC_VAR( type, name, params );
+#define QGL_EXT( type, name, params ) QGL_FUNC_VAR( type, name, params );
 #define QGL_WGL( type, name, params ) type( APIENTRY * q ## name ) params;
 #define QGL_WGL_EXT( type, name, params ) type( APIENTRY * q ## name ) params;
 #define QGL_GLX( type, name, params )
@@ -100,11 +100,11 @@ void QGL_Shutdown( void ) {
 
 	qglGetGLWExtensionsString = NULL;
 
-#define QGL_FUNC( type, name, params ) ( q ## name ) = NULL;
-#define QGL_FUNC_OPT( type, name, params ) ( q ## name ) = NULL;
-#define QGL_EXT( type, name, params ) ( q ## name ) = NULL;
-#define QGL_WGL( type, name, params ) ( q ## name ) = NULL;
-#define QGL_WGL_EXT( type, name, params ) ( q ## name ) = NULL;
+#define QGL_FUNC( type, name, params ) ( q ## name ) = nullptr;
+#define QGL_FUNC_OPT( type, name, params ) ( q ## name ) = nullptr;
+#define QGL_EXT( type, name, params ) ( q ## name ) = nullptr;
+#define QGL_WGL( type, name, params ) ( q ## name ) = nullptr;
+#define QGL_WGL_EXT( type, name, params ) ( q ## name ) = nullptr;
 #define QGL_GLX( type, name, params )
 #define QGL_GLX_EXT( type, name, params )
 #define QGL_EGL( type, name, params )
@@ -165,9 +165,9 @@ qgl_initerr_t QGL_Init( const char *dllname ) {
 		return qgl_initerr_invalid_driver;
 	}
 
-#define QGL_FUNC( type, name, params ) ( q ## name ) = (decltype( q ## name ))GetProcAddress( glw_state.hinstOpenGL, # name ); \
+#define QGL_FUNC( type, name, params ) QGL_ASSIGN_VAR( q ## name, GetProcAddress( glw_state.hinstOpenGL, # name ) ); \
 	if( !( q ## name ) ) { Com_Printf( "QGL_Init: Failed to get address for %s\n", # name ); return qgl_initerr_invalid_driver; }
-#define QGL_FUNC_OPT( type, name, params ) ( q ## name ) = (decltype( q ## name ))GetProcAddress( glw_state.hinstOpenGL, # name );
+#define QGL_FUNC_OPT( type, name, params ) QGL_ASSIGN_VAR( q ## name, GetProcAddress( glw_state.hinstOpenGL, # name ) );
 #define QGL_EXT( type, name, params ) ( q ## name ) = NULL;
 #define QGL_WGL( type, name, params ) ( q ## name ) = (decltype( q ## name ))GetProcAddress( glw_state.hinstOpenGL, # name ); \
 	if( !( q ## name ) ) { Com_Printf( "QGL_Init: Failed to get address for %s\n", # name ); return qgl_initerr_invalid_driver; }

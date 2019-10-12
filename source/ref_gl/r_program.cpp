@@ -527,14 +527,14 @@ static int RF_CompileShader( int program, const char *programName, const char *s
 	}
 
 	// if lengths is NULL, then each string is assumed to be null-terminated
-	qglShaderSource( shader, numStrings, strings, NULL );
+	qglShaderSource( shader, numStrings, strings, nullptr );
 	qglCompileShader( shader );
 	qglGetShaderiv( shader, GL_COMPILE_STATUS, &compiled );
 
 	if( !compiled ) {
 		char log[4096];
 
-		qglGetShaderInfoLog( shader, sizeof( log ) - 1, NULL, log );
+		qglGetShaderInfoLog( shader, sizeof( log ) - 1, nullptr, log );
 		log[sizeof( log ) - 1] = 0;
 
 		if( log[0] ) {
@@ -1858,7 +1858,7 @@ static int RP_RegisterProgramBinary( int type, const char *name, const char *def
 	if( !linked ) {
 		char log[8192];
 
-		qglGetProgramInfoLog( program->object, sizeof( log ), NULL, log );
+		qglGetProgramInfoLog( program->object, sizeof( log ), nullptr, log );
 		log[sizeof( log ) - 1] = 0;
 
 		if( log[0] ) {
@@ -1945,7 +1945,7 @@ static void *RP_GetProgramBinary( int elem, int *format, unsigned *length ) {
 	}
 
 	binary = R_Malloc( GLlength );
-	qglGetProgramBinary( program->object, GLlength, NULL, &GLFormat, binary );
+	qglGetProgramBinary( program->object, GLlength, nullptr, &GLFormat, binary );
 
 	*format = GLFormat;
 	*length = GLlength;

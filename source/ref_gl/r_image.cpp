@@ -1839,7 +1839,7 @@ image_t *R_Create3DImage( const char *name, int width, int height, int layers, i
 	R_TextureTarget( flags, &target );
 	R_TextureFormat( flags, samples, &comp, &format, &type );
 
-	qglTexImage3D( target, 0, comp, scaledWidth, scaledHeight, layers, 0, format, type, NULL );
+	qglTexImage3D( target, 0, comp, scaledWidth, scaledHeight, layers, 0, format, type, nullptr );
 
 	if( !( flags & IT_NOMIPMAP ) ) {
 		int miplevel = 0;
@@ -1852,7 +1852,7 @@ image_t *R_Create3DImage( const char *name, int width, int height, int layers, i
 			if( scaledHeight < 1 ) {
 				scaledHeight = 1;
 			}
-			qglTexImage3D( target, miplevel++, comp, scaledWidth, scaledHeight, layers, 0, format, type, NULL );
+			qglTexImage3D( target, miplevel++, comp, scaledWidth, scaledHeight, layers, 0, format, type, nullptr );
 		}
 	}
 

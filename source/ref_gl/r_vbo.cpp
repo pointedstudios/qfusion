@@ -221,7 +221,7 @@ mesh_vbo_t *R_CreateMeshVBO( void *owner, int numVerts, int numElems, int numIns
 	vbo->vertexId = vbo_id;
 
 	qglBindBuffer( GL_ARRAY_BUFFER, vbo_id );
-	qglBufferData( GL_ARRAY_BUFFER, size, NULL, usage );
+	qglBufferData( GL_ARRAY_BUFFER, size, nullptr, usage );
 	if( qglGetError() == GL_OUT_OF_MEMORY ) {
 		goto error;
 	}
@@ -238,7 +238,7 @@ mesh_vbo_t *R_CreateMeshVBO( void *owner, int numVerts, int numElems, int numIns
 
 	size = numElems * sizeof( elem_t );
 	qglBindBuffer( GL_ELEMENT_ARRAY_BUFFER, vbo_id );
-	qglBufferData( GL_ELEMENT_ARRAY_BUFFER, size, NULL, usage );
+	qglBufferData( GL_ELEMENT_ARRAY_BUFFER, size, nullptr, usage );
 	if( qglGetError() == GL_OUT_OF_MEMORY ) {
 		goto error;
 	}

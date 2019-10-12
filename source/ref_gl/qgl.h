@@ -121,6 +121,79 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define GLAPIENTRYP GLAPIENTRY *
 #endif
 
+#ifdef QGL_VALIDATE_CALLS
+#ifndef QGL_USE_CALL_WRAPPERS
+#error QGL_USE_CALL_WRAPPERS must be defined if QGL_VALIDATE_CALLS is
+#endif
+#endif
+
+#ifdef QGL_USE_CALL_WRAPPERS
+
+class QGLFunc {
+protected:
+	void *address { nullptr };
+	const char *name { nullptr };
+	QGLFunc *next { nullptr };
+	int counter { 0 };
+
+	static QGLFunc *listHead;
+
+#ifdef QGL_VALIDATE_CALLS
+	const char *checkForError();
+#endif
+
+	template <class R, class Fn, typename std::enable_if<!std::is_void<R>::value>::type * = nullptr, typename... Args>
+	R call( Args... args ) {
+		R result = ( (Fn)address )( args... );
+#ifdef QGL_VALIDATE_CALLS
+		if( const char *error = checkForError() ) {
+			Com_Error( ERR_FATAL, "Got %s while calling %s\n", error, name );
+		}
+#endif
+		counter++;
+		return result;
+	}
+
+	template <class R, class Fn, typename std::enable_if<std::is_void<R>::value>::type * = nullptr, typename... Args>
+	R call( Args... args ) {
+		( (Fn)address )( args... );
+#ifdef QGL_VALIDATE_CALLS
+		if( const char *error = checkForError() ) {
+			Com_Error( ERR_FATAL, "Got %s while calling %s\n", error, name );
+		}
+#endif
+		counter++;
+	}
+public:
+	operator bool() { return address != nullptr; }
+};
+
+#define QGL_FUNC_WRAPPER_VAR( type, fname, params )         \
+class QGLFunc_ ## fname : public QGLFunc {                  \
+	typedef type ( APIENTRY *RawFn ) params;                \
+public:                                                     \
+	QGLFunc_ ## fname() {                                   \
+		this->name = "q" #fname;                            \
+		this->next = listHead;                              \
+		listHead = this;                                    \
+	}                                                       \
+	template <typename... Args>                             \
+	type operator()( Args... args ) {                       \
+		return call<type, RawFn, nullptr>( args... );       \
+	};                                                      \
+	auto operator=( void *address_ ) {                      \
+		this->address = address_; return *this;             \
+	}                                                       \
+};                                                          \
+QGL_EXTERN QGLFunc_ ## fname q ## fname
+
+#define QGL_FUNC_VAR( type, fname, params ) QGL_FUNC_WRAPPER_VAR( type, fname, params )
+#define QGL_ASSIGN_VAR( var, addr ) ( var = addr )
+#else
+#define QGL_FUNC_VAR( type, fname, params ) QGL_EXTERN type( APIENTRY * q ## fname ) params
+#define QGL_ASSIGN_VAR( var, addr ) ( var = ( decltype( var ) )addr )
+#endif
+
 typedef unsigned int	GLenum;
 typedef unsigned char	GLboolean;
 typedef unsigned int	GLbitfield;
