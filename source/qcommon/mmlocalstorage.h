@@ -1,7 +1,7 @@
 #ifndef QFUSION_MM_STORAGE_H
 #define QFUSION_MM_STORAGE_H
 
-#include "mm_query.h"
+#include "mmquery.h"
 
 #include <memory>
 #include <utility>

@@ -1,9 +1,9 @@
 #ifndef QFUSION_MM_FACADE_H
 #define QFUSION_MM_FACADE_H
 
-#include "mm_common.h"
-#include "mm_query.h"
-#include "../qcommon/links.h"
+#include "links.h"
+#include "mmcommon.h"
+#include "mmquery.h"
 
 template <typename> class StatsowFacadeTask;
 

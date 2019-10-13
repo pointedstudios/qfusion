@@ -1,8 +1,8 @@
 #ifndef QFUSION_MM_NETWORK_TASK_H
 #define QFUSION_MM_NETWORK_TASK_H
 
-#include "mm_query.h"
-#include "../qcommon/qcommon.h"
+#include "mmquery.h"
+#include "qcommon.h"
 
 // TODO: Lift this to an application-global scope
 class ScopeGuard {

@@ -1,8 +1,8 @@
 #ifndef QFUSION_SV_MM_H
 #define QFUSION_SV_MM_H
 
-#include "../matchmaker/mm_facade.h"
-#include "../matchmaker/mm_reliable_pipe.h"
+#include "../qcommon/mmfacade.h"
+#include "../qcommon/mmreliablepipe.h"
 
 struct client_s;
 struct netadr_s;

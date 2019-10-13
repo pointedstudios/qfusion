@@ -32,7 +32,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "g_syscalls.h"
 #include "g_gametypes.h"
 
-#include "../matchmaker/mm_rating.h"
+#include "../qcommon/mmrating.h"
 
 #include <algorithm>
 #include <array>

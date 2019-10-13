@@ -24,11 +24,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "sv_mm.h"
 #include "../gameshared/q_shared.h"
 
-#include "../matchmaker/mm_common.h"
-#include "../matchmaker/mm_rating.h"
-#include "../matchmaker/mm_query.h"
-#include "../matchmaker/mm_network_task.h"
-#include "../matchmaker/mm_reliable_pipe.h"
+#include "../qcommon/mmcommon.h"
+#include "../qcommon/mmrating.h"
+#include "../qcommon/mmquery.h"
+#include "../qcommon/mmnetworktask.h"
+#include "../qcommon/mmreliablepipe.h"
 
 #include "../qcommon/singletonholder.h"
 

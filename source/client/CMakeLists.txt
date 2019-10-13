@@ -30,7 +30,6 @@ file(GLOB CLIENT_HEADERS
 	"../ftlib/ftlib_public.h"
 	"../steamlib/steamlib_public.h"
 	"../cin/cin_public.h"
-	"../matchmaker/*.h"
 	"../server/*.h"
 )
 
@@ -41,7 +40,6 @@ file(GLOB CLIENT_COMMON_SOURCES
     "../server/*.cpp"
     "*.cpp"
     "../gameshared/q_*.cpp"
-    "../matchmaker/*.cpp"
     # We have to include this for linking with shared MM facilities.
     # This also is required to run listen servers (do we allow ranked listen servers?)
     # Unused stuff should get stripped anyway.

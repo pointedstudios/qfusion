@@ -23,8 +23,8 @@
 #define QFUSION_SERVER_H
 
 #include "../qcommon/qcommon.h"
+#include "../qcommon/mmrating.h"
 #include "../game/g_public.h"
-#include "../matchmaker/mm_rating.h"
 
 #include <algorithm>
 #include <cstdlib>

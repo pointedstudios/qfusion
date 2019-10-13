@@ -8,7 +8,6 @@ file(GLOB SERVER_HEADERS
 	"../gameshared/anorms.h"
 	"../gameshared/config.h"	
 	"../qcommon/*.h"
-	"../matchmaker/*.h"
 	"../angelwrap/qas_public.h"
 	"../game/g_public.h"
 	"../server/*.h"
@@ -39,6 +38,11 @@ file(GLOB SERVER_SOURCES
     "../qcommon/dynvar.cpp"
     "../qcommon/library.cpp"
 	"../qcommon/md5.cpp"
+	"../qcommon/mmcommon.cpp"
+	"../qcommon/mmlocalstorage.cpp"
+	"../qcommon/mmquery.cpp"
+	"../qcommon/mmrating.cpp"
+	"../qcommon/mmreliablepipe.cpp"
     "../qcommon/mlist.cpp"
     "../qcommon/svnrev.cpp"
     "../qcommon/snap_demos.cpp"
@@ -54,7 +58,6 @@ file(GLOB SERVER_SOURCES
     "*.cpp"
     "../null/cl_null.cpp"
     "../gameshared/q_*.cpp"
-    "../matchmaker/*.cpp"
 	"../../third-party/sqlite-amalgamation/sqlite3.c"
 )
 

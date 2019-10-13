@@ -1,9 +1,7 @@
-#include "mm_reliable_pipe.h"
-
-#include "../qcommon/singletonholder.h"
-
-#include "../qcommon/qthreads.h"
-#include "../qcommon/qcommon.h"
+#include "mmreliablepipe.h"
+#include "singletonholder.h"
+#include "qthreads.h"
+#include "qcommon.h"
 
 const char *ReliablePipe::MakeLocalStoragePath() {
 	return va( "%s/sv_port_%d.sqlite3", FS_CacheDirectory(), (unsigned)Cvar_Value( "sv_port" ) );

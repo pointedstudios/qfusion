@@ -22,9 +22,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "cl_mm.h"
 
-#include "../matchmaker/mm_common.h"
-#include "../matchmaker/mm_query.h"
-#include "../matchmaker/mm_network_task.h"
+#include "../qcommon/mmcommon.h"
+#include "../qcommon/mmquery.h"
+#include "../qcommon/mmnetworktask.h"
 
 #include "../qcommon/base64.h"
 #include "../qcommon/singletonholder.h"

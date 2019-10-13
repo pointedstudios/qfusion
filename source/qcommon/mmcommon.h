@@ -23,8 +23,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __MM_COMMON_H
 #define __MM_COMMON_H
 
-#include "../qcommon/wswcurl.h"
-#include "../matchmaker/mm_query.h"
+#include "wswcurl.h"
+#include "mmquery.h"
 
 // these are in milliseconds
 #define MM_HEARTBEAT_INTERVAL   15 * 1000

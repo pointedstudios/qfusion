@@ -18,7 +18,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 #include "g_local.h"
-#include "../matchmaker/mm_query.h"
+#include "../qcommon/mmquery.h"
 #include "g_gametypes.h"
 
 #include "../qcommon/links.h"

@@ -18,10 +18,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "../qcommon/qcommon.h"
-#include "../qcommon/base64.h"
-#include "../qcommon/wswcurl.h"
-#include "mm_reliable_pipe.h"
+#include "qcommon.h"
+#include "base64.h"
+#include "wswcurl.h"
+#include "mmreliablepipe.h"
 
 cvar_t *mm_url;
 

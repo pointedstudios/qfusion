@@ -1,7 +1,7 @@
 #ifndef QFUSION_CL_MM_H
 #define QFUSION_CL_MM_H
 
-#include "../matchmaker/mm_facade.h"
+#include "../qcommon/mmfacade.h"
 #include "../qcommon/wswstdtypes.h"
 
 #include <functional>

@@ -1,7 +1,7 @@
 #ifndef QFUSION_MM_REPORTS_UPLOADER_H
 #define QFUSION_MM_REPORTS_UPLOADER_H
 
-#include "mm_local_storage.h"
+#include "mmlocalstorage.h"
 
 class ReliablePipe {
 	friend class SVStatsowFacade;

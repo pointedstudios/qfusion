@@ -34,7 +34,7 @@ file(GLOB GAME_SOURCES
 	"ai/planning/*.cpp"
 	"ai/teamplay/*.cpp"
 	"../gameshared/*.cpp"
-	"../matchmaker/mm_rating.cpp"
+	"../qcommon/mmrating.cpp"
 	"../qcommon/base64.cpp"
 	"../qcommon/md5.cpp"
 	"../qcommon/hash.cpp"

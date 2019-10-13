@@ -21,8 +21,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <errno.h>
 
 #include "../gameshared/q_math.h"
-#include "../qcommon/qcommon.h"
-#include "mm_rating.h"
+#include "qcommon.h"
+#include "mmrating.h"
 
 #ifndef _WIN32
 

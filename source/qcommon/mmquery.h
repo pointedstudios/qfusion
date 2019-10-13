@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __MM_QUERY_H__
 #define __MM_QUERY_H__
 
-#include "mm_rating.h"
+#include "mmrating.h"
 
 #include "../qcommon/wswcurl.h"
 #include "../qcommon/cjson.h"

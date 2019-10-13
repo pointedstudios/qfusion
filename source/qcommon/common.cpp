@@ -41,7 +41,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "glob.h"
 #include "md5.h"
 #include "../qcommon/cjson.h"
-#include "../matchmaker/mm_common.h"
+#include "mmcommon.h"
 #include "compression.h"
 
 #define MAX_NUM_ARGVS   50
