@@ -260,6 +260,22 @@ static const int num_gl_extensions = sizeof( gl_extensions_decl ) / sizeof( gl_e
 #undef GL_EXTENSION
 #undef GL_EXTENSION_EXT
 
+static bool isExtensionSupported( const char *ext ) {
+	GLint numExtensions;
+	qglGetIntegerv( GL_NUM_EXTENSIONS, &numExtensions );
+	// CBA to speed it up as this is required only on starting up
+	for( unsigned i = 0; i < numExtensions; ++i ) {
+		if( !Q_stricmp( ext, (const char *)qglGetStringi( GL_EXTENSIONS, i ) ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool isPlatformExtensionSupported( const char *ext ) {
+	return strstr( qglGetGLWExtensionsString(), ext ) != nullptr;
+}
+
 /*
 * R_RegisterGLExtensions
 */
@@ -302,12 +318,16 @@ static bool R_RegisterGLExtensions( void ) {
 
 		// let's see what the driver's got to say about this...
 		if( *extension->prefix ) {
-			const char *extstring = ( !strncmp( extension->prefix, "WGL", 3 ) ||
-									  !strncmp( extension->prefix, "GLX", 3 ) ||
-									  !strncmp( extension->prefix, "EGL", 3 ) ) ? glConfig.glwExtensionsString : glConfig.extensionsString;
+			auto testFunc = isExtensionSupported;
+			for( const char *prefix : { "WGL", "GLX", "EGL" } ) {
+				if( !strncmp( extension->prefix, prefix, 3 ) ) {
+					testFunc = isPlatformExtensionSupported;
+					break;
+				}
+			}
 
 			Q_snprintfz( name, sizeof( name ), "%s_%s", extension->prefix, extension->name );
-			if( !strstr( extstring, name ) ) {
+			if( !testFunc( name ) ) {
 				continue;
 			}
 		}
@@ -378,30 +398,6 @@ static void R_PrintGLExtensionsInfo( void ) {
 			Com_Printf( "%s: %s\n", extension->name, GLINF_FROM( &glConfig.ext, lastOffset ) ? "enabled" : "disabled" );
 		}
 	}
-}
-
-/*
-* R_PrintGLExtensionsString
-*/
-static void R_PrintGLExtensionsString( const char *name, const char *str ) {
-	size_t len, p;
-
-	Com_Printf( "%s: ", name );
-
-	if( str && *str ) {
-		for( len = strlen( str ), p = 0; p < len; ) {
-			char chunk[512];
-
-			Q_snprintfz( chunk, sizeof( chunk ), "%s", str + p );
-			p += strlen( chunk );
-
-			Com_Printf( "%s", chunk );
-		}
-	} else {
-		Com_Printf( "none" );
-	}
-
-	Com_Printf( "\n" );
 }
 
 /*
@@ -488,7 +484,7 @@ static void R_FinalizeGLExtensions( void ) {
 
 	/* GL_EXT_texture_filter_anisotropic */
 	glConfig.maxTextureFilterAnisotropic = 0;
-	if( strstr( glConfig.extensionsString, "GL_EXT_texture_filter_anisotropic" ) ) {
+	if( isExtensionSupported( "GL_EXT_texture_filter_anisotropic" ) ) {
 		qglGetIntegerv( GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &glConfig.maxTextureFilterAnisotropic );
 	}
 
@@ -722,8 +718,15 @@ static void R_GfxInfo_f( void ) {
 	Com_Printf( "GL_VERSION: %s\n", glConfig.versionString );
 	Com_Printf( "GL_SHADING_LANGUAGE_VERSION: %s\n", glConfig.shadingLanguageVersionString );
 
-	R_PrintGLExtensionsString( "GL_EXTENSIONS", glConfig.extensionsString );
-	R_PrintGLExtensionsString( "GLXW_EXTENSIONS", glConfig.glwExtensionsString );
+	Com_Printf( "GL_EXTENSIONS:\n" );
+	GLint numExtensions;
+	qglGetIntegerv( GL_NUM_EXTENSIONS, &numExtensions );
+	for( int i = 0; i < numExtensions; ++i ) {
+		Com_Printf( "%s ", (const char *)qglGetStringi( GL_EXTENSIONS, i ) );
+	}
+	Com_Printf( "\n" );
+
+	Com_Printf( "GLXW_EXTENSIONS:\n%s\n", qglGetGLWExtensionsString() );
 
 	Com_Printf( "GL_MAX_TEXTURE_SIZE: %i\n", glConfig.maxTextureSize );
 	Com_Printf( "GL_MAX_TEXTURE_IMAGE_UNITS: %i\n", glConfig.maxTextureUnits );
@@ -874,8 +877,6 @@ static rserr_t R_PostInit( void ) {
 	glConfig.vendorString = (const char *)qglGetString( GL_VENDOR );
 	glConfig.rendererString = (const char *)qglGetString( GL_RENDERER );
 	glConfig.versionString = (const char *)qglGetString( GL_VERSION );
-	glConfig.extensionsString = (const char *)qglGetString( GL_EXTENSIONS );
-	glConfig.glwExtensionsString = (const char *)qglGetGLWExtensionsString();
 	glConfig.shadingLanguageVersionString = (const char *)qglGetString( GL_SHADING_LANGUAGE_VERSION );
 
 	if( !glConfig.vendorString ) {
@@ -886,12 +887,6 @@ static rserr_t R_PostInit( void ) {
 	}
 	if( !glConfig.versionString ) {
 		glConfig.versionString = "";
-	}
-	if( !glConfig.extensionsString ) {
-		glConfig.extensionsString = "";
-	}
-	if( !glConfig.glwExtensionsString ) {
-		glConfig.glwExtensionsString = "";
 	}
 	if( !glConfig.shadingLanguageVersionString ) {
 		glConfig.shadingLanguageVersionString = "";

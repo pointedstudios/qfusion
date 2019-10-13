@@ -183,8 +183,6 @@ typedef struct {
 	const char      *rendererString;
 	const char      *vendorString;
 	const char      *versionString;
-	const char      *extensionsString;
-	const char      *glwExtensionsString;
 	const char      *shadingLanguageVersionString;
 	unsigned versionHash;
 

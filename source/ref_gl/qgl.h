@@ -297,7 +297,8 @@ QGL_EXTERN const char              *(*qglGetGLWExtensionsString)( void );
 #define GL_VENDOR				0x1F00
 #define GL_RENDERER				0x1F01
 #define GL_VERSION				0x1F02
-#define GL_EXTENSIONS				0x1F03
+#define GL_EXTENSIONS			0x1F03
+#define GL_NUM_EXTENSIONS		0x821D
 
 #define GL_NO_ERROR 				0
 #define GL_INVALID_ENUM				0x0500
@@ -579,6 +580,7 @@ QGL_FUNC( void, glFrontFace, ( GLenum mode ) );
 QGL_FUNC( GLenum, glGetError, ( void ) );
 QGL_FUNC( void, glGetIntegerv, ( GLenum pname, GLint * params ) );
 QGL_FUNC( const GLubyte *, glGetString, ( GLenum name ) );
+QGL_FUNC( const GLubyte *, glGetStringi, ( GLenum name, GLuint index ) );
 QGL_FUNC( void, glPixelStorei, ( GLenum pname, GLint param ) );
 QGL_FUNC( void, glPolygonOffset, ( GLfloat factor, GLfloat units ) );
 QGL_FUNC( void, glReadPixels, ( GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLvoid * pixels ) );
