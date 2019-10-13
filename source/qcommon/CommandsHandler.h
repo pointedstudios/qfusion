@@ -77,7 +77,7 @@ public:
 
 template <typename Callback>
 bool CommandsHandler<Callback>::Add( Callback *entry ) {
-	const unsigned binIndex = entry->name.Hash() % NUM_BINS;
+	const unsigned binIndex = entry->name.getHash() % NUM_BINS;
 	if( FindByName( entry->name, binIndex ) ) {
 		return false;
 	}
@@ -87,7 +87,7 @@ bool CommandsHandler<Callback>::Add( Callback *entry ) {
 
 template <typename Callback>
 bool CommandsHandler<Callback>::AddOrReplace( Callback *entry ) {
-	const unsigned binIndex = entry->name.Hash() % NUM_BINS;
+	const unsigned binIndex = entry->name.getHash() % NUM_BINS;
 	bool result = true;
 	if( Callback *existing = FindByName( entry->name, binIndex ) ) {
 		UnlinkAndDelete( existing );
@@ -127,14 +127,14 @@ CommandsHandler<Callback>::~CommandsHandler() {
 template <typename Callback>
 Callback* CommandsHandler<Callback>::FindByName( const char *name ) {
 	wsw::HashedStringView hashedNameView( name );
-	return FindByName( hashedNameView, hashedNameView.Hash() % NUM_BINS );
+	return FindByName( hashedNameView, hashedNameView.getHash() % NUM_BINS );
 }
 
 template <typename Callback>
 Callback *CommandsHandler<Callback>::FindByName( const wsw::HashedStringView &name, unsigned binIndex ) {
 	Callback *entry = hashBins[binIndex];
 	while( entry ) {
-		if( entry->name.EqualsIgnoreCase( name ) ) {
+		if( entry->name.equalsIgnoreCase( name ) ) {
 			return entry;
 		}
 		entry = entry->NextInBin();

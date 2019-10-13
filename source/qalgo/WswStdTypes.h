@@ -19,7 +19,7 @@ protected:
 	// We have to declare this bit here for making layout of some descendants optimal
 	bool hasOwnership : 1;
 
-	static size_t CheckingLen( size_t len ) {
+	static size_t checkLen( size_t len ) {
 		assert( len < ( 1u << 31 ) );
 		return len;
 	}
@@ -28,35 +28,40 @@ public:
 		: s( "" ), len( 0 ), hasOwnership( false ) {}
 
 	explicit StringView( const char *s_ ) noexcept
-		: s( s_ ), len( CheckingLen( std::strlen( s_ ) ) ), hasOwnership( false ) {}
+		: s( s_ ), len( checkLen( std::strlen( s_ ) ) ), hasOwnership( false ) {}
 
 	StringView( const char *s_, size_t len_ ) noexcept
-		: s( s_ ), len( CheckingLen( len_ ) ), hasOwnership( false ) {}
+		: s( s_ ), len( checkLen( len_ ) ), hasOwnership( false ) {}
 
-	const char *Data() const { return data(); }
-	size_t Size() const { return len; }
+	[[nodiscard]]
+	const char *data() const { return s; }
+	[[nodiscard]]
+	size_t size() const { return len; }
+	[[nodiscard]]
+	size_t length() const { return len; }
 
-	bool Equals( const wsw::StringView &that ) const {
+	[[nodiscard]]
+	bool equals( const wsw::StringView &that ) const {
 		return len == that.len && !std::strncmp( s, that.s, len );
 	}
 
-	bool EqualsIgnoreCase( const wsw::StringView &that ) const {
+	[[nodiscard]]
+	bool equalsIgnoreCase( const wsw::StringView &that ) const {
 		return len == that.len && !Q_strnicmp( s, that.s, len );
 	}
 
-	bool operator==( const wsw::StringView &that ) const { return Equals( that ); }
-	bool operator!=( const wsw::StringView &that ) const { return !Equals( that ); }
+	[[nodiscard]]
+	bool operator==( const wsw::StringView &that ) const { return equals( that ); }
+	[[nodiscard]]
+	bool operator!=( const wsw::StringView &that ) const { return !equals( that ); }
 
-	// These accessors are for STL structural compatibility only. Avoid using these ones directly due to code style mismatch.
-
-	const char *data() const { return s; }
-	size_t size() const { return len; }
-	size_t length() const { return len; }
-
+	[[nodiscard]]
 	const char *begin() const { return s; }
+	[[nodiscard]]
 	const char *end() const { return s + len; }
-
+	[[nodiscard]]
 	const char *cbegin() const { return s; }
+	[[nodiscard]]
 	const char *cend() const { return s + len; }
 };
 
@@ -64,7 +69,7 @@ public:
  * An extension of {@code StringView} that allows taking ownership over the supplied memory.
  */
 class StringRef : public StringView {
-	void MoveFromThat( StringRef &&that ) {
+	void moveFromThat( StringRef &&that ) {
 		this->s = that.s;
 		this->len = that.len;
 		this->hasOwnership = that.hasOwnership;
@@ -87,30 +92,34 @@ public:
 			delete[] s;
 			this->hasOwnership = false;
 		}
-		MoveFromThat( std::forward<StringRef &&>( that ) );
+		moveFromThat( std::forward<StringRef &&>( that ) );
 		return *this;
 	}
 
 	StringRef( StringRef &&that ) noexcept : StringView() {
-		MoveFromThat( std::forward<StringRef &&>( that ) );
+		moveFromThat( std::forward<StringRef &&>( that ) );
 	}
 
-	static StringRef DeepCopyOf( const char *s_ ) {
-		return DeepCopyOf( s_, std::strlen( s_ ) );
+	[[nodiscard]]
+	static StringRef deepCopyOf( const char *s_ ) {
+		return deepCopyOf( s_, std::strlen( s_ ) );
 	}
 
-	static StringRef DeepCopyOf( const char *s_, size_t len ) {
+	[[nodiscard]]
+	static StringRef deepCopyOf( const char *s_, size_t len ) {
 		char *mem = new char[len + 1];
 		std::memcpy( mem, s_, len );
 		mem[len] = '\0';
-		return TakeOwnershipOf( mem, len );
+		return takeOwnershipOf( mem, len );
 	}
 
-	static StringRef TakeOwnershipOf( const char *s_ ) {
-		return TakeOwnershipOf( s_, std::strlen( s_ ) );
+	[[nodiscard]]
+	static StringRef takeOwnershipOf( const char *s_ ) {
+		return takeOwnershipOf( s_, std::strlen( s_ ) );
 	}
 
-	static StringRef TakeOwnershipOf( const char *s_, size_t len ) {
+	[[nodiscard]]
+	static StringRef takeOwnershipOf( const char *s_, size_t len ) {
 		StringRef result( s_, len );
 		result.hasOwnership = true;
 		return result;
@@ -133,28 +142,31 @@ public:
 	constexpr HashedStringView() : StringView(), hash( 0 ) {}
 
 	explicit HashedStringView( const char *s_ ) : StringView( s_ ) {
-		hash = ::GetHashForLength( s_, len );
+		hash = GetHashForLength( s_, len );
 	}
 
 	HashedStringView( const char *s_, size_t len_ ) : StringView( s_, len_ ) {
-		hash = ::GetHashForLength( s_, len_ );
+		hash = GetHashForLength( s_, len_ );
 	}
 
 	HashedStringView( const char *s_, size_t len_, uint32_t hash_ )
 		: StringView( s_, len_ ), hash( hash_ ) {}
 
-	uint32_t Hash() const { return hash; }
+	[[nodiscard]]
+	uint32_t getHash() const { return hash; }
 
-	bool Equals( const wsw::HashedStringView &that ) const {
+	[[nodiscard]]
+	bool equals( const wsw::HashedStringView &that ) const {
 		return hash == that.hash && len == that.len && !std::strncmp( s, that.s, len );
 	}
 
-	bool EqualsIgnoreCase( const wsw::HashedStringView &that ) const {
+	[[nodiscard]]
+	bool equalsIgnoreCase( const wsw::HashedStringView &that ) const {
 		return hash == that.hash && len == that.len && !Q_strnicmp( s, that.s, len );
 	}
 
-	bool operator==( const wsw::HashedStringView &that ) const { return Equals( that ); }
-	bool operator!=( const wsw::HashedStringView &that ) const { return !Equals( that ); }
+	bool operator==( const wsw::HashedStringView &that ) const { return equals( that ); }
+	bool operator!=( const wsw::HashedStringView &that ) const { return !equals( that ); }
 };
 
 /**
@@ -164,7 +176,7 @@ public:
  * but only due to the fact an ownership over memory is a purely implementation detail that does not belong to interface.
  */
 class HashedStringRef : public HashedStringView {
-	void MoveFromThat( HashedStringRef &&that ) {
+	void moveFromThat( HashedStringRef &&that ) {
 		this->s = that.s;
 		this->len = that.len;
 		this->hasOwnership = that.hasOwnership;
@@ -197,30 +209,34 @@ public:
 			delete[] s;
 			this->hasOwnership = false;
 		}
-		MoveFromThat( std::forward<HashedStringRef &&>( that ) );
+		moveFromThat( std::forward<HashedStringRef &&>( that ) );
 		return *this;
 	}
 
 	HashedStringRef( HashedStringRef &&that ) noexcept : HashedStringView() {
-		MoveFromThat( std::forward<HashedStringRef &&>( that ) );
+		moveFromThat( std::forward<HashedStringRef &&>( that ) );
 	}
 
-	static HashedStringRef DeepCopyOf( const char *s_ ) {
-		return DeepCopyOf( s_, std::strlen( s_ ) );
+	[[nodiscard]]
+	static HashedStringRef deepCopyOf( const char *s_ ) {
+		return deepCopyOf( s_, std::strlen( s_ ) );
 	}
 
-	static HashedStringRef DeepCopyOf( const char *s_, size_t len ) {
+	[[nodiscard]]
+	static HashedStringRef deepCopyOf( const char *s_, size_t len ) {
 		char *mem = new char[len + 1];
 		std::memcpy( mem, s_, len );
 		mem[len] = '\0';
-		return TakeOwnershipOf( mem, len );
+		return takeOwnershipOf( mem, len );
 	}
 
-	static HashedStringRef TakeOwnershipOf( const char *s_ ) {
-		return TakeOwnershipOf( s_, std::strlen( s_ ) );
+	[[nodiscard]]
+	static HashedStringRef takeOwnershipOf( const char *s_ ) {
+		return takeOwnershipOf( s_, std::strlen( s_ ) );
 	}
 
-	static HashedStringRef TakeOwnershipOf( const char *s_, size_t len ) {
+	[[nodiscard]]
+	static HashedStringRef takeOwnershipOf( const char *s_, size_t len ) {
 		HashedStringRef result( s_, len );
 		result.hasOwnership = true;
 		return result;

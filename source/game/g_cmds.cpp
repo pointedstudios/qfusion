@@ -1375,7 +1375,7 @@ void ClientCommandsHandler::PrecacheCommands() {
 	int i = 0;
 	for( auto *callback = listHead; callback; callback = callback->NextInList() ) {
 		// TODO: This assumes zero-terminated string views!
-		trap_ConfigString( CS_GAMECOMMANDS + i, callback->name.Data() );
+		trap_ConfigString( CS_GAMECOMMANDS + i, callback->name.data() );
 		i++;
 	}
 	for(; i < MAX_GAMECOMMANDS; ++i ) {
@@ -1388,7 +1388,7 @@ static const wsw::StringView callvotePassed( "callvotePassed" );
 
 bool ClientCommandsHandler::IsWriteProtected( const wsw::StringView &name ) {
 	for( const wsw::string_view &s: { callvoteValidate, callvotePassed } ) {
-		if( s.EqualsIgnoreCase( name ) ) {
+		if( s.equalsIgnoreCase( name ) ) {
 			return true;
 		}
 	}
@@ -1399,7 +1399,7 @@ bool ClientCommandsHandler::AddOrReplace( GenericCommandCallback *callback ) {
 	// TODO: The code assumes zero-terminated string views!
 
 	if( IsWriteProtected( callback->name ) ) {
-		G_Printf( "WARNING: G_AddCommand: command name '%s' is write protected\n", callback->name.Data() );
+		G_Printf( "WARNING: G_AddCommand: command name '%s' is write protected\n", callback->name.data() );
 		return false;
 	}
 
@@ -1410,12 +1410,12 @@ bool ClientCommandsHandler::AddOrReplace( GenericCommandCallback *callback ) {
 
 	// If the size has grew up over this value after the AddOrReplace() call
 	if( size > MAX_GAMECOMMANDS ) {
-		G_Error( "ClientCommandsHandler::AddOrReplace(`%s`): Too many commands\n", callback->name.Data() );
+		G_Error( "ClientCommandsHandler::AddOrReplace(`%s`): Too many commands\n", callback->name.data() );
 	}
 
 	// add the configstring if the precache process was already done
 	if( level.canSpawnEntities ) {
-		trap_ConfigString( CS_GAMECOMMANDS + ( size - 1 ), callback->name.Data() );
+		trap_ConfigString( CS_GAMECOMMANDS + ( size - 1 ), callback->name.data() );
 	}
 
 	return true;
@@ -1506,10 +1506,10 @@ void ClientCommandsHandler::HandleClientCommand( edict_t *ent ) {
 }
 
 void ClientCommandsHandler::AddScriptCommand( const char *name ) {
-	Add( new ScriptCommandCallback( wsw::HashedStringRef::DeepCopyOf( name ) ) );
+	Add( new ScriptCommandCallback( wsw::HashedStringRef::deepCopyOf( name ) ) );
 }
 
 bool ClientCommandsHandler::ScriptCommandCallback::operator()( edict_t *arg ) {
-	return GT_asCallGameCommand( arg->r.client, name.Data(), trap_Cmd_Args(), trap_Cmd_Argc() - 1 );
+	return GT_asCallGameCommand( arg->r.client, name.data(), trap_Cmd_Args(), trap_Cmd_Argc() - 1 );
 }
 
