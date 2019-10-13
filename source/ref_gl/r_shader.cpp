@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_shader.c
 
 #include "r_local.h"
-#include "../qalgo/hash.h"
+#include "../qcommon/hash.h"
 #include "../qcommon/qcommon.h"
 
 #include <algorithm>

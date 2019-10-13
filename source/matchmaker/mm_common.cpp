@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "../qcommon/qcommon.h"
-#include "../qalgo/base64.h"
+#include "../qcommon/base64.h"
 #include "../qcommon/wswcurl.h"
 #include "mm_reliable_pipe.h"
 

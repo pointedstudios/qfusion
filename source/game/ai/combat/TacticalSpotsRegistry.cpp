@@ -1,7 +1,7 @@
 #include "TacticalSpotsRegistry.h"
 #include "../ai_precomputed_file_handler.h"
 #include "../bot.h"
-#include "../../../qalgo/Links.h"
+#include "../../../qcommon/links.h"
 
 typedef TacticalSpotsRegistry::SpotsQueryVector SpotsQueryVector;
 

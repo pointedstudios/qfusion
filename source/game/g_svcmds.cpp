@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "g_local.h"
 #include "../qcommon/net.h"
-#include "../qalgo/Links.h"
+#include "../qcommon/links.h"
 
 #include <new>
 #include <algorithm>

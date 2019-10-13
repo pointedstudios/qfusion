@@ -38,8 +38,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <setjmp.h>
 #include "wswcurl.h"
 #include "steam.h"
-#include "../qalgo/glob.h"
-#include "../qalgo/md5.h"
+#include "glob.h"
+#include "md5.h"
 #include "../qcommon/cjson.h"
 #include "../matchmaker/mm_common.h"
 #include "compression.h"

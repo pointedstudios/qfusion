@@ -1,7 +1,7 @@
 #include "../qcommon/qcommon.h"
 #include "mm_local_storage.h"
-#include "../qalgo/SingletonHolder.h"
-#include "../qalgo/WswStdTypes.h"
+#include "../qcommon/singletonholder.h"
+#include "../qcommon/wswstdtypes.h"
 
 #include "../../third-party/sqlite-amalgamation/sqlite3.h"
 

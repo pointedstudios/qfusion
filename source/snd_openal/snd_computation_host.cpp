@@ -1,8 +1,8 @@
 #include "snd_computation_host.h"
 #include "snd_local.h"
 
-#include "../qalgo/Links.h"
-#include "../qalgo/SingletonHolder.h"
+#include "../qcommon/links.h"
+#include "../qcommon/singletonholder.h"
 
 #include <thread>
 #include <algorithm>

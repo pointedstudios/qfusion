@@ -1,6 +1,6 @@
 #include "mm_reliable_pipe.h"
 
-#include "../qalgo/SingletonHolder.h"
+#include "../qcommon/singletonholder.h"
 
 #include "../qcommon/qthreads.h"
 #include "../qcommon/qcommon.h"

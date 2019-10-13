@@ -4,7 +4,7 @@
 #include <tuple>
 #include "ai_local.h"
 #include "static_vector.h"
-#include "../../qalgo/hash.h"
+#include "../../qcommon/hash.h"
 
 void GT_asRegisterScriptWeightConfig( class AiWeightConfig *weightConfig, const edict_t *configOwner );
 void GT_asReleaseScriptWeightConfig( class AiWeightConfig *weightConfig, const edict_t *configOwner );

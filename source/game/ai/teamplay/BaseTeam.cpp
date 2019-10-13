@@ -1,7 +1,7 @@
 #include "BaseTeam.h"
 #include "SquadBasedTeam.h"
 #include "../bot.h"
-#include "../../../qalgo/Links.h"
+#include "../../../qcommon/links.h"
 
 AiBaseTeam *AiBaseTeam::teamsForNums[GS_MAX_TEAMS - 1];
 

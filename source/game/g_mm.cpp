@@ -21,9 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../matchmaker/mm_query.h"
 #include "g_gametypes.h"
 
-#include "../qalgo/Links.h"
-#include "../qalgo/SingletonHolder.h"
-#include "../qalgo/WswStdTypes.h"
+#include "../qcommon/links.h"
+#include "../qcommon/singletonholder.h"
+#include "../qcommon/wswstdtypes.h"
 
 #include <algorithm>
 #include <cmath>

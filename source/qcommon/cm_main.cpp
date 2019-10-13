@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "qcommon.h"
 #include "cm_local.h"
-#include "../qalgo/md5.h"
+#include "md5.h"
 
 static bool cm_initialized = false;
 

@@ -1,6 +1,6 @@
 #include "GoalEntities.h"
 #include "../static_vector.h"
-#include "../../../qalgo/Links.h"
+#include "../../../qcommon/links.h"
 
 float NavEntity::CostInfluence() const {
 	// Usually these kinds of nav entities are CTF flags or bomb spots,

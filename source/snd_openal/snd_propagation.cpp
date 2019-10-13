@@ -4,8 +4,8 @@
 
 #include "../gameshared/q_collision.h"
 
-#include "../qalgo/Links.h"
-#include "../qalgo/SingletonHolder.h"
+#include "../qcommon/links.h"
+#include "../qcommon/singletonholder.h"
 
 #include <algorithm>
 #include <limits>

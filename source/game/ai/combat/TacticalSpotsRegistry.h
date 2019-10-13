@@ -5,7 +5,7 @@
 #include "../navigation/AasRouteCache.h"
 #include "../static_vector.h"
 #include "../bot.h"
-#include "../../../qalgo/Links.h"
+#include "../../../qcommon/links.h"
 
 class TacticalSpotsRegistry
 {

@@ -6,9 +6,9 @@
 #include <utility>
 #include <tuple>
 
-#include "../qalgo/hash.h"
-#include "../qalgo/Links.h"
-#include "../qalgo/WswStdTypes.h"
+#include "../qcommon/hash.h"
+#include "../qcommon/links.h"
+#include "../qcommon/wswstdtypes.h"
 
 struct GenericCommandCallback {
 	enum { HASH_LINKS, LIST_LINKS };

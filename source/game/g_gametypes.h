@@ -27,7 +27,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <utility>
 
 #include "../matchmaker/mm_rating.h"
-#include "../qalgo/WswStdTypes.h"
+#include "../qcommon/wswstdtypes.h"
 
 //g_gametypes.c
 extern cvar_t *g_warmup_timelimit;

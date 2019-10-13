@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "snd_cmdque.h"
 #include "snd_env_sampler.h"
 #include "../client/client.h"
-#include "../qalgo/SingletonHolder.h"
+#include "../qcommon/singletonholder.h"
 
 class NullSoundSystem : public SoundSystem {
 public:

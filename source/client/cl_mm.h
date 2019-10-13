@@ -2,7 +2,7 @@
 #define QFUSION_CL_MM_H
 
 #include "../matchmaker/mm_facade.h"
-#include "../qalgo/WswStdTypes.h"
+#include "../qcommon/wswstdtypes.h"
 
 #include <functional>
 #include <memory>

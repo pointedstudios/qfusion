@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "ui_precompiled.h"
 #include "kernel/ui_common.h"
 #include "kernel/ui_streamcache.h"
-#include "../../qalgo/md5.h"
+#include "../../qcommon/md5.h"
 #include <time.h>
 
 namespace WSWUI

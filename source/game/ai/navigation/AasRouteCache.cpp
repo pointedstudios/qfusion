@@ -4,8 +4,8 @@
 #include "../ai_local.h"
 #include "../bot.h"
 
-#include "../../../qalgo/Links.h"
-#include "../../../qalgo/md5.h"
+#include "../../../qcommon/links.h"
+#include "../../../qcommon/md5.h"
 
 #include <cstdlib>
 #include <algorithm>

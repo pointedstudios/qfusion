@@ -19,8 +19,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 #include "g_local.h"
 
-#include "../qalgo/SingletonHolder.h"
-#include "../qalgo/WswStdTypes.h"
+#include "../qcommon/singletonholder.h"
+#include "../qcommon/wswstdtypes.h"
 #include "ai/navigation/AasWorld.h"
 #include "../qcommon/CommandsHandler.h"
 

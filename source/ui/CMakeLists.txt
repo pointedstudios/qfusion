@@ -10,7 +10,6 @@ file(GLOB UI_HEADERS
     "parsers/*.h"
 	"formatters/*.h"
 	"../gameshared/q_*.h"
-	"../qalgo/*.h"
 )
 
 file(GLOB UI_SOURCES
@@ -22,7 +21,6 @@ file(GLOB UI_SOURCES
     "decorators/*.cpp"
     "parsers/*.cpp"
     "../gameshared/q_*.c"
-	"../qalgo/*.cpp"
 )
 
 file(GLOB ROCKET_ROOT_HEADERS

@@ -8,7 +8,7 @@
 // TODO: Switch to using OpenAL SOFT headers across the entire codebase?
 #include "../../third-party/openal-soft/include/AL/efx-presets.h"
 
-#include "../qalgo/hash.h"
+#include "../qcommon/hash.h"
 
 /**
  * Must be kept structurally-compatible with preset braced declarations from efx-presets.h

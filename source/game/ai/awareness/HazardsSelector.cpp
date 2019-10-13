@@ -1,7 +1,7 @@
 #include "HazardsSelector.h"
 #include "AwarenessModule.h"
 #include "../bot.h"
-#include "../../../qalgo/Links.h"
+#include "../../../qcommon/links.h"
 
 void HazardsSelector::BeginUpdate() {
 	if( primaryHazard ) {

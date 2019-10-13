@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __UI_PUBLIC_H__
 #define __UI_PUBLIC_H__
 
-#include "../qalgo/WswStdTypes.h"
+#include "../qcommon/wswstdtypes.h"
 
 #define UI_API_VERSION      70
 

@@ -2,7 +2,7 @@
 #include "snd_effect_sampler.h"
 #include "snd_computation_host.h"
 #include "snd_presets_registry.h"
-#include "../qalgo/SingletonHolder.h"
+#include "../qcommon/singletonholder.h"
 
 #include <algorithm>
 #include <new>

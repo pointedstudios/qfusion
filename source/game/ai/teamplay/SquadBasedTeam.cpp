@@ -3,7 +3,7 @@
 #include "TeamplayLocal.h"
 #include "../ai_ground_trace_cache.h"
 #include "../bot.h"
-#include "../../../qalgo/Links.h"
+#include "../../../qcommon/links.h"
 
 #include <algorithm>
 #include <limits>

@@ -26,8 +26,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../matchmaker/mm_query.h"
 #include "../matchmaker/mm_network_task.h"
 
-#include "../qalgo/base64.h"
-#include "../qalgo/SingletonHolder.h"
+#include "../qcommon/base64.h"
+#include "../qcommon/singletonholder.h"
 
 #include <errno.h>
 

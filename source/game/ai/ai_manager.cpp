@@ -4,7 +4,7 @@
 #include "bot_evolution_manager.h"
 #include "bot.h"
 #include "combat/TacticalSpotsRegistry.h"
-#include "../../qalgo/Links.h"
+#include "../../qcommon/links.h"
 
 // Class static variable declaration
 AiManager *AiManager::instance = nullptr;

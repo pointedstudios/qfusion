@@ -25,8 +25,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "compression.h"
 #include "wswcurl.h"
-#include "../qalgo/md5.h"
-#include "../qalgo/q_trie.h"
+#include "md5.h"
+#include "q_trie.h"
 
 #include <algorithm>
 

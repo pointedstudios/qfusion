@@ -3,7 +3,7 @@
 
 #include "mm_common.h"
 #include "mm_query.h"
-#include "../qalgo/Links.h"
+#include "../qcommon/links.h"
 
 template <typename> class StatsowFacadeTask;
 

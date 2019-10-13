@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_local.h"
 #include "../qcommon/qthreads.h"
-#include "../qalgo/SingletonHolder.h"
+#include "../qcommon/singletonholder.h"
 
 #include <algorithm>
 

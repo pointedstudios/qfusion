@@ -5,8 +5,8 @@
 #include "../static_vector.h"
 #include "../ai_local.h"
 #include "../ai_precomputed_file_handler.h"
-#include "../../../qalgo/md5.h"
-#include "../../../qalgo/base64.h"
+#include "../../../qcommon/md5.h"
+#include "../../../qcommon/base64.h"
 
 #undef min
 #undef max

@@ -21,7 +21,6 @@ file(GLOB CLIENT_HEADERS
 	"../gameshared/anorms.h"
 	"../gameshared/config.h"
 	"../qcommon/*.h"
-	"../qalgo/*.h"
 	"../angelwrap/qas_public.h"
 	"../ref_gl/r_public.h"
 	"../cgame/cg_public.h"
@@ -42,7 +41,6 @@ file(GLOB CLIENT_COMMON_SOURCES
     "../server/*.cpp"
     "*.cpp"
     "../gameshared/q_*.cpp"
-    "../qalgo/*.c"
     "../matchmaker/*.cpp"
     # We have to include this for linking with shared MM facilities.
     # This also is required to run listen servers (do we allow ranked listen servers?)
@@ -59,13 +57,11 @@ file(GLOB REF_GL_HEADERS
 		"../qcommon/patch.h"
 		"../qcommon/iqm.h"
 		"../qcommon/qfiles.h"
-		"../qalgo/*.h"
 		)
 
 file(GLOB REF_GL_COMMON_SOURCES
 		"../ref_gl/*.cpp"
 		"../gameshared/q_*.cpp"
-		"../qalgo/*.cpp"
 		"../qcommon/bsp.cpp"
 		"../qcommon/patch.cpp"
 		)
