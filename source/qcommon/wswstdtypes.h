@@ -243,9 +243,8 @@ public:
 	}
 };
 
-using string_view = StringView;
-using string = std::string;
-using stringstream = std::stringstream;
+using String = std::string;
+using StringStream = std::stringstream;
 
 }
 

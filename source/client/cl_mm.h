@@ -34,21 +34,21 @@ class CLStatsowFacade {
 	mm_uuid_t loginHandle { Uuid_ZeroUuid() };
 	mm_uuid_t matchHandle { Uuid_ZeroUuid() };
 
-	wsw::string matchAddress;
+	wsw::String matchAddress;
 
-	wsw::string lastErrorMessage;
-	mutable wsw::string_view lastErrorMessageView;
+	wsw::String lastErrorMessage;
+	mutable wsw::StringView lastErrorMessageView;
 
-	wsw::string profileWebUrl;
-	mutable wsw::string_view profileWebUrlView;
+	wsw::String profileWebUrl;
+	mutable wsw::StringView profileWebUrlView;
 
-	wsw::string profileRmlUrl;
-	mutable wsw::string_view profileRmlUrlView;
+	wsw::String profileRmlUrl;
+	mutable wsw::StringView profileRmlUrlView;
 
-	mutable wsw::string_view baseUrlView;
+	mutable wsw::StringView baseUrlView;
 
 	mutable char ticketStringBuffer[UUID_BUFFER_SIZE];
-	mutable wsw::string_view ticketStringView;
+	mutable wsw::StringView ticketStringView;
 
 	struct cvar_s *cl_mm_user;
 	struct cvar_s *cl_mm_password;
@@ -140,8 +140,8 @@ class CLStatsowFacade {
 		return tasksRunner.TryStartingTask( task );
 	}
 
-	const wsw::string_view &GetStringAsView( const wsw::string &s, wsw::string_view *view ) const {
-		*view = wsw::string_view( s.data(), s.length() );
+	const wsw::StringView &GetStringAsView( const wsw::String &s, wsw::StringView *view ) const {
+		*view = wsw::StringView( s.data(), s.length() );
 		return *view;
 	}
 public:
@@ -178,23 +178,23 @@ public:
 
 	int GetLoginState() const;
 
-	const wsw::string_view &GetLastErrorMessage() const {
+	const wsw::StringView &GetLastErrorMessage() const {
 		return GetStringAsView( lastErrorMessage, &lastErrorMessageView );
 	}
 
-	const wsw::string_view &GetProfileWebUrl() const {
+	const wsw::StringView &GetProfileWebUrl() const {
 		return GetStringAsView( profileWebUrl, &profileWebUrlView );
 	}
 
-	const wsw::string_view &GetProfileRmlUrl() const {
+	const wsw::StringView &GetProfileRmlUrl() const {
 		return GetStringAsView( profileRmlUrl, &profileRmlUrlView );
 	}
 
-	const wsw::string_view &GetBaseWebUrl() const;
+	const wsw::StringView &GetBaseWebUrl() const;
 
-	const wsw::string_view &GetTicketString() const {
+	const wsw::StringView &GetTicketString() const {
 		ticket.ToString( ticketStringBuffer );
-		ticketStringView = wsw::string_view( ticketStringBuffer, UUID_DATA_LENGTH );
+		ticketStringView = wsw::StringView( ticketStringBuffer, UUID_DATA_LENGTH );
 		return ticketStringView;
 	}
 };

@@ -50,10 +50,10 @@ class SoundSystem {
 	static SoundSystem *InstanceOrNull() { return instance; }
 #endif
 protected:
-	wsw::string tmpString1 { MAX_QPATH };
-	wsw::string tmpString2 { MAX_QPATH };
+	wsw::String tmpString1 { MAX_QPATH };
+	wsw::String tmpString2 { MAX_QPATH };
 
-	static const char *PathForName( const char *name, wsw::string &reuse );
+	static const char *PathForName( const char *name, wsw::String &reuse );
 
 	explicit SoundSystem( client_state_s *client_ ) : client( client_ ) {}
 public:

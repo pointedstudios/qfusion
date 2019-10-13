@@ -158,7 +158,7 @@ template <typename T> bool SQLiteBindArg( sqlite3_stmt *stmt, int index, const T
 	return T::implement_specialization_for_this_type();
 }
 
-template <> bool SQLiteBindArg( sqlite3_stmt *stmt, int index, const wsw::string_view &value ) {
+template <> bool SQLiteBindArg( sqlite3_stmt *stmt, int index, const wsw::StringView &value ) {
 	const int code = ::sqlite3_bind_text( stmt, index, value.data(), (int)value.size(), SQLITE_STATIC );
 	if( code == SQLITE_OK ) {
 		return true;
@@ -288,12 +288,12 @@ public:
 		return ::sqlite3_data_count( stmt );
 	}
 
-	const wsw::string_view GetString( int num ) const {
+	const wsw::StringView GetString( int num ) const {
 		assert( (unsigned)num < (unsigned)NumColumns() );
 		auto *data = (const char *)::sqlite3_column_text( stmt, num );
 		assert( data && "Nullable columns are not supported\n" );
 		int numBytes = ::sqlite3_column_bytes( stmt, num );
-		return wsw::string_view( data, (size_t)numBytes );
+		return wsw::StringView( data, (size_t)numBytes );
 	}
 };
 
@@ -522,11 +522,11 @@ bool LocalReliableStorage::InsertQueryFields( DBConnection connection, const Que
 
 	const char *queryId = GetQueryId( query );
 	for( auto formParam = query->formParamsHead; formParam; formParam = formParam->next ) {
-		const wsw::string_view id( queryId, UUID_DATA_LENGTH );
+		const wsw::StringView id( queryId, UUID_DATA_LENGTH );
 		Com_DPrintf( "%s: writing (`query id`, `%s`)\n", tag, queryId );
-		const wsw::string_view name( formParam->name, formParam->nameLen );
+		const wsw::StringView name( formParam->name, formParam->nameLen );
 		Com_DPrintf( "%s: writing (`name`, `%s`)\n", tag, formParam->name );
-		const wsw::string_view value( formParam->value, formParam->valueLen );
+		const wsw::StringView value( formParam->value, formParam->valueLen );
 		Com_DPrintf( "%s: writing (`value`, `%s`)\n", tag, formParam->value );
 		if( !adapter.InsertNextRow( id, name, value ) ) {
 			return false;
@@ -557,7 +557,7 @@ QueryObject *LocalReliableStorage::FetchNext( DBConnection connection, const cha
 
 	QueryObject *query = nullptr;
 
-	auto printReadRow = [&]( const char *name, const wsw::string_view &value ) {
+	auto printReadRow = [&]( const char *name, const wsw::StringView &value ) {
 		constexpr const char *tag = "LocalReliableStorage::FetchNext()";
 		// TODO: This is quite error-prone (string views currently point to zero-terminated data
 		// but there's no strict guarantee). Introduce and use streams instead.

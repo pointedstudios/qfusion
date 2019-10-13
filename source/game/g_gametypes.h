@@ -46,10 +46,10 @@ extern cvar_t *g_gametypes_list;
 #define MAX_RACE_CHECKPOINTS    32
 
 struct LoggedAward {
-	const wsw::string_view name;
+	const wsw::StringView name;
 	int count;
 
-	explicit LoggedAward( const wsw::string_view &name_, int count_ = 1 )
+	explicit LoggedAward( const wsw::StringView &name_, int count_ = 1 )
 		: name( name_ ), count( count_ ) {}
 };
 

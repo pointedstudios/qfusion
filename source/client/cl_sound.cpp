@@ -25,7 +25,7 @@ static cvar_t *s_module = nullptr;
 
 SoundSystem *SoundSystem::instance = nullptr;
 
-const char *SoundSystem::PathForName( const char *name, wsw::string &reuse ) {
+const char *SoundSystem::PathForName( const char *name, wsw::String &reuse ) {
 	if( COM_FileExtension( name ) ) {
 		return name;
 	}

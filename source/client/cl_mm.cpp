@@ -911,8 +911,8 @@ int CLStatsowFacade::GetLoginState() const {
 	return isLoggingIn ? MM_LOGIN_STATE_IN_PROGRESS : MM_LOGIN_STATE_LOGGED_OUT;
 }
 
-const wsw::string_view &CLStatsowFacade::GetBaseWebUrl() const {
-	baseUrlView = wsw::string_view( APP_MATCHMAKER_WEB_URL );
+const wsw::StringView &CLStatsowFacade::GetBaseWebUrl() const {
+	baseUrlView = wsw::StringView( APP_MATCHMAKER_WEB_URL );
 	return baseUrlView;
 }
 

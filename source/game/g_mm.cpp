@@ -904,7 +904,7 @@ void StatsowFacade::AddAward( const edict_t *ent, const char *awardMsg ) {
 	StatsSequence<LoggedAward>::iterator end( awardsSequence.end() );
 	for( StatsSequence<LoggedAward>::iterator it = awardsSequence.begin(); it != end; ++it ) {
 		LoggedAward &existing = *it;
-		const wsw::string_view &name = existing.name;
+		const wsw::StringView &name = existing.name;
 		if( name.size() != msgLen ) {
 			continue;
 		}
@@ -916,7 +916,7 @@ void StatsowFacade::AddAward( const edict_t *ent, const char *awardMsg ) {
 	}
 
 	const char *name = G_RegisterLevelString( awardMsg );
-	awardsSequence.New( wsw::string_view( name, msgLen ), 1 );
+	awardsSequence.New( wsw::StringView( name, msgLen ), 1 );
 }
 
 mm_uuid_t StatsowFacade::SessionOf( const edict_t *ent ) {
@@ -1553,13 +1553,13 @@ void RespectHandler::ClientEntry::ShowRespectMenuAtClient( unsigned timeout, int
 
 class RespectToken {
 	const char *name { nullptr };
-	wsw::string_view *aliases { nullptr };
+	wsw::StringView *aliases { nullptr };
 	int tokenNum { -1 };
 	int numAliases { -1 };
 
 	// TODO: Can all this stuff be implemented using variadic templates?
 	void InitFrom( const char *name_, int tokenNum_, int numAliases_, ... ) {
-		aliases = (wsw::string_view *)::malloc( numAliases_ * sizeof( wsw::string_view ) );
+		aliases = (wsw::StringView *)::malloc( numAliases_ * sizeof( wsw::StringView ) );
 		numAliases = numAliases_;
 		name = name_;
 		tokenNum = tokenNum_;
@@ -1568,12 +1568,12 @@ class RespectToken {
 		va_start( va, numAliases_ );
 		for( int i = 0; i < numAliases_; ++i ) {
 			const char *alias = va_arg( va, const char * );
-			new( aliases + i )wsw::string_view( alias );
+			new( aliases + i )wsw::StringView( alias );
 		}
 		va_end( va );
 	}
 
-	int TryMatchingByAlias( const char *p, const wsw::string_view &alias ) const;
+	int TryMatchingByAlias( const char *p, const wsw::StringView &alias ) const;
 public:
 	RespectToken( const char *name_, int tokenNum_, const char *alias1 ) {
 		InitFrom( name_, tokenNum_, 1, alias1 );
@@ -1607,7 +1607,7 @@ int RespectToken::GetMatchedLength( const char *p ) const {
 	return -1;
 }
 
-int RespectToken::TryMatchingByAlias( const char *p, const wsw::string_view &alias ) const {
+int RespectToken::TryMatchingByAlias( const char *p, const wsw::StringView &alias ) const {
 	const char *const start = p;
 	for( const char aliasChar: alias ) {
 		assert( !::isalpha( aliasChar ) || ::islower( aliasChar ) );
@@ -2141,7 +2141,7 @@ void IgnoreFilter::HandleIgnoreListCommand( const edict_t *ent ) {
 		return;
 	}
 
-	wsw::stringstream ss;
+	wsw::StringStream ss;
 	ss << action;
 	const char *separator = " ";
 	bool wereTeammatesMet = false;

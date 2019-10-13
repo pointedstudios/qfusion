@@ -164,19 +164,19 @@ static int CL_MM_GetLoginState() {
 	return CLStatsowFacade::Instance()->GetLoginState();
 }
 
-static const wsw::string_view &CL_MM_GetLastErrorMessage() {
+static const wsw::StringView &CL_MM_GetLastErrorMessage() {
 	return CLStatsowFacade::Instance()->GetLastErrorMessage();
 }
 
-static const wsw::string_view &CL_MM_GetProfileWebUrl() {
+static const wsw::StringView &CL_MM_GetProfileWebUrl() {
 	return CLStatsowFacade::Instance()->GetProfileWebUrl();
 }
 
-static const wsw::string_view &CL_MM_GetProfileRmlUrl() {
+static const wsw::StringView &CL_MM_GetProfileRmlUrl() {
 	return CLStatsowFacade::Instance()->GetProfileRmlUrl();
 }
 
-static const wsw::string_view &CL_MM_GetBaseWebUrl() {
+static const wsw::StringView &CL_MM_GetBaseWebUrl() {
 	return CLStatsowFacade::Instance()->GetBaseWebUrl();
 }
 

@@ -187,10 +187,10 @@ typedef struct {
 	bool ( *MM_Login )( const char *user, const char *password );
 	bool ( *MM_Logout )( bool force );
 	int ( *MM_GetLoginState )();
-	const wsw::string_view &( *MM_GetLastErrorMessage )();
-	const wsw::string_view &( *MM_GetProfileWebUrl )();
-	const wsw::string_view &( *MM_GetProfileRmlUrl )();
-	const wsw::string_view &( *MM_GetBaseWebUrl )();
+	const wsw::StringView &( *MM_GetLastErrorMessage )();
+	const wsw::StringView &( *MM_GetProfileWebUrl )();
+	const wsw::StringView &( *MM_GetProfileRmlUrl )();
+	const wsw::StringView &( *MM_GetBaseWebUrl )();
 
 	void *( *Mem_Alloc )( size_t size, const char *filename, int fileline );
 	void ( *Mem_Free )( void *data, const char *filename, int fileline );

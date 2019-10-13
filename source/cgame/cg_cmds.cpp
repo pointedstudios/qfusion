@@ -748,7 +748,7 @@ static void CG_SC_MenuQuick() {
 }
 
 static void PutRespectMenuItems( int highlightEntryNum ) {
-	wsw::stringstream ss;
+	wsw::StringStream ss;
 
 	auto add = [&]( const char *token, int i ) {
 		ss << va( "btn%i \"`%s` !\" ", i, token );
@@ -768,7 +768,7 @@ static void PutRespectMenuItems( int highlightEntryNum ) {
 
 	ss << "highlight" << " \"" << highlightEntryNum << "\" ";
 
-	const wsw::string s( ss.str() );
+	const wsw::String s( ss.str() );
 	memcpy( cg.quickmenu, s.data(), s.size() + 1 );
 
 	CG_RefreshQuickMenu();

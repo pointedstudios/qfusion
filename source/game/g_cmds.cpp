@@ -693,7 +693,7 @@ static void Cmd_Position_f( edict_t *ent ) {
 	}
 
 	if( !Q_stricmp( action, "details" ) ) {
-		wsw::stringstream ss;
+		wsw::StringStream ss;
 		ss << va( "Origin: %.6f %.6f %.6f, ", ent->s.origin[0], ent->s.origin[1], ent->s.origin[2] );
 		ss << va( "angles: %.6f %.6f\n", ent->s.angles[0], ent->s.angles[1] );
 		if( G_ISGHOSTING( ent ) ) {
@@ -727,7 +727,7 @@ static void Cmd_Position_f( edict_t *ent ) {
 		return;
 	}
 
-	wsw::stringstream ss;
+	wsw::StringStream ss;
 	ss << "Usage:\n";
 	ss << "position save - Save the current position (origin and angles)\n";
 	ss << "position showSaved - Displays an information about the saved position\n";
@@ -1387,7 +1387,7 @@ static const wsw::StringView callvoteValidate( "callvoteValidate" );
 static const wsw::StringView callvotePassed( "callvotePassed" );
 
 bool ClientCommandsHandler::IsWriteProtected( const wsw::StringView &name ) {
-	for( const wsw::string_view &s: { callvoteValidate, callvotePassed } ) {
+	for( const wsw::StringView &s: { callvoteValidate, callvotePassed } ) {
 		if( s.equalsIgnoreCase( name ) ) {
 			return true;
 		}
