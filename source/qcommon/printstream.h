@@ -150,7 +150,57 @@ public:
 		printFn( printerObj, "%s", value );
 		return *this;
 	}
+
+	PrintStream &operator<<( PrintStream & ( *fn )( PrintStream & ) ) {
+		return fn( *this );
+	}
 };
+
+#ifndef S_COLOR_BLACK
+#define S_COLOR_BLACK   "^0"
+#endif
+#ifndef S_COLOR_RED
+#define S_COLOR_RED     "^1"
+#endif
+#ifndef S_COLOR_GREEN
+#define S_COLOR_GREEN   "^2"
+#endif
+#ifndef S_COLOR_YELLOW
+#define S_COLOR_YELLOW  "^3"
+#endif
+#ifndef S_COLOR_BLUE
+#define S_COLOR_BLUE    "^4"
+#endif
+#ifndef S_COLOR_CYAN
+#define S_COLOR_CYAN    "^5"
+#endif
+#ifndef S_COLOR_MAGENTA
+#define S_COLOR_MAGENTA "^6"
+#endif
+#ifndef S_COLOR_WHITE
+#define S_COLOR_WHITE   "^7"
+#endif
+#ifndef S_COLOR_ORANGE
+#define S_COLOR_ORANGE  "^8"
+#endif
+#ifndef S_COLOR_GREY
+#define S_COLOR_GREY    "^9"
+#endif
+
+namespace colors {
+
+inline PrintStream &black( PrintStream &s ) { return s << S_COLOR_BLACK; }
+inline PrintStream &red( PrintStream &s ) { return s << S_COLOR_RED; }
+inline PrintStream &green( PrintStream &s ) { return s << S_COLOR_GREEN; }
+inline PrintStream &yellow( PrintStream &s ) { return s << S_COLOR_YELLOW; }
+inline PrintStream &blue( PrintStream &s ) { return s << S_COLOR_BLUE; }
+inline PrintStream &cyan( PrintStream &s ) { return s << S_COLOR_CYAN; }
+inline PrintStream &magenta( PrintStream &s ) { return s << S_COLOR_MAGENTA; }
+inline PrintStream &white( PrintStream &s ) { return s << S_COLOR_WHITE; }
+inline PrintStream &orange( PrintStream &s ) { return s << S_COLOR_ORANGE; }
+inline PrintStream &grey( PrintStream &s ) { return s << S_COLOR_GREY; }
+
+}
 
 template <typename T>
 PrintStream &PrintStream::operator<<( FloatLikePrintable<T> &&printable ) {
