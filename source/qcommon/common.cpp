@@ -19,6 +19,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // common.c -- misc functions used in client and server
 #include "qcommon.h"
+#include "printstream.h"
+
+// TODO: Lift the header to the toplevel
+#include "../game/ai/static_vector.h"
 
 #if ( defined( _MSC_VER ) && ( defined( _M_IX86 ) || defined( _M_AMD64 ) || defined( _M_X64 ) ) )
 // For __cpuid() intrinsic
@@ -71,7 +75,10 @@ static cvar_t *logconsole_flush;
 static cvar_t *logconsole_timestamp;
 static cvar_t *com_introPlayed3;
 
+// TODO: Merge these once a full switch to LogLine is performed
 static qmutex_t *com_print_mutex;
+static qmutex_t *com_logline_mutex;
+static qmutex_t *com_failure_mutex;
 
 static int log_file = 0;
 
@@ -209,6 +216,293 @@ static void Com_ReopenConsoleLog( void ) {
 	if( errmsg[0] ) {
 		Com_Printf( "%s", errmsg );
 	}
+}
+
+class ConsoleLogStream : public wsw::streams::PrintStream {
+	friend class wsw::LogLine;
+	friend class wsw::FailureTrigger;
+
+	enum { kLineSize = MAX_PRINTMSG };
+
+	char *lineBuffer;
+	size_t lineLenSoFar { 0 };
+
+	void print( const char *, va_list );
+
+	static const char *stripFilePrefix( const char *fileName );
+
+	void printLinePrefix( const char *fileName, int line );
+
+	void flush() {
+		if( !lineLenSoFar ) {
+			return;
+		}
+
+		if( lineBuffer[lineLenSoFar - 1] != '\n' ) {
+			if( lineLenSoFar < kLineSize + 2 ) {
+				lineBuffer[lineLenSoFar++] = '\n';
+				lineBuffer[lineLenSoFar++] = '\0';
+			} else {
+				lineBuffer[kLineSize - 2] = '\n';
+				lineBuffer[kLineSize - 1] = '\0';
+			}
+		}
+
+		Com_Printf( "%s", lineBuffer );
+		lineLenSoFar = 0;
+	}
+
+	[[noreturn]]
+	void drop() {
+		Com_Error( ERR_DROP, "%s", lineBuffer );
+	}
+
+	[[noreturn]]
+	void fatal() {
+		Com_Error( ERR_FATAL, "%s", lineBuffer );
+	}
+public:
+	explicit ConsoleLogStream( void ( *fn )( void *, const char *, ... ) )
+		: wsw::streams::PrintStream( fn, this ) {
+		lineBuffer = new char[kLineSize];
+	}
+
+	virtual ~ConsoleLogStream() {
+		delete lineBuffer;
+	}
+
+	static void printProxy( void *, const char *, ... );
+	static void debugPrintProxy( void *, const char *, ... );
+};
+
+class AllocatedLogStream;
+
+template <typename Stream>
+class LogStreamAllocator {
+	static constexpr const int kMaxStreams = 8;
+	static constexpr const int kMaxTopOfStack = kMaxStreams - 1;
+
+	StaticVector<Stream, kMaxStreams> streams;
+
+	int topOfStack { 0 };
+	int numToSReuses { 0 };
+public:
+	LogStreamAllocator() {
+		// Precache the initial stream
+		new( streams.unsafe_grow_back() )Stream( this );
+	}
+
+	std::pair<AllocatedLogStream *, bool> alloc() {
+		Stream *result;
+		if( topOfStack < kMaxTopOfStack ) {
+			assert( !numToSReuses );
+			if( streams.size() == topOfStack ) {
+				new( streams.unsafe_grow_back() )Stream( this );
+			}
+			result = &streams[topOfStack++];
+			return std::make_pair( result, false );
+		}
+
+		assert( topOfStack == kMaxTopOfStack );
+		result = &streams[kMaxTopOfStack];
+		numToSReuses++;
+		return std::make_pair( result, true );
+	}
+
+	void free( AllocatedLogStream *stream ) {
+		const Stream *streamsBegin = streams.begin();
+		const Stream *streamsBack = streamsBegin + kMaxTopOfStack;
+		const Stream *argAddr = (Stream *)stream;
+		if( argAddr != streamsBack ) {
+			// `topOfStack` points at the space after the top element
+			assert( topOfStack == (int)( argAddr - streamsBegin ) + 1 );
+			topOfStack--;
+			return;
+		}
+
+		if( !numToSReuses ) {
+			topOfStack--;
+			return;
+		}
+
+		numToSReuses--;
+	}
+};
+
+/**
+ * A non-template base for descendants.
+ * This allows referral to {@code deleteSelf()} without specifying a template parameter.
+ */
+class AllocatedLogStream : public ConsoleLogStream {
+public:
+	virtual void deleteSelf() = 0;
+
+	explicit AllocatedLogStream( void ( *fn )( void *, const char *, ... ) )
+		: ConsoleLogStream( fn ) {}
+};
+
+template <typename Self>
+class AllocatorChildStream : public AllocatedLogStream {
+protected:
+	using AllocatorType = LogStreamAllocator<Self>;
+private:
+	AllocatorType *parent;
+protected:
+	void deleteSelf() override {
+		parent->free( this );
+	}
+
+	AllocatorChildStream( void ( *fn )( void *, const char *, ... ), LogStreamAllocator<Self> *parent_ )
+		: AllocatedLogStream( fn ), parent( parent_ ) {}
+};
+
+class RegularLogStream : public AllocatorChildStream<RegularLogStream> {
+public:
+	explicit RegularLogStream( AllocatorType *parent_ )
+		: AllocatorChildStream<RegularLogStream>( ConsoleLogStream::printProxy, parent_ ) {}
+};
+
+class DebugLogStream : public AllocatorChildStream<DebugLogStream> {
+public:
+	explicit DebugLogStream( AllocatorType *parent_ )
+		: AllocatorChildStream<DebugLogStream>( ConsoleLogStream::debugPrintProxy, parent_ ) {}
+};
+
+ConsoleLogStream fatalLogStream( ConsoleLogStream::printProxy );
+
+LogStreamAllocator<RegularLogStream> regularLogStreams;
+LogStreamAllocator<DebugLogStream> debugLogStreams;
+
+void ConsoleLogStream::printProxy( void *obj, const char *fmt, ... ) {
+	va_list va;
+	va_start( va, fmt );
+	( ( ConsoleLogStream *)obj )->print( fmt, va );
+	va_end( va );
+}
+
+void ConsoleLogStream::debugPrintProxy( void *obj, const char *fmt, ... ) {
+	if( !developer->integer ) {
+		return;
+	}
+
+	va_list va;
+	va_start( va, fmt );
+	( ( ConsoleLogStream *)obj )->print( fmt, va );
+	va_end( va );
+}
+
+void ConsoleLogStream::print( const char *fmt, va_list va ) {
+	assert( kLineSize >= lineLenSoFar );
+	int res = Q_vsnprintfz( lineBuffer + lineLenSoFar, kLineSize - lineLenSoFar, fmt, va );
+	if( res >= 0 ) {
+		lineLenSoFar += (unsigned)res;
+	}
+}
+
+const char *ConsoleLogStream::stripFilePrefix( const char *fileName ) {
+	// TODO: Stripping of file path prefix could be done in compile time.
+	// There were some troubles in forcing compile-time computations
+	// in this case so a more robust runtime version is currently used.
+
+#ifndef WIN32
+	const char *prefix = std::strstr( fileName, "qfusion/source/" );
+#else
+	const char *prefix = std::strstr( fileName, "qfusion\\source\\" );
+	// In case if some compiler uses forward slashes in filenames on Windows
+	if( !prefix ) {
+		prefix = std::strstr( fileName, "qfusion/source/" );
+	}
+#endif
+	return prefix ? prefix + sizeof( "qfusion/source" ) : fileName;
+}
+
+void ConsoleLogStream::printLinePrefix( const char *fileName, int line ) {
+	*this << '[';
+
+	size_t lineDigits;
+	if( line < 10 ) {
+		lineDigits = 1;
+	} else if( line < 100 ) {
+		lineDigits = 2;
+	} else if( line < 1000 ) {
+		lineDigits = 3;
+	} else {
+		lineDigits = 4;
+	}
+
+	const size_t limit = 22 - lineDigits;
+	size_t nameLen = std::strlen( fileName );
+	if( nameLen <= limit ) {
+		*this << fileName;
+		for( size_t i = nameLen; i < limit; ++i ) {
+			*this << ' ';
+		}
+	} else {
+		for( size_t i = 0; i < nameLen; ++i ) {
+			*this << fileName[i + nameLen - limit];
+		}
+	}
+
+	*this << ':' << line << "]: ";
+}
+
+wsw::FailureTrigger::FailureTrigger( const char *fileName_, int line_ )
+	: fileName( fileName_ ), line( line_ ) {
+	QMutex_Lock( com_failure_mutex );
+}
+
+wsw::streams::PrintStream& wsw::FailureTrigger::startWritingToStream( com_error_code_t code_ ) {
+	const char *shownFileName = ConsoleLogStream::stripFilePrefix( fileName );
+	if( activeStream ) {
+		Com_Error( ERR_FATAL, "%s:%d: Internal error: A stream is already set", shownFileName, line );
+	}
+
+	code = code_;
+	activeStream = &fatalLogStream;
+	fatalLogStream.printLinePrefix( shownFileName, line );
+	return *activeStream;
+}
+
+wsw::FailureTrigger::~FailureTrigger() {
+	// TODO: Release properly on scope exit once Com_Error() starts using exceptions for stack unwinding
+	QMutex_Unlock( com_failure_mutex );
+	if( code == ERR_DROP ) {
+		fatalLogStream.drop();
+	} else {
+		fatalLogStream.fatal();
+	}
+}
+
+wsw::LogLine::LogLine( const char *fileName_, int line_ )
+	: fileName( fileName_ ), line( line_ ) {
+	// TODO: Either ensure this is a recursive mutex on every platform or use std::recursive_mutex
+	QMutex_Lock( com_logline_mutex );
+}
+
+wsw::streams::PrintStream &wsw::LogLine::startWritingToStream( bool debugOne ) {
+	const char *shownFileName = ConsoleLogStream::stripFilePrefix( fileName );
+	if( activeStream ) {
+		Com_Error( ERR_FATAL, "%s:%d: Internal error: A stream is already set", shownFileName, line );
+	}
+
+	auto [stream, hasToReuse] = !debugOne ? regularLogStreams.alloc() : debugLogStreams.alloc();
+	if( hasToReuse ) {
+		stream->flush();
+	}
+
+	stream->printLinePrefix( shownFileName, line );
+	activeStream = stream;
+	return *activeStream;
+}
+
+wsw::LogLine::~LogLine() {
+	*activeStream << wsw::streams::colors::white << '\n';
+
+	auto *realStream = (AllocatedLogStream *)activeStream;
+	realStream->flush();
+	realStream->deleteSelf();
+
+	QMutex_Unlock( com_logline_mutex );
 }
 
 /*
@@ -756,6 +1050,8 @@ void Qcommon_Init( int argc, char **argv ) {
 	QThreads_Init();
 
 	com_print_mutex = QMutex_Create();
+	com_logline_mutex = QMutex_Create();
+	com_failure_mutex = QMutex_Create();
 
 	// Force doing this early as this could fork for executing shell commands on UNIX.
 	// Required being able to call Com_Printf().
@@ -1031,6 +1327,8 @@ void Qcommon_Shutdown( void ) {
 	Cbuf_Shutdown();
 	Memory_Shutdown();
 
+	QMutex_Destroy( &com_failure_mutex );
+	QMutex_Destroy( &com_logline_mutex );
 	QMutex_Destroy( &com_print_mutex );
 
 	QThreads_Shutdown();

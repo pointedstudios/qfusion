@@ -9,7 +9,7 @@
 #include <stddef.h>
 #include <stdarg.h>
 
-#include "ai_local.h"
+#include "../../gameshared/q_shared.h"
 
 #ifdef _MSC_VER
 #pragma warning( disable : 4324 )       // structure was padded due to alignment specifier
@@ -44,10 +44,14 @@ private:
 	inline static void fail_with( const char *format, ... )
 #endif
 	{
+		char buffer[1024];
+
 		va_list va;
 		va_start( va, format );
-		AI_FailWithv( "StaticVector::fail_with()", format, va );
+		Q_vsnprintfz( buffer, sizeof( buffer ), format, va );
 		va_end( va );
+
+		Sys_Error( "%s", buffer );
 	}
 
 	inline ptrdiff_t idx( const_iterator ptr ) { return ptr - basePointer; }
