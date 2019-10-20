@@ -662,6 +662,10 @@ QGL_FUNC( void, glDrawArraysInstanced, ( GLenum mode, GLint first, GLsizei count
 QGL_FUNC( void, glDrawElementsInstanced, ( GLenum mode, GLsizei count, GLenum type, const GLvoid * indices, GLsizei primcount ) );
 QGL_FUNC( void, glVertexAttribDivisor, ( GLuint index, GLuint divisor ) );
 
+QGL_FUNC( void, glGenVertexArrays, ( GLsizei n, GLuint *arrays ) );
+QGL_FUNC( void, glDeleteVertexArrays, ( GLsizei n, const GLuint *arrays ) );
+QGL_FUNC( void, glBindVertexArray, ( GLuint array ) )
+
 QGL_FUNC( GLboolean, glIsRenderbuffer, ( GLuint ) );
 QGL_FUNC( void, glBindRenderbuffer, ( GLenum, GLuint ) );
 QGL_FUNC( void, glDeleteRenderbuffers, ( GLsizei, const GLuint * ) );

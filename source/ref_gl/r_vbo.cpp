@@ -53,6 +53,8 @@ static size_t r_vbo_tempvsoupsize;
 
 static int r_num_active_vbos;
 
+static GLuint r_vao;
+
 static elem_t *R_VBOElemBuffer( unsigned numElems );
 static void *R_VBOVertBuffer( unsigned numVerts, size_t vertSize );
 
@@ -84,6 +86,9 @@ void R_InitVBO( void ) {
 	for( i = 0; i < MAX_MESH_VERTEX_BUFFER_OBJECTS - 1; i++ ) {
 		r_vbohandles[i].next = &r_vbohandles[i + 1];
 	}
+
+	qglGenVertexArrays( 1, &r_vao );
+	qglBindVertexArray( r_vao );
 }
 
 /*
@@ -873,4 +878,8 @@ void R_ShutdownVBO( void ) {
 		R_Free( r_vbo_tempelems );
 	}
 	r_vbo_numtempelems = 0;
+
+	qglBindVertexArray( 0 );
+	qglDeleteVertexArrays( 1, &r_vao );
+	r_vao = 0;
 }
