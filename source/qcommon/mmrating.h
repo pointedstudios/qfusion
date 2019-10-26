@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define __MM_RATING_H__
 
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cinttypes>
 #include <cassert>

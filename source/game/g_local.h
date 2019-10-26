@@ -1382,9 +1382,7 @@ struct gclient_s {
 	}
 };
 
-namespace std {
-	template<typename F> class function;
-}
+#include <functional>
 
 class StatsowFacade {
 	friend class ChatHandlersChain;

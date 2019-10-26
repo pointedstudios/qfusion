@@ -542,7 +542,7 @@ public:
 	 */
 	QueryObject &SetPort( int value ) {
 		char buffer[64];
-		sprintf( buffer, "%d", value );
+		std::sprintf( buffer, "%d", value );
 		buffer[sizeof( buffer ) - 1] = '\0';
 		return SetField( "port", buffer );
 	}
