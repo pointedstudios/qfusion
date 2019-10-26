@@ -287,7 +287,6 @@ if (NOT GAME_MODULES_ONLY)
 
     if (NOT SERVER_ONLY)
         add_subdirectory(snd_openal)
-        add_subdirectory(ui)
         add_subdirectory(client)
     endif()
 endif()
