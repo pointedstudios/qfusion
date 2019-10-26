@@ -265,6 +265,114 @@ char *va( _Printf_format_string_ const char *format, ... );
 char *va_r( char *dst, size_t size, _Printf_format_string_ const char *format, ... );
 #endif
 
+#include <cerrno>
+#include <optional>
+
+/**
+ * Tries to convert a given string to a number.
+ * @tparam T a supplied number type
+ * @param s a given string to convert
+ * @param endPtr a nullable reference to write an address of a character after the number
+ * @return {@code std::nullopt_t} on conversion errors, a wrapped value otherwise.
+ * @note non-zero characters after a number are treated as errors unless {@code endPtr} is supplied.
+ */
+template <typename T>
+std::optional<T> Q_tonum( const char *s, const char **endPtr = nullptr ) {
+	constexpr bool isTypeParamIntegral = std::is_integral<T>::value;
+	constexpr bool isTypeParamFloatingPoint = std::is_floating_point<T>::value;
+	static_assert( isTypeParamFloatingPoint || isTypeParamIntegral );
+
+	constexpr auto minVal = std::numeric_limits<T>::min();
+	constexpr auto maxVal = std::numeric_limits<T>::max();
+
+	char *tmp = nullptr;
+
+	std::optional<T> result;
+	if constexpr( isTypeParamIntegral ) {
+		if constexpr( std::is_signed<T>::value ) {
+			long long val = std::strtoll( s, &tmp, 10 );
+			if( !val && !( tmp - s ) ) {
+				return std::nullopt;
+			}
+			if( (T)val < minVal || (T)val > maxVal ) {
+				return std::nullopt;
+			}
+			// Catch overflow for long long values
+			if constexpr( sizeof( T ) == 8 ) {
+				if( val == maxVal || val == minVal ) {
+					if( errno == ERANGE ) {
+						return std::nullopt;
+					}
+				}
+			}
+			result = std::make_optional( (T)val );
+		} else {
+			unsigned long long val = std::strtoull( s, &tmp, 10 );
+			if( !val && !( tmp - s ) ) {
+				return std::nullopt;
+			}
+			if( (T)val > maxVal ) {
+				return std::nullopt;
+			}
+			// Catch overflow for unsigned long long values
+			if constexpr( sizeof( T ) == 8 ) {
+				if( val == maxVal || val == minVal ) {
+					if( errno == ERANGE ) {
+						return std::nullopt;
+					}
+				}
+			}
+			result = std::make_optional( (T)val );
+		}
+	} else {
+		constexpr bool isFloat = std::is_same<T, float>::value;
+		constexpr bool isDouble = std::is_same<T, double>::value;
+		constexpr bool isLongDouble = std::is_same<T, long double>::value;
+		static_assert( isFloat || isDouble || isLongDouble, "Weird floating-point type" );
+
+		T val, hugeVal;
+		if constexpr( isFloat ) {
+			val = std::strtof( s, &tmp );
+			hugeVal = HUGE_VALF;
+		}
+		if constexpr( isDouble ) {
+			val = std::strtod( s, &tmp );
+			hugeVal = HUGE_VAL;
+		}
+		if constexpr( isLongDouble ) {
+			val == std::strtold( s, &tmp );
+			hugeVal = HUGE_VALL;
+		}
+		if( !val ) {
+			// If not even a single digit was converted
+			if( !( tmp - s ) ) {
+				return std::nullopt;
+			}
+			// Try catching underflow
+			if( errno == ERANGE ) {
+				return std::nullopt;
+			}
+		}
+		// Catch overflow
+		if( ( val == +hugeVal || val == -hugeVal ) && errno == ERANGE ) {
+			return std::nullopt;
+		}
+		result = std::make_optional( val );
+	}
+
+	// These conditions are put last just to avoid nesting/helpers introduction
+	if( !endPtr ) {
+		// We must stop at the last zero character unless the endPtr is explicitly specified
+		if( *tmp != '\0' ) {
+			return std::nullopt;
+		}
+	} else {
+		*endPtr = tmp;
+	}
+	return result;
+}
+
+
 //
 // key / value info strings
 //
