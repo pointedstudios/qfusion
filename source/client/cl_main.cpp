@@ -2911,9 +2911,6 @@ void CL_Init( void ) {
 
 	CL_Sys_Init();
 
-	// init localization subsystem
-	L10n_Init();
-
 	Steam_Init();
 	// Do this before UI initialization!
 	CLStatsowFacade::Init();
@@ -2994,7 +2991,6 @@ void CL_Shutdown( void ) {
 	CL_GameModule_Shutdown();
 	CL_SoundModule_Shutdown( true );
 	CL_ShutdownInput();
-	L10n_Shutdown();
 	VID_Shutdown();
 
 	CL_ShutdownMedia();

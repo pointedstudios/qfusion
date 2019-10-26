@@ -31,7 +31,6 @@
 #include "input.h"
 #include "keys.h"
 #include "console.h"
-#include "l10n.h"
 
 #include <algorithm>
 #include <array>

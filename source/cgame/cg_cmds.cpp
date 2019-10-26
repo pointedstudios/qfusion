@@ -556,12 +556,6 @@ static void CG_SC_HelpMessage( void ) {
 		return;
 	}
 
-	if( !( IN_SupportedDevices() & IN_DEVICE_KEYBOARD ) ) {
-		char nokeyboard[MAX_CONFIGSTRING_CHARS + 16];
-		Q_snprintfz( nokeyboard, sizeof( nokeyboard ), "%s_nokeyboard", id );
-		helpmessage = L10n_TranslateString( CGAME_L10N_DOMAIN, nokeyboard );
-	}
-
 	if( !helpmessage ) {
 		helpmessage = CG_TranslateString( id );
 	}

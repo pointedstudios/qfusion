@@ -366,8 +366,6 @@ void VID_CheckChanges( void ) {
 
 		FTLIB_FreeFonts( false );
 
-		L10n_ClearDomains();
-
 		Cvar_GetLatchedVars( CVAR_LATCH_VIDEO );
 
 load_refresh:
@@ -485,9 +483,6 @@ load_refresh:
 		SoundSystem::Instance()->BeginRegistration();
 
 		FTLIB_PrecacheFonts( verbose );
-
-		// load common localization strings
-		L10n_LoadLangPOFile( "common", "l10n" );
 
 		if( vid_ref_was_active ) {
 			IN_Restart();

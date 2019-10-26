@@ -743,22 +743,12 @@ static void Con_DrawInput( int vislines ) {
 * Returns the prompt for the chat input
 */
 static const char *Con_ChatPrompt( void ) {
-	const char *text, *translated;
-
 	if( chat_team || ctrl_is_down ) {
-		text = "say (to team):";
+		return "say (to team):";
 	} else if( IN_SupportedDevices() & IN_DEVICE_TOUCHSCREEN ) {
-		text = "say (to all):";
-	} else {
-		text = "say:";
+		return "say (to all):";
 	}
-
-	translated = L10n_TranslateString( "common", text );
-	if( !translated ) {
-		return text;
-	}
-
-	return translated;
+	return "say:";
 }
 
 /*
