@@ -121,7 +121,7 @@ void MSG_ReadDeltaGameState( msg_t *msg, const game_state_t *from, game_state_t 
 void MSG_ReadDir( msg_t *sb, vec3_t vector );
 void MSG_ReadData( msg_t *sb, void *buffer, size_t length );
 void MSG_ReadDeltaStruct( msg_t *msg, const void *from, void *to, size_t size, const msg_field_t *fields, size_t numFields );
-
+int MSG_BytesLeft( const msg_t *msg );
 //============================================================================
 
 typedef struct purelist_s {

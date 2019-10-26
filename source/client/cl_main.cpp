@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../qcommon/asyncstream.h"
 #include "../qcommon/hash.h"
 #include "../ref_gl/r_frontend.h"
+#include "serverlist.h"
 
 #include <random>
 
@@ -1056,15 +1057,9 @@ static void CL_ConnectionlessPacket( const socket_t *socket, const netadr_t *add
 
 	s = MSG_ReadStringLine( msg );
 
-	if( !strncmp( s, "getserversResponse\\", 19 ) ) {
+	if( !strncmp( s, "getserversResponse", 18 ) ) {
 		Com_DPrintf( "%s: %s\n", NET_AddressToString( address ), "getserversResponse" );
-		CL_ParseGetServersResponse( socket, address, msg, false );
-		return;
-	}
-
-	if( !strncmp( s, "getserversExtResponse", 21 ) ) {
-		Com_DPrintf( "%s: %s\n", NET_AddressToString( address ), "getserversExtResponse" );
-		CL_ParseGetServersResponse( socket, address, msg, true );
+		ServerList::instance()->parseGetServersResponse( socket, *address, msg );
 		return;
 	}
 
@@ -1073,20 +1068,14 @@ static void CL_ConnectionlessPacket( const socket_t *socket, const netadr_t *add
 
 	Com_DPrintf( "%s: %s\n", NET_AddressToString( address ), s );
 
-	// server responding to a status broadcast
-	if( !strcmp( c, "info" ) ) {
-		CL_ParseStatusMessage( socket, address, msg );
-		return;
-	}
-
 	// jal : wsw
 	// server responding to a detailed info broadcast
 	if( !strcmp( c, "infoResponse" ) ) {
-		CL_ParseGetInfoResponse( socket, address, msg );
+		ServerList::instance()->parseGetInfoResponse( socket, *address, msg );
 		return;
 	}
 	if( !strcmp( c, "statusResponse" ) ) {
-		CL_ParseGetStatusResponse( socket, address, msg );
+		ServerList::instance()->parseGetStatusResponse( socket, *address, msg );
 		return;
 	}
 
@@ -2051,9 +2040,6 @@ static void CL_InitLocal( void ) {
 	//
 	Cmd_AddCommand( "s_restart", CL_S_Restart_f );
 	Cmd_AddCommand( "cmd", CL_ForwardToServer_f );
-	Cmd_AddCommand( "requestservers", CL_GetServers_f );
-	Cmd_AddCommand( "getinfo", CL_QueryGetInfoMessage_f ); // wsw : jal : ask for server info
-	Cmd_AddCommand( "getstatus", CL_QueryGetStatusMessage_f ); // wsw : jal : ask for server info
 	Cmd_AddCommand( "userinfo", CL_Userinfo_f );
 	Cmd_AddCommand( "disconnect", CL_Disconnect_f );
 	Cmd_AddCommand( "record", CL_Record_f );
@@ -2070,7 +2056,6 @@ static void CL_InitLocal( void ) {
 	Cmd_AddCommand( "demo", CL_PlayDemo_f );
 	Cmd_AddCommand( "demoavi", CL_PlayDemoToAvi_f );
 	Cmd_AddCommand( "next", CL_SetNext_f );
-	Cmd_AddCommand( "pingserver", CL_PingServer_f );
 	Cmd_AddCommand( "demopause", CL_PauseDemo_f );
 	Cmd_AddCommand( "demojump", CL_DemoJump_f );
 	Cmd_AddCommand( "showserverip", CL_ShowServerIP_f );
@@ -2091,9 +2076,6 @@ static void CL_ShutdownLocal( void ) {
 
 	Cmd_RemoveCommand( "s_restart" );
 	Cmd_RemoveCommand( "cmd" );
-	Cmd_RemoveCommand( "requestservers" );
-	Cmd_RemoveCommand( "getinfo" );
-	Cmd_RemoveCommand( "getstatus" );
 	Cmd_RemoveCommand( "userinfo" );
 	Cmd_RemoveCommand( "disconnect" );
 	Cmd_RemoveCommand( "record" );
@@ -2110,7 +2092,6 @@ static void CL_ShutdownLocal( void ) {
 	Cmd_RemoveCommand( "demo" );
 	Cmd_RemoveCommand( "demoavi" );
 	Cmd_RemoveCommand( "next" );
-	Cmd_RemoveCommand( "pingserver" );
 	Cmd_RemoveCommand( "demopause" );
 	Cmd_RemoveCommand( "demojump" );
 	Cmd_RemoveCommand( "showserverip" );
@@ -2421,7 +2402,7 @@ static void CL_NetFrame( int realMsec, int gameMsec ) {
 	CL_CheckForResend();
 	CL_CheckDownloadTimeout();
 
-	CL_ServerListFrame();
+	ServerList::instance()->frame();
 }
 
 /*
@@ -2944,6 +2925,8 @@ void CL_Init( void ) {
 	CL_InitInput();
 
 	CL_InitAsyncStream();
+	// Caution! The UI system relies on the server list being in a valid state.
+	ServerList::init();
 
 	CL_InitMedia();
 
@@ -2951,8 +2934,6 @@ void CL_Init( void ) {
 
 	// check for update
 	CL_CheckForUpdate();
-
-	CL_InitServerList();
 
 	ML_Init();
 }
@@ -2973,8 +2954,6 @@ void CL_Shutdown( void ) {
 	ML_Shutdown();
 
 	CLStatsowFacade::Shutdown();
-
-	CL_ShutDownServerList();
 
 	CL_WriteConfiguration( "config.cfg", true );
 
