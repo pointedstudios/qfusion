@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../qcommon/qcommon.h"
 
 #include <algorithm>
+#include <tuple>
 
 #define MAX_GLIMAGES        8192
 #define IMAGES_HASH_SIZE    64
@@ -764,73 +765,47 @@ static void R_MipMap16( unsigned short *in, int width, int height, int rMask, in
 	}
 }
 
-/*
-* R_TextureInternalFormat
-*/
-static int R_TextureInternalFormat( int samples, int flags, int pixelType ) {
-	bool sRGB = ( flags & IT_SRGB ) != 0;
+static const GLint kSwizzleMaskIdentity[] = { GL_RED, GL_GREEN, GL_BLUE, GL_ALPHA };
+static const GLint kSwizzleMaskAlpha[] = { GL_ZERO, GL_ZERO, GL_ZERO, GL_RED };
+static const GLint kSwizzleMaskLuminance[] = { GL_RED, GL_RED, GL_RED, GL_ALPHA };
+static const GLint kSwizzleMaskLuminanceAlpha[] = { GL_RED, GL_RED, GL_RED, GL_GREEN };
+
+static std::pair<GLuint, const GLint *> R_TextureInternalFormat( int samples, int flags ) {
+	const bool sRGB = ( flags & IT_SRGB ) != 0;
 
 	if( !( flags & IT_NOCOMPRESS ) && r_texturecompression->integer ) {
-		if( sRGB ) {
-			if( samples == 4 ) {
-				return GL_COMPRESSED_SRGB_ALPHA;
-			}
-			if( samples == 3 ) {
-				return GL_COMPRESSED_SRGB;
-			}
-			if( samples == 2 ) {
-				return GL_COMPRESSED_SLUMINANCE;
-			}
-			if( ( samples == 1 ) && !( flags & IT_ALPHAMASK ) ) {
-				return GL_COMPRESSED_SLUMINANCE_ALPHA;
-			}
-		} else {
-			if( samples == 4 ) {
-				return GL_COMPRESSED_RGBA;
-			}
-			if( samples == 3 ) {
-				return GL_COMPRESSED_RGB;
-			}
-			if( samples == 2 ) {
-				return GL_COMPRESSED_LUMINANCE_ALPHA;
-			}
-			if( ( samples == 1 ) && !( flags & IT_ALPHAMASK ) ) {
-				return GL_COMPRESSED_LUMINANCE;
-			}
+		if( samples == 4 ) {
+			return { sRGB ? GL_COMPRESSED_SRGB_ALPHA : GL_COMPRESSED_RGBA, kSwizzleMaskIdentity };
+		}
+		if( samples == 3 ) {
+			return { sRGB ? GL_COMPRESSED_SRGB :  GL_COMPRESSED_RGB, kSwizzleMaskIdentity };
+		}
+		if( samples == 2 ) {
+			return { sRGB ? GL_COMPRESSED_SLUMINANCE_ALPHA : GL_COMPRESSED_RG, kSwizzleMaskLuminanceAlpha };
+		}
+		if( ( samples == 1 ) && !( flags & IT_ALPHAMASK ) ) {
+			return { sRGB ? GL_COMPRESSED_SLUMINANCE : GL_COMPRESSED_RED, kSwizzleMaskLuminance };
 		}
 	}
 
 	if( samples == 3 ) {
-		if( sRGB ) {
-			return GL_SRGB;
-		}
-		return GL_RGB;
+		return { sRGB ? GL_SRGB8 : GL_RGB8, kSwizzleMaskIdentity };
 	}
 
 	if( samples == 2 ) {
-		if( sRGB ) {
-			return GL_SLUMINANCE_ALPHA;
-		}
-		return GL_LUMINANCE_ALPHA;
+		return { sRGB ? GL_RG16F : GL_RG, kSwizzleMaskLuminanceAlpha };
 	}
 
 	if( samples == 1 ) {
-		if( sRGB ) {
-			return ( ( flags & IT_ALPHAMASK ) ? GL_ALPHA : GL_SLUMINANCE );
-		}
-		return ( ( flags & IT_ALPHAMASK ) ? GL_ALPHA : GL_LUMINANCE );
+		const GLint *mask = ( flags & IT_ALPHAMASK ) ? kSwizzleMaskAlpha : kSwizzleMaskLuminance;
+		return { sRGB ? GL_R16F : GL_R8, mask };
 	}
 
-	if( sRGB ) {
-		return GL_SRGB8_ALPHA8;
-	}
-	return GL_RGBA;
+	return { sRGB ? GL_SRGB8_ALPHA8 : GL_RGBA8, kSwizzleMaskIdentity };
 }
 
-/*
-* R_TextureFormat
-*/
-static void R_TextureFormat( int flags, int samples, int *comp, int *format, int *type ) {
+static void R_TextureFormat( int flags, int samples, int *comp, int *format, int *type, const GLint **swizzleMask ) {
+	*swizzleMask = kSwizzleMaskIdentity;
 	if( flags & IT_DEPTH ) {
 		if( flags & IT_STENCIL ) {
 			*comp = *format = GL_DEPTH_STENCIL;
@@ -842,9 +817,11 @@ static void R_TextureFormat( int flags, int samples, int *comp, int *format, int
 	} else if( flags & IT_FRAMEBUFFER ) {
 		*type = GL_UNSIGNED_BYTE;
 		if( samples == 4 ) {
-			*comp = *format = GL_RGBA;
+			*format = GL_RGBA;
+			*comp = GL_RGBA8;
 		} else {
-			*comp = *format = GL_RGB;
+			*format = GL_RGB;
+			*comp = GL_RGB8;
 		}
 
 		if( flags & IT_FLOAT ) {
@@ -861,11 +838,14 @@ static void R_TextureFormat( int flags, int samples, int *comp, int *format, int
 		} else if( samples == 3 ) {
 			*format = ( flags & IT_BGRA ? GL_BGR_EXT : GL_RGB );
 		} else if( samples == 2 ) {
-			*format = GL_LUMINANCE_ALPHA;
+			*format = GL_RG;
+			*swizzleMask = kSwizzleMaskLuminanceAlpha;
 		} else if( flags & IT_ALPHAMASK ) {
-			*format = GL_ALPHA;
+			*format = GL_RED;
+			*swizzleMask = kSwizzleMaskAlpha;
 		} else {
-			*format = GL_LUMINANCE;
+			*format = GL_RED;
+			*swizzleMask = kSwizzleMaskLuminance;
 		}
 
 		if( flags & IT_FLOAT ) {
@@ -875,18 +855,23 @@ static void R_TextureFormat( int flags, int samples, int *comp, int *format, int
 			} else if( samples == 3 ) {
 				*comp = GL_RGB16F;
 			} else if( samples == 2 ) {
-				*comp = GL_LUMINANCE_ALPHA16F;
+				*comp = GL_RG16F;
 			} else if( flags & IT_ALPHAMASK ) {
-				*comp = GL_ALPHA16F;
+				*comp = GL_R16F;
 			} else {
-				*comp = GL_LUMINANCE16F;
+				*comp = GL_R16F;
 			}
 		} else {
 			*type = GL_UNSIGNED_BYTE;
 			*comp = *format;
+			if( *comp == GL_RGB ) {
+				*comp = GL_RGB8;
+			} else if( *comp == GL_RGBA ) {
+				*comp = GL_RGBA8;
+			}
 
 			if( !( flags & IT_3D ) ) {
-				*comp = R_TextureInternalFormat( samples, flags, GL_UNSIGNED_BYTE );
+				std::tie( *comp, *swizzleMask ) = R_TextureInternalFormat( samples, flags );
 			}
 		}
 	}
@@ -1012,10 +997,12 @@ static void R_Upload32( int ctx, uint8_t **data, int layer,
 		*upload_height = scaledHeight;
 	}
 
-	R_TextureFormat( flags, samples, &comp, &format, &type );
+	const GLint *swizzleMask = nullptr;
+	R_TextureFormat( flags, samples, &comp, &format, &type, &swizzleMask );
 
 	if( !( flags & ( IT_ARRAY | IT_3D ) ) ) { // set in R_Create3DImage
 		R_SetupTexParameters( flags, scaledWidth, scaledHeight, minmipsize );
+		qglTexParameteriv( R_TextureTarget( flags, nullptr ), GL_TEXTURE_SWIZZLE_RGBA, swizzleMask );
 	}
 
 	R_UnpackAlignment( ctx, 1 );
@@ -1160,7 +1147,7 @@ static void R_UploadMipmapped( int ctx, uint8_t **data,
 	int mip;
 	uint8_t *scaled[6] = { NULL };
 	int faces, faceSize = 0;
-	int target, comp;
+	int target;
 	int mips;
 	uint8_t *face;
 	int oldWidth = 0, oldHeight = 0;
@@ -1235,9 +1222,16 @@ static void R_UploadMipmapped( int ctx, uint8_t **data,
 		mipLevels = 1;
 	}
 
-	comp = R_TextureInternalFormat( pixelSize, flags, type );
-
+	auto [comp, swizzleMask] = R_TextureInternalFormat( pixelSize, flags );
 	R_SetupTexParameters( flags, scaledWidth, scaledHeight, minmipsize );
+	qglTexParameteriv( R_TextureTarget( flags, nullptr ), GL_TEXTURE_SWIZZLE_RGBA, swizzleMask );
+
+	// Hacks, should be gone along with overall codebase refactoring
+	if( format == GL_LUMINANCE || format == GL_ALPHA ) {
+		format = GL_RED;
+	} else if( format == GL_LUMINANCE_ALPHA ) {
+		format = GL_RG;
+	}
 
 	R_UnpackAlignment( ctx, 4 );
 
@@ -1837,7 +1831,10 @@ image_t *R_Create3DImage( const char *name, int width, int height, int layers, i
 	R_SetupTexParameters( flags, scaledWidth, scaledHeight, 1 );
 
 	R_TextureTarget( flags, &target );
-	R_TextureFormat( flags, samples, &comp, &format, &type );
+
+	const GLint *swizzleMask = nullptr;
+	R_TextureFormat( flags, samples, &comp, &format, &type, &swizzleMask );
+	qglTexParameteriv( R_TextureTarget( flags, nullptr ), GL_TEXTURE_SWIZZLE_RGBA, swizzleMask );
 
 	qglTexImage3D( target, 0, comp, scaledWidth, scaledHeight, layers, 0, format, type, nullptr );
 

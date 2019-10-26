@@ -339,8 +339,21 @@ QGL_EXTERN const char              *(*qglGetGLWExtensionsString)( void );
 #define GL_NONE					    0
 #define GL_BACK_LEFT				0x0402
 #define GL_BACK_RIGHT				0x0403
+
+#define GL_RED					   0x1903
+#define GL_GREEN				   0x1904
+#define GL_BLUE					   0x1905
+
 #define GL_RGB					    0x1907
 #define GL_RGBA					    0x1908
+
+#define GL_RGB8					    0x8051
+#define GL_RGBA8				    0x8058
+
+#define GL_RG                       0x8227
+#define GL_R8                       0x8229
+#define GL_RG8                      0x822B
+
 #define GL_ALPHA				    0x1906
 #define GL_LUMINANCE				0x1909
 #define GL_LUMINANCE_ALPHA			0x190A
@@ -358,12 +371,10 @@ QGL_EXTERN const char              *(*qglGetGLWExtensionsString)( void );
 #define GL_TEXTURE0                                     0x84C0
 #define GL_MAX_TEXTURE_IMAGE_UNITS                      0x8872
 
-#define GL_COMPRESSED_ALPHA                             0x84E9
-#define GL_COMPRESSED_LUMINANCE                         0x84EA
-#define GL_COMPRESSED_LUMINANCE_ALPHA                   0x84EB
-#define GL_COMPRESSED_INTENSITY                         0x84EC
 #define GL_COMPRESSED_RGB                               0x84ED
 #define GL_COMPRESSED_RGBA                              0x84EE
+#define GL_COMPRESSED_RED                               0x8225
+#define GL_COMPRESSED_RG                                0x8226
 
 #define GL_ETC1_RGB8_OES                                    0x8D64
 
@@ -383,6 +394,8 @@ QGL_EXTERN const char              *(*qglGetGLWExtensionsString)( void );
 
 #define GL_BGR_EXT                                          0x80E0
 #define GL_BGRA_EXT                                         0x80E1
+
+#define GL_TEXTURE_SWIZZLE_RGBA           0x8E46
 
 #define GL_COMPILE_STATUS                        0x8B81
 #define GL_LINK_STATUS                           0x8B82
@@ -455,10 +468,8 @@ QGL_EXTERN const char              *(*qglGetGLWExtensionsString)( void );
 
 #define GL_RGBA16F                    0x881A
 #define GL_RGB16F                     0x881B
-#define GL_ALPHA16F                   0x881C
-#define GL_INTENSITY16F               0x881D
-#define GL_LUMINANCE16F               0x881E
-#define GL_LUMINANCE_ALPHA16F         0x881F
+#define GL_R16F                           0x822D
+#define GL_RG16F                          0x822F
 
 #define GL_SRGB                       0x8C40
 #define GL_SRGB8                      0x8C41
@@ -590,6 +601,7 @@ QGL_FUNC( void, glStencilMask, ( GLuint mask ) );
 QGL_FUNC( void, glStencilOp, ( GLenum fail, GLenum zfail, GLenum zpass ) );
 QGL_FUNC( void, glTexImage2D, ( GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid * pixels ) );
 QGL_FUNC( void, glTexParameteri, ( GLenum target, GLenum pname, GLint param ) );
+QGL_FUNC( void, glTexParameteriv, ( GLenum target, GLenum pname, const GLint *params ) );
 QGL_FUNC( void, glTexSubImage2D, ( GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid * pixels ) );
 QGL_FUNC( void, glViewport, ( GLint x, GLint y, GLsizei width, GLsizei height ) );
 
