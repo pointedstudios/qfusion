@@ -911,8 +911,6 @@ static rserr_t R_PostInit( void ) {
 	rf.speedsMsgLock = QMutex_Create();
 	rf.debugSurfaceLock = QMutex_Create();
 
-	RJ_Init();
-
 	R_InitDrawLists();
 
 	if( !R_RegisterGLExtensions() ) {
@@ -1112,8 +1110,6 @@ void R_Shutdown( bool verbose ) {
 
 	QMutex_Destroy( &rf.speedsMsgLock );
 	QMutex_Destroy( &rf.debugSurfaceLock );
-
-	RJ_Shutdown();
 
 	// shut down OS specific OpenGL stuff like contexts, etc.
 	GLimp_Shutdown();

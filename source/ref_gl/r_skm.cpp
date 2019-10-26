@@ -1192,10 +1192,7 @@ static void R_SkeletalTransformNormalsAndSVecs( int numverts, const unsigned int
 # pragma fp_contract(off)   // this line is needed on Itanium processors
 #endif
 
-/*
-* R_CacheBoneTransformsJob
-*/
-static void R_CacheBoneTransformsJob( unsigned first, unsigned items, jobarg_t *ja ) {
+static void R_CacheBoneTransforms( skmcacheentry_t *cache ) {
 	unsigned i, j;
 	const entity_t *e;
 	float frontlerp;
@@ -1204,14 +1201,8 @@ static void R_CacheBoneTransformsJob( unsigned first, unsigned items, jobarg_t *
 	bonepose_t *out, tp;
 	mskbone_t *bone;
 	const mskmodel_t *skmodel;
-	skmcacheentry_t *cache;
 	mat4_t *bonePoseRelativeMat;
 	dualquat_t *bonePoseRelativeDQ;
-
-	cache = (skmcacheentry_t *)ja->parg;
-	if( !cache ) {
-		return;
-	}
 
 	e = R_NUM2ENT( cache->entNum );
 	skmodel = cache->skmodel;
@@ -1460,17 +1451,13 @@ void R_SkeletalModelFrameBounds( const model_t *mod, int frame, vec3_t mins, vec
 	VectorCopy( pframe->maxs, maxs );
 }
 
-/*
-* R_AddSkeletalModelCacheJob
-*/
-static void R_AddSkeletalModelCacheJob( const entity_t *e, const model_t *mod ) {
+static void R_AddSkeletalModelCache( const entity_t *e, const model_t *mod ) {
 	int entNum;
 	int framenum, oldframenum;
 	const mskmodel_t *skmodel;
 	const bonepose_t *bp, *oldbp;
 	skmcacheentry_t *cache;
 	bool hwTransform;
-	jobarg_t ja = { 0 };
 
 	entNum = R_ENT2NUM( e );
 	skmodel = ( ( mskmodel_t * )mod->extradata );
@@ -1537,8 +1524,7 @@ static void R_AddSkeletalModelCacheJob( const entity_t *e, const model_t *mod ) 
 		return;
 	}
 
-	ja.parg = cache;
-	RJ_ScheduleJob( &R_CacheBoneTransformsJob, &ja, 1 );
+	R_CacheBoneTransforms( cache );
 }
 
 /*
@@ -1595,7 +1581,7 @@ bool R_AddSkeletalModelToDrawList( const entity_t *e ) {
 #endif
 
 	// run quaternions lerping job in the background
-	R_AddSkeletalModelCacheJob( e, mod );
+	R_AddSkeletalModelCache( e, mod );
 
 	for( i = 0, mesh = skmodel->meshes; i < (int)skmodel->nummeshes; i++, mesh++ ) {
 		shader = NULL;

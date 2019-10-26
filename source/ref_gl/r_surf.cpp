@@ -835,27 +835,6 @@ static void R_AddWorldDrawSurfaces( unsigned firstDrawSurf, unsigned numDrawSurf
 }
 
 /*
-* R_AddWorldDrawSurfacesJob
-*/
-static void R_AddWorldDrawSurfacesJob( unsigned first, unsigned items, jobarg_t *j ) {
-	R_AddWorldDrawSurfaces( first, items );
-}
-
-/*
-* R_CullVisLeavesJob
-*/
-static void R_CullVisLeavesJob( unsigned first, unsigned items, jobarg_t *j ) {
-	R_CullVisLeaves( first, items, j->uarg );
-}
-
-/*
-* R_CullVisSurfacesJob
-*/
-static void R_CullVisSurfacesJob( unsigned first, unsigned items, jobarg_t *j ) {
-	R_CullVisSurfaces( first, items, j->uarg );
-}
-
-/*
 * R_DrawWorld
 */
 void R_DrawWorld( void ) {
@@ -865,7 +844,6 @@ void R_DrawWorld( void ) {
 	unsigned int dlightBits;
 	unsigned int shadowBits;
 	bool worldOutlines;
-	jobarg_t ja = { 0 };
 	bool speeds = r_speeds->integer != 0;
 
 	assert( rf.numWorldSurfVis >= rsh.worldBrushModel->numsurfaces );
@@ -922,8 +900,6 @@ void R_DrawWorld( void ) {
 		msec = Sys_Milliseconds();
 	}
 
-	ja.uarg = clipFlags;
-
 	if( rsh.worldBrushModel->numvisleafs > rsh.worldBrushModel->numsurfaces ) {
 		memset( (void *)rf.worldSurfVis, 1, rsh.worldBrushModel->numsurfaces * sizeof( *rf.worldSurfVis ) );
 		memset( (void *)rf.worldSurfFullVis, 0, rsh.worldBrushModel->numsurfaces * sizeof( *rf.worldSurfVis ) );
@@ -942,9 +918,7 @@ void R_DrawWorld( void ) {
 		//
 		// cull leafs
 		//
-		RJ_ScheduleJob( &R_CullVisLeavesJob, &ja, rsh.worldBrushModel->numvisleafs );
-
-		RJ_FinishJobs();
+		R_CullVisLeaves( 0, rsh.worldBrushModel->numvisleafs, clipFlags );
 
 		if( speeds ) {
 			rf.stats.t_cull_world_nodes += Sys_Milliseconds() - msec2;
@@ -958,11 +932,9 @@ void R_DrawWorld( void ) {
 		msec2 = Sys_Milliseconds();
 	}
 
-	RJ_ScheduleJob( &R_CullVisSurfacesJob, &ja, rsh.worldBrushModel->numModelSurfaces );
+	R_CullVisSurfaces( 0, rsh.worldBrushModel->numModelSurfaces, clipFlags );
 
 	R_PostCullVisLeaves();
-
-	RJ_FinishJobs();
 
 	if( speeds ) {
 		rf.stats.t_cull_world_surfs += Sys_Milliseconds() - msec2;
@@ -976,7 +948,7 @@ void R_DrawWorld( void ) {
 	}
 	R_AddVisSurfaces( dlightBits, shadowBits );
 
-	RJ_ScheduleJob( &R_AddWorldDrawSurfacesJob, &ja, rsh.worldBrushModel->numModelDrawSurfaces );
+	R_AddWorldDrawSurfaces( 0, rsh.worldBrushModel->numModelDrawSurfaces );
 
 	if( speeds ) {
 		for( i = 0; i < rsh.worldBrushModel->numsurfaces; i++ ) {

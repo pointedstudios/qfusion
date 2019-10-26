@@ -85,7 +85,6 @@ typedef struct superLightStyle_s {
 #include "r_model.h"
 #include "r_trace.h"
 #include "r_program.h"
-#include "r_jobs.h"
 
 #ifdef min
 #undef min
