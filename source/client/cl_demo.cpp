@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // cl_demo.c  -- demo recording
 
 #include "client.h"
-#include "../ref_gl/r_frontend.h"
+#include "../ref/frontend.h"
 
 static void CL_PauseDemo( bool paused );
 

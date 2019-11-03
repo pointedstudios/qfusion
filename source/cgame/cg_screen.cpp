@@ -35,7 +35,7 @@ end of unit intermissions
 
 #include "cg_local.h"
 #include "../client/client.h"
-#include "../ref_gl/r_frontend.h"
+#include "../ref/frontend.h"
 
 vrect_t scr_vrect;
 

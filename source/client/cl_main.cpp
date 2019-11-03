@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "../qcommon/asyncstream.h"
 #include "../qcommon/hash.h"
-#include "../ref_gl/r_frontend.h"
+#include "../ref/frontend.h"
 #include "serverlist.h"
 
 #include <random>

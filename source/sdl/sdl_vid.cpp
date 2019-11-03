@@ -20,7 +20,7 @@
 
 #include <SDL.h>
 #include "../client/client.h"
-#include "../ref_gl/r_frontend.h"
+#include "../ref/frontend.h"
 
 SDL_Window *sdl_window;
 

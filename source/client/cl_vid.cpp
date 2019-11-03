@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "client.h"
 #include "../cin/cin.h"
 #include "xpm.h"
-#include "../ref_gl/r_frontend.h"
+#include "../ref/frontend.h"
 
 cvar_t *vid_ref;
 cvar_t *vid_width, *vid_height;
@@ -41,7 +41,7 @@ cvar_t *win_nowinkeys;
 // Global variables used internally by this module
 viddef_t viddef;             // global video state; used by other modules
 
-#define VID_DEFAULTREF          "ref_gl"
+#define VID_DEFAULTREF          "gl"
 
 typedef rserr_t (*vid_init_t)( int, int, int, int, int, void *, bool );
 

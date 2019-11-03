@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // cg_scoreboard.c -- scoreboard layouts for gametypes
 
 #include "cg_local.h"
-#include "../ref_gl/r_frontend.h"
+#include "../ref/frontend.h"
 #include "../client/client.h"
 
 #define SCB_BACKGROUND_ALPHA 0.25f

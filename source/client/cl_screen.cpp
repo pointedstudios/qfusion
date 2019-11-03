@@ -33,7 +33,7 @@ end of unit intermissions
 */
 
 #include "client.h"
-#include "../ref_gl/r_frontend.h"
+#include "../ref/frontend.h"
 
 float scr_con_current;    // aproaches scr_conlines at scr_conspeed
 float scr_con_previous;

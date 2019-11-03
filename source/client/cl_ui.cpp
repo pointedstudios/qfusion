@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "client.h"
 #include "cl_mm.h"
 #include "../qcommon/asyncstream.h"
-#include "../ref_gl/r_frontend.h"
+#include "../ref/frontend.h"
 
 EXTERN_API_FUNC void *GetGameAPI( void * );
 

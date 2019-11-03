@@ -22,7 +22,7 @@ file(GLOB CLIENT_HEADERS
 	"../gameshared/config.h"
 	"../qcommon/*.h"
 	"../angelwrap/qas_public.h"
-	"../ref_gl/r_public.h"
+	"../ref/r_public.h"
 	"../cgame/cg_public.h"
 	"../cgame/ref.h"
 	"../game/g_public.h"
@@ -46,8 +46,8 @@ file(GLOB CLIENT_COMMON_SOURCES
     "../../third-party/sqlite-amalgamation/sqlite3.c"
 )
 
-file(GLOB REF_GL_HEADERS
-		"../ref_gl/*.h"
+file(GLOB REF_HEADERS
+		"../ref/*.h"
 		"../gameshared/q_*.h"
 		"../gameshared/anorms.h"
 		"../gameshared/config.h"
@@ -57,37 +57,37 @@ file(GLOB REF_GL_HEADERS
 		"../qcommon/qfiles.h"
 		)
 
-file(GLOB REF_GL_COMMON_SOURCES
-		"../ref_gl/*.cpp"
+file(GLOB REF_COMMON_SOURCES
+		"../ref/*.cpp"
 		"../gameshared/q_*.cpp"
 		"../qcommon/bsp.cpp"
 		"../qcommon/patch.cpp"
 		)
 
 if (USE_SDL2)
-	file(GLOB REF_GL_PLATFORM_SOURCES
+	file(GLOB REF_PLATFORM_SOURCES
 			"../sdl/sdl_glw.cpp"
 			"../sdl/sdl_qgl.cpp"
 			)
 
-	set(REF_GL_PLATFORM_LIBRARIES ${SDL2_LIBRARY})
+	set(REF_PLATFORM_LIBRARIES ${SDL2_LIBRARY})
 else()
 	if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-		file(GLOB REF_GL_PLATFORM_SOURCES
+		file(GLOB REF_PLATFORM_SOURCES
 				"../win32/win_glw.cpp"
 				"../win32/win_qgl.cpp"
 				)
 
-		set(REF_GL_PLATFORM_LIBRARIES "")
+		set(REF_PLATFORM_LIBRARIES "")
 	endif()
 
 	if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-		file(GLOB REF_GL_PLATFORM_SOURCES
+		file(GLOB REF_PLATFORM_SOURCES
 				"../unix/unix_glw.cpp"
 				"../unix/unix_qgl.cpp"
 				)
 
-		set(REF_GL_PLATFORM_LIBRARIES "X11" "Xext" "Xinerama" "Xrandr" "Xxf86vm" "m")
+		set(REF_PLATFORM_LIBRARIES "X11" "Xext" "Xinerama" "Xrandr" "Xxf86vm" "m")
 	endif()
 endif()
 
@@ -279,7 +279,7 @@ else()
 	set_source_files_properties("../../third-party/sqlite-amalgamation/sqlite3.c" PROPERTIES COMPILE_FLAGS "-fno-fast-math")
 endif()
 
-add_executable(${QFUSION_CLIENT_NAME} ${CLIENT_BINARY_TYPE} ${CLIENT_HEADERS} ${CLIENT_PLATFORM_HEADERS} ${CLIENT_COMMON_SOURCES} ${CLIENT_PLATFORM_SOURCES} ${REF_GL_HEADERS} ${REF_GL_COMMON_SOURCES} ${REF_GL_PLATFORM_SOURCES} ${FTLIB_SOURCES} ${CIN_SOURCES} ${CGAME_HEADERS} ${CGAME_SOURCES} ${BUNDLE_RESOURCES})
+add_executable(${QFUSION_CLIENT_NAME} ${CLIENT_BINARY_TYPE} ${CLIENT_HEADERS} ${CLIENT_PLATFORM_HEADERS} ${CLIENT_COMMON_SOURCES} ${CLIENT_PLATFORM_SOURCES} ${REF_HEADERS} ${REF_COMMON_SOURCES} ${REF_PLATFORM_SOURCES} ${FTLIB_SOURCES} ${CIN_SOURCES} ${CGAME_HEADERS} ${CGAME_SOURCES} ${BUNDLE_RESOURCES})
 add_dependencies(${QFUSION_CLIENT_NAME} angelwrap game snd_openal_soft)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -302,5 +302,5 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     add_custom_command(TARGET ${QFUSION_CLIENT_NAME} POST_BUILD COMMAND ${COPY_DYLIBS})
 endif()
 
-target_link_libraries(${QFUSION_CLIENT_NAME} PRIVATE ${CURL_LIBRARY} ${ZLIB_LIBRARY} ${JPEG_LIBRARIES} ${PNG_LIBRARIES} ${REF_GL_PLATFORM_LIBRARIES} ${OGG_LIBRARY} ${VORBIS_LIBRARIES} ${THEORA_LIBRARY} ${FREETYPE_LIBRARIES} ${CLIENT_PLATFORM_LIBRARIES} snd_openal_soft)
+target_link_libraries(${QFUSION_CLIENT_NAME} PRIVATE ${CURL_LIBRARY} ${ZLIB_LIBRARY} ${JPEG_LIBRARIES} ${PNG_LIBRARIES} ${REF_PLATFORM_LIBRARIES} ${OGG_LIBRARY} ${VORBIS_LIBRARIES} ${THEORA_LIBRARY} ${FREETYPE_LIBRARIES} ${CLIENT_PLATFORM_LIBRARIES} snd_openal_soft)
 qf_set_output_dir(${QFUSION_CLIENT_NAME} "")

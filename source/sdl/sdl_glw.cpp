@@ -20,7 +20,7 @@
 
 #include <SDL.h>
 
-#include "../ref_gl/r_local.h"
+#include "../ref/local.h"
 #include "sdl_glw.h"
 
 #include <algorithm>

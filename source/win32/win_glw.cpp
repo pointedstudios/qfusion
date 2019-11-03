@@ -30,7 +30,7 @@
 **
 */
 #include <assert.h>
-#include "../ref_gl/r_local.h"
+#include "../ref/r_local.h"
 #include "../qcommon/qcommon.h"
 #include "win_glw.h"
 
@@ -296,17 +296,17 @@ rserr_t GLimp_SetMode( int x, int y, int width, int height, int displayFrequency
 */
 void GLimp_Shutdown( void ) {
 	if( qwglMakeCurrent && !qwglMakeCurrent( NULL, NULL ) ) {
-		Com_Printf( "ref_gl::R_Shutdown() - wglMakeCurrent failed\n" );
+		Com_Printf( "ref::R_Shutdown() - wglMakeCurrent failed\n" );
 	}
 	if( glw_state.hGLRC ) {
 		if( qwglDeleteContext && !qwglDeleteContext( glw_state.hGLRC ) ) {
-			Com_Printf( "ref_gl::R_Shutdown() - wglDeleteContext failed\n" );
+			Com_Printf( "ref::R_Shutdown() - wglDeleteContext failed\n" );
 		}
 		glw_state.hGLRC = NULL;
 	}
 	if( glw_state.hDC ) {
 		if( !ReleaseDC( glw_state.hWnd, glw_state.hDC ) ) {
-			Com_Printf( "ref_gl::R_Shutdown() - ReleaseDC failed\n" );
+			Com_Printf( "ref::R_Shutdown() - ReleaseDC failed\n" );
 		}
 		glw_state.hDC   = NULL;
 	}

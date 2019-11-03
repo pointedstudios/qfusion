@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "cg_local.h"
 #include "../client/snd_public.h"
-#include "../ref_gl/r_frontend.h"
+#include "../ref/frontend.h"
 
 #define MAX_LOCAL_ENTITIES  512
 
