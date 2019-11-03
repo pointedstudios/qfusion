@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "local.h"
 #include "../qcommon/qthreads.h"
 #include "../qcommon/singletonholder.h"
+#include "materiallocal.h"
 
 #include <algorithm>
 
@@ -144,6 +145,14 @@ void Scene::Shutdown() {
 
 Scene *Scene::Instance() {
 	return sceneInstanceHolder.Instance();
+}
+
+void Scene::InitVolatileAssets() {
+	coronaShader = MaterialCache::instance()->loadDefaultMaterial( wsw::StringView( "$corona" ), SHADER_TYPE_CORONA );
+}
+
+void Scene::DestroyVolatileAssets() {
+	coronaShader = nullptr;
 }
 
 void Scene::AddLight( const vec3_t org, float programIntensity, float coronaIntensity, float r, float g, float b ) {
@@ -418,6 +427,8 @@ void R_AddLightStyleToScene( int style, float r, float g, float b ) {
 	ls->rgb[2] = std::max( 0.0f, b );
 }
 
+static const wsw::HashedStringView kBuiltinPostProcessing( "$builtinpostprocessing" );
+
 /*
 * R_BlitTextureToScrFbo
 */
@@ -426,7 +437,6 @@ static void R_BlitTextureToScrFbo( const refdef_t *fd, image_t *image, int dstFb
 								   int iParam0 ) {
 	int x, y;
 	int w, h, fw, fh;
-	static char s_name[] = "$builtinpostprocessing";
 	static shaderpass_t p;
 	static shader_t s;
 	int i;
@@ -477,7 +487,7 @@ static void R_BlitTextureToScrFbo( const refdef_t *fd, image_t *image, int dstFb
 	s.vattribs = VATTRIB_POSITION_BIT | VATTRIB_TEXCOORDS_BIT;
 	s.sort = SHADER_SORT_NEAREST;
 	s.numpasses = 1;
-	s.name = s_name;
+	s.name = kBuiltinPostProcessing;
 	s.passes = &p;
 
 	p.rgbgen.type = RGB_GEN_IDENTITY;

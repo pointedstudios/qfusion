@@ -220,6 +220,20 @@ typedef struct {
 
 //====================================================
 
+enum class BuiltinTexNumber {
+	Raw,
+	RawYuv0,
+	No = RawYuv0 + 3,
+	White,
+	WhiteCubemap,
+	Black,
+	Grey,
+	BlankBump,
+	Particle,
+	Corona,
+	Portal0
+};
+
 // globals shared by the frontend and the backend
 // the backend should never attempt modifying any of these
 typedef struct {
@@ -352,13 +366,9 @@ public:
 		numDrawnProgramLights = 0;
 	}
 
-	void InitVolatileAssets() {
-		coronaShader = R_LoadShader( "$corona", SHADER_TYPE_CORONA, true, NULL );
-	}
+	void InitVolatileAssets();
 
-	void DestroyVolatileAssets() {
-		coronaShader = nullptr;
-	}
+	void DestroyVolatileAssets();
 
 	void AddLight( const vec3_t origin, float programIntensity, float coronaIntensity, float r, float g, float b );
 
@@ -582,7 +592,9 @@ void        R_AliasModelFrameBounds( const model_t *mod, int frame, vec3_t mins,
 //
 void        R_InitCinematics( void );
 void        R_ShutdownCinematics( void );
-unsigned int R_StartCinematic( const char *arg );
+
+unsigned int R_StartCinematic( const wsw::StringView &arg );
+
 void        R_FreeCinematic( unsigned int id );
 void        R_RunAllCinematics( void );
 void        R_TouchCinematic( unsigned int id );
@@ -602,8 +614,6 @@ void        R_ScreenShot_f( void );
 void        R_TakeEnvShot( const char *path, const char *name, unsigned maxPixels );
 void        R_EnvShot_f( void );
 void        R_ImageList_f( void );
-void        R_ShaderList_f( void );
-void        R_ShaderDump_f( void );
 
 //
 // r_cull.c

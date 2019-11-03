@@ -183,7 +183,7 @@ enum {
 	DEFORMV_OUTLINE
 };
 
-typedef struct {
+typedef struct shaderfunc_s {
 	unsigned int type;                  // SHADER_FUNC enum
 	float args[4];                      // offset, amplitude, phase_offset, rate
 } shaderfunc_t;
@@ -206,7 +206,7 @@ typedef struct {
 } deformv_t;
 
 // Per-pass rendering state information
-typedef struct {
+typedef struct shaderpass_s {
 	unsigned int flags;
 
 	colorgen_t rgbgen;
@@ -222,67 +222,79 @@ typedef struct {
 
 	unsigned int program_type;
 
-	image_t             *images[MAX_SHADER_IMAGES]; // texture refs
+	struct image_s             *images[MAX_SHADER_IMAGES]; // texture refs
 
 	float anim_fps;                                 // animation frames per sec
 	unsigned int anim_numframes;
+
+	[[nodiscard]]
+	int getNumRgbGenElems() const {
+		auto type = rgbgen.type;
+		if( type == RGB_GEN_WAVE || type == RGB_GEN_CONST ) {
+			return 4;
+		}
+		return type == RGB_GEN_CUSTOMWAVE ? 2 : 0;
+	}
+
+	[[nodiscard]]
+	int getNumAlphaGenElems() const {
+		return alphagen.type == ALPHA_GEN_CONST ? 2 : 0;
+	}
+
+	[[nodiscard]]
+	int getNumTCGenElems() const {
+		return tcgen == TC_GEN_VECTOR ? 8 : 0;
+	}
 } shaderpass_t;
 
 // Shader information
-typedef struct shader_s {
-	char                *name;
-	unsigned int id;
-	int registrationSequence;
-	shaderType_e type;
+typedef struct alignas( 8 ) shader_s {
+	enum { kListLinks, kBinLinks };
 
-	unsigned int flags;
-	vattribmask_t vattribs;
-	unsigned int sort;
-	int imagetags;                                  // usage tags of the images - currently only depend
+	shader_s *prev[2] { nullptr, nullptr };
+	shader_s *next[2] { nullptr, nullptr };
+
+	wsw::HashedStringView name;
+
+	unsigned int id { 0 };
+	int registrationSequence { 0 };
+	shaderType_e type { (shaderType_e)0 };
+
+	unsigned int flags { 0 };
+	vattribmask_t vattribs { 0 };
+	unsigned int sort { 0 };
+	int imagetags { 0 };                                  // usage tags of the images - currently only depend
 	                                                // on type, but if one shader can be requesed with
 	                                                // different tags, functions like R_TouchShader
 	                                                // should merge the existing and the requested tags
 
-	unsigned int numpasses;
-	shaderpass_t        *passes;
+	unsigned int numpasses { 0 };
+	shaderpass_t        *passes { nullptr };
 
-	unsigned int numdeforms;
-	deformv_t           *deforms;
-	char                *deformsKey;
+	unsigned int numdeforms { 0 };
+	deformv_t           *deforms { nullptr };
+	char                *deformsKey { nullptr };
 
-	uint8_t fog_color[4];
-	float fog_dist, fog_clearDist;
+	uint8_t fog_color[4] { 0, 0, 0, 0 };
+	float fog_dist { 0.0f };
+	float fog_clearDist { 0.0f };
 
-	unsigned int cin;
+	unsigned int cin { 0 };
 
-	float glossIntensity;
-	float glossExponent;
-	float offsetmappingScale;
+	float glossIntensity { 0.0f };
+	float glossExponent { 0.0f };
+	float offsetmappingScale { 0.0f };
 
-	float portalDistance;
+	float portalDistance { 0.0f };
 
-	float skyHeight;
-	image_t             *skyboxImages[6];
-
-	struct shader_s     *prev, *next;
+	float skyHeight { 0.0f };
+	struct image_s *skyboxImages[6] { nullptr };
 } shader_t;
 
 #define     Shader_UseTextureFog( s ) ( ( ( s )->sort <= SHADER_SORT_FOG && \
 										  ( ( s )->flags & SHADER_DEPTHWRITE ) ) || ( s )->fog_dist || ( s )->type == SHADER_TYPE_FOG )
 
 #define     Shader_ReadDepth( s ) ( ( s )->flags & SHADER_SOFT_PARTICLE )
-
-void        R_InitShaders( void );
-void        R_ShutdownShaders( void );
-
-void        R_UploadCinematicShader( const shader_t *shader );
-
-void        R_PrintShaderList( const char *mask, bool ( *filter )( const char *filter, const char *value ) );
-void        R_PrintShaderCache( const char *name );
-
-shader_t    *R_ShaderById( unsigned int id );
-
-shader_t    *R_LoadShader( const char *name, int type, bool forceDefault, const char *text );
 
 shader_t    *R_RegisterShader( const char *name, shaderType_e type );
 shader_t    *R_RegisterPic( const char *name );
@@ -296,11 +308,6 @@ shader_t    *R_RegisterLinearPic( const char *name );
 unsigned    R_PackShaderOrder( const shader_t *shader );
 
 void        R_TouchShader( shader_t *s );
-void        R_TouchShadersByName( const char *name );
-void        R_FreeUnusedShadersByType( const shaderType_e *types, unsigned int numTypes );
-void        R_FreeUnusedShaders( void );
-
-void        R_RemapShader( const char *from, const char *to, int timeOffset );
 
 void        R_GetShaderDimensions( const shader_t *shader, int *width, int *height );
 

@@ -23,7 +23,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "local.h"
 #include "../qcommon/qcommon.h"
+#include "materiallocal.h"
 #include <algorithm>
+#include <array>
 
 typedef struct {
 	vec3_t mins, maxs;
@@ -549,19 +551,20 @@ static void Mod_LoadShaderrefs( const lump_t *l ) {
 	// see if the map is new and we need to free shaders from the previous one
 	newMap = r_prevworldmodel && ( r_prevworldmodel->registrationSequence != rsh.registrationSequence );
 
+	auto *materialCache = MaterialCache::instance();
 	for( i = 0; i < count; i++, in++ ) {
 		Q_strncpyz( out[i].name, in->name, sizeof( out[i].name ) );
 		out[i].flags = LittleLong( in->flags );
 
 		if( newMap ) {
-			R_TouchShadersByName( out[i].name );
+			materialCache->touchMaterialsByName( wsw::StringView( out[i].name ) );
 		}
 	}
 
 	// free world textures from the previous map that are not used on the new map
 	if( newMap ) {
-		const shaderType_e shaderTypes[] = { SHADER_TYPE_DELUXEMAP, SHADER_TYPE_VERTEX };
-		R_FreeUnusedShadersByType( shaderTypes, sizeof( shaderTypes ) / sizeof( shaderTypes[0] ) );
+		std::array<shaderType_e, 2> shaderTypes = { SHADER_TYPE_DELUXEMAP, SHADER_TYPE_VERTEX };
+		materialCache->freeUnusedMaterialsByType( shaderTypes.data(), shaderTypes.size() );
 		R_FreeUnusedImagesByTags( IMAGE_TAG_WORLD );
 	}
 }
@@ -1664,7 +1667,7 @@ static void Mod_Finish( const lump_t *faces, const lump_t *light, vec3_t gridSiz
 
 	if( globalFog ) {
 		loadbmodel->globalfog = testFog;
-		Com_DPrintf( "Global fog detected: %s\n", testFog->shader->name );
+		//Com_DPrintf( "Global fog detected: %s\n", testFog->shader->name );
 	}
 
 	if( !( mod_bspFormat->flags & BSP_RAVEN ) ) {

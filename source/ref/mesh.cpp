@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_mesh.c: transformation and sorting
 
 #include "local.h"
+#include "materiallocal.h"
 
 #include <algorithm>
 
@@ -191,10 +192,6 @@ void *R_AddSurfToDrawList( drawList_t *list, const entity_t *e, const mfog_t *fo
 	distKey = R_PackDistKey( e->renderfx, shader, dist, order );
 	if( !distKey ) {
 		return NULL;
-	}
-
-	if( shader->cin ) {
-		R_UploadCinematicShader( shader );
 	}
 
 	// reallocate if numDrawSurfs
@@ -454,7 +451,7 @@ static void _R_DrawSurfaces( drawList_t *list ) {
 		// decode draw surface properties
 		R_UnpackSortKey( sortKey, &shaderNum, &fogNum, &portalNum, &entNum );
 
-		shader = R_ShaderById( shaderNum );
+		shader = MaterialCache::instance()->getMaterialById( shaderNum );
 		entity = R_NUM2ENT( entNum );
 		fog = fogNum >= 0 ? rsh.worldBrushModel->fogs + fogNum : NULL;
 		portalSurface = portalNum >= 0 ? rn.portalSurfaces + portalNum : NULL;

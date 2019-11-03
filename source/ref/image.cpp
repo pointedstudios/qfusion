@@ -1953,39 +1953,36 @@ void R_ReplaceImageLayer( image_t *image, int layer, uint8_t **pic ) {
 * Finds and loads the given image. IT_SYNC images are loaded synchronously.
 * For synchronous missing images, NULL is returned.
 */
-image_t *R_FindImage( const char *name, const char *suffix, int flags, int minmipsize, int tags ) {
-	int i, lastDot, lastSlash, searchFlags;
-	unsigned int len, key;
-	image_t *image, *hnode;
-	char *pathname;
+image_t *R_FindImage( const wsw::StringView &name, const wsw::StringView &suffix, int flags, int minmipsize, int tags ) {
 	uint8_t *empty_data[6] = { NULL, NULL, NULL, NULL, NULL, NULL };
 	bool loaded;
 
-	if( !name || !name[0] ) {
+	if( name.length() == 0 ) {
 		return NULL; //	ri.Com_Error (ERR_DROP, "R_FindImage: NULL name");
-
 	}
-	ENSUREBUFSIZE( imagePathBuf, strlen( name ) + ( suffix ? strlen( suffix ) : 0 ) + 5 );
-	pathname = r_imagePathBuf;
 
-	lastDot = -1;
-	lastSlash = -1;
-	for( i = ( name[0] == '/' || name[0] == '\\' ), len = 0; name[i]; i++ ) {
-		if( name[i] == '.' ) {
-			lastDot = len;
+	// Should be a member of some "image cache" singleton instance
+	wsw::String buffer;
+
+	int lastDot = -1;
+	int lastSlash = -1;
+
+	for( size_t i = name[0] == '/' || name[0] == '\\'; i < name.length(); ++i ) {
+		char ch = name[i];
+		if( ch == '.' ) {
+			lastDot = (int)i;
 		}
-		if( name[i] == '\\' ) {
-			pathname[len] = '/';
+		if( ch == '\\' ) {
+			buffer.push_back( '/' );
 		} else {
-			pathname[len] = tolower( name[i] );
+			buffer.push_back( ch );
 		}
-		if( pathname[len] == '/' ) {
-			lastSlash = len;
+		if( buffer.back() == '/' ) {
+			lastSlash = (int)i;
 		}
-		len++;
 	}
 
-	if( len < 5 ) {
+	if( buffer.size() < 5 ) {
 		return NULL;
 	}
 
@@ -1995,38 +1992,34 @@ image_t *R_FindImage( const char *name, const char *suffix, int flags, int minmi
 	}
 
 	if( lastDot != -1 ) {
-		len = lastDot;
+		buffer.resize( lastDot );
 	}
 
-	if( suffix ) {
-		for( i = 0; suffix[i]; i++ )
-			pathname[len++] = tolower( suffix[i] );
+	for( char ch: suffix ) {
+		buffer.push_back( ch );
 	}
-
-	pathname[len] = 0;
 
 	if( !glConfig.sSRGB ) {
 		flags &= ~IT_SRGB;
 	}
-	searchFlags = flags & ~IT_LOADFLAGS;
+
+	int searchFlags = flags & ~IT_LOADFLAGS;
 
 	// look for it
-	key = COM_SuperFastHash( ( const uint8_t *)pathname, len, len ) % IMAGES_HASH_SIZE;
-	hnode = &r_images_hash_headnode[key];
-	for( image = hnode->prev; image != hnode; image = image->prev ) {
+	unsigned key = COM_SuperFastHash( ( const uint8_t *)buffer.data(), buffer.size(), buffer.size() ) % IMAGES_HASH_SIZE;
+	image_t *hnode = &r_images_hash_headnode[key];
+	for( image_t *image = hnode->prev; image != hnode; image = image->prev ) {
 		if( ( ( image->flags & ~IT_LOADFLAGS ) == searchFlags ) &&
-			!strcmp( image->name, pathname ) && ( image->minmipsize == minmipsize ) ) {
+			!strcmp( image->name, buffer.data() ) && ( image->minmipsize == minmipsize ) ) {
 			R_TouchImage( image, tags );
 			return image;
 		}
 	}
 
-	pathname[len] = 0;
-
 	//
 	// load the pic from disk
 	//
-	image = R_LoadImage( pathname, empty_data, 1, 1, flags, minmipsize, tags, 1 );
+	image_t *image = R_LoadImage( buffer.data(), empty_data, 1, 1, flags, minmipsize, tags, 1 );
 
 	if( !( image->flags & IT_SYNC ) ) {
 		if( R_LoadAsyncImageFromDisk( image ) ) {

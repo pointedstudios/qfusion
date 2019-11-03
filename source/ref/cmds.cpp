@@ -297,32 +297,3 @@ void R_ImageList_f( void ) {
 	R_PrintImageList( Cmd_Argv( 1 ), R_GlobFilter );
 }
 
-/*
-* R_ShaderList_f
-*/
-void R_ShaderList_f( void ) {
-	R_PrintShaderList( Cmd_Argv( 1 ), R_GlobFilter );
-}
-
-/*
-* R_ShaderDump_f
-*/
-void R_ShaderDump_f( void ) {
-	const char *name;
-	const msurface_t *debugSurface;
-
-	debugSurface = R_GetDebugSurface();
-
-	if( ( Cmd_Argc() < 2 ) && !debugSurface ) {
-		Com_Printf( "Usage: %s [name]\n", Cmd_Argv( 0 ) );
-		return;
-	}
-
-	if( Cmd_Argc() < 2 ) {
-		name = debugSurface->shader->name;
-	} else {
-		name = Cmd_Argv( 1 );
-	}
-
-	R_PrintShaderCache( name );
-}

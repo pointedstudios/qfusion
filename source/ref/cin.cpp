@@ -295,22 +295,20 @@ void R_UploadCinematic( unsigned int id ) {
 /*
 * R_StartCinematic
 */
-unsigned int R_StartCinematic( const char *arg ) {
+unsigned int R_StartCinematic( const wsw::StringView &arg ) {
 	char uploadName[128];
 	size_t name_size;
-	char *name;
 	r_cinhandle_t *handle, *hnode, *next;
 	struct cinematics_s *cin;
 	bool yuv;
 
-	name_size = strlen( "video/" ) + strlen( arg ) + 1;
-	name = (char *)alloca( name_size );
-
-	if( strstr( arg, "/" ) == NULL && strstr( arg, "\\" ) == NULL ) {
-		Q_snprintfz( name, name_size, "video/%s", arg );
-	} else {
-		Q_snprintfz( name, name_size, "%s", arg );
+	wsw::String name;
+	if( !arg.containsAny( wsw::StringView( "/\\") ) ) {
+		name.append( "video/" );
 	}
+
+	// TODO... implement a custom wsw::String class for real
+	name.append( std::string_view( arg.data(), arg.size() ) );
 
 	// find cinematics with the same name
 	hnode = &r_cinematics_headnode;
@@ -319,13 +317,13 @@ unsigned int R_StartCinematic( const char *arg ) {
 		assert( handle->cin );
 
 		// reuse
-		if( !Q_stricmp( handle->name, name ) ) {
+		if( !Q_stricmp( handle->name, name.data() ) ) {
 			return handle->id;
 		}
 	}
 
 	// open the file, read header, etc
-	cin = CIN_Open( name, Sys_Milliseconds(), CIN_LOOP, &yuv, NULL );
+	cin = CIN_Open( name.data(), Sys_Milliseconds(), CIN_LOOP, &yuv, NULL );
 
 	// take a free cinematic handle if possible
 	if( !r_free_cinematics || !cin ) {
@@ -336,7 +334,7 @@ unsigned int R_StartCinematic( const char *arg ) {
 	r_free_cinematics = handle->next;
 
 	// copy name
-	handle->name = R_CopyString( name );
+	handle->name = R_CopyString( name.data() );
 
 	// copy upload name
 	Q_snprintfz( uploadName, sizeof( uploadName ), "***r_cinematic%i***", handle->id - 1 );

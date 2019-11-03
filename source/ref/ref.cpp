@@ -555,10 +555,6 @@ void R_DrawRotatedStretchPic( int x, int y, int w, int h, float s1, float t1, fl
 		return;
 	}
 
-	if( shader->cin ) {
-		R_UploadCinematicShader( shader );
-	}
-
 	// lower-left
 	Vector2Set( pic_xyz[0], x, y );
 	Vector2Set( pic_st[0], s1, t1 );
@@ -667,6 +663,8 @@ void R_DrawStretchRaw( int x, int y, int w, int h, float s1, float t1, float s2,
 	R_DrawStretchQuick( x, y, w, h, s1, t1, s2, t2, colorWhite, GLSL_PROGRAM_TYPE_NONE, rsh.rawTexture, 0 );
 }
 
+static const wsw::HashedStringView kBuilitinYuvName( "$builtinyuv" );
+
 /*
 * R_DrawStretchRawYUVBuiltin
 *
@@ -675,7 +673,6 @@ void R_DrawStretchRaw( int x, int y, int w, int h, float s1, float t1, float s2,
 */
 void R_DrawStretchRawYUVBuiltin( int x, int y, int w, int h,
 								 float s1, float t1, float s2, float t2, image_t **yuvTextures, int flip ) {
-	static const char *s_name = "$builtinyuv";
 	static shaderpass_t p;
 	static shader_t s;
 	float h_scale, v_scale;
@@ -685,7 +682,7 @@ void R_DrawStretchRawYUVBuiltin( int x, int y, int w, int h,
 	s.vattribs = VATTRIB_POSITION_BIT | VATTRIB_TEXCOORDS_BIT;
 	s.sort = SHADER_SORT_NEAREST;
 	s.numpasses = 1;
-	s.name = (char *)s_name;
+	s.name = kBuilitinYuvName;
 	s.passes = &p;
 
 	p.rgbgen.type = RGB_GEN_IDENTITY;
@@ -740,12 +737,13 @@ void R_DrawStretchRawYUV( int x, int y, int w, int h, float s1, float t1, float 
 	R_DrawStretchRawYUVBuiltin( x, y, w, h, s1, t1, s2, t2, rsh.rawYUVTextures, 0 );
 }
 
+static const wsw::HashedStringView kBuiltinImage( "$builtinimage" );
+
 /*
 * R_DrawStretchQuick
 */
 void R_DrawStretchQuick( int x, int y, int w, int h, float s1, float t1, float s2, float t2,
 						 const vec4_t color, int program_type, image_t *image, int blendMask ) {
-	static const char *s_name = "$builtinimage";
 	static shaderpass_t p;
 	static shader_t s;
 	static float rgba[4];
@@ -753,7 +751,7 @@ void R_DrawStretchQuick( int x, int y, int w, int h, float s1, float t1, float s
 	s.vattribs = VATTRIB_POSITION_BIT | VATTRIB_TEXCOORDS_BIT;
 	s.sort = SHADER_SORT_NEAREST;
 	s.numpasses = 1;
-	s.name = (char *)s_name;
+	s.name = kBuiltinImage;
 	s.passes = &p;
 
 	Vector4Copy( color, rgba );
@@ -1497,9 +1495,10 @@ const char *R_WriteSpeedsMessage( char *out, size_t size ) {
 					msurface_t *debugSurface = rf.debugSurface;
 					drawSurfaceBSP_t *drawSurf = rf.debugSurface ? &rsh.worldBrushModel->drawSurfaces[debugSurface->drawSurf - 1] : NULL;
 
+					assert( debugSurface->shader->name.isZeroTerminated() );
 					Q_snprintfz( out, size,
 								 "%s type:%i sort:%i",
-								 debugSurface->shader->name, debugSurface->facetype, debugSurface->shader->sort );
+								 debugSurface->shader->name.data(), debugSurface->facetype, debugSurface->shader->sort );
 
 					Q_strncatz( out, "\n", size );
 
@@ -1520,7 +1519,8 @@ const char *R_WriteSpeedsMessage( char *out, size_t size ) {
 
 					if( debugSurface->fog && debugSurface->fog->shader
 						&& debugSurface->fog->shader != debugSurface->shader ) {
-						Q_strncatz( out, debugSurface->fog->shader->name, size );
+						assert( debugSurface->fog->shader->name.isZeroTerminated() );
+						Q_strncatz( out, debugSurface->fog->shader->name.data(), size );
 					}
 				}
 				break;

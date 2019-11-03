@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "local.h"
 #include "../qcommon/hash.h"
 #include "../qcommon/qcommon.h"
+#include "materiallocal.h"
 
 #include <algorithm>
 
@@ -698,8 +699,6 @@ static void R_Register( const char *screenshotsPrefix ) {
 	}
 
 	Cmd_AddCommand( "imagelist", R_ImageList_f );
-	Cmd_AddCommand( "shaderlist", R_ShaderList_f );
-	Cmd_AddCommand( "shaderdump", R_ShaderDump_f );
 	Cmd_AddCommand( "screenshot", R_ScreenShot_f );
 	Cmd_AddCommand( "envshot", R_EnvShot_f );
 	Cmd_AddCommand( "modellist", Mod_Modellist_f );
@@ -938,7 +937,7 @@ static rserr_t R_PostInit( void ) {
 
 	R_InitImages();
 
-	R_InitShaders();
+	MaterialCache::init();
 
 	R_InitCinematics();
 
@@ -992,10 +991,11 @@ static void R_InitVolatileAssets( void ) {
 
 	Scene::Instance()->InitVolatileAssets();
 
-	rsh.envShader = R_LoadShader( "$environment", SHADER_TYPE_OPAQUE_ENV, true, NULL );
-	rsh.skyShader = R_LoadShader( "$skybox", SHADER_TYPE_SKYBOX, true, NULL );
-	rsh.whiteShader = R_LoadShader( "$whiteimage", SHADER_TYPE_2D, true, NULL );
-	rsh.emptyFogShader = R_LoadShader( "$emptyfog", SHADER_TYPE_FOG, true, NULL );
+	auto *materialCache = MaterialCache::instance();
+	rsh.envShader = materialCache->loadDefaultMaterial( wsw::StringView( "$environment" ), SHADER_TYPE_OPAQUE_ENV );
+	rsh.skyShader = materialCache->loadDefaultMaterial( wsw::StringView( "$skybox" ), SHADER_TYPE_SKYBOX );
+	rsh.whiteShader = materialCache->loadDefaultMaterial( wsw::StringView( "$whiteimage" ), SHADER_TYPE_2D );
+	rsh.emptyFogShader = materialCache->loadDefaultMaterial( wsw::StringView( "$emptyfog" ), SHADER_TYPE_FOG );
 
 	if( !rsh.nullVBO ) {
 		rsh.nullVBO = R_InitNullModelVBO();
@@ -1057,7 +1057,9 @@ void R_EndRegistration( void ) {
 	R_FreeUnusedModels();
 	R_FreeUnusedVBOs();
 	R_FreeUnusedSkinFiles();
-	R_FreeUnusedShaders();
+
+	MaterialCache::instance()->freeUnusedMaterials();
+
 	R_FreeUnusedCinematics();
 	R_FreeUnusedImages();
 
@@ -1077,8 +1079,6 @@ void R_Shutdown( bool verbose ) {
 	Cmd_RemoveCommand( "envshot" );
 	Cmd_RemoveCommand( "imagelist" );
 	Cmd_RemoveCommand( "gfxinfo" );
-	Cmd_RemoveCommand( "shaderdump" );
-	Cmd_RemoveCommand( "shaderlist" );
 	Cmd_RemoveCommand( "glslprogramlist" );
 	Cmd_RemoveCommand( "cinlist" );
 
@@ -1094,7 +1094,7 @@ void R_Shutdown( bool verbose ) {
 
 	R_ShutdownVBO();
 
-	R_ShutdownShaders();
+	MaterialCache::shutdown();
 
 	R_ShutdownCinematics();
 

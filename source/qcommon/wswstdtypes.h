@@ -1,6 +1,8 @@
 #ifndef QFUSION_STDTYPES_H
 #define QFUSION_STDTYPES_H
 
+#include <algorithm>
+
 #include <cstdlib>
 #include <cstring>
 
@@ -290,7 +292,7 @@ public:
 
 	[[nodiscard]]
 	wsw::StringView take( size_t n ) const {
-		Terminated terminated = zeroTerminated && len >= n ? ZeroTerminated : Unspecified;
+		Terminated terminated = zeroTerminated && n >= len ? ZeroTerminated : Unspecified;
 		return wsw::StringView( s, std::min( len, n ), terminated );
 	}
 
@@ -327,19 +329,19 @@ public:
 
 	template <typename Predicate>
 	[[nodiscard]]
-	wsw::StringView dropWhile( Predicate predicate ) {
+	wsw::StringView dropWhile( Predicate predicate ) const {
 		const char *p = std::find_if_not( s, s + len, predicate );
 		return wsw::StringView( p, len - ( p - s ), (Terminated)zeroTerminated );
 	}
 
 	[[nodiscard]]
-	wsw::StringView takeRight( size_t n ) {
+	wsw::StringView takeRight( size_t n ) const {
 		size_t suffixLen = std::min( n, len );
 		return wsw::StringView( s + len - suffixLen, suffixLen, (Terminated)zeroTerminated );
 	}
 
 	[[nodiscard]]
-	std::optional<wsw::StringView> takeRightExact( size_t n ) {
+	std::optional<wsw::StringView> takeRightExact( size_t n ) const {
 		if( n <= len ) {
 			return wsw::StringView( s + len - n, n, (Terminated)zeroTerminated );
 		}
@@ -348,7 +350,7 @@ public:
 
 	template <typename Predicate>
 	[[nodiscard]]
-	wsw::StringView takeRightWhile( Predicate predicate ) {
+	wsw::StringView takeRightWhile( Predicate predicate ) const {
 		auto begin = std::make_reverse_iterator( s + len ), end = std::make_reverse_iterator( s );
 		auto it = std::find_if_not( begin, end, predicate );
 		const char *p = it.base();
@@ -356,14 +358,14 @@ public:
 	}
 
 	[[nodiscard]]
-	wsw::StringView dropRight( size_t n ) {
+	wsw::StringView dropRight( size_t n ) const {
 		Terminated terminated = ( zeroTerminated && n >= len ) ? ZeroTerminated : Unspecified;
 		size_t suffixLen = std::min( n, len );
 		return wsw::StringView( s + len - suffixLen, suffixLen, terminated );
 	}
 
 	[[nodiscard]]
-	std::optional<wsw::StringView> dropRightExact( size_t n ) {
+	std::optional<wsw::StringView> dropRightExact( size_t n ) const {
 		if( n <= len ) {
 			size_t suffixLen = std::min( n, len );
 			Terminated terminated = zeroTerminated && suffixLen == len ? ZeroTerminated : Unspecified;
@@ -374,7 +376,7 @@ public:
 
 	template <typename Predicate>
 	[[nodiscard]]
-	wsw::StringView dropRightWhile( Predicate predicate ) {
+	wsw::StringView dropRightWhile( Predicate predicate ) const {
 		auto begin = std::make_reverse_iterator( s + len ), end = std::make_reverse_iterator( s );
 		auto it = std::find_if_not( begin, end, predicate );
 		const char *p = it.base();
@@ -382,14 +384,14 @@ public:
 		return wsw::StringView( s, len - ( p - s ), terminated );
 	}
 
-	void copyTo( char *buffer, size_t bufferSize ) {
+	void copyTo( char *buffer, size_t bufferSize ) const {
 		assert( bufferSize > len );
 		memcpy( buffer, s, len );
 		buffer[len] = '\0';
 	}
 
 	template <size_t N>
-	void copyTo( char buffer[N] ) {
+	void copyTo( char buffer[N] ) const {
 		copyTo( buffer, N );
 	}
 };
