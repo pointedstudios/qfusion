@@ -865,7 +865,6 @@ void RB_FlushDynamicMeshes( void ) {
 		RB_BindShader( draw->entity, draw->shader, draw->fog );
 		RB_BindVBO( draw->streamId, draw->primitive );
 		RB_SetPortalSurface( draw->portalSurface );
-		RB_SetShadowBits( draw->shadowBits );
 		RB_Scissor( draw->scissor[0], draw->scissor[1], draw->scissor[2], draw->scissor[3] );
 
 		// translate the mesh in 2D
@@ -878,8 +877,6 @@ void RB_FlushDynamicMeshes( void ) {
 		}
 
 		RB_DrawElements(
-			draw->drawElements.firstVert, draw->drawElements.numVerts,
-			draw->drawElements.firstElem, draw->drawElements.numElems,
 			draw->drawElements.firstVert, draw->drawElements.numVerts,
 			draw->drawElements.firstElem, draw->drawElements.numElems );
 	}
@@ -1098,8 +1095,7 @@ static void RB_DrawElements_( void ) {
 /*
 * RB_DrawElements
 */
-void RB_DrawElements( int firstVert, int numVerts, int firstElem, int numElems,
-					  int firstShadowVert, int numShadowVerts, int firstShadowElem, int numShadowElems ) {
+void RB_DrawElements( int firstVert, int numVerts, int firstElem, int numElems ) {
 	rb.currentVAttribs &= ~VATTRIB_INSTANCES_BITS;
 
 	rb.drawElements.numVerts = numVerts;
@@ -1107,12 +1103,6 @@ void RB_DrawElements( int firstVert, int numVerts, int firstElem, int numElems,
 	rb.drawElements.firstVert = firstVert;
 	rb.drawElements.firstElem = firstElem;
 	rb.drawElements.numInstances = 0;
-
-	rb.drawShadowElements.numVerts = numShadowVerts;
-	rb.drawShadowElements.numElems = numShadowElems;
-	rb.drawShadowElements.firstVert = firstShadowVert;
-	rb.drawShadowElements.firstElem = firstShadowElem;
-	rb.drawShadowElements.numInstances = 0;
 
 	RB_DrawElements_();
 }
@@ -1123,7 +1113,6 @@ void RB_DrawElements( int firstVert, int numVerts, int firstElem, int numElems,
 * Draws <numInstances> instances of elements
 */
 void RB_DrawElementsInstanced( int firstVert, int numVerts, int firstElem, int numElems,
-							   int firstShadowVert, int numShadowVerts, int firstShadowElem, int numShadowElems,
 							   int numInstances, instancePoint_t *instances ) {
 	if( !numInstances ) {
 		return;
@@ -1143,19 +1132,12 @@ void RB_DrawElementsInstanced( int firstVert, int numVerts, int firstElem, int n
 	rb.drawElements.firstElem = firstElem;
 	rb.drawElements.numInstances = 0;
 
-	rb.drawShadowElements.numVerts = numShadowVerts;
-	rb.drawShadowElements.numElems = numShadowElems;
-	rb.drawShadowElements.firstVert = firstShadowVert;
-	rb.drawShadowElements.firstElem = firstShadowElem;
-	rb.drawShadowElements.numInstances = 0;
-
 	if( rb.currentVBO->instancesOffset ) {
 		// static VBO's must come with their own set of instance data
 		rb.currentVAttribs |= VATTRIB_INSTANCES_BITS;
 	}
 
 	rb.drawElements.numInstances = numInstances;
-	rb.drawShadowElements.numInstances = numInstances;
 	RB_DrawElements_();
 }
 

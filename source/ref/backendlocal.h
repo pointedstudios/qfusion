@@ -135,7 +135,6 @@ typedef struct r_backend_s {
 	int maxDrawInstances;
 
 	rbDrawElements_t drawElements;
-	rbDrawElements_t drawShadowElements;
 
 	vattribmask_t currentVAttribs;
 

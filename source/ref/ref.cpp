@@ -474,7 +474,7 @@ void R_DrawNullSurf( const entity_t *e, const shader_t *shader, const mfog_t *fo
 
 	RB_BindVBO( rsh.nullVBO->index, GL_LINES );
 
-	RB_DrawElements( 0, 6, 0, 6, 0, 0, 0, 0 );
+	RB_DrawElements( 0, 6, 0, 6 );
 }
 
 /*
@@ -886,9 +886,7 @@ mesh_vbo_t *R_InitPostProcessingVBO( void ) {
 float R_DefaultFarClip( void ) {
 	float farclip_dist;
 
-	if( rn.renderFlags & RF_SHADOWMAPVIEW ) {
-		return rn.shadowGroup->projDist;
-	} else if( rn.refdef.rdflags & RDF_NOWORLDMODEL ) {
+	if( rn.refdef.rdflags & RDF_NOWORLDMODEL ) {
 		farclip_dist = 1024;
 	} else if( rsh.worldModel && rsh.worldBrushModel->globalfog ) {
 		farclip_dist = rsh.worldBrushModel->globalfog->shader->fog_dist;
@@ -1139,8 +1137,6 @@ static void R_EndGL( void ) {
 static void R_DrawEntities( void ) {
 	unsigned int i;
 	entity_t *e;
-	bool shadowmap = ( ( rn.renderFlags & RF_SHADOWMAPVIEW ) != 0 );
-	bool culled = true;
 
 	if( rn.renderFlags & RF_ENVVIEW ) {
 		for( i = 0; i < rsc.numBmodelEntities; i++ ) {
@@ -1157,7 +1153,6 @@ static void R_DrawEntities( void ) {
 
 	for( i = rsc.numLocalEntities; i < rsc.numEntities; i++ ) {
 		e = R_NUM2ENT( i );
-		culled = true;
 
 		if( !r_lerpmodels->integer ) {
 			e->backlerp = 0;
@@ -1172,32 +1167,24 @@ static void R_DrawEntities( void ) {
 
 				switch( e->model->type ) {
 					case mod_alias:
-						culled = !R_AddAliasModelToDrawList( e );
+						R_AddAliasModelToDrawList( e );
 						break;
 					case mod_skeletal:
-						culled = !R_AddSkeletalModelToDrawList( e );
+						R_AddSkeletalModelToDrawList( e );
 						break;
 					case mod_brush:
 						e->outlineHeight = rsc.worldent->outlineHeight;
 						Vector4Copy( rsc.worldent->outlineRGBA, e->outlineColor );
-						culled = !R_AddBrushModelToDrawList( e );
+						R_AddBrushModelToDrawList( e );
 					default:
 						break;
 				}
 				break;
 			case RT_SPRITE:
-				culled = !R_AddSpriteToDrawList( e );
+				R_AddSpriteToDrawList( e );
 				break;
 			default:
 				break;
-		}
-
-		if( shadowmap && !culled ) {
-			if( rsc.entShadowGroups[i] != rn.shadowGroup->id ||
-				r_shadows_self_shadow->integer ) {
-				// not from the casting group, mark as shadowed
-				rsc.entShadowBits[i] |= rn.shadowGroup->bit;
-			}
 		}
 	}
 }
@@ -1227,7 +1214,6 @@ void R_RenderView( const refdef_t *fd ) {
 	rn.fog_eye = NULL;
 	rn.hdrExposure = 1;
 
-	rn.shadowBits = 0;
 	rn.dlightBits = 0;
 
 	rn.numPortalSurfaces = 0;
@@ -1299,7 +1285,7 @@ void R_RenderView( const refdef_t *fd ) {
 		R_SetupViewMatrices();
 
 		// render to depth textures, mark shadowed entities and surfaces
-		R_DrawShadowmaps();
+		// TODO
 	}
 
 	R_SortDrawList( rn.meshlist );

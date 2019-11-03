@@ -562,8 +562,7 @@ void R_DrawAliasSurf( const entity_t *e, const shader_t *shader, const mfog_t *f
 	if( aliasmesh->vbo != NULL && !framenum && !oldframenum ) {
 		RB_BindVBO( aliasmesh->vbo->index, GL_TRIANGLES );
 
-		RB_DrawElements( 0, aliasmesh->numverts, 0, aliasmesh->numtris * 3,
-						 0, aliasmesh->numverts, 0, aliasmesh->numtris * 3 );
+		RB_DrawElements( 0, aliasmesh->numverts, 0, aliasmesh->numtris * 3 );
 	} else {
 		mesh_t dynamicMesh;
 		vec4_t *inVertsArray;
@@ -722,9 +721,6 @@ bool R_AddAliasModelToDrawList( const entity_t *e ) {
 	// never render weapon models or non-occluders into shadowmaps
 	if( rn.renderFlags & RF_SHADOWMAPVIEW ) {
 		if( e->renderfx & RF_WEAPONMODEL ) {
-			return true;
-		}
-		if( rsc.entShadowGroups[R_ENT2NUM( e )] != rn.shadowGroup->id ) {
 			return true;
 		}
 	}

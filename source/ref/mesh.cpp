@@ -432,7 +432,6 @@ static void _R_DrawSurfaces( drawList_t *list ) {
 	bool batchFlushed = true, batchOpaque = false;
 	int entityFX = 0, prevEntityFX = -1;
 	mat4_t projectionMatrix;
-	unsigned int shadowBits = 0;
 	int riFBO = 0;
 
 	if( !list->numDrawSurfs ) {
@@ -556,16 +555,13 @@ static void _R_DrawSurfaces( drawList_t *list ) {
 				}
 			}
 
-			shadowBits = ( rsc.entShadowBits[entNum] & rn.shadowBits ) & rsc.renderedShadowBits;
-
 			if( !batchDrawSurf ) {
 				assert( r_drawSurfCb[drawSurfType] );
 
 				RB_BindShader( entity, shader, fog );
 				RB_SetPortalSurface( portalSurface );
-				RB_SetShadowBits( shadowBits );
 
-				r_drawSurfCb[drawSurfType]( entity, shader, fog, portalSurface, shadowBits, sds->drawSurf );
+				r_drawSurfCb[drawSurfType]( entity, shader, fog, portalSurface, 0, sds->drawSurf );
 			}
 
 			prevShaderNum = shaderNum;
@@ -578,7 +574,7 @@ static void _R_DrawSurfaces( drawList_t *list ) {
 		}
 
 		if( batchDrawSurf ) {
-			r_batchDrawSurfCb[drawSurfType]( entity, shader, fog, portalSurface, shadowBits, sds->drawSurf );
+			r_batchDrawSurfCb[drawSurfType]( entity, shader, fog, portalSurface, 0, sds->drawSurf );
 			batchFlushed = false;
 			if( depthWrite ) {
 				batchOpaque = true;

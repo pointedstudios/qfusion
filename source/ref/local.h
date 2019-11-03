@@ -168,8 +168,6 @@ typedef struct {
 	unsigned int renderFlags;
 	unsigned int dlightBits;
 
-	unsigned int shadowBits;
-
 	int renderTarget;                       // target framebuffer object
 	bool multisampleDepthResolved;
 
@@ -217,9 +215,6 @@ typedef struct {
 	drawList_t      *meshlist;              // meshes to be rendered
 	drawList_t      *portalmasklist;        // sky and portal BSP surfaces are rendered before (sky-)portals
 											// to create depth mask
-
-	shadowGroup_t   *shadowGroup;
-
 	mfog_t          *fog_eye;
 } refinst_t;
 
@@ -257,7 +252,6 @@ typedef struct {
 	image_t         *particleTexture;           // little dot for particles
 	image_t         *coronaTexture;
 	image_t         *portalTextures[MAX_PORTAL_TEXTURES + 1];
-	image_t         *shadowmapTextures[MAX_SHADOWGROUPS];
 
 	refScreenTexSet_t st, stf;
 
@@ -288,15 +282,7 @@ typedef struct {
 	unsigned int numBmodelEntities;
 	entity_t        *bmodelEntities[MAX_REF_ENTITIES];
 
-	unsigned int maxShadowGroups;
-	unsigned int numShadowGroups;
-	shadowGroup_t shadowGroups[MAX_REF_ENTITIES];
-	unsigned int entShadowGroups[MAX_REF_ENTITIES];
-	unsigned int entShadowBits[MAX_REF_ENTITIES];
-
 	float farClipMin, farClipBias;
-
-	unsigned int renderedShadowBits;
 
 	refdef_t refdef;
 } r_scene_t;
@@ -589,7 +575,6 @@ bool    R_AddAliasModelToDrawList( const entity_t *e );
 void    R_DrawAliasSurf( const entity_t *e, const shader_t *shader, const mfog_t *fog, const portalSurface_t *portalSurface, unsigned int shadowBits, drawSurfaceAlias_t *drawSurf );
 bool    R_AliasModelLerpTag( orientation_t *orient, const maliasmodel_t *aliasmodel, int framenum, int oldframenum,
 							 float lerpfrac, const char *name );
-float       R_AliasModelBBox( const entity_t *e, vec3_t mins, vec3_t maxs );
 void        R_AliasModelFrameBounds( const model_t *mod, int frame, vec3_t mins, vec3_t maxs );
 
 //

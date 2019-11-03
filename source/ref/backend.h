@@ -75,10 +75,8 @@ void RB_AddDynamicMesh( const entity_t *entity, const shader_t *shader,
 						const struct mesh_s *mesh, int primitive, float x_offset, float y_offset );
 void RB_FlushDynamicMeshes( void );
 
-void RB_DrawElements( int firstVert, int numVerts, int firstElem, int numElems,
-					  int firstShadowVert, int numShadowVerts, int firstShadowElem, int numShadowElems );
+void RB_DrawElements( int firstVert, int numVerts, int firstElem, int numElems );
 void RB_DrawElementsInstanced( int firstVert, int numVerts, int firstElem, int numElems,
-							   int firstShadowVert, int numShadowVerts, int firstShadowElem, int numShadowElems,
 							   int numInstances, instancePoint_t *instances );
 
 void RB_FlushTextureCache( void );
@@ -87,7 +85,6 @@ void RB_FlushTextureCache( void );
 void RB_BindShader( const entity_t *e, const struct shader_s *shader, const struct mfog_s *fog );
 void RB_SetLightstyle( const struct superLightStyle_s *lightStyle );
 void RB_SetDlightBits( unsigned int dlightBits );
-void RB_SetShadowBits( unsigned int shadowBits );
 void RB_SetBonesData( int numBones, dualquat_t *dualQuats, int maxWeights );
 void RB_SetPortalSurface( const struct portalSurface_s *portalSurface );
 void RB_SetSkyboxShader( const shader_t *shader );

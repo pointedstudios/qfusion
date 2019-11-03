@@ -41,9 +41,6 @@ typedef struct {
 
 	unsigned int visFrame;          // should be drawn when node is crossed
 
-	unsigned int shadowBits;
-	unsigned int shadowFrame;
-
 	unsigned int dlightBits;
 	unsigned int dlightFrame;
 

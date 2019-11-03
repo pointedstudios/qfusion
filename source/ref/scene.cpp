@@ -76,12 +76,9 @@ void R_ClearScene( void ) {
 
 	rsc.numBmodelEntities = 0;
 
-	rsc.renderedShadowBits = 0;
 	rsc.frameCount++;
 
 	R_ClearDebugBounds();
-
-	R_ClearShadowGroups();
 
 	R_ClearSkeletalCache();
 
@@ -104,15 +101,13 @@ void R_AddEntityToScene( const entity_t *ent ) {
 		if( r_outlines_scale->value <= 0 ) {
 			de->outlineHeight = 0;
 		}
-		rsc.entShadowBits[eNum] = 0;
-		rsc.entShadowGroups[eNum] = 0;
 
 		if( de->rtype == RT_MODEL ) {
 			if( de->model && de->model->type == mod_brush ) {
 				rsc.bmodelEntities[rsc.numBmodelEntities++] = de;
 			}
 			if( !( de->renderfx & RF_NOSHADOW ) ) {
-				R_AddLightOccluder( de ); // build groups and mark shadow casters
+				// TODO
 			}
 		} else if( de->rtype == RT_SPRITE ) {
 			// simplifies further checks
@@ -520,7 +515,7 @@ static void R_BlitTextureToScrFbo( const refdef_t *fd, image_t *image, int dstFb
 
 	RB_BindShader( NULL, &s, NULL );
 	RB_BindVBO( rsh.postProcessingVBO->index, GL_TRIANGLES );
-	RB_DrawElements( 0, 4, 0, 6, 0, 0, 0, 0 );
+	RB_DrawElements( 0, 4, 0, 6 );
 
 	RB_LoadObjectMatrix( mat4x4_identity );
 
@@ -605,9 +600,7 @@ void R_RenderScene( const refdef_t *fd ) {
 	}
 	rn.meshlist = &r_worldlist;
 	rn.portalmasklist = &r_portalmasklist;
-	rn.shadowBits = 0;
 	rn.dlightBits = 0;
-	rn.shadowGroup = NULL;
 
 	rn.st = &rsh.st;
 	rn.renderTarget = 0;
@@ -691,8 +684,6 @@ void R_RenderScene( const refdef_t *fd ) {
 	VectorCopy( fd->vieworg, rn.lodOrigin );
 
 	R_BindFrameBufferObject( 0 );
-
-	R_BuildShadowGroups();
 
 	R_RenderView( fd );
 

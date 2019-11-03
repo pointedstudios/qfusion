@@ -1311,8 +1311,7 @@ void R_DrawSkeletalSurf( const entity_t *e, const shader_t *shader, const mfog_t
 		// fastpath: render static frame 0 as is
 		if( skmesh->vbo ) {
 			RB_BindVBO( skmesh->vbo->index, GL_TRIANGLES );
-			RB_DrawElements( 0, skmesh->numverts, 0, skmesh->numtris * 3,
-				 0, skmesh->numverts, 0, skmesh->numtris * 3 );
+			RB_DrawElements( 0, skmesh->numverts, 0, skmesh->numtris * 3 );
 			return;
 		}
 	}
@@ -1321,8 +1320,7 @@ void R_DrawSkeletalSurf( const entity_t *e, const shader_t *shader, const mfog_t
 		// another fastpath: transform the initial pose on the GPU
 		RB_BindVBO( skmesh->vbo->index, GL_TRIANGLES );
 		RB_SetBonesData( skmodel->numbones, bonePoseRelativeDQ, skmesh->maxWeights );
-		RB_DrawElements( 0, skmesh->numverts, 0, skmesh->numtris * 3,
-						 0, skmesh->numverts, 0, skmesh->numtris * 3 );
+		RB_DrawElements( 0, skmesh->numverts, 0, skmesh->numtris * 3 );
 		return;
 	}
 
@@ -1556,9 +1554,6 @@ bool R_AddSkeletalModelToDrawList( const entity_t *e ) {
 	// never render weapon models or non-occluders into shadowmaps
 	if( rn.renderFlags & RF_SHADOWMAPVIEW ) {
 		if( e->renderfx & RF_WEAPONMODEL ) {
-			return true;
-		}
-		if( rsc.entShadowGroups[R_ENT2NUM( e )] != rn.shadowGroup->id ) {
 			return true;
 		}
 	}

@@ -109,8 +109,6 @@ void R_GetRenderBufferSize( const int inWidth, const int inHeight,
 void R_InitViewportTexture( image_t **texture, const char *name, int id,
 							int viewportWidth, int viewportHeight, int size, int flags, int tags, int samples );
 image_t *R_GetPortalTexture( int viewportWidth, int viewportHeight, int flags, unsigned frameNum );
-image_t *R_GetShadowmapTexture( int id, int viewportWidth, int viewportHeight, int flags );
-void R_InitDrawFlatTexture( void );
 void R_FreeImageBuffers( void );
 
 void R_PrintImageList( const char *pattern, bool ( *filter )( const char *filter, const char *value ) );
