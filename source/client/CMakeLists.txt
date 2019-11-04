@@ -3,6 +3,7 @@ project(${QFUSION_CLIENT_NAME})
 include_directories(${ZLIB_INCLUDE_DIR} ${CURL_INCLUDE_DIR} ${JPEG_INCLUDE_DIR} ${PNG_INCLUDE_DIR})
 include_directories(${OGG_INCLUDE_DIR} ${VORBIS_INCLUDE_DIR} ${THEORA_INCLUDE_DIR})
 include_directories(${FREETYPE_INCLUDE_DIRS})
+include_directories("../../third-party/magic_enum/include")
 
 if (USE_SDL2 OR (${CMAKE_SYSTEM_NAME} MATCHES "Linux"))
     include_directories(${SDL2_INCLUDE_DIR})

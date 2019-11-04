@@ -13,3 +13,6 @@
 [submodule "libsrcs"]
 	path = libsrcs
 	url = https://github.com/Warsow/qfusion-libsrcs.git
+[submodule "third-party/magic_enum"]
+	path = third-party/magic_enum
+	url = https://github.com/Warsow/magic_enum.git
