@@ -15,23 +15,34 @@ namespace wsw {
 class StringView {
 protected:
 	const char *s;
-	size_t len: 31;
+	size_t len: 30;
+	bool zeroTerminated: 1;
 	// We have to declare this bit here for making layout of some descendants optimal
 	bool hasOwnership : 1;
 
 	static size_t checkLen( size_t len ) {
-		assert( len < ( 1u << 31 ) );
+		assert( len < ( 1u << 30u ) );
 		return len;
 	}
 public:
+	enum Terminated {
+		Unspecified,
+		ZeroTerminated,
+	};
+
 	constexpr StringView() noexcept
-		: s( "" ), len( 0 ), hasOwnership( false ) {}
+		: s( "" ), len( 0 ), zeroTerminated( true ), hasOwnership( false ) {}
 
 	explicit StringView( const char *s_ ) noexcept
-		: s( s_ ), len( checkLen( std::strlen( s_ ) ) ), hasOwnership( false ) {}
+		: s( s_ ), len( checkLen( std::strlen( s_ ) ) ), zeroTerminated( true ), hasOwnership( false ) {}
 
-	StringView( const char *s_, size_t len_ ) noexcept
-		: s( s_ ), len( checkLen( len_ ) ), hasOwnership( false ) {}
+	StringView( const char *s_, size_t len_, Terminated terminated_ = Unspecified ) noexcept
+		: s( s_ ), len( checkLen( len_ ) ), zeroTerminated( terminated_ != Unspecified ), hasOwnership( false ) {
+		assert( !zeroTerminated || !s[len] );
+	}
+
+	[[nodiscard]]
+	bool isZeroTerminated() const { return zeroTerminated; }
 
 	[[nodiscard]]
 	const char *data() const { return s; }
@@ -72,6 +83,7 @@ class StringRef : public StringView {
 	void moveFromThat( StringRef &&that ) {
 		this->s = that.s;
 		this->len = that.len;
+		this->zeroTerminated = that.zeroTerminated;
 		this->hasOwnership = that.hasOwnership;
 		that.s = "";
 		that.len = 0;
@@ -82,7 +94,8 @@ public:
 
 	explicit StringRef( const char *s_ ) : StringView( s_ ) {}
 
-	StringRef( const char *s_, size_t len_ ) : StringView( s_, len_ ) {}
+	StringRef( const char *s_, size_t len_, Terminated terminated_ = Unspecified )
+		: StringView( s_, len_, terminated_ ) {}
 
 	StringRef( const StringRef &that ) = delete;
 	StringRef &operator=( const StringRef &that ) = delete;
@@ -110,17 +123,17 @@ public:
 		char *mem = new char[len + 1];
 		std::memcpy( mem, s_, len );
 		mem[len] = '\0';
-		return takeOwnershipOf( mem, len );
+		return takeOwnershipOf( mem, len, ZeroTerminated );
 	}
 
 	[[nodiscard]]
 	static StringRef takeOwnershipOf( const char *s_ ) {
-		return takeOwnershipOf( s_, std::strlen( s_ ) );
+		return takeOwnershipOf( s_, std::strlen( s_ ), ZeroTerminated );
 	}
 
 	[[nodiscard]]
-	static StringRef takeOwnershipOf( const char *s_, size_t len ) {
-		StringRef result( s_, len );
+	static StringRef takeOwnershipOf( const char *s_, size_t len, Terminated terminated_ = Unspecified ) {
+		StringRef result( s_, len, terminated_ );
 		result.hasOwnership = true;
 		return result;
 	}
@@ -145,12 +158,13 @@ public:
 		hash = GetHashForLength( s_, len );
 	}
 
-	HashedStringView( const char *s_, size_t len_ ) : StringView( s_, len_ ) {
+	HashedStringView( const char *s_, size_t len_, Terminated terminated_ = Unspecified )
+		: StringView( s_, len_, terminated_ ) {
 		hash = GetHashForLength( s_, len_ );
 	}
 
-	HashedStringView( const char *s_, size_t len_, uint32_t hash_ )
-		: StringView( s_, len_ ), hash( hash_ ) {}
+	HashedStringView( const char *s_, size_t len_, uint32_t hash_, Terminated terminated_ = Unspecified )
+		: StringView( s_, len_, terminated_ ), hash( hash_ ) {}
 
 	[[nodiscard]]
 	uint32_t getHash() const { return hash; }
@@ -179,6 +193,7 @@ class HashedStringRef : public HashedStringView {
 	void moveFromThat( HashedStringRef &&that ) {
 		this->s = that.s;
 		this->len = that.len;
+		this->zeroTerminated = that.zeroTerminated;
 		this->hasOwnership = that.hasOwnership;
 		this->hash = that.hash;
 		that.s = "";
@@ -191,9 +206,11 @@ public:
 
 	explicit HashedStringRef( const char *s_ ) : HashedStringView( s_ ) {}
 
-	HashedStringRef( const char *s_, size_t len_ ) : HashedStringView( s_, len_ ) {}
+	HashedStringRef( const char *s_, size_t len_, Terminated terminated_ = Unspecified )
+		: HashedStringView( s_, len_, terminated_ ) {}
 
-	HashedStringRef( const char *s_, size_t len_, uint32_t hash_ ) : HashedStringView( s_, len_, hash_ ) {}
+	HashedStringRef( const char *s_, size_t len_, uint32_t hash_, Terminated terminated_ = Unspecified )
+		: HashedStringView( s_, len_, hash_, terminated_ ) {}
 
 	~HashedStringRef() {
 		if( hasOwnership ) {
@@ -227,17 +244,17 @@ public:
 		char *mem = new char[len + 1];
 		std::memcpy( mem, s_, len );
 		mem[len] = '\0';
-		return takeOwnershipOf( mem, len );
+		return takeOwnershipOf( mem, len, ZeroTerminated );
 	}
 
 	[[nodiscard]]
 	static HashedStringRef takeOwnershipOf( const char *s_ ) {
-		return takeOwnershipOf( s_, std::strlen( s_ ) );
+		return takeOwnershipOf( s_, std::strlen( s_ ), ZeroTerminated );
 	}
 
 	[[nodiscard]]
-	static HashedStringRef takeOwnershipOf( const char *s_, size_t len ) {
-		HashedStringRef result( s_, len );
+	static HashedStringRef takeOwnershipOf( const char *s_, size_t len, Terminated terminated_ = Unspecified ) {
+		HashedStringRef result( s_, len, terminated_ );
 		result.hasOwnership = true;
 		return result;
 	}
