@@ -52,7 +52,15 @@ bool Walker::Accept( int, const aas_reachability_t &reach, int travelTime ) {
 		return TestReachVis( reach );
 	}
 
-	if( travelType == TRAVEL_WALKOFFLEDGE && reach.start[2] - reach.end[2] < 40.0f ) {
+	if( travelType != TRAVEL_WALKOFFLEDGE ) {
+		return false;
+	}
+
+	if( reach.start[2] - reach.end[2] < 40.0f ) {
+		return TestReachVis( reach );
+	}
+
+	if( aasWorld->AreaSettings()[reach.areanum].areaflags & AREA_NOFALL ) {
 		return TestReachVis( reach );
 	}
 
