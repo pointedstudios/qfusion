@@ -88,30 +88,59 @@ void BunnyTestingMultipleLookDirsAction::PlanPredictionStep( Context *context ) 
 void BunnyTestingSavedLookDirsAction::DeriveMoreDirsFromSavedDirs() {
 	// TODO: See notes in the method javadoc about this very basic approach
 
-	mat3_t rotations[6];
-	Matrix3_Rotate( axis_identity, -5.0f, 0, 0, 1, rotations[0] );
-	Matrix3_Rotate( axis_identity, +5.0f, 0, 0, 1, rotations[1] );
-	Matrix3_Rotate( axis_identity, -2.5f, 0, 0, 1, rotations[2] );
-	Matrix3_Rotate( axis_identity, +2.5f, 0, 0, 1, rotations[3] );
-	Matrix3_Rotate( axis_identity, -7.5f, 0, 0, 1, rotations[4] );
-	Matrix3_Rotate( axis_identity, +7.5f, 0, 0, 1, rotations[5] );
+	if( suggestedLookDirs.empty() ) {
+		return;
+	}
+
+	const float similarityDotThreshold = std::cosf( DEG2RAD( 2.5f ) ) + 0.0001f;
+
+	// First prune similar suggested areas.
+	// (a code that fills suggested areas may test similarity
+	// for its own optimization purposes but it is not mandatory).
+	for( size_t i = 0; i < suggestedLookDirs.size(); ++i ) {
+		const Vec3 &__restrict baseDir = suggestedLookDirs[i].dir;
+		assert( std::fabs( baseDir.Length() - 1.0f ) < 0.001f );
+		for( size_t j = i + 1; j < suggestedLookDirs.size(); ) {
+			const Vec3 &__restrict currDir = suggestedLookDirs[j].dir;
+			if( baseDir.Dot( currDir ) < similarityDotThreshold ) {
+				j++;
+				continue;
+			}
+			suggestedLookDirs[j] = suggestedLookDirs.back();
+			suggestedLookDirs.pop_back();
+		}
+	}
+
+	// Ensure we can assume at least one free array cell in the loop below.
+	if( suggestedLookDirs.size() == suggestedLookDirs.capacity() ) {
+		return;
+	}
+
+	int rotationIndex = 0;
+	mat3_t rotations[12];
+	// The step is not monotonic and is not uniform intentionally
+	const float rotationVals[6] = { 5.0f, 2.5f, 11.f, 7.5f, 14.0f, 20.0f };
+	for( float val: rotationVals ) {
+		// TODO: Compute once and negate?
+		Matrix3_Rotate( axis_identity, -val, 0, 0, 1, rotations[rotationIndex++] );
+		Matrix3_Rotate( axis_identity, +val, 0, 0, 1, rotations[rotationIndex++] );
+	}
 
 	// Save this fixed value (as the dirs array is going to grow)
-	const int lastBaseAreaIndex = suggestedLookDirs.size() - 1;
-	for( int areaIndex = 0; areaIndex <= lastBaseAreaIndex; ++areaIndex ) {
-		const auto &existing = suggestedLookDirs[areaIndex];
-		// Skip dirs that do not have a corresponding "may stop at" areas
-		// (they're usually "synthetic" and have a low chance to yield a result)
-		if( !existing.area ) {
-			continue;
-		}
+	const size_t lastBaseAreaIndex = suggestedLookDirs.size() - 1;
+	for( size_t areaIndex = 0; areaIndex <= lastBaseAreaIndex; ++areaIndex ) {
+		const auto &base = suggestedLookDirs[areaIndex];
 		for( const auto &rotation : rotations ) {
-			if( suggestedLookDirs.size() >= MAX_SUGGESTED_LOOK_DIRS ) {
-				break;
-			}
 			vec3_t rotated;
-			Matrix3_TransformVector( rotation, existing.dir.Data(), rotated );
-			suggestedLookDirs.emplace_back( DirAndArea( Vec3( rotated ), existing.area ) );
+			Matrix3_TransformVector( rotation, base.dir.Data(), rotated );
+			if( HasSavedSimilarDir( rotated, similarityDotThreshold ) ) {
+				continue;
+			}
+
+			suggestedLookDirs.emplace_back( DirAndArea( Vec3( rotated ), base.area ) );
+			if( suggestedLookDirs.size() == suggestedLookDirs.capacity() ) {
+				return;
+			}
 		}
 	}
 }

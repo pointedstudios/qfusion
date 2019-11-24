@@ -74,11 +74,11 @@ protected:
 								AreaAndScore *candidateAreasBegin,
 								AreaAndScore *candidateAreasEnd );
 
-	bool HasSavedSimilarDir( const Vec3 &dir, float dotThreshold = 0.98f ) {
+	bool HasSavedSimilarDir( const Vec3 &dir, float dotThreshold = 0.9995f /* a bit larger than cos( 2.5 deg ) */ ) {
 		return HasSavedSimilarDir( dir.Data(), dotThreshold );
 	}
 
-	bool HasSavedSimilarDir( const float *dir, float dotThreshold = 0.98f );
+	bool HasSavedSimilarDir( const float *dir, float dotThreshold = 0.9995f /* a bit larger than cos( 2.5 deg ) */ );
 
 	BunnyTestingSavedLookDirsAction( BotMovementModule *module_, const char *name_, int debugColor_ )
 		: BunnyTestingMultipleLookDirsAction( module_, name_, debugColor_ ) {}
