@@ -274,11 +274,13 @@ static void Intercepted_PMoveTouchTriggers( pmove_t *pm, const vec3_t previous_o
 	game.edicts[pm->playerState->playerNum + 1].ai->botRef->OnInterceptedPMoveTouchTriggers( pm, previous_origin );
 }
 
+static const CMShapeList *pmoveShapeList;
+
 static void Intercepted_Trace( trace_t *t, const vec3_t start, const vec3_t mins,
 							   const vec3_t maxs, const vec3_t end,
 							   int ignore, int contentmask, int timeDelta ) {
-	int topNodeHint = ::collisionTopNodeCache.GetTopNode( start, mins, maxs, end );
-	trap_CM_TransformedBoxTrace( t, start, end, mins, maxs, nullptr, contentmask, nullptr, nullptr, topNodeHint );
+	// TODO: Check whether contentmask is compatible
+	GAME_IMPORT.CM_ClipToShapeList( pmoveShapeList, t, start, end, mins, maxs, contentmask );
 }
 
 static int Intercepted_PointContents( const vec3_t p, int timeDelta ) {
@@ -1037,6 +1039,8 @@ void MovementPredictionContext::NextMovementStep() {
 	currPlayerState->pmove.gravity = (int)level.gravity;
 	currPlayerState->pmove.pm_type = PM_NORMAL;
 
+
+
 	pmove_t pm;
 	// TODO: Eliminate this call?
 	memset( &pm, 0, sizeof( pmove_t ) );
@@ -1060,7 +1064,21 @@ void MovementPredictionContext::NextMovementStep() {
 	// The naive solution of supplying a dummy trace function
 	// (that yields a zeroed output with fraction = 1) does not work.
 	// An actual logic tied to this flag has to be added in Pmove() for each module_Trace() call.
+
+	// This call is quite cheap
 	pm.skipCollision = EnvironmentTraceCache().CanSkipPMoveCollision( this );
+	// Update the shape lists cache if only it's really needed
+	if( !pm.skipCollision ) {
+		Vec3 regionMins = Vec3( -32, -32, -20 );
+		regionMins += playerbox_stand_mins;
+		regionMins += entityPhysicsState->Origin();
+		Vec3 regionMaxs = Vec3( +32, +32, +20 );
+		regionMaxs += playerbox_stand_maxs;
+		regionMaxs += entityPhysicsState->Origin();
+		// Only brushes within these bounds are going to be tested while performing PMove collision calls.
+		// This may produce incorrect results for a very high speed but overall this greatly improves prediction performance.
+		pmoveShapeList = shapesListCache.prepareList( regionMins.Data(), regionMaxs.Data() );
+	}
 
 	// We currently test collisions only against a solid world on each movement step and the corresponding PMove() call.
 	// Touching trigger entities is handled by Intercepted_PMoveTouchTriggers(), also we use AAS sampling for it.

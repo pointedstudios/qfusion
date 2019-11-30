@@ -44,44 +44,42 @@ int TriggerAreaNumsCache::GetAreaNum( int entNum ) const {
 	return *areaNumRef;
 }
 
+static const float kTopNodeCacheAddToMins[] = { -56, -56, -24 };
+static const float kTopNodeCacheAddToMaxs[] = { +56, +56, +24 };
+
+CollisionTopNodeCache::CollisionTopNodeCache() noexcept
+	: boundsCache( "TopNodeCache", kTopNodeCacheAddToMins, kTopNodeCacheAddToMaxs ) {}
+
 CollisionTopNodeCache collisionTopNodeCache;
 
-int CollisionTopNodeCache::GetTopNode( const float *traceStart, const float *traceMins,
-									   const float *traceMaxs, const float *traceEnd ) const {
-	if( profileHits ) {
-		total++;
+static const float kShapesListCacheAddToMins[] = { -64, -64, -32 };
+static const float kShapesListCacheAddToMaxs[] = { +64, +64, +32 };
+
+CollisionShapesListCache::CollisionShapesListCache() noexcept
+	: boundsCache( "ShapesListCache", kShapesListCacheAddToMins, kShapesListCacheAddToMaxs ) {}
+
+CollisionShapesListCache::~CollisionShapesListCache() {
+	GAME_IMPORT.CM_FreeShapeList( cachedList );
+	GAME_IMPORT.CM_FreeShapeList( clippedList );
+}
+
+CollisionShapesListCache shapesListCache;
+
+const CMShapeList *CollisionShapesListCache::prepareList( const float *mins, const float *maxs ) const {
+	if( boundsCache.checkOrUpdateBounds( mins, maxs ) ) {
+		GAME_IMPORT.CM_ClipShapeList( clippedList, cachedList, mins, maxs );
+		return clippedList;
 	}
 
-	vec3_t bounds[2];
-	ClearBounds( bounds[0], bounds[1] );
-
-	vec3_t startMins, startMaxs;
-	VectorAdd( traceStart, traceMins, startMins );
-	AddPointToBounds( startMins, bounds[0], bounds[1] );
-	VectorAdd( traceStart, traceMaxs, startMaxs );
-	AddPointToBounds( startMaxs, bounds[0], bounds[1] );
-
-	vec3_t endMins, endMaxs;
-	VectorAdd( traceEnd, traceMins, endMins );
-	AddPointToBounds( endMins, bounds[0], bounds[1] );
-	VectorAdd( traceEnd, traceMaxs, endMaxs );
-	AddPointToBounds( endMaxs, bounds[0], bounds[1] );
-
-	if( WithinCachedBounds( bounds[0], bounds[1] ) ) {
-		if( profileHits ) {
-			hits++;
-		}
-		return cachedNode;
+	if( !cachedList ) {
+		cachedList = GAME_IMPORT.CM_AllocShapeList();
+		clippedList = GAME_IMPORT.CM_AllocShapeList();
 	}
 
-	SaveCachedBounds( bounds[0], bounds[1] );
-	cachedNode = trap_CM_FindTopNodeForBox( cachedForMins, cachedForMaxs );
-	if( profileHits ) {
-		// The CM call must not return leaves
-		assert( cachedNode >= 0 );
-		nodeValuesSum += cachedNode;
-	}
-	return cachedNode;
+	constexpr int mask = MASK_PLAYERSOLID | MASK_WATER | CONTENTS_TRIGGER | CONTENTS_JUMPPAD | CONTENTS_TELEPORTER;
+	cachedList = GAME_IMPORT.CM_BuildShapeList( cachedList, boundsCache.getCacheMins(), boundsCache.getCacheMaxs(), mask );
+	GAME_IMPORT.CM_ClipShapeList( clippedList, cachedList, mins, maxs );
+	return clippedList;
 }
 
 bool ReachChainWalker::Exec() {

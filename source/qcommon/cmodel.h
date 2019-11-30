@@ -124,6 +124,16 @@ cmodel_state_t *CM_New( void *mempool );
 void CM_AddReference( cmodel_state_t *cms );
 void CM_ReleaseReference( cmodel_state_t *cms );
 
+struct CMShapeList;
+
+CMShapeList *CM_AllocShapeList( cmodel_state_t *cms );
+void CM_FreeShapeList( cmodel_state_t *cms, CMShapeList *list );
+CMShapeList *CM_BuildShapeList( cmodel_state_t *cms, CMShapeList *list, const float *mins, const float *maxs, int clipMask );
+void CM_ClipShapeList( cmodel_state_t *cms, CMShapeList *, const CMShapeList *, const float *mins, const float *maxs );
+void CM_ClipToShapeList( cmodel_state_t *cms, const CMShapeList *list, trace_t *tr,
+						 const float *start, const float *end,
+						 const float *mins, const float *maxs, int clipMask );
+
 //
 void CM_Init( void );
 void CM_Shutdown( void );

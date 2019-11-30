@@ -248,5 +248,16 @@ static inline void CM_CopyCMToRawPlane( const cm_plane_t *src, cplane_t *dest ) 
 
 #ifdef __cplusplus
 }
+
+struct CMShapeList {
+	const cbrush_t **shapes;
+	int numShapes { 0 };
+
+	explicit CMShapeList( void *mem ) {
+		assert( !( (uintptr_t)mem % sizeof( void * ) ) );
+		shapes = (const cbrush_t **)mem;
+	}
+};
+
 #endif
 

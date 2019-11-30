@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "qcommon.h"
 #include "cm_local.h"
 #include "cm_trace.h"
+#include "../game/ai/static_vector.h"
 
 static inline void CM_SetBuiltinBrushBounds( vec_bounds_t mins, vec_bounds_t maxs ) {
 	for( int i = 0; i < (int)( sizeof( vec_bounds_t ) / sizeof( vec_t ) ); ++i ) {
@@ -281,7 +282,7 @@ BOX TRACING
 ===============================================================================
 */
 
-void CMTraceComputer::ClipBoxToBrush( CMTraceContext *tlc, cbrush_t *brush ) {
+void CMTraceComputer::ClipBoxToBrush( CMTraceContext *tlc, const cbrush_t *brush ) {
 	cm_plane_t *clipplane;
 	cbrushside_t *side, *leadside;
 	float d1, d2, f;
@@ -411,7 +412,7 @@ void CMTraceComputer::ClipBoxToBrush( CMTraceContext *tlc, cbrush_t *brush ) {
 	}
 }
 
-void CMTraceComputer::TestBoxInBrush( CMTraceContext *tlc, cbrush_t *brush ) {
+void CMTraceComputer::TestBoxInBrush( CMTraceContext *tlc, const cbrush_t *brush ) {
 	int i;
 	cm_plane_t *p;
 	cbrushside_t *side;
@@ -494,20 +495,15 @@ static inline bool CM_MightCollide( const vec_bounds_t shapeMins, const vec_boun
 	return BoundsIntersect( shapeMins, shapeMaxs, tlc->absmins, tlc->absmaxs );
 }
 
-void CMTraceComputer::CollideBox( CMTraceContext *tlc, void ( CMTraceComputer::*method )( CMTraceContext *, cbrush_t * ),
-								  cbrush_t *brushes, int nummarkbrushes,
-								  cface_t *markfaces, int nummarkfaces ) {
-	int i, j;
-	cbrush_t *b;
-	cface_t *patch;
-	cbrush_t *facet;
-
+void CMTraceComputer::CollideBox( CMTraceContext *tlc, void ( CMTraceComputer::*method )( CMTraceContext *, const cbrush_t * ),
+								  const cbrush_t *brushes, int nummarkbrushes,
+								  const cface_t *markfaces, int nummarkfaces ) {
 	// Save the exact address to avoid pointer chasing in loops
 	const float *fraction = &tlc->trace->fraction;
 
 	// trace line against all brushes
-	for( i = 0; i < nummarkbrushes; i++ ) {
-		b = &brushes[i];
+	for( int i = 0; i < nummarkbrushes; i++ ) {
+		const auto *__restrict b = &brushes[i];
 		if( !( b->contents & tlc->contents ) ) {
 			continue;
 		}
@@ -521,16 +517,16 @@ void CMTraceComputer::CollideBox( CMTraceContext *tlc, void ( CMTraceComputer::*
 	}
 
 	// trace line against all patches
-	for( i = 0; i < nummarkfaces; i++ ) {
-		patch = &markfaces[i];
+	for( int i = 0; i < nummarkfaces; i++ ) {
+		const auto *__restrict patch = &markfaces[i];
 		if( !( patch->contents & tlc->contents ) ) {
 			continue;
 		}
 		if( !CM_MightCollide( patch->mins, patch->maxs, tlc ) ) {
 			continue;
 		}
-		facet = patch->facets;
-		for( j = 0; j < patch->numfacets; j++, facet++ ) {
+		for( int j = 0; j < patch->numfacets; j++ ) {
+			const auto *__restrict facet = &patch->facets[j];
 			if( !CM_MightCollide( facet->mins, facet->maxs, tlc ) ) {
 				continue;
 			}
@@ -564,13 +560,8 @@ static inline bool CM_MightCollideInLeaf( const vec_bounds_t shapeMins,
 	return VectorLengthSquared( perp ) <= distanceThreshold * distanceThreshold;
 }
 
-void CMTraceComputer::ClipBoxToLeaf( CMTraceContext *tlc, cbrush_t *brushes,
-									 int numbrushes, cface_t *markfaces, int nummarkfaces ) {
-	int i, j;
-	cbrush_t *b;
-	cface_t *patch;
-	cbrush_t *facet;
-
+void CMTraceComputer::ClipBoxToLeaf( CMTraceContext *tlc, const cbrush_t *brushes,
+									 int numbrushes, const cface_t *markfaces, int nummarkfaces ) {
 	// Saving the method reference should reduce virtual calls cost by avoid vtable lookup
 	auto method = &CMTraceComputer::ClipBoxToBrush;
 
@@ -578,8 +569,8 @@ void CMTraceComputer::ClipBoxToLeaf( CMTraceContext *tlc, cbrush_t *brushes,
 	const float *fraction = &tlc->trace->fraction;
 
 	// trace line against all brushes
-	for( i = 0; i < numbrushes; i++ ) {
-		b = &brushes[i];
+	for( int i = 0; i < numbrushes; i++ ) {
+		const auto *__restrict b = &brushes[i];
 		if( !( b->contents & tlc->contents ) ) {
 			continue;
 		}
@@ -593,16 +584,16 @@ void CMTraceComputer::ClipBoxToLeaf( CMTraceContext *tlc, cbrush_t *brushes,
 	}
 
 	// trace line against all patches
-	for( i = 0; i < nummarkfaces; i++ ) {
-		patch = &markfaces[i];
+	for( int i = 0; i < nummarkfaces; i++ ) {
+		const auto *__restrict patch = &markfaces[i];
 		if( !( patch->contents & tlc->contents ) ) {
 			continue;
 		}
 		if( !CM_MightCollideInLeaf( patch->mins, patch->maxs, patch->center, patch->radius, tlc ) ) {
 			continue;
 		}
-		facet = patch->facets;
-		for( j = 0; j < patch->numfacets; j++, facet++ ) {
+		for( int j = 0; j < patch->numfacets; j++ ) {
+			const auto *__restrict facet = &patch->facets[j];
 			if( !CM_MightCollideInLeaf( facet->mins, facet->maxs, facet->center, facet->radius, tlc ) ) {
 				continue;
 			}
@@ -926,4 +917,146 @@ void CM_TransformedBoxTrace( const cmodel_state_t *cms, trace_t *tr,
 		}
 #endif
 	}
+}
+
+void CMTraceComputer::BuildShapeList( CMShapeList *list, const float *mins, const float *maxs, int clipMask ) {
+	int leafNums[1024], topNode;
+	// TODO: This can be optimized
+	const int numLeaves = CM_BoxLeafnums( cms, mins, maxs, leafNums, 1024, &topNode );
+
+	int numShapes = 0;
+	const auto *leaves = cms->map_leafs;
+	const float *__restrict testedMins = mins;
+	const float *__restrict testedMaxs = maxs;
+	auto *__restrict destShapes = list->shapes;
+	for( int i = 0; i < numLeaves; ++i ) {
+		const auto *__restrict leaf = &leaves[leafNums[i]];
+		const auto *brushes = leaf->brushes;
+		for( int j = 0; j < leaf->numbrushes; ++j ) {
+			const auto *__restrict b = &brushes[j];
+			if( !( b->contents & clipMask ) ) {
+				continue;
+			}
+			if( !BoundsIntersect( b->mins, b->maxs, testedMins, testedMaxs ) ) {
+				continue;
+			}
+			destShapes[numShapes++] = b;
+		}
+
+		const auto *faces = leaf->faces;
+		for( int j = 0; j < leaf->numfaces; ++j ) {
+			const auto *__restrict f = &faces[j];
+			if( !( f->contents & clipMask ) ) {
+				continue;
+			}
+			if( !BoundsIntersect( f->mins, f->maxs, testedMins, testedMaxs ) ) {
+				continue;
+			}
+			for( int k = 0; k < f->numfacets; ++k ) {
+				const auto *__restrict b = &f->facets[k];
+				if( !BoundsIntersect( b->mins, b->maxs, testedMins, testedMaxs ) ) {
+					continue;
+				}
+				destShapes[numShapes++] = b;
+			}
+		}
+	}
+
+	list->numShapes = numShapes;
+}
+
+void CMTraceComputer::ClipShapeList( CMShapeList *list, const CMShapeList *baseList, const float *mins, const float *maxs ) {
+	const int numSrcShapes = baseList->numShapes;
+	const auto *srcShapes = baseList->shapes;
+
+	int numDestShapes = 0;
+	auto *destShapes = list->shapes;
+
+	const float *__restrict testedMins = mins;
+	const float *__restrict testedMaxs = maxs;
+	for( int i = 0; i < numSrcShapes; ++i ) {
+		const cbrush_t *__restrict b = srcShapes[i];
+		if( !BoundsIntersect( b->mins, b->maxs, testedMins, testedMaxs ) ) {
+			continue;
+		}
+		destShapes[numDestShapes++] = b;
+	}
+
+	list->numShapes = numDestShapes;
+}
+
+void CMTraceComputer::ClipToShapeList( const CMShapeList *list, trace_t *tr,
+	                                   const float *start, const float *end,
+	                                   const float *mins, const float *maxs, int clipMask ) {
+	CMTraceContext tlc;
+	SetupCollideContext( &tlc, tr, start, end, mins, maxs, clipMask );
+
+	const int numShapes = list->numShapes;
+	const auto *__restrict shapes = list->shapes;
+
+	float *const __restrict fraction = &tlc.trace->fraction;
+
+	// Make sure the virtual call address gets resolved here
+	auto clipFn = &CMTraceComputer::ClipBoxToBrush;
+	if( VectorCompare( start, end ) ) {
+		clipFn = &CMTraceComputer::TestBoxInBrush;
+	}
+
+	for( int i = 0; i < numShapes; ++i ) {
+		const cbrush_t *__restrict b = shapes[i];
+		if( !BoundsIntersect( b->mins, b->maxs, tlc.mins, tlc.maxs ) ) {
+			continue;
+		}
+		( this->*clipFn )( &tlc, b );
+		if( !*fraction ) {
+			break;
+		}
+	}
+
+	if( tr->fraction == 1.0f ) {
+		VectorCopy( end, tr->endpos );
+	} else {
+		VectorLerp( start, tr->fraction, end, tr->endpos );
+#ifdef TRACE_NOAXIAL
+		if( PlaneTypeForNormal( tr->plane.normal ) == PLANE_NONAXIAL ) {
+			VectorMA( tr->endpos, TRACE_NOAXIAL_SAFETY_OFFSET, tr->plane.normal, tr->endpos );
+		}
+#endif
+	}
+}
+
+CMShapeList *CM_AllocShapeList( cmodel_state_t *cms ) {
+	// TODO: Use only a necessary amount of memory
+	void *mem = ::malloc( 16 * 1024 );
+	if( !mem ) {
+		return nullptr;
+	}
+	auto *list = (CMShapeList *)mem;
+	new( list )CMShapeList( list + 1 );
+	return list;
+}
+
+void CM_FreeShapeList( cmodel_state_t *cms, CMShapeList *list ) {
+	if( list ) {
+		::free( list );
+	}
+}
+
+CMShapeList *CM_BuildShapeList( cmodel_state_t *cms, CMShapeList *list, const float *mins, const float *maxs, int clipMask ) {
+	CM_GetTraceComputer( cms )->BuildShapeList( list, mins, maxs, clipMask );
+	return list;
+}
+
+void CM_ClipShapeList( cmodel_state_t *cms, CMShapeList *list,
+	                   const CMShapeList *baseList,
+	                   const float *mins, const float *maxs ) {
+	CM_GetTraceComputer( cms )->ClipShapeList( list, baseList, mins, maxs );
+}
+
+void CM_ClipToShapeList( cmodel_state_t *cms, const CMShapeList *list, trace_t *tr,
+	                     const float *start, const float *end,
+	                     const float *mins, const float *maxs, int clipMask ) {
+	memset( tr, 0, sizeof( trace_t ) );
+	tr->fraction = 1.0f;
+	CM_GetTraceComputer( cms )->ClipToShapeList( list, tr, start, end, mins, maxs, clipMask );
 }

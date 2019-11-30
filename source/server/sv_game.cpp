@@ -100,6 +100,27 @@ static int PF_CM_FindTopNodeForSphere( const vec3_t center, float radius, unsign
 	return CM_FindTopNodeForSphere( svs.cms, center, radius, maxValue );
 }
 
+static CMShapeList *PF_CM_AllocShapeList() {
+	return CM_AllocShapeList( svs.cms );
+}
+
+static void PF_CM_FreeShapeList( CMShapeList *list ) {
+	CM_FreeShapeList( svs.cms, list );
+}
+
+CMShapeList *PF_CM_BuildShapeList( CMShapeList *list, const float *mins, const float *maxs, int clipMask ) {
+	return CM_BuildShapeList( svs.cms, list, mins, maxs, clipMask );
+}
+
+void PF_CM_ClipShapeList( CMShapeList *list, const CMShapeList *baseList, const float *mins, const float *maxs ) {
+	CM_ClipShapeList( svs.cms, list, baseList, mins, maxs );
+}
+
+void PF_CM_ClipToShapeList( const CMShapeList *list, trace_t *tr, const float *start,
+	                        const float *end, const float *mins, const float *maxs, int clipMask ) {
+	CM_ClipToShapeList( svs.cms, list, tr, start, end, mins, maxs, clipMask );
+}
+
 static QueryObject *SV_MM_NewGetQuery( const char *url ) {
 	return QueryObject::NewGetQuery( url, sv_ip->string );
 }
@@ -505,6 +526,11 @@ void SV_InitGameProgs( void ) {
 	import.CM_LeafsInPVS = PF_CM_LeafsInPVS;
 	import.CM_FindTopNodeForBox = PF_CM_FindTopNodeForBox;
 	import.CM_FindTopNodeForSphere = PF_CM_FindTopNodeForSphere;
+	import.CM_AllocShapeList = PF_CM_AllocShapeList;
+	import.CM_FreeShapeList = PF_CM_FreeShapeList;
+	import.CM_BuildShapeList = PF_CM_BuildShapeList;
+	import.CM_ClipShapeList = PF_CM_ClipShapeList;
+	import.CM_ClipToShapeList = PF_CM_ClipToShapeList;
 
 	import.Milliseconds = Sys_Milliseconds;
 

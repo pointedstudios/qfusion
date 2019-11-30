@@ -66,6 +66,8 @@ typedef struct {
 
 //===============================================================
 
+struct CMShapeList;
+
 //
 // functions provided by the main engine
 //
@@ -117,6 +119,12 @@ typedef struct {
 	int ( *CM_LeafsInPVS )( int leafnum1, int leafnum2 );
 	int ( *CM_FindTopNodeForBox )( const vec3_t mins, const vec3_t maxs, unsigned maxValue );
 	int ( *CM_FindTopNodeForSphere )( const vec3_t center, float radius, unsigned maxValue );
+	CMShapeList *( *CM_AllocShapeList )();
+	void ( *CM_FreeShapeList )( CMShapeList *list );
+	CMShapeList *( *CM_BuildShapeList )( CMShapeList *, const float *mins, const float *maxs, int clipMask );
+	void ( *CM_ClipShapeList )( CMShapeList *, const CMShapeList *, const float *mins, const float *maxs );
+	void ( *CM_ClipToShapeList )( const CMShapeList *list, trace_t *tr, const float *start,
+		                          const float *end, const float *mins, const float *maxs, int clipMask );
 
 	// managed memory allocation
 	void *( *Mem_Alloc )( size_t size, const char *filename, int fileline );

@@ -35,6 +35,8 @@ struct CMTraceContext {
 	bool ispoint;      // optimized case
 };
 
+struct CMShapeList;
+
 struct CMTraceComputer {
 	struct cmodel_state_s *cms;
 
@@ -45,24 +47,31 @@ struct CMTraceComputer {
 
 	virtual void SetupClipContext( CMTraceContext *tlc ) {}
 
-	virtual void CollideBox( CMTraceContext *tlc, void ( CMTraceComputer::*method )( CMTraceContext *, cbrush_s * ),
-							 cbrush_s *brushes, int numbrushes, cface_s *markfaces, int nummarkfaces );
+	virtual void CollideBox( CMTraceContext *tlc, void ( CMTraceComputer::*method )( CMTraceContext *, const cbrush_s * ),
+							 const cbrush_s *brushes, int numbrushes, const cface_s *markfaces, int nummarkfaces );
 
 
-	virtual void ClipBoxToLeaf( CMTraceContext *tlc, cbrush_s *brushes,
-								int numbrushes, cface_s *markfaces, int nummarkfaces );
+	virtual void ClipBoxToLeaf( CMTraceContext *tlc, const cbrush_s *brushes,
+								int numbrushes, const cface_s *markfaces, int nummarkfaces );
 
 	// Lets avoid making these calls virtual, there is a small but definite performance penalty
 	// (something around 5-10%s, and this really matter as all newly introduced engine features rely on fast CM raycasting).
 	// They still can be "overridden" for specialized implementations
 	// just by using explicitly qualified method with the same signature.
-	void TestBoxInBrush( CMTraceContext *tlc, cbrush_s *brush );
-	void ClipBoxToBrush( CMTraceContext *tlc, cbrush_s *brush );
+	void TestBoxInBrush( CMTraceContext *tlc, const cbrush_s *brush );
+	void ClipBoxToBrush( CMTraceContext *tlc, const cbrush_s *brush );
 
 	void RecursiveHullCheck( CMTraceContext *tlc, int num, float p1f, float p2f, const vec3_t p1, const vec3_t p2 );
 
 	void Trace( trace_t *tr, const vec3_t start, const vec3_t end, const vec3_t mins,
 				const vec3_t maxs, const cmodel_s *cmodel, int brushmask, int topNodeHint );
+
+	virtual void BuildShapeList( CMShapeList *list, const float *mins, const float *maxs, int clipMask );
+	virtual void ClipShapeList( CMShapeList *list, const CMShapeList *baseList, const float *mins, const float *maxs );
+
+	virtual void ClipToShapeList( const CMShapeList *list, trace_t *tr,
+		                          const float *start, const float *end,
+		                          const float *mins, const float *maxs, int clipMask );
 };
 
 struct CMGenericTraceComputer final: public CMTraceComputer {};
@@ -76,11 +85,18 @@ struct CMSse42TraceComputer final: public CMTraceComputer {
 
 	void SetupClipContext( CMTraceContext *tlc ) override;
 
-	void ClipBoxToLeaf( CMTraceContext *tlc, cbrush_s *brushes, int numbrushes,
-						cface_s *markfaces, int nummarkfaces ) override;
+	void ClipBoxToLeaf( CMTraceContext *tlc, const cbrush_s *brushes, int numbrushes,
+						const cface_s *markfaces, int nummarkfaces ) override;
 
 	// Overrides a base member by hiding it
-	void ClipBoxToBrush( CMTraceContext *tlc, cbrush_s *brush );
+	void ClipBoxToBrush( CMTraceContext *tlc, const cbrush_s *brush );
+
+	void BuildShapeList( CMShapeList *list, const float *mins, const float *maxs, int clipMask ) override;
+	void ClipShapeList( CMShapeList *list, const CMShapeList *baseList, const float *mins, const float *maxs ) override;
+
+	void ClipToShapeList( const CMShapeList *list, trace_t *tr,
+		                  const float *start, const float *end,
+		                  const float *mins, const float *maxs, int clipMask ) override;
 #endif
 };
 

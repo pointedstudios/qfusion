@@ -457,11 +457,16 @@ public:
 
 extern TriggerAreaNumsCache triggerAreaNumsCache;
 
-class CollisionTopNodeCache {
-	mutable vec3_t cachedForMins { 0, 0, 0 };
-	mutable vec3_t cachedForMaxs { 0, 0, 0 };
+class RegionBoundsCache {
+	const char *const tag;
+	const float *const addToMins;
+	const float *const addToMaxs;
 
-	mutable int cachedNode { 0 };
+	mutable int64_t hits { 0 };
+	mutable int64_t total { 0 };
+
+	vec3_t cachedForMins { -99999, -99999, -99999 };
+	vec3_t cachedForMaxs { -99998, -99998, -99998 };
 
 	// This approach looks much cleaner rather multiple ifdefs spread over the code
 #ifndef PUBLIC_BUILD
@@ -469,67 +474,82 @@ class CollisionTopNodeCache {
 #else
 	static constexpr auto profileHits = false;
 #endif
-
-	mutable int64_t hits { 0 };
-	mutable int64_t total { 0 };
-	mutable int64_t nodeValuesSum { 0 };
-
-	bool WithinCachedBounds( const float *mins, const float *maxs ) const {
-		// TODO: Use SIMD if it becomes noticeable at profiling results
-		return
-			( mins[0] > cachedForMins[0] ) & ( mins[1] > cachedForMins[1] ) & ( mins[2] > cachedForMins[2] ) &
-			( maxs[0] < cachedForMaxs[0] ) & ( maxs[1] < cachedForMaxs[1] ) & ( maxs[2] < cachedForMaxs[2] );
-	}
-
-	void SaveCachedBounds( const float *testedForMins, const float *testedForMaxs ) const {
-		VectorSet( cachedForMins, -56, -56, -24 );
-		VectorSet( cachedForMaxs, +56, +56, +24 );
-		VectorAdd( testedForMins, cachedForMins, cachedForMins );
-		VectorAdd( testedForMaxs, cachedForMaxs, cachedForMaxs );
-	}
 public:
-	~CollisionTopNodeCache() {
-		if( !profileHits ) {
-			return;
+	RegionBoundsCache( const char *tag_, const float *addToMins_, const float *addToMaxs_ ) noexcept
+		: tag( tag_ ), addToMins( addToMins_ ), addToMaxs( addToMaxs_ ) {
+	}
+
+	[[nodiscard]]
+	const float *getCacheMins() const { return cachedForMins; }
+	[[nodiscard]]
+	const float *getCacheMaxs() const { return cachedForMaxs; }
+
+	[[nodiscard]]
+	bool checkOrUpdateBounds( const float *mins, const float *maxs ) {
+		if( profileHits ) {
+			total++;
 		}
 
-		double hitRate = total ? hits / ( (double)total ) : 0.0;
-		// Divide the node values sum by count of misses
-		int avgTopNode = total ? (int)( nodeValuesSum / ( (double)( total - hits ) ) ) : 0;
-		// We are unsure if calling G_Printf() is valid at the moment of this object destruction
-		constexpr const char *tag = "CollisionTopNodeCache::~CollisionTopNodeCache()";
-		printf( "%s: Hit rate: %.3lf, avg. top node: %d\n", tag, hitRate, avgTopNode );
+		// TODO: Use SIMD if it becomes noticeable at profiling results
+		bool isWithinBounds =
+			( mins[0] > cachedForMins[0] ) & ( mins[1] > cachedForMins[1] ) & ( mins[2] > cachedForMins[2] ) &
+			( maxs[0] < cachedForMaxs[0] ) & ( maxs[1] < cachedForMaxs[1] ) & ( maxs[2] < cachedForMaxs[2] );
+
+		if( isWithinBounds ) {
+			if( profileHits ) {
+				hits++;
+			}
+			return true;
+		}
+
+		VectorAdd( mins, addToMins, cachedForMins );
+		VectorAdd( maxs, addToMaxs, cachedForMaxs );
+		return false;
 	}
 
-	int GetTopNode( const float *traceStart, const float *traceMins, const float *traceMaxs, const float *traceEnd ) const;
+	~RegionBoundsCache() {
+		if( !profileHits || !total ) {
+			return;
+		}
+		double rate = (double)hits / (double)total;
+		printf( "RegionBoundsCache@%s::~RegionBoundsCache(): hit rate was %f\n", tag, rate);
+	}
+};
+
+class CollisionTopNodeCache {
+	mutable RegionBoundsCache boundsCache;
+	mutable int cachedNode { 0 };
+public:
+	CollisionTopNodeCache() noexcept;
 
 	int GetTopNode( const Vec3 &absMins, const Vec3 &absMaxs ) const {
 		return GetTopNode( absMins.Data(), absMaxs.Data() );
 	}
 
 	int GetTopNode( const float *absMins, const float *absMaxs ) const {
-		if( profileHits ) {
-			total++;
-		}
-		if( WithinCachedBounds( absMins, absMaxs ) ) {
-			if( profileHits ) {
-				hits++;
-			}
+		if( boundsCache.checkOrUpdateBounds( absMins, absMaxs ) ) {
 			return cachedNode;
 		}
 
-		SaveCachedBounds( absMins, absMaxs );
-		cachedNode = trap_CM_FindTopNodeForBox( cachedForMins, cachedForMaxs );
-		if( profileHits ) {
-			// The CM call must not return leaves
-			assert( cachedNode >= 0 );
-			nodeValuesSum += cachedNode;
-		}
+		cachedNode = trap_CM_FindTopNodeForBox( boundsCache.getCacheMins(), boundsCache.getCacheMaxs() );
 		return cachedNode;
 	}
 };
 
 extern CollisionTopNodeCache collisionTopNodeCache;
+
+class CollisionShapesListCache {
+	mutable CMShapeList *cachedList { nullptr };
+	mutable CMShapeList *clippedList { nullptr };
+	mutable RegionBoundsCache boundsCache;
+public:
+	CollisionShapesListCache() noexcept;
+	~CollisionShapesListCache();
+
+	const CMShapeList *prepareList( const float *mins, const float *maxs ) const;
+};
+
+extern CollisionShapesListCache shapesListCache;
 
 class ReachChainWalker {
 protected:
