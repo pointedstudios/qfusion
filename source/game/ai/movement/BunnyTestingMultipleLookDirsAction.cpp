@@ -85,14 +85,103 @@ void BunnyTestingMultipleLookDirsAction::PlanPredictionStep( Context *context ) 
 	}
 }
 
+/**
+ * Applies scaling of Z and re-normalizing before testing a dot product.
+ * This helps to avoid excessive checks in case of stairs-like environment.
+ */
+static inline bool areDirsSimilar( const Vec3 &a, const Vec3 &b ) {
+	Vec3 lessBendingA( a );
+	lessBendingA.Z() *= Z_NO_BEND_SCALE;
+	// We do not want using fast inv. square root as the cosine threshold is really sensitive for these angle values.
+	// TODO: Maybe use a custom routine that is more precise but is still cheaper than a precise square root?
+	float invLenA = 1.0f / std::sqrt( lessBendingA.Length() );
+	lessBendingA *= invLenA;
+	Vec3 lessBendingB( b );
+	lessBendingB.Z() *= Z_NO_BEND_SCALE;
+	float invLenB = 1.0f / std::sqrt( lessBendingB.Length() );
+	lessBendingB *= invLenB;
+	// The threshold is approximately a cosine of 3 degrees
+	return lessBendingA.Dot( lessBendingB ) > 0.9987f;
+}
+
+// We do not want to export the actual inner container/elem type that's why it's a template
+template <typename Container>
+static bool hasSavedASimilarDir( const Container &__restrict savedDirs, const Vec3 &__restrict dir ) {
+	for( const auto &dirAndAttr: savedDirs ) {
+		if( areDirsSimilar( dirAndAttr.dir, dir ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+class DirRotatorsCache {
+	enum { kMaxRotations = 16 };
+	enum { kMatrixStrideFloats = sizeof( mat3_t ) / sizeof( float ) };
+
+	mat3_t values[kMaxRotations];
+public:
+	DirRotatorsCache() noexcept {
+		// We can't (?) use axis_identity due to initialization order issues (?), can we?
+		mat3_t identity = {
+			1, 0, 0,
+			0, 1, 0,
+			0, 0, 1
+		};
+
+		int index = 0;
+		// The step is not monotonic and is not uniform intentionally
+		const float angles[kMaxRotations / 2] = { 6.0f, 3.0f, 12.0f, 9.0f, 18.0f, 15.0f, 24.0f, 30.0f };
+		for( float angle : angles ) {
+			// TODO: Just negate some elements? Does not really matter for a static initializer
+			Matrix3_Rotate( identity, -angle, 0, 0, 1, values[index++] );
+			Matrix3_Rotate( identity, +angle, 0, 0, 1, values[index++] );
+		}
+	}
+
+	class RotationRef {
+		const float *m;
+	public:
+		explicit RotationRef( const float *m_ ): m( m_ ) {}
+		Vec3 rotate( const Vec3 &__restrict v ) const {
+			vec3_t result;
+			assert( std::fabs( v.Length() - 1.0f ) < 0.001f );
+			Matrix3_TransformVector( m, v.Data(), result );
+			return Vec3( result );
+		}
+	};
+
+	class const_iterator {
+		friend class DirRotatorsCache;
+		const float *m;
+		explicit const_iterator( const float *m_ ): m( m_ ) {}
+	public:
+		const_iterator& operator++() {
+			m += kMatrixStrideFloats;
+			return *this;
+		}
+		bool operator!=( const const_iterator &that ) const {
+			return m != that.m;
+		}
+		RotationRef operator*() const {
+			return RotationRef( m );
+		}
+	};
+
+	[[nodiscard]]
+	const_iterator begin() const { return const_iterator( &values[0][0] ); }
+	[[nodiscard]]
+	const_iterator end() const { return const_iterator( &values[0][0] + kMaxRotations * kMatrixStrideFloats ); }
+};
+
+static DirRotatorsCache dirRotatorsCache;
+
 void BunnyTestingSavedLookDirsAction::DeriveMoreDirsFromSavedDirs() {
 	// TODO: See notes in the method javadoc about this very basic approach
 
 	if( suggestedLookDirs.empty() ) {
 		return;
 	}
-
-	const float similarityDotThreshold = std::cosf( DEG2RAD( 2.5f ) ) + 0.0001f;
 
 	// First prune similar suggested areas.
 	// (a code that fills suggested areas may test similarity
@@ -102,7 +191,7 @@ void BunnyTestingSavedLookDirsAction::DeriveMoreDirsFromSavedDirs() {
 		assert( std::fabs( baseDir.Length() - 1.0f ) < 0.001f );
 		for( size_t j = i + 1; j < suggestedLookDirs.size(); ) {
 			const Vec3 &__restrict currDir = suggestedLookDirs[j].dir;
-			if( baseDir.Dot( currDir ) < similarityDotThreshold ) {
+			if( areDirsSimilar( baseDir, currDir ) ) {
 				j++;
 				continue;
 			}
@@ -116,28 +205,18 @@ void BunnyTestingSavedLookDirsAction::DeriveMoreDirsFromSavedDirs() {
 		return;
 	}
 
-	int rotationIndex = 0;
-	mat3_t rotations[12];
-	// The step is not monotonic and is not uniform intentionally
-	const float rotationVals[6] = { 5.0f, 2.5f, 11.f, 7.5f, 14.0f, 20.0f };
-	for( float val: rotationVals ) {
-		// TODO: Compute once and negate?
-		Matrix3_Rotate( axis_identity, -val, 0, 0, 1, rotations[rotationIndex++] );
-		Matrix3_Rotate( axis_identity, +val, 0, 0, 1, rotations[rotationIndex++] );
-	}
-
 	// Save this fixed value (as the dirs array is going to grow)
 	const size_t lastBaseAreaIndex = suggestedLookDirs.size() - 1;
 	for( size_t areaIndex = 0; areaIndex <= lastBaseAreaIndex; ++areaIndex ) {
-		const auto &base = suggestedLookDirs[areaIndex];
-		for( const auto &rotation : rotations ) {
-			vec3_t rotated;
-			Matrix3_TransformVector( rotation, base.dir.Data(), rotated );
-			if( HasSavedSimilarDir( rotated, similarityDotThreshold ) ) {
+		const auto &__restrict base = suggestedLookDirs[areaIndex];
+		for( const auto &rotator: dirRotatorsCache ) {
+			Vec3 rotated( rotator.rotate( base.dir ) );
+			assert( std::fabs( rotated.Length() - 1.0f ) < 0.001f );
+			if( hasSavedASimilarDir( suggestedLookDirs, rotated ) ) {
 				continue;
 			}
 
-			suggestedLookDirs.emplace_back( DirAndArea( Vec3( rotated ), base.area ) );
+			suggestedLookDirs.emplace_back( DirAndArea( rotated, base.area ) );
 			if( suggestedLookDirs.size() == suggestedLookDirs.capacity() ) {
 				return;
 			}
@@ -195,16 +274,4 @@ void BunnyTestingSavedLookDirsAction::SaveCandidateAreaDirs( MovementPredictionC
 			toTargetDir->NormalizeFast();
 		}
 	}
-}
-
-bool BunnyTestingSavedLookDirsAction::HasSavedSimilarDir( const float *dir, float dotThreshold ) {
-	assert( dotThreshold >= 0 && dotThreshold <= 1.0f );
-
-	for( const DirAndArea &saved: suggestedLookDirs ) {
-		if( saved.dir.Dot( dir ) >= dotThreshold ) {
-			return true;
-		}
-	}
-
-	return false;
 }
