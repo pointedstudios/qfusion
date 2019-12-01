@@ -138,52 +138,13 @@ public:
 		static_assert( N <= std::numeric_limits<int16_t>::max(), "Links can't handle more than 2^15 elements in pool" );
 	}
 
-	Item *New() {
+	template<typename... Args>
+	Item *New( Args... args ) {
 		if( void *mem = Alloc() ) {
-			return new( mem )Item( this );
+			return new( mem )Item( this, args... );
 		}
 		return nullptr;
 	}
-
-	template <typename Arg1>
-	Item *New( Arg1 arg1 ) {
-		if( void *mem = Alloc() ) {
-			return new( mem )Item( this, arg1 );
-		}
-		return nullptr;
-	}
-
-	template <typename Arg1, typename Arg2>
-	Item *New( Arg1 arg1, Arg2 arg2 ) {
-		if( void *mem = Alloc() ) {
-			return new( mem )Item( this, arg1, arg2 );
-		}
-		return nullptr;
-	};
-
-	template <typename Arg1, typename Arg2, typename Arg3>
-	Item *New( Arg1 arg1, Arg2 arg2, Arg3 arg3 ) {
-		if( void *mem = Alloc() ) {
-			return new( mem )Item( this, arg1, arg2, arg3 );
-		}
-		return nullptr;
-	};
-
-	template <typename Arg1, typename Arg2, typename Arg3, typename Arg4>
-	Item *New( Arg1 arg1, Arg2 arg2, Arg3 arg3, Arg4 arg4 ) {
-		if( void *mem = Alloc() ) {
-			return new( mem )Item( this, arg1, arg2, arg3, arg4 );
-		}
-		return nullptr;
-	};
-
-	template <typename Arg1, typename Arg2, typename Arg3, typename Arg4, typename Arg5>
-	Item *New( Arg1 arg1, Arg2 arg2, Arg3 arg3, Arg4 arg4, Arg5 arg5 ) {
-		if( void *mem = Alloc() ) {
-			return new( mem )Item( this, arg1, arg2, arg3, arg4, arg5 );
-		}
-		return nullptr;
-	};
 };
 
 #endif
