@@ -6,24 +6,6 @@
 class MovementPredictionContext;
 
 /**
- * Represents a ternary result of obstacle avoidance
- */
-enum class ObstacleAvoidanceResult {
-	/**
-	 * No obstacles were met and an initial direction was kept as-is
-	 */
-	NO_OBSTACLES,
-	/**
-	 * Some obstacles were met and an initial direction was modified
-	 */
-	CORRECTED,
-	/**
-	 * Some obstacles were met but there's no solution for obstacle avoidance
-	 */
-	KEPT_AS_IS
-};
-
-/**
  * Provides lazily-computed results of full-height or jumpable-height
  * short traces in 8 directions (front, left, back-left, front-right...)
  */
@@ -61,11 +43,6 @@ private:
 		}
 #endif
 	}
-
-	ObstacleAvoidanceResult TryAvoidObstacles( class MovementPredictionContext *context,
-											   Vec3 *intendedLookVec,
-											   float correctionFraction,
-											   unsigned sidesShift );
 
 	/**
 	 * Sets both full-height and jumpable-height cached results to empty
@@ -133,17 +110,6 @@ public:
 	}
 
 	bool CanSkipPMoveCollision( class MovementPredictionContext *context );
-
-	ObstacleAvoidanceResult TryAvoidJumpableObstacles( class MovementPredictionContext *context,
-													   Vec3 *intendedLookVec,
-													   float correctionFraction ) {
-		return TryAvoidObstacles( context, intendedLookVec, correctionFraction, 8 );
-	}
-	ObstacleAvoidanceResult TryAvoidFullHeightObstacles( class MovementPredictionContext *context,
-														 Vec3 *intendedLookVec,
-														 float correctionFraction ) {
-		return TryAvoidObstacles( context, intendedLookVec, correctionFraction, 0 );
-	}
 
 	void MakeRandomizedKeyMovesToTarget( MovementPredictionContext *context, const Vec3 &intendedMoveDir, int *keyMoves );
 	void MakeKeyMovesToTarget( MovementPredictionContext *context, const Vec3 &intendedMoveDir, int *keyMoves );

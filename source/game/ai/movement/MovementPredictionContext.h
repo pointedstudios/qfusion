@@ -307,8 +307,6 @@ public:
 	inline unsigned DefaultFrameTime() const;
 
 	inline EnvironmentTraceCache &TraceCache();
-	inline ObstacleAvoidanceResult TryAvoidFullHeightObstacles( float correctionFraction );
-	inline ObstacleAvoidanceResult TryAvoidJumpableObstacles( float correctionFraction );
 
 	// Do not return boolean value, avoid extra branching. Checking results if necessary is enough.
 	void NextReachNumAndTravelTimeToNavTarget( int *reachNum, int *travelTimeToNavTarget );

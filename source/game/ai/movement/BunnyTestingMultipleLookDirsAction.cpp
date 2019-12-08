@@ -75,10 +75,6 @@ void BunnyTestingMultipleLookDirsAction::PlanPredictionStep( Context *context ) 
 
 	context->record->botInput.SetIntendedLookDir( suggestedDir, true );
 
-	if( isTryingObstacleAvoidance ) {
-		context->TryAvoidJumpableObstacles( SuggestObstacleAvoidanceCorrectionFraction( context ) );
-	}
-
 	if( !SetupBunnyHopping( context->record->botInput.IntendedLookDir(), context ) ) {
 		context->SetPendingRollback();
 		return;

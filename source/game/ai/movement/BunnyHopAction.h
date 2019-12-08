@@ -47,15 +47,6 @@ protected:
 	bool hasEnteredNavTargetArea { false };
 	bool hasTouchedNavTarget { false };
 
-	bool supportsObstacleAvoidance { false };
-	bool shouldTryObstacleAvoidance { false };
-	bool isTryingObstacleAvoidance { false };
-
-	inline void ResetObstacleAvoidanceState() {
-		shouldTryObstacleAvoidance = false;
-		isTryingObstacleAvoidance = false;
-	}
-
 	void SetupCommonBunnyHopInput( MovementPredictionContext *context );
 	// TODO: Mark as virtual in base class and mark as final here to avoid a warning about hiding parent member?
 	bool GenericCheckIsActionEnabled( MovementPredictionContext *context, BaseMovementAction *suggestedAction );
@@ -95,7 +86,6 @@ protected:
 public:
 	BunnyHopAction( BotMovementModule *module_, const char *name_, int debugColor_ = 0 )
 		: BaseMovementAction( module_, name_, debugColor_ ) {
-		ResetObstacleAvoidanceState();
 		// Do NOT stop prediction on this! We have to check where the bot is going to land!
 		BaseMovementAction::stopPredictionOnTouchingNavEntity = false;
 	}

@@ -373,7 +373,6 @@ bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 			return true;
 		}
 		Debug( "A prediction step has lead to close to zero 2D speed while it was significant\n" );
-		this->shouldTryObstacleAvoidance = true;
 		return false;
 	}
 
@@ -417,7 +416,6 @@ bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 	if( speed2D < 100 ) {
 		const char *format_ = "A sequential speed loss interval of %d millis exceeds the tolerable one of %d millis\n";
 		Debug( format_, currentSpeedLossSequentialMillis, tolerableSpeedLossSequentialMillis );
-		this->shouldTryObstacleAvoidance = true;
 		return false;
 	}
 
@@ -784,7 +782,6 @@ void BunnyHopAction::OnApplicationSequenceStopped( Context *context,
 	BaseMovementAction::OnApplicationSequenceStopped( context, reason, stoppedAtFrameIndex );
 
 	if( reason != FAILED ) {
-		ResetObstacleAvoidanceState();
 		if( reason != DISABLED ) {
 			this->disabledForApplicationFrameIndex = std::numeric_limits<unsigned>::max();
 		}
@@ -796,31 +793,11 @@ void BunnyHopAction::OnApplicationSequenceStopped( Context *context,
 		return;
 	}
 
-	if( !supportsObstacleAvoidance ) {
-		// However having shouldTryObstacleAvoidance flag is legal (it should be ignored in this case).
-		// Make sure THIS method logic (that sets isTryingObstacleAvoidance) works as intended.
-		Assert( !isTryingObstacleAvoidance );
-		// Disable applying this action after rolling back to the savepoint
-		this->disabledForApplicationFrameIndex = context->savepointTopOfStackIndex;
-		return;
-	}
-
-	if( !isTryingObstacleAvoidance && shouldTryObstacleAvoidance ) {
-		// Try using obstacle avoidance after rolling back to the savepoint
-		// (We rely on skimming for the first try).
-		isTryingObstacleAvoidance = true;
-		// Make sure this action will be chosen again after rolling back
-		context->SaveSuggestedActionForNextFrame( this );
-		return;
-	}
-
 	// Disable applying this action after rolling back to the savepoint
 	this->disabledForApplicationFrameIndex = context->savepointTopOfStackIndex;
-	this->ResetObstacleAvoidanceState();
 }
 
 void BunnyHopAction::BeforePlanning() {
 	BaseMovementAction::BeforePlanning();
 	this->disabledForApplicationFrameIndex = std::numeric_limits<unsigned>::max();
-	ResetObstacleAvoidanceState();
 }

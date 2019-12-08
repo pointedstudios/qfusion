@@ -274,28 +274,6 @@ inline unsigned MovementPredictionContext::MillisAheadForFrameStart( unsigned fr
 	return totalMillisAhead;
 }
 
-inline ObstacleAvoidanceResult MovementPredictionContext::TryAvoidFullHeightObstacles( float correctionFraction ) {
-	// Make a modifiable copy of the intended look dir
-	Vec3 intendedLookVec( this->record->botInput.IntendedLookDir() );
-	auto result = EnvironmentTraceCache().TryAvoidFullHeightObstacles( this, &intendedLookVec, correctionFraction );
-	if( result == ObstacleAvoidanceResult::CORRECTED ) {
-		// Write the modified intended look dir back in this case
-		this->record->botInput.SetIntendedLookDir( intendedLookVec );
-	}
-	return result;
-}
-
-inline ObstacleAvoidanceResult MovementPredictionContext::TryAvoidJumpableObstacles( float correctionFraction ) {
-	// Make a modifiable copy of the intended look dir
-	Vec3 intendedLookVec( this->record->botInput.IntendedLookDir() );
-	auto result = EnvironmentTraceCache().TryAvoidJumpableObstacles( this, &intendedLookVec, correctionFraction );
-	if( result == ObstacleAvoidanceResult::CORRECTED ) {
-		// Write the modified intended look dir back in this case
-		this->record->botInput.SetIntendedLookDir( intendedLookVec );
-	}
-	return result;
-}
-
 inline BaseMovementAction &BaseMovementAction::DummyAction() {
 	// We have to check the combat action since it might be disabled due to planning stack overflow.
 	if( bot->ShouldKeepXhairOnEnemy() && bot->GetSelectedEnemies().AreValid() ) {
