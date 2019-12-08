@@ -28,12 +28,12 @@ void CombatDodgeSemiRandomlyToTargetAction::UpdateKeyMoveDirs( Context *context 
 		intendedMoveDir.NormalizeFast();
 
 		if( ShouldTryRandomness() ) {
-			traceCache.MakeRandomizedKeyMovesToTarget( context, intendedMoveDir, keyMoves );
+			traceCache.makeRandomizedKeyMovesToTarget( context, intendedMoveDir, keyMoves );
 		} else {
-			traceCache.MakeKeyMovesToTarget( context, intendedMoveDir, keyMoves );
+			traceCache.makeKeyMovesToTarget( context, intendedMoveDir, keyMoves );
 		}
 	} else {
-		traceCache.MakeRandomKeyMoves( context, keyMoves );
+		traceCache.makeRandomKeyMoves( context, keyMoves );
 	}
 
 	unsigned timeout = BotKeyMoveDirsState::TIMEOUT_PERIOD;

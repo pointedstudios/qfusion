@@ -11,7 +11,7 @@ class MovementPredictionContext;
  */
 class EnvironmentTraceCache {
 public:
-	static constexpr float TRACE_DEPTH = 32.0f;
+	static constexpr float kTraceDepth = 32.0f;
 
 	/**
 	 * Represents a cached trace result
@@ -27,9 +27,8 @@ private:
 	const aas_areasettings_t *aasAreaSettings;
 
 	TraceResult results[16];
-	unsigned resultsMask;
-	bool didAreaTest;
-	bool hasNoFullHeightObstaclesAround;
+	const CMShapeList *cachedShapeList { nullptr };
+	unsigned resultsMask { 0 };
 
 	template <typename T>
 	static inline void Assert( T condition, const char *message = nullptr ) {
@@ -44,23 +43,7 @@ private:
 #endif
 	}
 
-	/**
-	 * Sets both full-height and jumpable-height cached results to empty
-	 * @param front2DDir a front direction for a bot in predicted state
-	 * @param right2DDir a right direction for a bot in predicted state
-	 */
-	void SetAllResultsToEmpty( const vec3_t front2DDir, const vec3_t right2DDir );
-	/**
-	 * Sets only jumpable-height cached results to empty
-	 * @param front2DDir a front direction for a bot in predicted state
-	 * @param right2DDir a right direction for a bot in predicted state
-	 */
-	void SetAllJumpableToEmpty( const vec3_t front2DDir, const vec3_t right2DDir );
-
-	bool TrySkipTracingForCurrOrigin( class MovementPredictionContext *context,
-									  const vec3_t front2DDir, const vec3_t right2DDir );
-
-	int ComputeCollisionTopNodeHint( class MovementPredictionContext *context ) const;
+	const CMShapeList *getOrMakeRegionShapeList( class MovementPredictionContext *context );
 
 	/**
 	 * Selects indices of non-blocked dirs among 8 full-height ones.
@@ -68,22 +51,22 @@ private:
 	 * @param nonBlockedDirIndices a buffer for results
 	 * @return a number of non-blocked dirs
 	 */
-	inline unsigned SelectNonBlockedDirs( class MovementPredictionContext *context, unsigned *nonBlockedDirIndices );
+	inline unsigned selectNonBlockedDirs( class MovementPredictionContext *context, unsigned *nonBlockedDirIndices );
 public:
 	struct Query {
 		unsigned mask;
 		int index;
 
-		static Query Front() { return { 1u << 0, 0 }; }
-		static Query Back() { return { 1u << 1, 1 }; }
-		static Query Left() { return { 1u << 2, 2 }; }
-		static Query Right() { return { 1u << 3, 3 }; }
-		static Query FrontLeft() { return { 1u << 4, 4 }; }
-		static Query FrontRight() { return { 1u << 5, 5 }; }
-		static Query BackLeft() { return { 1u << 6, 6 }; }
-		static Query BackRight() { return { 1u << 7, 7 }; }
+		static Query front() { return { 1u << 0, 0 }; }
+		static Query back() { return { 1u << 1, 1 }; }
+		static Query left() { return { 1u << 2, 2 }; }
+		static Query right() { return { 1u << 3, 3 }; }
+		static Query frontLeft() { return { 1u << 4, 4 }; }
+		static Query frontRight() { return { 1u << 5, 5 }; }
+		static Query backLeft() { return { 1u << 6, 6 }; }
+		static Query backRight() { return { 1u << 7, 7 }; }
 
-		Query &JumpableHeight() {
+		Query &jumpableHeight() {
 			// Check whether the current mask is for a full height
 			if( mask <= ( 1u << 7 ) ) {
 				mask <<= 8;
@@ -92,28 +75,26 @@ public:
 		}
 	};
 
-	const TraceResult ResultForQuery( const Query &query ) {
+	const TraceResult resultForQuery( const Query &query ) {
 		Assert( query.mask & this->resultsMask, "A result is not present for the index" );
 		return results[query.index];
 	}
 
 	EnvironmentTraceCache() {
-		// Shut an analyzer up
-		memset( this, 0, sizeof( EnvironmentTraceCache ) );
 		this->aasAreaSettings = AiAasWorld::Instance()->AreaSettings();
 	}
 
-	void TestForResultsMask( class MovementPredictionContext *context, unsigned requiredResultsMask );
+	void testForResultsMask( class MovementPredictionContext *context, unsigned requiredResultsMask );
 
-	void TestForQuery( class MovementPredictionContext *context, const Query &query ) {
-		TestForResultsMask( context, query.mask );
+	void testForQuery( class MovementPredictionContext *context, const Query &query ) {
+		testForResultsMask( context, query.mask );
 	}
 
-	bool CanSkipPMoveCollision( class MovementPredictionContext *context );
+	const CMShapeList *getShapeListForPMoveCollision( class MovementPredictionContext *context );
 
-	void MakeRandomizedKeyMovesToTarget( MovementPredictionContext *context, const Vec3 &intendedMoveDir, int *keyMoves );
-	void MakeKeyMovesToTarget( MovementPredictionContext *context, const Vec3 &intendedMoveDir, int *keyMoves );
-	void MakeRandomKeyMoves( MovementPredictionContext *context, int *keyMoves );
+	void makeRandomizedKeyMovesToTarget( MovementPredictionContext *context, const Vec3 &intendedMoveDir, int *keyMoves );
+	void makeKeyMovesToTarget( MovementPredictionContext *context, const Vec3 &intendedMoveDir, int *keyMoves );
+	void makeRandomKeyMoves( MovementPredictionContext *context, int *keyMoves );
 };
 
 #endif

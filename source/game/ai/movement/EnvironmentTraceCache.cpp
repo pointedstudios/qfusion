@@ -36,16 +36,16 @@ static const float sideDirFractions[8][2] = {
  * @param right2DDir a current right direction for a bot
  * @param traceDir a result storage
  */
-static inline void MakeTraceDir( unsigned dirNum, const vec3_t front2DDir, const vec3_t right2DDir, vec3_t traceDir ) {
+static inline void makeTraceDir( unsigned dirNum, const vec3_t front2DDir, const vec3_t right2DDir, vec3_t traceDir ) {
 	const float *fractions = sideDirFractions[dirNum];
 	VectorScale( front2DDir, fractions[0], traceDir );
 	VectorMA( traceDir, fractions[1], right2DDir, traceDir );
 	VectorNormalizeFast( traceDir );
 }
 
-inline unsigned EnvironmentTraceCache::SelectNonBlockedDirs( Context *context, unsigned *nonBlockedDirIndices ) {
+unsigned EnvironmentTraceCache::selectNonBlockedDirs( Context *context, unsigned *nonBlockedDirIndices ) {
 	// Test for all 8 lower bits of full-height mask
-	this->TestForResultsMask( context, 0xFF );
+	this->testForResultsMask( context, 0xFF );
 
 	unsigned numNonBlockedDirs = 0;
 	for( unsigned i = 0; i < 8; ++i ) {
@@ -57,9 +57,9 @@ inline unsigned EnvironmentTraceCache::SelectNonBlockedDirs( Context *context, u
 	return numNonBlockedDirs;
 }
 
-void EnvironmentTraceCache::MakeRandomizedKeyMovesToTarget( Context *context, const Vec3 &intendedMoveDir, int *keyMoves ) {
+void EnvironmentTraceCache::makeRandomizedKeyMovesToTarget( Context *context, const Vec3 &intendedMoveDir, int *keyMoves ) {
 	unsigned nonBlockedDirIndices[8];
-	unsigned numNonBlockedDirs = SelectNonBlockedDirs( context, nonBlockedDirIndices );
+	unsigned numNonBlockedDirs = selectNonBlockedDirs( context, nonBlockedDirIndices );
 
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	const Vec3 forwardDir( entityPhysicsState.ForwardDir() );
@@ -98,9 +98,9 @@ void EnvironmentTraceCache::MakeRandomizedKeyMovesToTarget( Context *context, co
 	Vector2Set( keyMoves, 0, 0 );
 }
 
-void EnvironmentTraceCache::MakeKeyMovesToTarget( Context *context, const Vec3 &intendedMoveDir, int *keyMoves ) {
+void EnvironmentTraceCache::makeKeyMovesToTarget( Context *context, const Vec3 &intendedMoveDir, int *keyMoves ) {
 	unsigned nonBlockedDirIndices[8];
-	unsigned numNonBlockedDirs = SelectNonBlockedDirs( context, nonBlockedDirIndices );
+	unsigned numNonBlockedDirs = selectNonBlockedDirs( context, nonBlockedDirIndices );
 
 	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
 	const Vec3 forwardDir( entityPhysicsState.ForwardDir() );
@@ -130,9 +130,9 @@ void EnvironmentTraceCache::MakeKeyMovesToTarget( Context *context, const Vec3 &
 	Vector2Set( keyMoves, 0, 0 );
 }
 
-void EnvironmentTraceCache::MakeRandomKeyMoves( Context *context, int *keyMoves ) {
+void EnvironmentTraceCache::makeRandomKeyMoves( Context *context, int *keyMoves ) {
 	unsigned nonBlockedDirIndices[8];
-	unsigned numNonBlockedDirs = SelectNonBlockedDirs( context, nonBlockedDirIndices );
+	unsigned numNonBlockedDirs = selectNonBlockedDirs( context, nonBlockedDirIndices );
 	if( numNonBlockedDirs ) {
 		int dirIndex = nonBlockedDirIndices[(unsigned)( 0.9999f * numNonBlockedDirs * random() )];
 		const int *const dirMoves = sideDirSigns[dirIndex];
@@ -142,124 +142,22 @@ void EnvironmentTraceCache::MakeRandomKeyMoves( Context *context, int *keyMoves 
 	Vector2Set( keyMoves, 0, 0 );
 }
 
-void EnvironmentTraceCache::SetAllResultsToEmpty( const vec3_t front2DDir, const vec3_t right2DDir ) {
-	for( unsigned i = 0; i < 8; ++i ) {
-		TraceResult *const fullResult = &results[i + 0];
-		TraceResult *const jumpableResult = &results[i + 8];
-		fullResult->trace.fraction = 1.0f;
-		jumpableResult->trace.fraction = 1.0f;
-		// We have to save a legal trace dir
-		MakeTraceDir( i, front2DDir, right2DDir, fullResult->traceDir );
-		VectorCopy( fullResult->traceDir, jumpableResult->traceDir );
+const CMShapeList *EnvironmentTraceCache::getOrMakeRegionShapeList( Context *context ) {
+	if( cachedShapeList ) {
+		return cachedShapeList;
 	}
 
-	resultsMask |= 0xFFFF;
-	hasNoFullHeightObstaclesAround = true;
+	const float *__restrict origin = context->movementState->entityPhysicsState.Origin();
+	Vec3 regionMins = Vec3( -kTraceDepth, -kTraceDepth, -20 );
+	regionMins += playerbox_stand_mins;
+	regionMins += origin;
+	Vec3 regionMaxs = Vec3( +kTraceDepth, +kTraceDepth, +20 );
+	regionMaxs += playerbox_stand_maxs;
+	regionMaxs += origin;
+	return ( cachedShapeList = shapesListCache.prepareList( regionMins.Data(), regionMaxs.Data() ) );
 }
 
-void EnvironmentTraceCache::SetAllJumpableToEmpty( const vec_t *front2DDir, const vec_t *right2DDir ) {
-	for( unsigned i = 0; i < 8; ++i ) {
-		TraceResult *result = &results[i + 8];
-		result->trace.fraction = 1.0f;
-		// We have to save a legal trace dir
-		MakeTraceDir( i, front2DDir, right2DDir, result->traceDir );
-	}
-	resultsMask |= 0xFF00;
-}
-
-static inline bool CanSkipTracingForAreaHeight( const vec3_t origin, const aas_area_t &area, float minZOffset ) {
-	if( area.mins[2] >= origin[2] + minZOffset ) {
-		return false;
-	}
-	if( area.maxs[2] <= origin[2] + playerbox_stand_maxs[2] ) {
-		return false;
-	}
-
-	return true;
-}
-
-bool EnvironmentTraceCache::TrySkipTracingForCurrOrigin( Context *context, const vec3_t front2DDir, const vec3_t right2DDir ) {
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	const int areaNum = entityPhysicsState.CurrAasAreaNum();
-	if( !areaNum ) {
-		return false;
-	}
-
-	const auto *aasWorld = AiAasWorld::Instance();
-	const auto &area = aasWorld->Areas()[areaNum];
-	const auto &areaSettings = aasWorld->AreaSettings()[areaNum];
-	const float *origin = entityPhysicsState.Origin();
-
-	// Extend playerbox XY bounds by TRACE_DEPTH
-	Vec3 mins( origin[0] - TRACE_DEPTH, origin[1] - TRACE_DEPTH, origin[2] );
-	Vec3 maxs( origin[0] + TRACE_DEPTH, origin[1] + TRACE_DEPTH, origin[2] );
-	mins += playerbox_stand_mins;
-	maxs += playerbox_stand_maxs;
-
-	// We have to add some offset to the area bounds (an area is not always a box)
-	const float areaBoundsOffset = ( areaSettings.areaflags & AREA_WALL ) ? 40.0f : 16.0f;
-
-	int sideNum = 0;
-	for(; sideNum < 2; ++sideNum ) {
-		if( area.mins[sideNum] + areaBoundsOffset >= mins.Data()[sideNum] ) {
-			break;
-		}
-		if( area.maxs[sideNum] + areaBoundsOffset <= maxs.Data()[sideNum] ) {
-			break;
-		}
-	}
-
-	// If the area bounds test has lead to conclusion that there is enough free space in side directions
-	if( sideNum == 2 ) {
-		if( CanSkipTracingForAreaHeight( origin, area, playerbox_stand_mins[2] + 0.25f ) ) {
-			SetAllResultsToEmpty( front2DDir, right2DDir );
-			return true;
-		}
-
-		if( CanSkipTracingForAreaHeight( origin, area, playerbox_stand_maxs[2] + AI_JUMPABLE_HEIGHT - 0.5f ) ) {
-			SetAllJumpableToEmpty( front2DDir, right2DDir );
-			// We might still need to perform full height traces in TestForResultsMask()
-			return false;
-		}
-	}
-
-	// Compute the top node hint while the bounds are absolute
-	const int topNodeHint = ::collisionTopNodeCache.GetTopNode( mins, maxs );
-
-	// Test bounds around the origin.
-	// Doing these tests can save expensive trace calls for separate directions
-
-	// Convert these bounds to relative for being used as trace args
-	mins -= origin;
-	maxs -= origin;
-
-	trace_t trace;
-	mins.Z() += 0.25f;
-	StaticWorldTrace( &trace, origin, origin, MASK_SOLID | MASK_WATER, mins.Data(), maxs.Data(), topNodeHint );
-	if( trace.fraction == 1.0f ) {
-		SetAllResultsToEmpty( front2DDir, right2DDir );
-		return true;
-	}
-
-	mins.Z() += AI_JUMPABLE_HEIGHT - 1.0f;
-	StaticWorldTrace( &trace, origin, origin, MASK_SOLID | MASK_WATER, mins.Data(), maxs.Data(), topNodeHint );
-	if( trace.fraction == 1.0f ) {
-		SetAllJumpableToEmpty( front2DDir, right2DDir );
-		// We might still need to perform full height traces in TestForResultsMask()
-		return false;
-	}
-
-	return false;
-}
-
-int EnvironmentTraceCache::ComputeCollisionTopNodeHint( Context *context ) const {
-	const float *botOrigin = context->movementState->entityPhysicsState.Origin();
-	Vec3 nodeHintMins( Vec3( Vec3( -TRACE_DEPTH, -TRACE_DEPTH, 0 ) + playerbox_stand_mins ) + botOrigin );
-	Vec3 nodeHintMaxs( Vec3( Vec3( +TRACE_DEPTH, +TRACE_DEPTH, 0 ) + playerbox_stand_maxs ) + botOrigin );
-	return ::collisionTopNodeCache.GetTopNode( nodeHintMins, nodeHintMaxs );
-}
-
-void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requiredResultsMask ) {
+void EnvironmentTraceCache::testForResultsMask( Context *context, unsigned requiredResultsMask ) {
 	// There must not be any extra bits
 	Assert( ( requiredResultsMask & ~0xFFFFu ) == 0 );
 	// All required traces have been already cached
@@ -273,17 +171,8 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 	angles.Data()[PITCH] = 0.0f;
 	AngleVectors( angles.Data(), front2DDir, right2DDir, nullptr );
 
-	if( !this->didAreaTest ) {
-		this->didAreaTest = true;
-		if( TrySkipTracingForCurrOrigin( context, front2DDir, right2DDir ) ) {
-			return;
-		}
-	}
-
 	const float *origin = entityPhysicsState.Origin();
 	constexpr auto contentsMask = MASK_SOLID | MASK_WATER;
-
-	int collisionTopNodeHint = -1;
 
 	// First, test all full side traces.
 	// If a full side trace is empty, a corresponding "jumpable" side trace can be set as empty too.
@@ -293,7 +182,7 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 	const unsigned resultFullSides = requiredResultsMask & 0xFFu;
 	// If we do not have some of required result bit set
 	if( ( actualFullSides & resultFullSides ) != resultFullSides ) {
-		collisionTopNodeHint = ComputeCollisionTopNodeHint( context );
+		const auto *shapeList = getOrMakeRegionShapeList( context );
 
 		vec3_t mins;
 		VectorCopy( playerbox_stand_mins, mins );
@@ -309,15 +198,15 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 				continue;
 			}
 
-			MakeTraceDir( i, front2DDir, right2DDir, traceEnd );
+			makeTraceDir( i, front2DDir, right2DDir, traceEnd );
 			// Save the trace dir
 			TraceResult *const fullResult = &results[i];
 			VectorCopy( traceEnd, fullResult->traceDir );
 			// Convert from a direction to the end point
-			VectorScale( traceEnd, TRACE_DEPTH, traceEnd );
+			VectorScale( traceEnd, kTraceDepth, traceEnd );
 			VectorAdd( traceEnd, origin, traceEnd );
 			// Compute the trace of the cached result
-			StaticWorldTrace( &fullResult->trace, origin, traceEnd, contentsMask, mins, maxs, collisionTopNodeHint );
+			GAME_IMPORT.CM_ClipToShapeList( shapeList, &fullResult->trace, origin, traceEnd, mins, maxs, contentsMask );
 			this->resultsMask |= mask;
 			if( fullResult->trace.fraction != 1.0f ) {
 				continue;
@@ -337,11 +226,7 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 	const unsigned resultJumpableSides = requiredResultsMask & 0xFF00u;
 	// If we do not have some of required result bit set
 	if( ( actualJumpableSides & resultJumpableSides ) != resultJumpableSides ) {
-		// If we have not computed a hint yet
-		if( collisionTopNodeHint < 0 ) {
-			// Use full-height bounds as the cached value for these bounds is more useful for other purposes
-			collisionTopNodeHint = ComputeCollisionTopNodeHint( context );
-		}
+		const auto *shapeList = getOrMakeRegionShapeList( context );
 
 		vec3_t mins;
 		VectorCopy( playerbox_stand_mins, mins );
@@ -357,15 +242,15 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 				continue;
 			}
 
-			MakeTraceDir( i, front2DDir, right2DDir, traceEnd );
+			makeTraceDir( i, front2DDir, right2DDir, traceEnd );
 			// Save the trace dir
 			TraceResult *const result = &results[i + 8];
 			VectorCopy( traceEnd, result->traceDir );
 			// Convert from a direction to the end point
-			VectorScale( traceEnd, TRACE_DEPTH, traceEnd );
+			VectorScale( traceEnd, kTraceDepth, traceEnd );
 			VectorAdd( traceEnd, origin, traceEnd );
 			// Compute the trace of the cached result
-			StaticWorldTrace( &result->trace, origin, traceEnd, contentsMask, mins, maxs, collisionTopNodeHint );
+			GAME_IMPORT.CM_ClipToShapeList( shapeList, &result->trace, origin, traceEnd, mins, maxs, contentsMask );
 			this->resultsMask |= mask;
 		}
 	}
@@ -374,38 +259,9 @@ void EnvironmentTraceCache::TestForResultsMask( Context *context, unsigned requi
 	Assert( ( this->resultsMask & requiredResultsMask ) == requiredResultsMask );
 }
 
-bool EnvironmentTraceCache::CanSkipPMoveCollision( Context *context ) {
-	const auto &entityPhysicsState = context->movementState->entityPhysicsState;
-	// We might still need to check steps even if there is no full height obstacles around.
-	if( entityPhysicsState.GroundEntity() ) {
-		return false;
-	}
+const CMShapeList *EnvironmentTraceCache::getShapeListForPMoveCollision( Context *context ) {
+	// TODO: Try skipping trace completely
+	// This requires revision of PMove() code so it never attempts using a null list (like it does sometimes now)
 
-	// If the bot does not move upwards
-	if( entityPhysicsState.HeightOverGround() <= 12.0f && entityPhysicsState.Velocity()[2] <= 10 ) {
-		return false;
-	}
-
-	const float expectedShift = entityPhysicsState.Speed() * context->predictionStepMillis * 0.001f;
-	const int areaFlags = aasAreaSettings[entityPhysicsState.CurrAasAreaNum()].areaflags;
-	// All greater shift flags imply this (and other lesser ones flags) flag being set too
-	if( areaFlags & AREA_SKIP_COLLISION_16 ) {
-		const float precomputedShifts[3] = { 16.0f, 32.0f, 48.0f };
-		const int flagsForShifts[3] = { AREA_SKIP_COLLISION_16, AREA_SKIP_COLLISION_32, AREA_SKIP_COLLISION_48 };
-		// Start from the minimal shift
-		for( int i = 0; i < 3; ++i ) {
-			if( ( expectedShift < precomputedShifts[i] ) && ( areaFlags & flagsForShifts[i] ) ) {
-				return true;
-			}
-		}
-	}
-
-	// Do not force computations in this case.
-	// Otherwise there is no speedup shown according to testing results.
-	if( !this->didAreaTest ) {
-		return false;
-	}
-
-	// Return the already computed result
-	return this->hasNoFullHeightObstaclesAround;
+	return getOrMakeRegionShapeList( context );
 }

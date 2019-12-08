@@ -98,9 +98,9 @@ void BunnyHopAction::SetupCommonBunnyHopInput( Context *context ) {
 		if( entityPhysicsState.Speed() < context->GetDashSpeed() && entityPhysicsState.GroundEntity() ) {
 			// Prevent dashing into obstacles
 			auto &traceCache = context->TraceCache();
-			auto query( EnvironmentTraceCache::Query::Front() );
-			traceCache.TestForQuery( context, query );
-			if( traceCache.ResultForQuery( query ).trace.fraction == 1.0f ) {
+			auto query( EnvironmentTraceCache::Query::front() );
+			traceCache.testForQuery( context, query );
+			if( traceCache.resultForQuery( query ).trace.fraction == 1.0f ) {
 				shouldDash = true;
 			}
 		}
@@ -292,9 +292,9 @@ bool BunnyHopAction::CanSetWalljump( Context *context ) const {
 	velocity2DDir *= 1.0f / speed2D;
 
 	auto &traceCache = context->TraceCache();
-	auto query( EnvironmentTraceCache::Query::Front() );
-	traceCache.TestForQuery( context, query );
-	const auto &frontResult = traceCache.ResultForQuery( query );
+	auto query( EnvironmentTraceCache::Query::front() );
+	traceCache.testForQuery( context, query );
+	const auto &frontResult = traceCache.resultForQuery( query );
 	if( velocity2DDir.Dot( frontResult.traceDir ) < 0.7f ) {
 		return false;
 	}
@@ -306,18 +306,18 @@ bool BunnyHopAction::CanSetWalljump( Context *context ) const {
 	// Walljump height rules are complicated, and full simulation of these rules seems to be excessive.
 	// In worst case a potential walljump might be skipped.
 
-	const auto leftQuery( EnvironmentTraceCache::Query::Left().JumpableHeight() );
-	const auto rightQuery( EnvironmentTraceCache::Query::Right().JumpableHeight() );
-	const auto frontLeftQuery( EnvironmentTraceCache::Query::FrontLeft().JumpableHeight() );
-	const auto frontRightQuery( EnvironmentTraceCache::Query::FrontRight().JumpableHeight() );
+	const auto leftQuery( EnvironmentTraceCache::Query::left().jumpableHeight() );
+	const auto rightQuery( EnvironmentTraceCache::Query::right().jumpableHeight() );
+	const auto frontLeftQuery( EnvironmentTraceCache::Query::frontLeft().jumpableHeight() );
+	const auto frontRightQuery( EnvironmentTraceCache::Query::frontRight().jumpableHeight() );
 
 	const unsigned mask = leftQuery.mask | rightQuery.mask | frontLeftQuery.mask | frontRightQuery.mask;
-	traceCache.TestForResultsMask( context, mask );
+	traceCache.testForResultsMask( context, mask );
 
-	TEST_TRACE_RESULT_NORMAL( traceCache.ResultForQuery( leftQuery ) );
-	TEST_TRACE_RESULT_NORMAL( traceCache.ResultForQuery( rightQuery ) );
-	TEST_TRACE_RESULT_NORMAL( traceCache.ResultForQuery( frontLeftQuery ) );
-	TEST_TRACE_RESULT_NORMAL( traceCache.ResultForQuery( frontRightQuery ) );
+	TEST_TRACE_RESULT_NORMAL( traceCache.resultForQuery( leftQuery ) );
+	TEST_TRACE_RESULT_NORMAL( traceCache.resultForQuery( rightQuery ) );
+	TEST_TRACE_RESULT_NORMAL( traceCache.resultForQuery( frontLeftQuery ) );
+	TEST_TRACE_RESULT_NORMAL( traceCache.resultForQuery( frontRightQuery ) );
 
 	return hasGoodWalljumpNormal;
 }

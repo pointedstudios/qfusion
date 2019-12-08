@@ -14,7 +14,7 @@ bool CampASpotMovementAction::TryUpdateKeyMoveDirs( Context *context ) {
 	botToSpotDir -= context->movementState->entityPhysicsState.Origin();
 	botToSpotDir.Normalize();
 
-	context->TraceCache().MakeRandomizedKeyMovesToTarget( context, botToSpotDir, keyMoves );
+	context->TraceCache().makeRandomizedKeyMovesToTarget( context, botToSpotDir, keyMoves );
 	campingSpotState->SetKeyMoveDirs( keyMoves[0], keyMoves[1] );
 	return true;
 }

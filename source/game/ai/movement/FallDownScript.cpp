@@ -48,7 +48,7 @@ void FallDownScript::SetupMovement( Context *context ) {
 			toPointVec -= entityPhysicsState.Origin();
 			botInput->SetIntendedLookDir( toPointVec, false );
 			int keyMoves[2];
-			context->TraceCache().MakeKeyMovesToTarget( context, toTargetDir, keyMoves );
+			context->TraceCache().makeKeyMovesToTarget( context, toTargetDir, keyMoves );
 			botInput->SetForwardMovement( keyMoves[0] );
 			botInput->SetRightMovement( keyMoves[1] );
 			botInput->canOverrideLookVec = true;

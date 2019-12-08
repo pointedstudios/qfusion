@@ -49,9 +49,9 @@ bool GenericGroundMovementScript::SetupForKeptPointInFov( MovementPredictionCont
 	intendedMoveDir -= entityPhysicsState.Origin();
 	const float distanceToTarget = intendedMoveDir.Normalize();
 	int keyMoves[2];
-	// While using MakeRandomizedKeyMovesToTarget() is desirable,
+	// While using makeRandomizedKeyMovesToTarget() is desirable,
 	// we do not use movement prediction and thus it should be avoided due to possible bot mistakes.
-	context->TraceCache().MakeKeyMovesToTarget( context, intendedMoveDir, keyMoves );
+	context->TraceCache().makeKeyMovesToTarget( context, intendedMoveDir, keyMoves );
 	// The call above does not guarantee producing at least a single pressed direction key
 	if( !( keyMoves[0] | keyMoves[1] ) ) {
 		return false;
