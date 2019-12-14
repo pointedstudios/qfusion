@@ -40,15 +40,11 @@ bool BotPlanner::FindDodgeHazardSpot( const Hazard &hazard, vec3_t spotOrigin ) 
 	typedef DodgeHazardProblemSolver Solver;
 	Solver::OriginParams originParams( game.edicts + bot->EntNum(), radius, bot->RouteCache() );
 	Solver::ProblemParams problemParams( hazard.hitPoint, hazard.direction, hazard.IsSplashLike() );
-	problemParams.SetCheckToAndBackReach( false );
-	problemParams.SetMinHeightAdvantageOverOrigin( -64.0f );
+	problemParams.setCheckToAndBackReach( false );
+	problemParams.setMinHeightAdvantageOverOrigin( -64.0f );
 	// Influence values are quite low because evade direction factor must be primary
-	problemParams.SetHeightOverOriginInfluence( 0.2f );
-	problemParams.SetMaxFeasibleTravelTimeMillis( 2500 );
-	problemParams.SetOriginDistanceInfluence( 0.4f );
-	problemParams.SetOriginWeightFalloffDistanceRatio( 0.9f );
-	problemParams.SetTravelTimeInfluence( 0.2f );
-	return Solver( originParams, problemParams ).FindSingle( spotOrigin );
+	problemParams.setMaxFeasibleTravelTimeMillis( 2500 );
+	return Solver( originParams, problemParams ).findSingle( spotOrigin );
 }
 
 void BotPlanner::PrepareCurrWorldState( WorldState *worldState ) {

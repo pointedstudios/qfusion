@@ -2,77 +2,83 @@
 #include "SpotsProblemSolversLocal.h"
 #include "../navigation/AasElementsMask.h"
 
-int DodgeHazardProblemSolver::FindMany( vec3_t *spotOrigins, int maxSpots ) {
-	volatile TemporariesCleanupGuard cleanupGuard( this );
+DodgeHazardProblemSolver::DodgeHazardProblemSolver( const OriginParams &originParams_, const ProblemParams &problemParams_ )
+	: TacticalSpotsProblemSolver( originParams_, problemParams_ ), problemParams( problemParams_ ) {
+	addSuperiorSortCriterion(SpotSortCriterion::GenericScore );
+}
 
+int DodgeHazardProblemSolver::findMany( vec3_t *spotOrigins, int maxSpots ) {
 	uint16_t insideSpotNum;
 	const SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
-	SpotsAndScoreVector &candidateSpots =  SelectCandidateSpots( spotsFromQuery );
-	ModifyScoreByVelocityConformance( candidateSpots );
-	// Sort spots before a final selection so best spots are first
-	std::sort( candidateSpots.begin(), candidateSpots.end() );
-	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( candidateSpots, maxSpots );
+	SpotsAndScoreVector &candidateSpots = tacticalSpotsRegistry->cleanAndGetSpotsAndScoreVector();
+	selectCandidateSpots( spotsFromQuery, candidateSpots );
+
+	auto maybeVelocityDir = getVelocityDirForConformanceTests();
+	if( maybeVelocityDir ) {
+		addABitSuperiorSortCriterion( SpotSortCriterion::VelocityConformance, 0.5f );
+		modifyScoreByVelocityConformance( candidateSpots, *maybeVelocityDir );
+	}
+
+	// Sort spots so best spots are first
+	sort( candidateSpots );
+	checkSpotsReach( candidateSpots, maxSpots );
 	// TODO: Continue retrieval if numSpots < maxSpots and merge results
-	if( int numSpots = MakeResultsFilteringByProximity( reachCheckedSpots, spotOrigins, maxSpots ) ) {
+	if( int numSpots = makeResultsPruningByProximity( candidateSpots, spotOrigins, maxSpots ) ) {
 		return numSpots;
 	}
 
-	OriginAndScoreVector &fallbackCandidates = SelectFallbackSpotLikeOrigins( spotsFromQuery );
-	ModifyScoreByVelocityConformance( fallbackCandidates );
+	OriginAndScoreVector &fallbackCandidates = tacticalSpotsRegistry->cleanAndGetOriginAndScoreVector();
+	selectFallbackSpotLikeOrigins( spotsFromQuery, fallbackCandidates );
+	if( maybeVelocityDir ) {
+		modifyScoreByVelocityConformance( fallbackCandidates, *maybeVelocityDir );
+	}
+
 	// We consider fallback candidates a-priori reachable so no reach test is performed.
 	// Actually this is due to way too many changes required to spots solver architecture.
-	std::sort( fallbackCandidates.begin(), fallbackCandidates.end() );
-	return MakeResultsFilteringByProximity( fallbackCandidates, spotOrigins, maxSpots );
+	sort( fallbackCandidates );
+	return makeResultsPruningByProximity( fallbackCandidates, spotOrigins, maxSpots );
 }
 
-template <typename VectorWithScores>
-void DodgeHazardProblemSolver::ModifyScoreByVelocityConformance( VectorWithScores &input ) {
+std::optional<Vec3> DodgeHazardProblemSolver::getVelocityDirForConformanceTests() const {
 	const edict_t *ent = originParams.originEntity;
 	if( !ent ) {
-		return;
+		return std::nullopt;
 	}
 
 	const float *__restrict origin = ent->s.origin;
 	// Make sure that the current entity params match problem params
 	if( !VectorCompare( origin, originParams.origin ) ) {
-		return;
+		return std::nullopt;
 	}
 
 	Vec3 velocityDir( ent->velocity );
 	const float squareSpeed = velocityDir.SquaredLength();
 	const float runSpeed = DEFAULT_PLAYERSPEED;
-	if( squareSpeed <= runSpeed * runSpeed ) {
-		return;
+	if( squareSpeed < runSpeed * runSpeed ) {
+		return std::nullopt;
 	}
 
-	const float invSpeed = Q_RSqrt( squareSpeed );
-	velocityDir *= invSpeed;
-	const float speed = Q_Rcp( invSpeed );
-	const float dashSpeed = DEFAULT_DASHSPEED;
-	assert( dashSpeed > runSpeed );
-	// Grow influence up to dash speed so the score is purely based
-	// on the "velocity dot factor" on speed equal or greater the dash speed.
-	const float influence = Q_Sqrt( BoundedFraction( speed - runSpeed, dashSpeed - runSpeed ) );
+	velocityDir *= Q_RSqrt( squareSpeed );
+	return velocityDir;
+}
 
+template <typename V>
+void DodgeHazardProblemSolver::modifyScoreByVelocityConformance( V &input, const Vec3 &velocityDir ) {
+	const float *__restrict origin = originParams.origin;
 	for( auto &spotAndScoreLike: input ) {
 		Vec3 toSpotDir = Vec3( ::SpotOriginOf( spotAndScoreLike ) ) - origin;
 		toSpotDir.NormalizeFast();
 		float velocityDotFactor = 0.5f * ( 1.0f + velocityDir.Dot( toSpotDir ) );
-		// Could go slightly out of these bounds due to using of a fast and coarse normalization.
-		Q_clamp( velocityDotFactor, 0.0f, 1.0f );
-		spotAndScoreLike.score = ApplyFactor( spotAndScoreLike.score, velocityDotFactor, influence );
+		scores[spotAndScoreLike.scoreIndex].set( SpotSortCriterion::VelocityConformance, velocityDotFactor );
 	}
 }
 
-SpotsAndScoreVector &DodgeHazardProblemSolver::SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) {
-	Vec3 dodgeDir( 0, 0, 0 );
-	bool mayNegateDodgeDir = false;
-	// TODO: Looking forward to use C++17 destructuring
-	std::tie( dodgeDir, mayNegateDodgeDir ) = MakeDodgeHazardDir();
+void DodgeHazardProblemSolver::selectCandidateSpots( const SpotsQueryVector &spotsFromQuery,
+													 SpotsAndScoreVector &candidateSpots ) {
+	auto [dodgeDir, mayNegateDodgeDir] = makeDodgeHazardDir();
 
 	const float searchRadius = originParams.searchRadius;
 	const float minHeightAdvantage = problemParams.minHeightAdvantageOverOrigin;
-	const float heightInfluence = problemParams.heightOverOriginInfluence;
 	const float originZ = originParams.origin[2];
 	const float *__restrict origin = originParams.origin;
 	const auto *aasWorld = AiAasWorld::Instance();
@@ -82,7 +88,6 @@ SpotsAndScoreVector &DodgeHazardProblemSolver::SelectCandidateSpots( const Spots
 	trace_t trace;
 
 	const auto *const spots = tacticalSpotsRegistry->spots;
-	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
 	for( auto spotNum: spotsFromQuery ) {
 		const TacticalSpot &spot = spots[spotNum];
 
@@ -119,15 +124,15 @@ SpotsAndScoreVector &DodgeHazardProblemSolver::SelectCandidateSpots( const Spots
 
 		heightOverOrigin -= minHeightAdvantage;
 		const float heightOverOriginFactor = BoundedFraction( heightOverOrigin, searchRadius - minHeightAdvantage );
-		const float score = ApplyFactor( absDot, heightOverOriginFactor, heightInfluence );
 
-		result.push_back( SpotAndScore( spotNum, score ) );
+		auto [criteriaScores, scoresIndex] = addNextScores();
+		criteriaScores->set( SpotSortCriterion::GenericScore, absDot );
+		criteriaScores->set( SpotSortCriterion::HeightOverOrigin, heightOverOriginFactor );
+		candidateSpots.push_back( SpotAndScore( spotNum, scoresIndex ) );
 	}
-
-	return result;
 }
 
-std::pair<Vec3, bool> DodgeHazardProblemSolver::MakeDodgeHazardDir() const {
+std::pair<Vec3, bool> DodgeHazardProblemSolver::makeDodgeHazardDir() const {
 	if( problemParams.avoidSplashDamage ) {
 		Vec3 result( 0, 0, 0 );
 		Vec3 originToHitDir = problemParams.hazardHitPoint - originParams.origin;
@@ -182,10 +187,10 @@ std::pair<Vec3, bool> DodgeHazardProblemSolver::MakeDodgeHazardDir() const {
 	return std::make_pair( result, true );
 }
 
-OriginAndScoreVector &DodgeHazardProblemSolver::SelectFallbackSpotLikeOrigins( const SpotsQueryVector &spotsFromQuery ) {
+void DodgeHazardProblemSolver::selectFallbackSpotLikeOrigins( const SpotsQueryVector &spotsFromQuery,
+															  OriginAndScoreVector &result ) {
 	const auto &aasWorld = AiAasWorld::Instance();
 	const auto *aasAreas = aasWorld->Areas();
-	auto &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanOriginAndScoreVector();
 
 	bool *const failedAtArea = AasElementsMask::TmpAreasVisRow();
 	::memset( failedAtArea, 0, sizeof( bool ) * aasWorld->NumAreas() );
@@ -200,10 +205,10 @@ OriginAndScoreVector &DodgeHazardProblemSolver::SelectFallbackSpotLikeOrigins( c
 		const auto *stairsClusterData = aasWorld->StairsClusterData( stairsClusterNum ) + 1;
 		for( int areaNum : { stairsClusterData[0], stairsClusterData[stairsClusterData[-1]] } ) {
 			if( !failedAtArea[areaNum] ) {
-				result.emplace_back( OriginAndScore::ForArea( aasAreas, areaNum ) );
+				result.emplace_back( OriginAndScore::ForArea( aasAreas, areaNum, addNextScores().second ) );
 			}
 		}
-		return result;
+		return;
 	}
 
 	const auto *aasAreaSettings = aasWorld->AreaSettings();
@@ -236,17 +241,17 @@ OriginAndScoreVector &DodgeHazardProblemSolver::SelectFallbackSpotLikeOrigins( c
 			}
 		}
 		if( rampStartArea && !failedAtArea[rampStartArea] ) {
-			result.emplace_back( OriginAndScore::ForArea( aasAreas, rampStartArea ) );
+			result.emplace_back( OriginAndScore::ForArea( aasAreas, rampStartArea, addNextScores().second ) );
 		}
 		if( rampEndArea && !failedAtArea[rampEndArea] ) {
-			result.emplace_back( OriginAndScore::ForArea( aasAreas, rampEndArea ) );
+			result.emplace_back( OriginAndScore::ForArea( aasAreas, rampEndArea, addNextScores().second ) );
 		}
-		return result;
+		return;
 	}
 
 	const int floorClusterNum = aasWorld->AreaFloorClusterNums()[originAreaNum];
 	if( !floorClusterNum ) {
-		return result;
+		return;
 	}
 
 	int skipAreaNum = originAreaNum;
@@ -285,7 +290,6 @@ OriginAndScoreVector &DodgeHazardProblemSolver::SelectFallbackSpotLikeOrigins( c
 		if( !aasWorld->IsAreaWalkableInFloorCluster( originAreaNum, areaNum ) ) {
 			continue;
 		}
-		result.emplace_back( OriginAndScore::ForArea( aasAreas, areaNum ) );
+		result.emplace_back( OriginAndScore::ForArea( aasAreas, areaNum, addNextScores().second ) );
 	}
-	return result;
 }

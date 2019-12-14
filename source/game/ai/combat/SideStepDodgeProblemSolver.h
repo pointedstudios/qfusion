@@ -20,14 +20,14 @@ public:
 private:
 	ProblemParams &problemParams;
 
-	int FindMany( vec3_t *, int ) override {
+	int findMany( vec3_t *, int ) override {
 		AI_FailWith( "SideStepDodgeProblemSolver::FindMany()", "Should not be called" );
 	}
 public:
 	SideStepDodgeProblemSolver( OriginParams &originParams_, ProblemParams &problemParams_ )
 		: TacticalSpotsProblemSolver( originParams_, problemParams_ ), problemParams( problemParams_ ) {}
 
-	bool FindSingle( vec3_t spot ) override;
+	bool findSingle( vec3_t spot ) override;
 };
 
 #endif

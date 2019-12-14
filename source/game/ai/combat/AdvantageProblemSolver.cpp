@@ -2,55 +2,67 @@
 #include "SpotsProblemSolversLocal.h"
 #include "../navigation/AasElementsMask.h"
 
-int AdvantageProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
-	volatile TemporariesCleanupGuard cleanupGuard( this );
+AdvantageProblemSolver::AdvantageProblemSolver( const OriginParams &originParams_, const ProblemParams &problemParams_ )
+	: TacticalSpotsProblemSolver( originParams_, problemParams_ ), problemParams( problemParams_ ) {
+	addSuperiorSortCriterion( SpotSortCriterion::SpotVisImpact );
+	addABitSuperiorSortCriterion( SpotSortCriterion::OriginDistance, 0.0f );
+	addABitSuperiorSortCriterion( SpotSortCriterion::EntityDistance, 0.0f );
+	addABitSuperiorSortCriterion( SpotSortCriterion::HeightOverOrigin, 0.0f );
+	addABitSuperiorSortCriterion( SpotSortCriterion::HeightOverEntity, 0.0f );
+	addABitSuperiorSortCriterion( SpotSortCriterion::TravelTime, 0.5f );
+	addABitSuperiorSortCriterion( SpotSortCriterion::EnemyVisImpact, 0.5f );
+}
 
+int AdvantageProblemSolver::findMany( vec3_t *spots, int maxSpots ) {
 	uint16_t insideSpotNum;
 	SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
 	// Cut off some raw spots from query by vis tables
-	SpotsQueryVector &filteredByVisTablesSpots = FilterByVisTables( spotsFromQuery );
+	pruneByVisTables( spotsFromQuery );
+	SpotsAndScoreVector &candidateSpots = tacticalSpotsRegistry->cleanAndGetSpotsAndScoreVector();
 	// This should be cheap as well
-	SpotsAndScoreVector &candidateSpots = SelectCandidateSpots( filteredByVisTablesSpots );
+	selectCandidateSpots( spotsFromQuery, candidateSpots );
 	// Cut off expensive routing calls for spots that a-priori do not have a feasible travel time
-	SpotsAndScoreVector &filteredByReachTablesSpots = FilterByReachTables( candidateSpots );
+	pruneByReachTables( candidateSpots );
 
 	// Now cast rays in a collision world... it's actually cheaper than pathfinding.
 	// Make sure we select not less than 5 candidates if possible even if maxSpots is lesser.
-	SpotsAndScoreVector &visCheckedSpots = SortAndTakeNBestIfOptimizingAggressively(
-		CheckOriginVisibility( filteredByReachTablesSpots ), std::max( 5, maxSpots ) );
+	checkOriginVisibility( candidateSpots );
+	sortAndTakeNBestIfOptimizingAggressively( candidateSpots, std::max( 5, maxSpots ) );
 
 	// Apply enemy influence... this is not that expensive
-	SpotsAndScoreVector &enemyCheckedSpots = SortAndTakeNBestIfOptimizingAggressively(
-		ApplyEnemiesInfluence( visCheckedSpots ), std::max( 5, maxSpots ) );
+	applyEnemiesInfluence( candidateSpots );
+	sortAndTakeNBestIfOptimizingAggressively( candidateSpots, std::max( 5, maxSpots ) );
 
 	// Make sure we select not less than 3 candidates if possible even if maxSpots is lesser
-	SpotsAndScoreVector &sortedCandidates = ApplyVisAndOtherFactors( enemyCheckedSpots );
+	applyVisAndOtherFactors( candidateSpots );
 
 	// Should be always sorted before the last selection call
-	std::sort( sortedCandidates.begin(), sortedCandidates.end() );
+	sortAndTakeNBestIfOptimizingAggressively( candidateSpots, std::max( 3, maxSpots ) );
 
-	SpotsAndScoreVector &finalCandidates = TakeNBestIfOptimizingAggressively( sortedCandidates, std::max( 3, maxSpots ) );
+	checkSpotsReach( candidateSpots, maxSpots );
 
-	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( finalCandidates, maxSpots );
-	return MakeResultsFilteringByProximity( reachCheckedSpots, spots, maxSpots );
+	sort( candidateSpots );
+	return makeResultsPruningByProximity( candidateSpots, spots, maxSpots );
 }
 
-SpotsAndScoreVector &AdvantageProblemSolver::SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) {
+void AdvantageProblemSolver::selectCandidateSpots( const SpotsQueryVector &spotsFromQuery, SpotsAndScoreVector &candidateSpots ) {
 	const float minHeightAdvantageOverOrigin = problemParams.minHeightAdvantageOverOrigin;
 	const float minHeightAdvantageOverEntity = problemParams.minHeightAdvantageOverEntity;
-	const float heightOverOriginInfluence = problemParams.heightOverOriginInfluence;
-	const float heightOverEntityInfluence = problemParams.heightOverEntityInfluence;
 	const float minSquareDistanceToEntity = problemParams.minSpotDistanceToEntity * problemParams.minSpotDistanceToEntity;
 	const float maxSquareDistanceToEntity = problemParams.maxSpotDistanceToEntity * problemParams.maxSpotDistanceToEntity;
 	const float searchRadius = originParams.searchRadius;
 	const float originZ = originParams.origin[2];
 	const float entityZ = problemParams.keepVisibleOrigin[2];
+	const float rangeOfAdvantageOverOrigin = problemParams.advantageOverOriginForMaxScore - minHeightAdvantageOverOrigin;
+	const float rangeOfAdvantageOverEntity = problemParams.advantageOverEntityForMaxScore - minHeightAdvantageOverEntity;
+	const float originAdvantageNormalizer = Q_Rcp( rangeOfAdvantageOverOrigin );
+	const float entityAdvantageNormalizer = Q_Rcp( rangeOfAdvantageOverEntity );
 	// Copy to stack for faster access
 	Vec3 origin( originParams.origin );
 	Vec3 entityOrigin( problemParams.keepVisibleOrigin );
 
 	const auto *const spots = tacticalSpotsRegistry->spots;
-	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
+
 	for( auto spotNum: spotsFromQuery ) {
 		const TacticalSpot &spot = spots[spotNum];
 
@@ -77,22 +89,20 @@ SpotsAndScoreVector &AdvantageProblemSolver::SelectCandidateSpots( const SpotsQu
 			continue;
 		}
 
-		float score = 1.0f;
-		float factor;
-		factor = BoundedFraction( heightOverOrigin - minHeightAdvantageOverOrigin, searchRadius );
-		score = ApplyFactor( score, factor, heightOverOriginInfluence );
-		factor = BoundedFraction( heightOverEntity - minHeightAdvantageOverEntity, searchRadius );
-		score = ApplyFactor( score, factor, heightOverEntityInfluence );
-
-		result.push_back( SpotAndScore( spotNum, score ) );
+		auto [criteriaScores, scoresIndex] = this->addNextScores();
+		float originAdvantageScore = ( heightOverOrigin - minHeightAdvantageOverOrigin );
+		originAdvantageScore = std::min( originAdvantageScore, rangeOfAdvantageOverOrigin );
+		originAdvantageScore *= originAdvantageNormalizer;
+		float entityAdvantageScore = ( heightOverEntity - minHeightAdvantageOverEntity );
+		entityAdvantageScore = std::min( entityAdvantageScore, rangeOfAdvantageOverEntity );
+		entityAdvantageScore *= entityAdvantageNormalizer;
+		criteriaScores->set( SpotSortCriterion::HeightOverOrigin, originAdvantageScore );
+		criteriaScores->set( SpotSortCriterion::HeightOverEntity, entityAdvantageScore );
+		candidateSpots.emplace_back( SpotAndScore( spotNum, scoresIndex ) );
 	}
-
-	// Sort result so best score areas are first
-	std::sort( result.begin(), result.end() );
-	return result;
 }
 
-TacticalSpotsRegistry::SpotsQueryVector &AdvantageProblemSolver::FilterByVisTables( SpotsQueryVector &spotsFromQuery ) {
+void AdvantageProblemSolver::pruneByVisTables( SpotsQueryVector &spotsFromQuery ) {
 	int keepVisibleAreaNum = 0;
 	Vec3 keepVisibleOrigin( problemParams.keepVisibleOrigin );
 	if( const auto *keepVisibleEntity = problemParams.keepVisibleEntity ) {
@@ -132,10 +142,9 @@ TacticalSpotsRegistry::SpotsQueryVector &AdvantageProblemSolver::FilterByVisTabl
 	}
 
 	spotsFromQuery.truncate( numKeptSpots );
-	return spotsFromQuery;
 }
 
-SpotsAndScoreVector &AdvantageProblemSolver::CheckOriginVisibility( SpotsAndScoreVector &reachCheckedSpots ) {
+void AdvantageProblemSolver::checkOriginVisibility( SpotsAndScoreVector &candidateSpots ) {
 	edict_t *passent = const_cast<edict_t*>( originParams.originEntity );
 	edict_t *keepVisibleEntity = const_cast<edict_t *>( problemParams.keepVisibleEntity );
 	Vec3 keepVisibleOrigin( problemParams.keepVisibleOrigin );
@@ -144,13 +153,13 @@ SpotsAndScoreVector &AdvantageProblemSolver::CheckOriginVisibility( SpotsAndScor
 		keepVisibleOrigin.Z() += 0.66f * keepVisibleEntity->r.maxs[2];
 	}
 
+	trace_t trace;
 	const edict_t *gameEdicts = game.edicts;
 	const auto *const spots = tacticalSpotsRegistry->spots;
 	const float spotZOffset = -playerbox_stand_mins[2] + playerbox_stand_viewheight;
-	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
 
-	trace_t trace;
-	for( const SpotAndScore &spotAndScore : reachCheckedSpots ) {
+	unsigned numKeptSpots = 0;
+	for( const SpotAndScore &spotAndScore : candidateSpots ) {
 		//.Spot origins are dropped to floor (only few units above)
 		// Check whether we can hit standing on this spot (having the gun at viewheight)
 		Vec3 from( spots[spotAndScore.spotNum].origin );
@@ -160,31 +169,22 @@ SpotsAndScoreVector &AdvantageProblemSolver::CheckOriginVisibility( SpotsAndScor
 			continue;
 		}
 
-		result.push_back( spotAndScore );
+		candidateSpots[numKeptSpots++] = spotAndScore;
 	}
 
-	return result;
+	candidateSpots.truncate( numKeptSpots );
 }
 
-SpotsAndScoreVector &AdvantageProblemSolver::ApplyVisAndOtherFactors( SpotsAndScoreVector &result ) {
-	const unsigned resultSpotsSize = result.size();
-	if( resultSpotsSize <= 1 ) {
-		return result;
+void AdvantageProblemSolver::applyVisAndOtherFactors( SpotsAndScoreVector &candidateSpots ) {
+	if( candidateSpots.empty() ) {
+		return;
 	}
 
 	const Vec3 origin( originParams.origin );
 	const Vec3 entityOrigin( problemParams.keepVisibleOrigin );
-	const float originZ = originParams.origin[2];
-	const float entityZ = problemParams.keepVisibleOrigin[2];
 	const float searchRadius = originParams.searchRadius;
-	const float minHeightAdvantageOverOrigin = problemParams.minHeightAdvantageOverOrigin;
-	const float heightOverOriginInfluence = problemParams.heightOverOriginInfluence;
-	const float minHeightAdvantageOverEntity = problemParams.minHeightAdvantageOverEntity;
-	const float heightOverEntityInfluence = problemParams.heightOverEntityInfluence;
 	const float originWeightFalloffDistanceRatio = problemParams.originWeightFalloffDistanceRatio;
-	const float originDistanceInfluence = problemParams.originDistanceInfluence;
 	const float entityWeightFalloffDistanceRatio = problemParams.entityWeightFalloffDistanceRatio;
-	const float entityDistanceInfluence = problemParams.entityDistanceInfluence;
 	const float minSpotDistanceToEntity = problemParams.minSpotDistanceToEntity;
 	const float entityDistanceRange = problemParams.maxSpotDistanceToEntity - problemParams.minSpotDistanceToEntity;
 
@@ -192,49 +192,41 @@ SpotsAndScoreVector &AdvantageProblemSolver::ApplyVisAndOtherFactors( SpotsAndSc
 	const auto *const spots = tacticalSpotsRegistry->spots;
 	const auto numSpots = tacticalSpotsRegistry->numSpots;
 
-	for( unsigned i = 0; i < resultSpotsSize; ++i ) {
-		unsigned visibilitySum = 0;
-		unsigned testedSpotNum = result[i].spotNum;
+	for( unsigned i = 0; i < candidateSpots.size(); ++i ) {
+		const auto &spotAndScore = candidateSpots[i];
+		unsigned testedSpotNum = spotAndScore.spotNum;
 		// Get address of the visibility table row
-		const uint8_t *spotVisibilityForSpotNum = spotVisibilityTable + testedSpotNum * numSpots;
+		const uint8_t *spotVisForSpotNum = spotVisibilityTable + testedSpotNum * numSpots;
 
-		for( unsigned j = 0; j < i; ++j )
-			visibilitySum += spotVisibilityForSpotNum[j];
+		unsigned visSum = 0;
+		for( unsigned j = 0; j < i; ++j ) {
+			visSum += spotVisForSpotNum[j];
+		}
 
 		// Skip i-th index
 
-		for( unsigned j = i + 1; j < resultSpotsSize; ++j )
-			visibilitySum += spotVisibilityForSpotNum[j];
+		for( unsigned j = i + 1; j < candidateSpots.size(); ++j ) {
+			visSum += spotVisForSpotNum[j];
+		}
 
 		const TacticalSpot &testedSpot = spots[testedSpotNum];
-		float score = result[i].score;
 
 		// The maximum possible visibility score for a pair of spots is 255
-		float visFactor = visibilitySum / ( ( result.size() - 1 ) * 255.0f );
-		visFactor = SQRTFAST( visFactor );
-		score *= visFactor;
+		float visFactor = Q_Sqrt( 0.001f + (float)visSum / ( candidateSpots.size() * 256.0f ) );
 
-		float heightOverOrigin = testedSpot.absMins[2] - originZ - minHeightAdvantageOverOrigin;
-		float heightOverOriginFactor = BoundedFraction( heightOverOrigin, searchRadius - minHeightAdvantageOverOrigin );
-		score = ApplyFactor( score, heightOverOriginFactor, heightOverOriginInfluence );
-
-		float heightOverEntity = testedSpot.absMins[2] - entityZ - minHeightAdvantageOverEntity;
-		float heightOverEntityFactor = BoundedFraction( heightOverEntity, searchRadius - minHeightAdvantageOverEntity );
-		score = ApplyFactor( score, heightOverEntityFactor, heightOverEntityInfluence );
-
-		float originDistance = SQRTFAST( 0.001f + DistanceSquared( testedSpot.origin, origin.Data() ) );
+		float originDistance = Q_Sqrt( 0.001f + origin.SquareDistanceTo( testedSpot.origin ) );
+		// TODO: Refactor/inline that too
 		float originDistanceFactor = ComputeDistanceFactor( originDistance, originWeightFalloffDistanceRatio, searchRadius );
-		score = ApplyFactor( score, originDistanceFactor, originDistanceInfluence );
 
-		float entityDistance = SQRTFAST( 0.001f + DistanceSquared( testedSpot.origin, entityOrigin.Data() ) );
+		float entityDistance = Q_Sqrt( 0.001f + DistanceSquared( testedSpot.origin, entityOrigin.Data() ) );
 		entityDistance -= minSpotDistanceToEntity;
+		// TODO: Refactor/inline that too
 		float entityDistanceFactor = ComputeDistanceFactor( entityDistance,
 															entityWeightFalloffDistanceRatio,
 															entityDistanceRange );
-		score = ApplyFactor( score, entityDistanceFactor, entityDistanceInfluence );
-
-		result[i].score = score;
+		auto &criteriaScores = scores[spotAndScore.scoreIndex];
+		criteriaScores.set( SpotSortCriterion::SpotVisImpact, visFactor );
+		criteriaScores.set( SpotSortCriterion::EntityDistance, entityDistanceFactor );
+		criteriaScores.set( SpotSortCriterion::OriginDistance, originDistanceFactor );
 	}
-
-	return result;
 }

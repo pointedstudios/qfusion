@@ -23,18 +23,20 @@ private:
 	 * Makes a dodge hazard direction for given {@code ProblemParams}
 	 * @return a pair of a direction and a flag indicating whether the direction is allowed to be negated.
 	 */
-	std::pair<Vec3, bool> MakeDodgeHazardDir() const;
+	[[nodiscard]]
+	std::pair<Vec3, bool> makeDodgeHazardDir() const;
 
-	SpotsAndScoreVector &SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) override;
-	OriginAndScoreVector &SelectFallbackSpotLikeOrigins( const SpotsQueryVector &spotsFromQuery );
+	void selectCandidateSpots( const SpotsQueryVector &spotsFromQuery, SpotsAndScoreVector &candidateSpots ) override;
+	void selectFallbackSpotLikeOrigins( const SpotsQueryVector &spotsFromQuery, OriginAndScoreVector &originsAndScores );
 
-	template <typename VectorWithScores>
-	void ModifyScoreByVelocityConformance( VectorWithScores &input );
+	std::optional<Vec3> getVelocityDirForConformanceTests() const;
+
+	template <typename V>
+	void modifyScoreByVelocityConformance( V &input, const Vec3 &velocityDir );
 public:
-	DodgeHazardProblemSolver( const OriginParams &originParams_, const ProblemParams &problemParams_ )
-		: TacticalSpotsProblemSolver( originParams_, problemParams_ ), problemParams( problemParams_ ) {}
+	DodgeHazardProblemSolver( const OriginParams &originParams_, const ProblemParams &problemParams_ );
 
-	int FindMany( vec3_t *spots, int numSpots ) override;
+	int findMany( vec3_t *spots, int numSpots ) override;
 };
 
 #endif

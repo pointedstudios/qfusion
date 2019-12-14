@@ -7,6 +7,43 @@
 #include "../bot.h"
 #include "../../../qcommon/links.h"
 
+enum class SpotSortCriterion {
+	GenericScore,
+	OriginDistance,
+	EntityDistance,
+	TravelTime,
+	HeightOverEntity,
+	HeightOverOrigin,
+	EnemyVisImpact,
+	SpotVisImpact,
+	VelocityConformance
+};
+
+struct CriteriaScores {
+	// TODO: Use magic_enum
+	enum { kMaxCriteria = 9 };
+	float scores[kMaxCriteria];
+
+	CriteriaScores() {
+		std::fill( std::begin( scores ), std::end( scores ), -1.0f );
+	}
+
+	[[nodiscard]]
+	float get( SpotSortCriterion criterion ) const {
+		// We do not check whether a value has been set for various reasons
+		// (dynamic addition of criteria could be complicated and scores system works file with default filler values)
+		return scores[(unsigned)criterion];
+	}
+
+	void set( SpotSortCriterion criterion, float value ) {
+		auto index = (unsigned)criterion;
+		assert( scores[index] < 0 && "A value has been already set" );
+		// Some computations are fast and coarse so we do not require the value to be strictly within [0.0, 1.0] bounds
+		assert( value >= -0.01f && value <= 1.01f );
+		scores[index] = value;
+	}
+};
+
 class TacticalSpotsRegistry
 {
 	friend class BotRoamingManager;
@@ -76,137 +113,53 @@ public:
 	typedef StaticVector<uint16_t, MAX_SPOTS> SpotsQueryVector;
 
 	struct alignas( 2 )SpotAndScore {
-		FloatAlign2 score;
 		uint16_t spotNum;
+		uint16_t scoreIndex;
 
-		SpotAndScore( uint16_t spotNum_, float score_ ) : score( score_ ), spotNum( spotNum_ ) {}
-		bool operator<( const SpotAndScore &that ) const { return score > that.score; }
+		SpotAndScore( uint16_t spotNum_, uint16_t scoreIndex_ )
+			: spotNum( spotNum_ ), scoreIndex( scoreIndex_ ) {}
 	};
 
 	struct OriginAndScore {
 		Vec3 origin;
-		float score;
+		uint16_t scoreIndex;
 		int16_t tag { -1 };
 		uint16_t spotNum { std::numeric_limits<uint16_t>::max() };
 
-		OriginAndScore( const float *origin_, float score_ ) : origin( origin_ ), score( score_ ) {}
-		OriginAndScore( const Vec3 &origin_, float score_ ) : origin( origin_ ), score( score_ ) {}
+		OriginAndScore( const float *origin_, uint16_t scoreIndex_ )
+			: origin( origin_ ), scoreIndex( scoreIndex_ ) {}
+		OriginAndScore( const Vec3 &origin_, uint16_t scoreIndex_ )
+			: origin( origin_ ), scoreIndex( scoreIndex_ ) {}
 
-		static OriginAndScore ForArea( const aas_area_t *aasAreas, int areaNum ) {
+		static OriginAndScore ForArea( const aas_area_t *aasAreas, int areaNum, uint16_t scoreIndex ) {
 			Vec3 origin( aasAreas[areaNum].center );
 			origin.Z() = aasAreas[areaNum].mins[2] + 8.0f;
 			OriginAndScore result( origin, 1.0f );
 			result.tag = areaNum;
+			result.scoreIndex = scoreIndex;
 			return result;
 		}
-
-		bool operator<( const OriginAndScore &that ) const { return score > that.score; }
 	};
 
 	typedef StaticVector<SpotAndScore, MAX_SPOTS> SpotsAndScoreVector;
 	typedef StaticVector<OriginAndScore, MAX_SPOTS> OriginAndScoreVector;
+	typedef StaticVector<CriteriaScores, MAX_SPOTS> CriteriaScoresVector;
+
+	SpotsQueryVector &cleanAndGetSpotsQueryVector() const;
+	SpotsAndScoreVector &cleanAndGetSpotsAndScoreVector() const;
+	OriginAndScoreVector &cleanAndGetOriginAndScoreVector() const;
+	CriteriaScoresVector &cleanAndGetCriteriaScoresVector() const;
+	bool *cleanAndGetExcludedSpotsMask();
 private:
-	class TemporariesAllocator {
-		// These values should be allocated, cached and used as buffers for spots query/problem params solving.
-		// TODO: Check alignment for StaticVector?
-		SpotsQueryVector *query { new( G_Malloc( sizeof( SpotsQueryVector ) ) )SpotsQueryVector };
-		bool *excludedSpotsMask { (bool *)G_Malloc( sizeof( bool ) * MAX_SPOTS ) };
+	// TODO: Move all this stuff to some helper object?
+	mutable std::unique_ptr<SpotsQueryVector> spotsQueryVectorHolder;
+	mutable std::unique_ptr<SpotsAndScoreVector> spotsAndScoreVectorHolder;
+	mutable std::unique_ptr<OriginAndScoreVector> originAndScoreVectorHolder;
+	mutable std::unique_ptr<CriteriaScoresVector> criteriaScoresVectorHolder;
+	mutable std::unique_ptr<bool[]> excludedSpotsMaskHolder;
 
-		template <typename V>
-		class VectorCache {
-			struct Entry {
-				Entry *next { nullptr };
-				Entry *prev { nullptr };
-				V data;
-			};
-			Entry *freeHead { nullptr };
-			Entry *usedHead { nullptr };
-			Entry *usedTail { nullptr };
-		public:
-			~VectorCache() {
-				if( usedHead ) {
-					const char *tag = "TacticalSpotsRegistry::TemporariesAllocator::VectorCache<?>~()";
-					AI_FailWith( tag, "A user has not released resources" );
-				}
-				Entry *nextEntry;
-				for( auto *entry = freeHead; entry; entry = nextEntry ) {
-					nextEntry = entry->next;
-					entry->~Entry();
-					G_Free( entry );
-				}
-			}
-
-			V &GetNextCleanVector() {
-				// It's better to use generic link utilities even if maintaining
-				// a double-linked list adds some overhead that is however
-				// negligible both from memory and execution speed sides.
-				// We win a lot by caching these allocated results anyway compared to naive malloc calls.
-				if( freeHead ) {
-					auto *const unlinked = ::Unlink( freeHead, &freeHead );
-					::Link( unlinked, &usedHead );
-					if( !usedTail ) {
-						usedTail = unlinked;
-					}
-					auto &data = unlinked->data;
-					data.clear();
-					return data;
-				}
-
-				auto *newEntry = new( G_Malloc( sizeof( Entry ) ) )Entry;
-				::Link( newEntry, &usedHead );
-				if( !usedTail ) {
-					usedTail = newEntry;
-				}
-				return newEntry->data;
-			}
-
-			void Release() {
-				if( !usedTail ) {
-					assert( !usedHead );
-					return;
-				}
-
-				// Merge used list tail and free list head
-				assert( !usedTail->next );
-				usedTail->next = freeHead;
-				if( freeHead ) {
-					assert( !freeHead->prev );
-					freeHead->prev = usedTail;
-				}
-
-				freeHead = usedHead;
-				usedHead = usedTail = nullptr;
-			}
-		};
-
-		VectorCache<SpotsAndScoreVector> spotAndScoreVectorsCache;
-		VectorCache<OriginAndScoreVector> originAndScoreVectorsCache;
-	public:
-		// TODO: We do not require explicit releasing of query vector, this is error-prone...
-		SpotsQueryVector &GetCleanQueryVector() {
-			query->clear();
-			return *query;
-		}
-
-		bool *GetCleanExcludedSpotsMask() {
-			memset( excludedSpotsMask, 0, sizeof( bool ) * MAX_SPOTS );
-			return excludedSpotsMask;
-		}
-
-		SpotsAndScoreVector &GetNextCleanSpotsAndScoreVector() {
-			return spotAndScoreVectorsCache.GetNextCleanVector();
-		}
-		OriginAndScoreVector &GetNextCleanOriginAndScoreVector() {
-			return originAndScoreVectorsCache.GetNextCleanVector();
-		}
-
-		void Release() {
-			spotAndScoreVectorsCache.Release();
-			originAndScoreVectorsCache.Release();
-		}
-
-		~TemporariesAllocator();
-	} temporariesAllocator;
+	template <typename V>
+	V &cleanAndGetVector( std::unique_ptr<V> *holder ) const;
 
 	static constexpr uint16_t MAX_SPOTS_PER_QUERY = 768;
 	static constexpr uint16_t MIN_GRID_CELL_SIDE = 512;

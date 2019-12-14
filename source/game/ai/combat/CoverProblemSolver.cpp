@@ -2,51 +2,53 @@
 #include "SpotsProblemSolversLocal.h"
 #include "../navigation/AasElementsMask.h"
 
-int CoverProblemSolver::FindMany( vec3_t *spots, int maxSpots ) {
-	volatile TemporariesCleanupGuard cleanupGuard( this );
+CoverProblemSolver::CoverProblemSolver( const OriginParams &originParams_, const ProblemParams &problemParams_ )
+	: TacticalSpotsProblemSolver( originParams_, problemParams_ ), problemParams( problemParams_ ) {
+	addSuperiorSortCriterion( SpotSortCriterion::TravelTime );
+	addABitSuperiorSortCriterion( SpotSortCriterion::EnemyVisImpact, 0.5f );
+}
 
+int CoverProblemSolver::findMany( vec3_t *spots, int maxSpots ) {
 	uint16_t insideSpotNum;
 	const SpotsQueryVector &spotsFromQuery = tacticalSpotsRegistry->FindSpotsInRadius( originParams, &insideSpotNum );
+	SpotsAndScoreVector &candidateSpots = tacticalSpotsRegistry->cleanAndGetSpotsAndScoreVector();
+	selectCandidateSpots( spotsFromQuery, candidateSpots );
 	// Use these cheap calls to cut off as many spots as possible before a first collision filter
-	SpotsAndScoreVector &candidateSpots = SelectCandidateSpots( spotsFromQuery );
-	SpotsAndScoreVector &filteredByReachTablesSpots = FilterByReachTables( candidateSpots );
-	SpotsAndScoreVector &filteredByVisTablesSpots = FilterByAreaVisTables( filteredByReachTablesSpots );
+	pruneByReachTables( candidateSpots );
+	pruneByAreaVisTables( candidateSpots );
 
 	// Return early in this case.
 	// All expensive stuff starts below.
-	if( filteredByVisTablesSpots.empty() ) {
+	if( candidateSpots.empty() ) {
 		return 0;
 	}
 
 	StaticVector<int, MAX_EDICTS> entNums;
-	const int topNode = FindTopNodeAndEntNums( filteredByVisTablesSpots, entNums );
+	const int topNode = findTopNodeAndEntNums( candidateSpots, entNums );
 
 	// These calls rely on vis tables to some degree and thus should not be extremely expensive.
 	// Make sure we select not less than 5 candidates if possible even if maxSpots is lesser.
-	SpotsAndScoreVector &filteredByCoarseRayTests = SortAndTakeNBestIfOptimizingAggressively(
-		FilterByCoarseRayTests( filteredByVisTablesSpots, topNode, entNums ), std::max( 5, maxSpots ) );
+	pruneByCoarseRayTests( candidateSpots, topNode, entNums );
+	sortAndTakeNBestIfOptimizingAggressively( candidateSpots, std::max( 5, maxSpots ) );
 
 	// Make sure we select not less than 5 candidates if possible even if maxSpots is lesser.
-	SpotsAndScoreVector &enemyCheckedSpots = SortAndTakeNBestIfOptimizingAggressively(
-		ApplyEnemiesInfluence( filteredByCoarseRayTests ), std::max( 5, maxSpots ) );
+	applyEnemiesInfluence( candidateSpots );
+	sortAndTakeNBestIfOptimizingAggressively( candidateSpots, std::max( 5, maxSpots ) );
 
 	// Even "fine" collision checks are actually faster than pathfinding.
-	SpotsAndScoreVector &coverSpots = SelectCoverSpots( enemyCheckedSpots, topNode, entNums );
-
-	// Always sort before the last selection
-	std::sort( coverSpots.begin(), coverSpots.end() );
+	selectCoverSpots( candidateSpots, topNode, entNums );
 
 	// Make sure we select not less than 3 candidates if possible even if maxSpots is lesser.
-	SpotsAndScoreVector &finalCandidates = TakeNBestIfOptimizingAggressively( coverSpots, std::max( 3, maxSpots ) );
+	sortAndTakeNBestIfOptimizingAggressively( candidateSpots, std::max( 3, maxSpots ) );
 
-	SpotsAndScoreVector &reachCheckedSpots = CheckSpotsReach( finalCandidates, maxSpots );
+	checkSpotsReach( candidateSpots, maxSpots );
 
 	// Sort spots before a final selection so best spots are first
-	std::sort( reachCheckedSpots.begin(), reachCheckedSpots.end() );
-	return MakeResultsFilteringByProximity( reachCheckedSpots, spots, maxSpots );
+	sort( candidateSpots );
+	return makeResultsPruningByProximity( candidateSpots, spots, maxSpots );
 }
 
-SpotsAndScoreVector &CoverProblemSolver::FilterByAreaVisTables( SpotsAndScoreVector &spotsAndScores ) {
+void CoverProblemSolver::pruneByAreaVisTables( SpotsAndScoreVector &spotsAndScores ) {
 	const auto *const aasWorld = AiAasWorld::Instance();
 	const auto *const aasAreas = aasWorld->Areas();
 	const int attackerAreaNum = aasWorld->FindAreaNum( problemParams.attackerOrigin );
@@ -60,7 +62,7 @@ SpotsAndScoreVector &CoverProblemSolver::FilterByAreaVisTables( SpotsAndScoreVec
 	for( int i = 0; i < 2; ++i ) {
 		if( attackerArea.maxs[i] - attackerArea.mins[i] > threshold ) {
 			// Can't do conclusions for the attacker area based on table data
-			return spotsAndScores;
+			return;
 		}
 	}
 
@@ -68,7 +70,6 @@ SpotsAndScoreVector &CoverProblemSolver::FilterByAreaVisTables( SpotsAndScoreVec
 	const bool *attackerVisRow = aasWorld->DecompressAreaVis( attackerAreaNum, AasElementsMask::TmpAreasVisRow() );
 
 	unsigned numFeasibleSpots = 0;
-	// Filter spots in-place
 	for( const SpotAndScore &spotAndScore: spotsAndScores ) {
 		const int spotAreaNum = spots[spotAndScore.spotNum].aasAreaNum;
 		const auto &spotArea = aasAreas[spotAreaNum];
@@ -85,10 +86,9 @@ SpotsAndScoreVector &CoverProblemSolver::FilterByAreaVisTables( SpotsAndScoreVec
 	}
 
 	spotsAndScores.truncate( numFeasibleSpots );
-	return spotsAndScores;
 }
 
-int CoverProblemSolver::FindTopNodeAndEntNums( SpotsAndScoreVector &spotsAndScores, EntNumsVector &entNums ) {
+int CoverProblemSolver::findTopNodeAndEntNums( SpotsAndScoreVector &spotsAndScores, EntNumsVector &entNums ) {
 	// Should not be called for these parameters
 	assert( !spotsAndScores.empty() );
 	assert( entNums.empty() );
@@ -117,13 +117,13 @@ int CoverProblemSolver::FindTopNodeAndEntNums( SpotsAndScoreVector &spotsAndScor
 	assert( numRawEnts < entNums.capacity() );
 	entNums.unsafe_set_size( numRawEnts );
 
-	FilterRawEntNums( entNums );
+	pruneRawEntNums( entNums );
 
 	return topNode;
 }
 
-void CoverProblemSolver::FilterRawEntNums( EntNumsVector &entNums ) {
-	unsigned numFilteredEnts = 0;
+void CoverProblemSolver::pruneRawEntNums( EntNumsVector &entNums ) {
+	unsigned numKeptEnts = 0;
 
 	// Filter out entities that should be excluded from collision tests for raycasts from attacker origin to spots.
 	// TODO: Use much more aggressive cutoffs
@@ -149,10 +149,10 @@ void CoverProblemSolver::FilterRawEntNums( EntNumsVector &entNums ) {
 			if( !trap_inPVS( attackerOrigin, ent->s.origin ) ) {
 				continue;
 			}
-			entNums[numFilteredEnts++] = entNum;
+			entNums[numKeptEnts++] = entNum;
 		}
 
-		entNums.truncate( numFilteredEnts );
+		entNums.truncate( numKeptEnts );
 		return;
 	}
 
@@ -171,15 +171,15 @@ void CoverProblemSolver::FilterRawEntNums( EntNumsVector &entNums ) {
 		if( !pvsCache->AreInPvs( attackerEntity, ent ) ) {
 			continue;
 		}
-		entNums[numFilteredEnts++] = entNum;
+		entNums[numKeptEnts++] = entNum;
 	}
 
-	entNums.truncate( numFilteredEnts );
+	entNums.truncate( numKeptEnts );
 }
 
-SpotsAndScoreVector &CoverProblemSolver::FilterByCoarseRayTests( SpotsAndScoreVector &spotsAndScores,
-	                                                             int collisionTopNodeHint,
-	                                                             const EntNumsVector &entNums ) {
+void CoverProblemSolver::pruneByCoarseRayTests( SpotsAndScoreVector &spotsAndScores,
+												int collisionTopNodeHint,
+												const EntNumsVector &entNums ) {
 	const auto *const spots = tacticalSpotsRegistry->spots;
 
 	unsigned numFeasibleSpots = 0;
@@ -187,19 +187,18 @@ SpotsAndScoreVector &CoverProblemSolver::FilterByCoarseRayTests( SpotsAndScoreVe
 	for( const SpotAndScore &spotAndScore: spotsAndScores ) {
 		const TacticalSpot &spot = spots[spotAndScore.spotNum];
 		// Check whether spot is certainly visible
-		if( CastRay( problemParams.attackerOrigin, spot.origin, collisionTopNodeHint, entNums ) ) {
+		if( castRay( problemParams.attackerOrigin, spot.origin, collisionTopNodeHint, entNums ) ) {
 			continue;
 		}
 		spotsAndScores[numFeasibleSpots++] = spotAndScore;
 	}
 
 	spotsAndScores.truncate( numFeasibleSpots );
-	return spotsAndScores;
 }
 
-SpotsAndScoreVector &CoverProblemSolver::SelectCoverSpots( SpotsAndScoreVector &spotsAndScores,
-	                                                       int collisionTopNodeHint,
-	                                                       const EntNumsVector &entNums ) {
+void CoverProblemSolver::selectCoverSpots( SpotsAndScoreVector &spotsAndScores,
+										   int collisionTopNodeHint,
+										   const EntNumsVector &entNums ) {
 	const float harmfulRayThickness = problemParams.harmfulRayThickness;
 	const auto *const spots = tacticalSpotsRegistry->spots;
 
@@ -212,7 +211,7 @@ SpotsAndScoreVector &CoverProblemSolver::SelectCoverSpots( SpotsAndScoreVector &
 	// Filter spots in-place
 	for( const SpotAndScore &spotAndScore: spotsAndScores ) {
 		const TacticalSpot &spot = spots[spotAndScore.spotNum];
-		if( !LooksLikeACoverSpot( spot, rayBounds, collisionTopNodeHint, entNums ) ) {
+		if( !looksLikeACoverSpot( spot, rayBounds, collisionTopNodeHint, entNums ) ) {
 			continue;
 		}
 
@@ -220,11 +219,12 @@ SpotsAndScoreVector &CoverProblemSolver::SelectCoverSpots( SpotsAndScoreVector &
 	}
 
 	spotsAndScores.truncate( numFilteredSpots );
-	return spotsAndScores;
 }
 
-bool CoverProblemSolver::LooksLikeACoverSpot( const TacticalSpot &spot, const vec3_t *rayBounds,
-											  int topNode, const EntNumsVector &entNums ) {
+bool CoverProblemSolver::looksLikeACoverSpot( const TacticalSpot &spot,
+											  const vec3_t *rayBounds,
+											  int collisionTopNodeHint,
+											  const EntNumsVector &entNums ) {
 	vec3_t bounds[2];
 	// Convert bounds from relative to absolute
 	VectorAdd( rayBounds[0], spot.absMins, bounds[0] );
@@ -238,7 +238,7 @@ bool CoverProblemSolver::LooksLikeACoverSpot( const TacticalSpot &spot, const ve
 			bounds[( i >> 0 ) & 1][2]
 		};
 		// If the corner is certainly visible
-		if( CastRay( problemParams.attackerOrigin, testedPoint, topNode, entNums ) ) {
+		if( castRay( problemParams.attackerOrigin, testedPoint, collisionTopNodeHint, entNums ) ) {
 			return false;
 		}
 	}
@@ -246,7 +246,7 @@ bool CoverProblemSolver::LooksLikeACoverSpot( const TacticalSpot &spot, const ve
 	return true;
 }
 
-bool CoverProblemSolver::CastRay( const float *from, const float *to, int topNode, const EntNumsVector &entNums ) {
+bool CoverProblemSolver::castRay( const float *from, const float *to, int topNode, const EntNumsVector &entNums ) {
 	trace_t trace;
 
 	// Test against blocking view entities first.

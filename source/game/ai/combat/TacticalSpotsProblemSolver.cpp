@@ -3,16 +3,14 @@
 #include "../navigation/AasElementsMask.h"
 #include "../ai_ground_trace_cache.h"
 
-SpotsAndScoreVector &TacticalSpotsProblemSolver::SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) {
+void TacticalSpotsProblemSolver::selectCandidateSpots( const SpotsQueryVector &spotsFromQuery,
+													   SpotsAndScoreVector &candidates ) {
 	const float minHeightAdvantageOverOrigin = problemParams.minHeightAdvantageOverOrigin;
-	const float heightOverOriginInfluence = problemParams.heightOverOriginInfluence;
 	const float searchRadius = originParams.searchRadius;
 	const float originZ = originParams.origin[2];
 	const auto *spots = tacticalSpotsRegistry->spots;
 	// Copy to stack for faster access
 	Vec3 origin( originParams.origin );
-
-	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
 
 	for( auto spotNum: spotsFromQuery ) {
 		const TacticalSpot &spot = spots[spotNum];
@@ -27,27 +25,24 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::SelectCandidateSpots( const Spo
 			continue;
 		}
 
-		float score = 1.0f;
-		float factor = BoundedFraction( heightOverOrigin - minHeightAdvantageOverOrigin, searchRadius );
-		score = ApplyFactor( score, factor, heightOverOriginInfluence );
-
-		result.push_back( SpotAndScore( spotNum, score ) );
+		auto [criteriaScores, scoresIndex] = addNextScores();
+		float heightAdvantage = heightOverOrigin - minHeightAdvantageOverOrigin;
+		float advantageFactor = BoundedFraction( heightAdvantage, searchRadius );
+		criteriaScores->set( SpotSortCriterion::HeightOverOrigin, advantageFactor );
+		candidates.emplace_back( SpotAndScore( spotNum, scoresIndex ) );
 	}
-
-	return result;
 }
 
-SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOrigin( SpotsAndScoreVector &spotsAndScores ) {
+void TacticalSpotsProblemSolver::pruneByReachTablesFromOrigin( SpotsAndScoreVector &candidates ) {
 	// AAS uses travel time in centiseconds
 	const int maxFeasibleTravelTimeCentis = problemParams.maxFeasibleTravelTimeMillis / 10;
 	const int originAreaNum = originParams.originAreaNum;
 	const auto *const routeCache = originParams.routeCache;
 	const auto *const spots = tacticalSpotsRegistry->spots;
 
-	unsigned numFilteredSpots = 0;
-	// Filter spots in-place
-	for( unsigned i = 0; i < spotsAndScores.size(); ++i ) {
-		const int spotNum = spotsAndScores[i].spotNum;
+	unsigned numKeptSpots = 0;
+	for( const auto &spotAndScore: candidates ) {
+		const int spotNum = spotAndScore.spotNum;
 		const int tableTravelTime = tacticalSpotsRegistry->TravelTimeFromAreaToSpot( originAreaNum, spotNum );
 		if( !tableTravelTime || tableTravelTime > maxFeasibleTravelTimeCentis ) {
 			continue;
@@ -57,64 +52,52 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOrigin( 
 			continue;
 		}
 
-		spotsAndScores[numFilteredSpots++] = spotsAndScores[i];
+		candidates[numKeptSpots++] = spotAndScore;
 	}
 
-	spotsAndScores.truncate( numFilteredSpots );
-	return spotsAndScores;
+	candidates.truncate( numKeptSpots );
 }
 
-SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOrigin( SpotsAndScoreVector &candidateSpots,
-																			int maxResultSpots ) {
+void TacticalSpotsProblemSolver::checkSpotsReachFromOrigin( SpotsAndScoreVector &candidates, int maxResultSpots ) {
 	const auto *const routeCache = originParams.routeCache;
-	const float *const origin = originParams.origin;
 	const auto *const spots = tacticalSpotsRegistry->spots;
 
 	const int originAreaNum = originParams.originAreaNum;
-	const float searchRadius = originParams.searchRadius;
 	// AAS uses travel time in centiseconds
 	const int maxFeasibleTravelTimeCentis = problemParams.maxFeasibleTravelTimeMillis / 10;
-	const float weightFalloffDistanceRatio = problemParams.originWeightFalloffDistanceRatio;
-	const float distanceInfluence = problemParams.originDistanceInfluence;
-	const float travelTimeInfluence = problemParams.travelTimeInfluence;
+	const float factorNormalizationMultiplier = Q_Rcp( (float)maxFeasibleTravelTimeCentis + 0.001f );
 	const auto travelFlags = Bot::ALLOWED_TRAVEL_FLAGS;
 
-	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
-
+	unsigned numKeptSpots = 0;
 	// The outer index of the table corresponds to an area to aid cache-friendly iteration in these checks
-	for( const SpotAndScore &spotAndScore: candidateSpots ) {
-		if( (int)result.size() >= maxResultSpots ) {
-			return result;
-		}
-
+	for( const SpotAndScore &spotAndScore: candidates ) {
 		const TacticalSpot &spot = spots[spotAndScore.spotNum];
 		const int travelTime = routeCache->TravelTimeToGoalArea( originAreaNum, spot.aasAreaNum, travelFlags );
 		if( !travelTime || travelTime > maxFeasibleTravelTimeCentis ) {
 			continue;
 		}
 
-		const float travelTimeFactor = 1.0f - ComputeTravelTimeFactor( travelTime, maxFeasibleTravelTimeCentis );
-		const float distanceFactor = ComputeDistanceFactor( spot.origin, origin, weightFalloffDistanceRatio, searchRadius );
-		float newScore = spotAndScore.score;
-		newScore = ApplyFactor( newScore, distanceFactor, distanceInfluence );
-		newScore = ApplyFactor( newScore, travelTimeFactor, travelTimeInfluence );
-		result.push_back( SpotAndScore( spotAndScore.spotNum, newScore ) );
+		auto &criteriaScores = scores[spotAndScore.scoreIndex];
+		criteriaScores.set( SpotSortCriterion::TravelTime, 1.0f - travelTime * factorNormalizationMultiplier );
+		candidates[numKeptSpots++] = spotAndScore;
+		if( numKeptSpots >= maxResultSpots ) {
+			break;
+		}
 	}
 
-	return result;
+	candidates.truncate( numKeptSpots );
 }
 
-SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOriginAndBack( SpotsAndScoreVector &spotsAndScores ) {
+void TacticalSpotsProblemSolver::pruneByReachTablesFromOriginAndBack( SpotsAndScoreVector &spotsAndScores ) {
 	// A round trip time can't be 2x larger
 	const int maxFeasibleSumTravelTimeCentis = 2 * ( problemParams.maxFeasibleTravelTimeMillis / 10 );
 	const int originAreaNum = originParams.originAreaNum;
 	const auto *const routeCache = originParams.routeCache;
 	const auto *const spots = tacticalSpotsRegistry->spots;
 
-	unsigned numFilteredSpots = 0;
-	// Filter spots in-place
-	for( unsigned i = 0; i < spotsAndScores.size(); ++i ) {
-		const auto spotNum = spotsAndScores[i].spotNum;
+	unsigned numKeptSpots = 0;
+	for( const auto &spotAndScore: spotsAndScores ) {
+		const auto spotNum = spotAndScore.spotNum;
 		const int tableToTravelTime = tacticalSpotsRegistry->TravelTimeFromAreaToSpot( originAreaNum, spotNum );
 		if( !tableToTravelTime ) {
 			continue;
@@ -130,36 +113,25 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::FilterByReachTablesFromOriginAn
 		if( routeCache->AreaDisabled( spots[spotNum].aasAreaNum ) ) {
 			continue;
 		}
-		spotsAndScores[numFilteredSpots++] = spotsAndScores[i];
+		spotsAndScores[numKeptSpots++] = spotAndScore;
 	}
 
-	spotsAndScores.truncate( numFilteredSpots );
-	return spotsAndScores;
+	spotsAndScores.truncate( numKeptSpots );
 }
 
-SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidateSpots,
-																				   int maxResultSpots ) {
+void TacticalSpotsProblemSolver::checkSpotsReachFromOriginAndBack( SpotsAndScoreVector &candidates, int maxResultSpots ) {
 	const auto *const routeCache = originParams.routeCache;
-	const float *const origin = originParams.origin;
 	const auto *const spots = tacticalSpotsRegistry->spots;
 
 	const int originAreaNum = originParams.originAreaNum;
-	const float searchRadius = originParams.searchRadius;
 	// AAS uses time in centiseconds
 	const int maxFeasibleTravelTimeCentis = problemParams.maxFeasibleTravelTimeMillis / 10;
-	const float weightFalloffDistanceRatio = problemParams.originWeightFalloffDistanceRatio;
-	const float distanceInfluence = problemParams.originDistanceInfluence;
-	const float travelTimeInfluence = problemParams.travelTimeInfluence;
+	const float factorNormalizationMultiplier = Q_Rcp( 2.0f * (float)maxFeasibleTravelTimeCentis + 0.001f );
 	const auto travelFlags = Bot::ALLOWED_TRAVEL_FLAGS;
 
-	SpotsAndScoreVector &result = tacticalSpotsRegistry->temporariesAllocator.GetNextCleanSpotsAndScoreVector();
-
+	unsigned numKeptSpots = 0;
 	// The outer index of the table corresponds to an area to aid cache-friendly iteration in these checks
-	for( const SpotAndScore &spotAndScore : candidateSpots ) {
-		if( (int)result.size() >= maxResultSpots ) {
-			return result;
-		}
-
+	for( const SpotAndScore &spotAndScore: candidates ) {
 		const auto spotNum = spotAndScore.spotNum;
 		const TacticalSpot &spot = spots[spotNum];
 		const int toTravelTime = routeCache->TravelTimeToGoalArea( originAreaNum, spot.aasAreaNum, travelFlags );
@@ -173,27 +145,20 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::CheckSpotsReachFromOriginAndBac
 			continue;
 		}
 
-		const int totalTravelTimeCentis = toTravelTime + backTravelTime;
-		const float travelTimeFactor = ComputeTravelTimeFactor( totalTravelTimeCentis, maxFeasibleTravelTimeCentis );
-		const float distanceFactor = ComputeDistanceFactor( spot.origin, origin, weightFalloffDistanceRatio, searchRadius );
-		float newScore = spotAndScore.score;
-		newScore = ApplyFactor( newScore, distanceFactor, distanceInfluence );
-		newScore = ApplyFactor( newScore, travelTimeFactor, travelTimeInfluence );
-		result.push_back( SpotAndScore( spotAndScore.spotNum, newScore ) );
+		float factor = 1.0f - ( ( toTravelTime + backTravelTime ) * factorNormalizationMultiplier );
+		scores[spotAndScore.scoreIndex].set( SpotSortCriterion::TravelTime, factor );
+		candidates[numKeptSpots++] = spotAndScore;
+		if( numKeptSpots >= maxResultSpots ) {
+			break;
+		}
 	}
 
-	return result;
+	candidates.truncate( numKeptSpots );
 }
 
-SpotsAndScoreVector &TacticalSpotsProblemSolver::ApplyEnemiesInfluence( SpotsAndScoreVector &candidateSpots ) {
-	if( candidateSpots.empty() ) {
-		return candidateSpots;
-	}
-	if( !problemParams.enemiesListHead ) {
-		return candidateSpots;
-	}
-	if( problemParams.enemiesInfluence <= 0.0f ) {
-		return candidateSpots;
+void TacticalSpotsProblemSolver::applyEnemiesInfluence( SpotsAndScoreVector &candidates ) {
+	if( candidates.empty() ) {
+		return;
 	}
 
 	// Precompute some enemy parameters that are going to be used in an inner loop.
@@ -268,11 +233,16 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::ApplyEnemiesInfluence( SpotsAnd
 	}
 
 	if( cachedEnemyData.empty() ) {
-		return candidateSpots;
+		// Set feasible scores anyway for correctness reasons
+		for( auto &spotAndScore: candidates ) {
+			scores[spotAndScore.scoreIndex].set( SpotSortCriterion::EnemyVisImpact, 0.0f );
+		}
+		return;
 	}
 
+	const float scoreNormalizationMultiplier = Q_Rcp( (float)cachedEnemyData.size() + 0.001f );
 	const auto *const spots = tacticalSpotsRegistry->spots;
-	for( auto &spotAndScore: candidateSpots ) {
+	for( auto &spotAndScore: candidates ) {
 		const auto &__restrict spot = spots[spotAndScore.spotNum];
 		const int spotFloorClusterNum = aasWorld->AreaFloorClusterNums()[spot.aasAreaNum];
 		float spotVisScore = 0.0f;
@@ -325,18 +295,13 @@ SpotsAndScoreVector &TacticalSpotsProblemSolver::ApplyEnemiesInfluence( SpotsAnd
 			// We just select spots that are less visible for other enemies for proper positioning.
 			spotVisScore += 1.0f;
 		}
-
-		// We have computed a vis score testing every enemy.
-		// Now modify the original score
-		const float enemyInfluenceFactor = Q_Rcp( 1.0f + spotVisScore );
-		spotAndScore.score = ApplyFactor( spotAndScore.score, enemyInfluenceFactor, problemParams.enemiesInfluence );
+		float impactFactor = 1.0f - spotVisScore * scoreNormalizationMultiplier;
+		scores[spotAndScore.scoreIndex].set( SpotSortCriterion::EnemyVisImpact, impactFactor );
 	}
-
-	return candidateSpots;
 }
 
-template <typename SpotsAndScores>
-int TacticalSpotsProblemSolver::MakeResultsFilteringByProximity_( const SpotsAndScores &spotsAndScores,
+template <typename SpotsLikeVector>
+int TacticalSpotsProblemSolver::makeResultsPruningByProximityImpl( const SpotsLikeVector &spotsAndScores,
 																  vec3_t *origins, int maxSpots ) {
 	const auto resultsSize = spotsAndScores.size();
 	if( maxSpots == 0 || resultsSize == 0 ) {
@@ -351,7 +316,7 @@ int TacticalSpotsProblemSolver::MakeResultsFilteringByProximity_( const SpotsAnd
 	}
 
 	const float squareProximityThreshold = problemParams.spotProximityThreshold * problemParams.spotProximityThreshold;
-	bool *const isSpotExcluded = tacticalSpotsRegistry->temporariesAllocator.GetCleanExcludedSpotsMask();
+	bool *const isSpotExcluded = tacticalSpotsRegistry->cleanAndGetExcludedSpotsMask();
 
 	int numSpots_ = 0;
 	unsigned keptSpotIndex = 0;
@@ -392,12 +357,53 @@ int TacticalSpotsProblemSolver::MakeResultsFilteringByProximity_( const SpotsAnd
 	}
 }
 
-int TacticalSpotsProblemSolver::MakeResultsFilteringByProximity( const SpotsAndScoreVector &spotsAndScores,
+int TacticalSpotsProblemSolver::makeResultsPruningByProximity( const SpotsAndScoreVector &spotsAndScores,
 																 vec3_t *origins, int maxSpots ) {
-	return MakeResultsFilteringByProximity_( spotsAndScores, origins, maxSpots );
+	return makeResultsPruningByProximityImpl( spotsAndScores, origins, maxSpots );
 }
 
-int TacticalSpotsProblemSolver::MakeResultsFilteringByProximity( const OriginAndScoreVector &originsAndScores,
+int TacticalSpotsProblemSolver::makeResultsPruningByProximity( const OriginAndScoreVector &originsAndScores,
 																 vec3_t *origins, int maxSpots ) {
-	return MakeResultsFilteringByProximity_( originsAndScores, origins, maxSpots );
+	return makeResultsPruningByProximityImpl( originsAndScores, origins, maxSpots );
+}
+
+template <typename SpotLikeVector>
+void TacticalSpotsProblemSolver::sortImpl( SpotLikeVector &v ) {
+	assert( !criteria.empty() && "There must be at least a single criterion" );
+
+	auto cmp = [this]( const auto &lhs, const auto &rhs ) {
+		const CriteriaScores &__restrict leftScores = this->scores[lhs.scoreIndex];
+		const CriteriaScores &__restrict rightScores = this->scores[rhs.scoreIndex];
+		const float valScale = 5.0f;
+		// Start from the superior criterion and continue while we can access an inferior element
+		for( unsigned i = criteria.size(); i-- > 1; ) {
+			const auto [criterion, separation] = criteria[i];
+			const float frac = 0.5f + 0.5f * separation;
+			const float fracComplement = 1.0f - frac;
+			const auto inferiorCriterion = criteria[i - 1].criterion;
+			float leftVal = leftScores.get( criterion ) * frac + leftScores.get( inferiorCriterion ) * fracComplement;
+			float rightVal = rightScores.get( criterion ) * frac + rightScores.get( inferiorCriterion ) * fracComplement;
+			// Convert to integer to ignore minor differences assuming values are within a small float range
+			assert( std::fabs( leftVal ) < 1.01f );
+			assert( std::fabs( rightVal ) < 1.01f );
+			const int comparedLeftVal = (int)( valScale * leftVal );
+			const int comparedRightVal = (int)( valScale * rightVal );
+			// Best spots should be first in an ascending order
+			if( comparedLeftVal > comparedRightVal ) {
+				return true;
+			}
+		}
+		auto criterion = criteria.front().criterion;
+		return (int)( valScale * leftScores.get( criterion ) ) > (int)( valScale * rightScores.get( criterion ) );
+	};
+
+	std::sort( v.begin(), v.end(), cmp );
+}
+
+void TacticalSpotsProblemSolver::sort( SpotsAndScoreVector &v ) {
+	sortImpl<SpotsAndScoreVector>( v );
+}
+
+void TacticalSpotsProblemSolver::sort( OriginAndScoreVector &v ) {
+	sortImpl<OriginAndScoreVector>( v );
 }

@@ -1,7 +1,7 @@
 #include "SideStepDodgeProblemSolver.h"
 #include "SpotsProblemSolversLocal.h"
 
-bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
+bool SideStepDodgeProblemSolver::findSingle( vec_t *spotOrigin ) {
 	trace_t trace;
 	Vec3 tmpVec3( 0, 0, 0 );
 	Vec3 *droppedToFloorOrigin = nullptr;
@@ -142,9 +142,6 @@ bool SideStepDodgeProblemSolver::FindSingle( vec_t *spotOrigin ) {
 			bestScore = score;
 			vec.CopyTo( bestVec );
 		}
-
-		// Clean up temporarily allocated query result
-		tacticalSpotsRegistry->temporariesAllocator.Release();
 
 		if( bestScore > 0 ) {
 			VectorCopy( bestVec, spotOrigin );

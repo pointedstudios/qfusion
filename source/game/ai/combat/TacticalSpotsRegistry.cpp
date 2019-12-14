@@ -1,4 +1,6 @@
 #include "TacticalSpotsRegistry.h"
+
+#include <memory>
 #include "../ai_precomputed_file_handler.h"
 #include "../bot.h"
 #include "../../../qcommon/links.h"
@@ -966,7 +968,7 @@ SpotsQueryVector &TacticalSpotsRegistry::BaseSpotsGrid::FindSpotsInRadius( const
 
 	*insideSpotNum = std::numeric_limits<uint16_t>::max();
 
-	SpotsQueryVector &result = parent->temporariesAllocator.GetCleanQueryVector();
+	SpotsQueryVector &result = parent->cleanAndGetSpotsQueryVector();
 
 	// Copy to locals for faster access
 	const Vec3 searchOrigin( originParams.origin );
@@ -1159,8 +1161,37 @@ void TacticalSpotsRegistry::SpotsGridBuilder::CopyTo( PrecomputedSpotsGrid *prec
 	}
 }
 
-TacticalSpotsRegistry::TemporariesAllocator::~TemporariesAllocator() {
-	query->~StaticVector();
-	G_Free( query );
-	G_Free( excludedSpotsMask );
+template <typename V>
+V &TacticalSpotsRegistry::cleanAndGetVector( std::unique_ptr<V> *holder ) const {
+	if( !*holder ) {
+		*holder = std::make_unique<V>();
+	} else {
+		( *holder )->clear();
+	}
+	return *( *holder );
+}
+
+TacticalSpotsRegistry::SpotsQueryVector &TacticalSpotsRegistry::cleanAndGetSpotsQueryVector() const {
+	return cleanAndGetVector( &spotsQueryVectorHolder );
+}
+
+TacticalSpotsRegistry::SpotsAndScoreVector &TacticalSpotsRegistry::cleanAndGetSpotsAndScoreVector() const {
+	return cleanAndGetVector( &spotsAndScoreVectorHolder );
+}
+
+TacticalSpotsRegistry::OriginAndScoreVector &TacticalSpotsRegistry::cleanAndGetOriginAndScoreVector() const {
+	return cleanAndGetVector( &originAndScoreVectorHolder );
+}
+
+TacticalSpotsRegistry::CriteriaScoresVector &TacticalSpotsRegistry::cleanAndGetCriteriaScoresVector() const {
+	return cleanAndGetVector( &criteriaScoresVectorHolder );
+}
+
+bool *TacticalSpotsRegistry::cleanAndGetExcludedSpotsMask() {
+	if( !excludedSpotsMaskHolder ) {
+		excludedSpotsMaskHolder = std::make_unique<bool[]>( MAX_SPOTS );
+	}
+	bool *result = excludedSpotsMaskHolder.get();
+	memset( result, 0, MAX_SPOTS * sizeof( bool ) );
+	return result;
 }

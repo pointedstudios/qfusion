@@ -12,10 +12,10 @@ public:
 		vec3_t keepVisibleOrigin;
 		float minSpotDistanceToEntity { 0.0f };
 		float maxSpotDistanceToEntity { 999999.0f };
-		float entityDistanceInfluence { 0.5f };
+		float originWeightFalloffDistanceRatio { 0.0f };
 		float entityWeightFalloffDistanceRatio { 0.0f };
 		float minHeightAdvantageOverEntity { -999999.0f };
-		float heightOverEntityInfluence { 0.5f };
+		float advantageOverEntityForMaxScore { 128.0f };
 	public:
 		explicit ProblemParams( const edict_t *keepVisibleEntity_ )
 			: keepVisibleEntity( keepVisibleEntity_ ) {
@@ -27,35 +27,48 @@ public:
 			VectorCopy( keepVisibleOrigin_, this->keepVisibleOrigin );
 		}
 
-		inline void SetMinSpotDistanceToEntity( float distance ) { minSpotDistanceToEntity = distance; }
-		inline void SetMaxSpotDistanceToEntity( float distance ) { maxSpotDistanceToEntity = distance; }
-		inline void SetEntityDistanceInfluence( float influence ) { entityDistanceInfluence = influence; }
-
-		inline void SetEntityWeightFalloffDistanceRatio( float ratio ) {
-			entityWeightFalloffDistanceRatio = Clamp( ratio );
+		void setMinSpotDistanceToEntity( float distance ) {
+			assert( distance > 0 );
+			minSpotDistanceToEntity = distance;
+		}
+		void setMaxSpotDistanceToEntity( float distance ) {
+			assert( distance > 0 );
+			maxSpotDistanceToEntity = distance;
 		}
 
-		inline void SetMinHeightAdvantageOverEntity( float height ) { minHeightAdvantageOverEntity = height; }
+		void setEntityWeightFalloffDistanceRatio( float ratio ) {
+			assert( ratio >= 0.0f && ratio <= 1.0f );
+			entityWeightFalloffDistanceRatio = ratio;
+		}
 
-		inline void SetHeightOverEntityInfluence( float influence ) {
-			heightOverEntityInfluence = Clamp( influence );
+		void setOriginWeightFalloffDistanceRatio( float ratio ) {
+			assert( ratio >= 0.0f && ratio <= 1.0f );
+			originWeightFalloffDistanceRatio = ratio;
+		}
+
+		void setMinHeightAdvantageOverEntity( float height ) {
+			minHeightAdvantageOverEntity = height;
+		}
+
+		void setAdvantageOverEntityForMaxScore( float threshold ) {
+			assert( threshold > 0 );
+			advantageOverEntityForMaxScore = threshold;
 		}
 	};
 private:
 	const ProblemParams &problemParams;
 
-	SpotsAndScoreVector &CheckOriginVisibility( SpotsAndScoreVector &candidateSpots );
+	void checkOriginVisibility( SpotsAndScoreVector &spotsAndScores );
 
-	SpotsAndScoreVector &ApplyVisAndOtherFactors( SpotsAndScoreVector &spots );
+	void applyVisAndOtherFactors( SpotsAndScoreVector &spotsAndScores );
 
-	SpotsQueryVector &FilterByVisTables( SpotsQueryVector &spotsFromQuery );
+	void pruneByVisTables( SpotsQueryVector &spotsFromQuery );
 
-	SpotsAndScoreVector &SelectCandidateSpots( const SpotsQueryVector &spotsFromQuery ) override;
+	void selectCandidateSpots( const SpotsQueryVector &spotsFromQuery, SpotsAndScoreVector &candidateSpots ) override;
 public:
-	AdvantageProblemSolver( const OriginParams &originParams_, const ProblemParams &problemParams_ )
-		: TacticalSpotsProblemSolver( originParams_, problemParams_ ), problemParams( problemParams_ ) {}
+	AdvantageProblemSolver( const OriginParams &originParams_, const ProblemParams &problemParams_ );
 
-	int FindMany( vec3_t *spots, int maxSpots ) override;
+	int findMany( vec3_t *spots, int maxSpots ) override;
 };
 
 #endif

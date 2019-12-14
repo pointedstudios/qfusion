@@ -24,30 +24,25 @@ public:
 private:
 	using EntNumsVector = StaticVector<int, MAX_EDICTS>;
 
-	int FindTopNodeAndEntNums( SpotsAndScoreVector &spotsAndScores, EntNumsVector &entNums );
+	int findTopNodeAndEntNums( SpotsAndScoreVector &spotsAndScores, EntNumsVector &entNums );
 
-	void FilterRawEntNums( EntNumsVector &entNums );
+	void pruneRawEntNums( EntNumsVector &entNums );
 
-	SpotsAndScoreVector &FilterByAreaVisTables( SpotsAndScoreVector &spotsAndScores );
+	void pruneByAreaVisTables( SpotsAndScoreVector &spotsAndScores );
 
-	SpotsAndScoreVector &FilterByCoarseRayTests( SpotsAndScoreVector &spotsAndScores,
-												 int collisionTopNodeHint,
-												 const EntNumsVector &entNums );
+	void pruneByCoarseRayTests( SpotsAndScoreVector &spotsAndScores, int topNode, const EntNumsVector &entNums );
 
-	SpotsAndScoreVector &SelectCoverSpots( SpotsAndScoreVector &candidateSpots,
-		                                   int collisionTopNodeHint,
-		                                   const EntNumsVector &entNums );
+	void selectCoverSpots( SpotsAndScoreVector &candidateSpots, int topNode, const EntNumsVector &entNums );
 
-	bool LooksLikeACoverSpot( const TacticalSpot &spot, const vec3_t *rayBounds, int topNode, const EntNumsVector &entNums );
+	bool looksLikeACoverSpot( const TacticalSpot &spot, const vec3_t *rayBounds, int topNode, const EntNumsVector &entNums );
 
-	bool CastRay( const float *from, const float *to, int topNode, const EntNumsVector &entNums );
+	bool castRay( const float *from, const float *to, int topNode, const EntNumsVector &entNums );
 
 	const ProblemParams &problemParams;
 public:
-	CoverProblemSolver( const OriginParams &originParams_, const ProblemParams &problemParams_ )
-		: TacticalSpotsProblemSolver( originParams_, problemParams_ ), problemParams( problemParams_ ) {}
+	CoverProblemSolver( const OriginParams &originParams_, const ProblemParams &problemParams_ );
 
-	int FindMany( vec3_t *spots, int numSpots ) override;
+	int findMany( vec3_t *spots, int numSpots ) override;
 };
 
 #endif

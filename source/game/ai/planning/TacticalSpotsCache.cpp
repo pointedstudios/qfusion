@@ -22,10 +22,10 @@ inline bool BotTacticalSpotsCache::FindForOrigin( const ProblemParams &problemPa
 	if( BotHasAlmostSameOrigin( origin ) ) {
 		// Provide a bot entity to aid trace checks
 		AdvantageProblemSolver::OriginParams originParams( game.edicts + bot->EntNum(), searchRadius, RouteCache() );
-		return AdvantageProblemSolver( originParams, problemParams ).FindSingle( result );
+		return AdvantageProblemSolver( originParams, problemParams ).findSingle( result );
 	}
 	TacticalSpotsRegistry::OriginParams originParams( origin.Data(), searchRadius, RouteCache() );
-	return AdvantageProblemSolver( originParams, problemParams ).FindSingle( result );
+	return AdvantageProblemSolver( originParams, problemParams ).findSingle( result );
 }
 
 const short *BotTacticalSpotsCache::GetSingleOriginSpot( SingleOriginSpotsCache *cache, const short *origin,
@@ -99,140 +99,81 @@ inline void BotTacticalSpotsCache::TakeEnemiesIntoAccount( ProblemParams &proble
 	}
 	// TODO: Provide PrimaryEnemy() getter?
 	assert( selectedEnemies.IsPrimaryEnemy( *selectedEnemies.begin() ) );
-	problemParams.TakeEnemiesIntoAccount( bot->TrackedEnemiesHead(), *selectedEnemies.begin() );
+	problemParams.setImpactfulEnemies( bot->TrackedEnemiesHead(), *selectedEnemies.begin() );
 }
 
 bool BotTacticalSpotsCache::FindSniperRangeTacticalSpot( const Vec3 &origin, const Vec3 &enemyOrigin, vec3_t result ) {
 	AdvantageProblemSolver::ProblemParams problemParams( enemyOrigin.Data() );
-	problemParams.SetMinSpotDistanceToEntity( WorldState::FAR_RANGE_MAX );
-	problemParams.SetOriginDistanceInfluence( 0.0f );
-	problemParams.SetTravelTimeInfluence( 0.8f );
-	problemParams.SetMinHeightAdvantageOverOrigin( -1024.0f );
-	problemParams.SetMinHeightAdvantageOverEntity( -1024.0f );
-	problemParams.SetHeightOverOriginInfluence( 0.3f );
-	problemParams.SetHeightOverEntityInfluence( 0.1f );
-	problemParams.SetCheckToAndBackReach( false );
-	problemParams.SetMaxFeasibleTravelTimeMillis( 12500 );
-	problemParams.OptimizeAggressively( true );
+	problemParams.setMinSpotDistanceToEntity( WorldState::FAR_RANGE_MAX );
+	problemParams.setMinHeightAdvantageOverOrigin( std::numeric_limits<float>::min() );
+	problemParams.setMinHeightAdvantageOverEntity( std::numeric_limits<float>::min() );
+	problemParams.setCheckToAndBackReach( false );
+	problemParams.setMaxFeasibleTravelTimeMillis( 12500 );
+	problemParams.setOptimizeAggressively( true );
 	TakeEnemiesIntoAccount( problemParams );
 
-	float searchRadius = 192.0f + 768.0f * Skill();
-	float distanceToEnemy = ( origin - enemyOrigin ).LengthFast();
-	// If bot is not on sniper range, increase search radius (otherwise a point in a sniper range can't be found).
-	if( distanceToEnemy - searchRadius < WorldState::FAR_RANGE_MAX ) {
-		searchRadius += WorldState::FAR_RANGE_MAX - distanceToEnemy + searchRadius;
-	}
-
-	return FindForOrigin( problemParams, origin, searchRadius, result );
+	return FindForOrigin( problemParams, origin, std::numeric_limits<float>::max(), result );
 }
 
 bool BotTacticalSpotsCache::FindFarRangeTacticalSpot( const Vec3 &origin, const Vec3 &enemyOrigin, vec3_t result ) {
 	AdvantageProblemSolver::ProblemParams problemParams( enemyOrigin.Data() );
-	problemParams.SetMinSpotDistanceToEntity( WorldState::MIDDLE_RANGE_MAX );
-	problemParams.SetMaxSpotDistanceToEntity( WorldState::FAR_RANGE_MAX );
-	problemParams.SetOriginDistanceInfluence( 0.0f );
-	problemParams.SetEntityDistanceInfluence( 0.3f );
-	problemParams.SetEntityWeightFalloffDistanceRatio( 0.25f );
-	problemParams.SetTravelTimeInfluence( 0.8f );
-	problemParams.SetMinHeightAdvantageOverOrigin( -192.0f );
-	problemParams.SetMinHeightAdvantageOverEntity( -192.0f );
-	problemParams.SetHeightOverOriginInfluence( 0.3f );
-	problemParams.SetHeightOverEntityInfluence( 0.7f );
-	problemParams.SetCheckToAndBackReach( false );
-	problemParams.SetMaxFeasibleTravelTimeMillis( 7500 );
-	problemParams.OptimizeAggressively( true );
+	problemParams.setMinSpotDistanceToEntity( WorldState::MIDDLE_RANGE_MAX );
+	problemParams.setMaxSpotDistanceToEntity( WorldState::FAR_RANGE_MAX );
+	problemParams.setEntityWeightFalloffDistanceRatio( 0.25f );
+	problemParams.setMinHeightAdvantageOverOrigin( -256.0f );
+	problemParams.setMinHeightAdvantageOverEntity( -256.0f );
+	problemParams.setCheckToAndBackReach( false );
+	problemParams.setMaxFeasibleTravelTimeMillis( 7500 );
+	problemParams.setOptimizeAggressively( true );
 	TakeEnemiesIntoAccount( problemParams );
 
-	float searchRadius = 192.0f + 768.0f * Skill();
-	float distanceToEnemy = ( origin - enemyOrigin ).LengthFast();
-	float minSearchDistanceToEnemy = distanceToEnemy - searchRadius;
-	float maxSearchDistanceToEnemy = distanceToEnemy + searchRadius;
-	if( minSearchDistanceToEnemy < WorldState::MIDDLE_RANGE_MAX ) {
-		searchRadius += WorldState::MIDDLE_RANGE_MAX - minSearchDistanceToEnemy;
-	} else if( maxSearchDistanceToEnemy > WorldState::FAR_RANGE_MAX ) {
-		searchRadius += maxSearchDistanceToEnemy - WorldState::FAR_RANGE_MAX;
-	}
-
-	return FindForOrigin( problemParams, origin, searchRadius, result );
+	return FindForOrigin( problemParams, origin, std::numeric_limits<float>::max(), result );
 }
 
 bool BotTacticalSpotsCache::FindMiddleRangeTacticalSpot( const Vec3 &origin, const Vec3 &enemyOrigin, vec3_t result ) {
 	AdvantageProblemSolver::ProblemParams problemParams( enemyOrigin.Data() );
-	problemParams.SetMinSpotDistanceToEntity( WorldState::CLOSE_RANGE_MAX );
-	problemParams.SetMaxSpotDistanceToEntity( WorldState::MIDDLE_RANGE_MAX );
-	problemParams.SetOriginDistanceInfluence( 0.3f );
-	problemParams.SetEntityDistanceInfluence( 0.4f );
-	problemParams.SetEntityWeightFalloffDistanceRatio( 0.5f );
-	problemParams.SetTravelTimeInfluence( 0.7f );
-	problemParams.SetMinHeightAdvantageOverOrigin( -64.0f );
-	problemParams.SetMinHeightAdvantageOverEntity( +16.0f );
-	problemParams.SetHeightOverOriginInfluence( 0.6f );
-	problemParams.SetHeightOverEntityInfluence( 0.8f );
-	problemParams.SetCheckToAndBackReach( false );
-	problemParams.SetMaxFeasibleTravelTimeMillis( 4000 );
+	problemParams.setMinSpotDistanceToEntity( WorldState::CLOSE_RANGE_MAX );
+	problemParams.setMaxSpotDistanceToEntity( WorldState::MIDDLE_RANGE_MAX );
+	problemParams.setEntityWeightFalloffDistanceRatio( 0.5f );
+	problemParams.setMinHeightAdvantageOverOrigin( -64.0f );
+	problemParams.setMinHeightAdvantageOverEntity( +16.0f );
+	problemParams.setCheckToAndBackReach( false );
+	problemParams.setMaxFeasibleTravelTimeMillis( 4000 );
 	TakeEnemiesIntoAccount( problemParams );
 
-	float searchRadius = WorldState::MIDDLE_RANGE_MAX;
-	float distanceToEnemy = ( origin - enemyOrigin ).LengthFast();
-	if( distanceToEnemy < WorldState::CLOSE_RANGE_MAX ) {
-		searchRadius += WorldState::CLOSE_RANGE_MAX;
-	} else if( distanceToEnemy > WorldState::MIDDLE_RANGE_MAX ) {
-		searchRadius += distanceToEnemy - WorldState::MIDDLE_RANGE_MAX;
-	} else {
-		searchRadius *= 1.0f + 0.5f * Skill();
-	}
-
-	return FindForOrigin( problemParams, origin, searchRadius, result );
+	return FindForOrigin( problemParams, origin, std::numeric_limits<float>::max(), result );
 }
 
 bool BotTacticalSpotsCache::FindCloseRangeTacticalSpot( const Vec3 &origin, const Vec3 &enemyOrigin, vec3_t result ) {
 	AdvantageProblemSolver::ProblemParams problemParams( enemyOrigin.Data() );
 	float meleeRange = GS_GetWeaponDef( WEAP_GUNBLADE )->firedef_weak.timeout;
-	problemParams.SetMinSpotDistanceToEntity( meleeRange );
-	problemParams.SetMaxSpotDistanceToEntity( WorldState::CLOSE_RANGE_MAX );
-	problemParams.SetOriginDistanceInfluence( 0.0f );
-	problemParams.SetEntityDistanceInfluence( 0.7f );
-	problemParams.SetEntityWeightFalloffDistanceRatio( 0.8f );
-	problemParams.SetTravelTimeInfluence( 0.0f );
-	problemParams.SetMinHeightAdvantageOverOrigin( -64.0f );
-	problemParams.SetMinHeightAdvantageOverEntity( +16.0f );
-	problemParams.SetHeightOverOriginInfluence( 0.4f );
-	problemParams.SetHeightOverEntityInfluence( 0.9f );
+	problemParams.setMinSpotDistanceToEntity( meleeRange );
+	problemParams.setMaxSpotDistanceToEntity( WorldState::CLOSE_RANGE_MAX );
+	problemParams.setEntityWeightFalloffDistanceRatio( 0.8f );
+	problemParams.setMinHeightAdvantageOverOrigin( -64.0f );
+	problemParams.setMinHeightAdvantageOverEntity( +16.0f );
 	// Bot should be able to retreat from close combat
-	problemParams.SetCheckToAndBackReach( true );
-	problemParams.SetMaxFeasibleTravelTimeMillis( 2000 );
+	problemParams.setCheckToAndBackReach( true );
+	problemParams.setMaxFeasibleTravelTimeMillis( 2000 );
 	TakeEnemiesIntoAccount( problemParams );
 
-	float searchRadius = WorldState::CLOSE_RANGE_MAX * 2;
-	float distanceToEnemy = ( origin - enemyOrigin ).LengthFast();
-	if( distanceToEnemy > WorldState::CLOSE_RANGE_MAX ) {
-		searchRadius += distanceToEnemy - WorldState::CLOSE_RANGE_MAX;
-		// On this range retreating to an old position makes little sense
-		if( distanceToEnemy > 0.5f * WorldState::MIDDLE_RANGE_MAX ) {
-			problemParams.SetCheckToAndBackReach( false );
-		}
-	}
-
-	return FindForOrigin( problemParams, origin, searchRadius, result );
+	return FindForOrigin( problemParams, origin, std::numeric_limits<float>::max(), result );
 }
 
 bool BotTacticalSpotsCache::FindCoverSpot( const Vec3 &origin, const Vec3 &enemyOrigin, vec3_t result ) {
 	const float searchRadius = 192.0f + 512.0f * Skill();
 	CoverProblemSolver::ProblemParams problemParams( enemyOrigin.Data(), 32.0f );
-	problemParams.SetOriginDistanceInfluence( 0.0f );
-	problemParams.SetTravelTimeInfluence( 0.9f );
-	problemParams.SetMinHeightAdvantageOverOrigin( -searchRadius );
-	problemParams.SetHeightOverOriginInfluence( 0.3f );
-	problemParams.SetCheckToAndBackReach( false );
-	problemParams.SetMaxFeasibleTravelTimeMillis( 1250 );
+	problemParams.setMinHeightAdvantageOverOrigin( -searchRadius );
+	problemParams.setCheckToAndBackReach( false );
+	problemParams.setMaxFeasibleTravelTimeMillis( 1250 );
 	TakeEnemiesIntoAccount( problemParams );
 
 	if( BotHasAlmostSameOrigin( origin ) ) {
 		TacticalSpotsRegistry::OriginParams originParams( game.edicts + bot->EntNum(), searchRadius, RouteCache() );
-		return CoverProblemSolver( originParams, problemParams ).FindSingle( result );
+		return CoverProblemSolver( originParams, problemParams ).findSingle( result );
 	}
 	TacticalSpotsRegistry::OriginParams originParams( origin.Data(), searchRadius, RouteCache() );
-	return CoverProblemSolver( originParams, problemParams ).FindSingle( result );
+	return CoverProblemSolver( originParams, problemParams ).findSingle( result );
 }
 
 const BotTacticalSpotsCache::NearbyEntitiesCache::NearbyEntitiesCacheEntry

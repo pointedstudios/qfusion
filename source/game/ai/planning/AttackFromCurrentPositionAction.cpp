@@ -25,7 +25,7 @@ AiActionRecord::Status AttackFromCurrentPositionActionRecord::UpdateStatus( cons
 		const Vec3 keepVisibleOrigin( Self()->GetSelectedEnemies().LastSeenOrigin() );
 		SideStepDodgeProblemSolver::ProblemParams problemParams( keepVisibleOrigin );
 		SideStepDodgeProblemSolver solver( originParams, problemParams );
-		if( solver.FindSingle( spotOrigin ) ) {
+		if( solver.findSingle( spotOrigin ) ) {
 			self->SetNavTarget( Vec3( spotOrigin ), 4.0f );
 		}
 	}
