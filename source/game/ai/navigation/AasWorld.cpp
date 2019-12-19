@@ -669,8 +669,8 @@ void AiAasWorld::TrySetAreaNoFallFlags( int areaNum ) {
 void AiAasWorld::TrySetAreaSkipCollisionFlags() {
 	trace_t trace;
 
-	const float extents[3] = { 48, 32, 16 };
-	int flagsToSet[3] = { AREA_SKIP_COLLISION_48, AREA_SKIP_COLLISION_32, AREA_SKIP_COLLISION_16 };
+	const float extents[3] = { 64, 48, 32 };
+	int flagsToSet[3] = { AREA_SKIP_COLLISION_64, AREA_SKIP_COLLISION_48, AREA_SKIP_COLLISION_32 };
 	// Leftmost flags also imply all rightmost flags presence
 	for( int i = 0; i < 2; ++i ) {
 		for( int j = i + 1; j < 3; ++j ) {
@@ -678,6 +678,9 @@ void AiAasWorld::TrySetAreaSkipCollisionFlags() {
 		}
 	}
 
+	const int clipMask = MASK_PLAYERSOLID | MASK_WATER | CONTENTS_TRIGGER | CONTENTS_JUMPPAD | CONTENTS_TELEPORTER;
+	const float playerHeight = playerbox_stand_maxs[2] - playerbox_stand_maxs[2];
+	const float playerRadius = 0.5f * ( M_SQRT2 * ( playerbox_stand_maxs[0] - playerbox_stand_mins[0] ) );
 	for( int i = 1; i < numareas; ++i ) {
 		int *const areaFlags = &areasettings[i].areaflags;
 		// If it is already known that the area is bounded by a solid wall or is an inclined floor area
@@ -690,33 +693,18 @@ void AiAasWorld::TrySetAreaSkipCollisionFlags() {
 			const float extent = extents[j];
 			// Now make a bounding box not lesser than the area bounds or player bounds
 
-			// Set some side extent, except for the bottom side
-			Vec3 mins( -extent, -extent, 0 );
-			Vec3 maxs( +extent, +extent, playerbox_stand_maxs[2] );
+			// Set some extent, except for the bottom side
+			Vec3 mins( -extent - playerRadius, -extent - playerRadius, 0 );
+			// Ensure that there's always a room for a player above
+			// even if a player barely touches area top by their feet
+			Vec3 maxs( +extent + playerRadius, +extent + playerRadius, playerHeight );
 			mins += area.mins;
 			maxs += area.maxs;
 			// Convert bounds to relative
 			maxs -= area.center;
 			mins -= area.center;
 
-			// Ensure that the bounds are not less than playerbox + necessary extent
-			for( int k = 0; k < 2; ++k ) {
-				float maxSideMins = playerbox_stand_mins[k] - extent;
-				if( mins.Data()[k] > maxSideMins ) {
-					mins.Data()[k] = maxSideMins;
-				}
-				float minSideMaxs = playerbox_stand_maxs[k] + extent;
-				if( maxs.Data()[k] < minSideMaxs ) {
-					maxs.Data()[k] = minSideMaxs;
-				}
-			}
-
-			float maxMinsZ = playerbox_stand_mins[2];
-			if( mins.Z() > maxMinsZ ) {
-				mins.Z() = maxMinsZ;
-			}
-
-			float minMaxsZ = playerbox_stand_maxs[2] * 2;
+			float minMaxsZ = playerHeight + extent;
 			if( maxs.Z() < minMaxsZ ) {
 				maxs.Z() = minMaxsZ;
 			}
@@ -726,10 +714,10 @@ void AiAasWorld::TrySetAreaSkipCollisionFlags() {
 				mins.Z() += 1.0f;
 			}
 
-			G_Trace( &trace, area.center, mins.Data(), maxs.Data(), area.center, nullptr, MASK_PLAYERSOLID );
+			G_Trace( &trace, area.center, mins.Data(), maxs.Data(), area.center, nullptr, clipMask );
 			if( trace.fraction == 1.0f && !trace.startsolid ) {
-				*areaFlags |= flagsToSet[j];
-				goto nextArea;
+			    *areaFlags |= flagsToSet[j];
+			    goto nextArea;
 			}
 		}
 nextArea:;

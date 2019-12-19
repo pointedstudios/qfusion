@@ -420,7 +420,7 @@ bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 	}
 
 	// If the area is not a "skip collision" area
-	if( !( AiAasWorld::Instance()->AreaSettings()[context->CurrAasAreaNum()].areaflags & AREA_SKIP_COLLISION_16 ) ) {
+	if( !( AiAasWorld::Instance()->AreaSettings()[context->CurrAasAreaNum()].areaflags & AREA_SKIP_COLLISION_MASK ) ) {
 		const float frac = ( threshold - speed2D ) * Q_Rcp( threshold );
 		penalty += (unsigned)( 250 + 1250 * Q_Sqrt( frac ) );
 	}

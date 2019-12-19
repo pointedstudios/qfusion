@@ -79,11 +79,15 @@
 #define AREA_INCLINED_FLOOR   ( 1 << 13 )  // an area has an inclined floor (AAS treats these areas as having a flat one)
 #define AREA_SLIDABLE_RAMP    ( 1 << 14 )  // an area is a slidable ramp (AREA_INCLINED_FLOOR is implied and set too)
 
-// if a bot is in any point of an area and is in air above ground,
-// it's legal to skip collision in PMove() for specified suffix units around/above.
-#define AREA_SKIP_COLLISION_16   ( 1 << 20 )
-#define AREA_SKIP_COLLISION_32   ( 1 << 21 )
-#define AREA_SKIP_COLLISION_48   ( 1 << 22 )
+// If any part of a bot box is within an area having one of these flags
+// collision can be safely skipped for 32, 48 or 64 units around the bot
+// in XY plane during movement prediction.
+// It's safe to assume there's no ceiling a bot can bump into as well.
+#define AREA_SKIP_COLLISION_32   ( 1 << 20 )
+#define AREA_SKIP_COLLISION_48   ( 1 << 21 )
+#define AREA_SKIP_COLLISION_64   ( 1 << 22 )
+
+#define AREA_SKIP_COLLISION_MASK  ( AREA_SKIP_COLLISION_32 | AREA_SKIP_COLLISION_48 | AREA_SKIP_COLLISION_64 )
 
 // a movement in an area is safe from falling/entering a hazard
 // (this is currently not a 100% guarantee but an optimistic estimation)
