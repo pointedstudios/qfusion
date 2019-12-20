@@ -388,6 +388,8 @@ void AiAasWorld::ComputeExtraAreaData() {
 	}
 
 	BuildSpecificAreaTypesLists();
+
+	computeInnerBoundsForAreas();
 }
 
 void AiAasWorld::TrySetAreaLedgeFlags( int areaNum ) {
@@ -722,6 +724,51 @@ void AiAasWorld::TrySetAreaSkipCollisionFlags() {
 		}
 nextArea:;
 	}
+}
+
+void AiAasWorld::computeInnerBoundsForAreas() {
+    areaInnerBounds = (int16_t *)G_Malloc( 6 * sizeof( int16_t ) * numareas );
+
+    VectorClear( areaInnerBounds + 0 );
+    VectorClear( areaInnerBounds + 3 );
+
+    const vec3_t addToMins { +0.5f, +0.5f, +0.5f };
+    const vec3_t addToMaxs { -0.5f, -0.5f, -0.5f };
+    for( int areaNum = 1; areaNum < numareas; ++areaNum ) {
+        const auto &area = areas[areaNum];
+        vec3_t innerMins, innerMaxs;
+        VectorCopy( area.mins, innerMins );
+        VectorCopy( area.maxs, innerMaxs );
+
+        for( int faceIndexNum = area.firstface; faceIndexNum < area.firstface + area.numfaces; ++faceIndexNum ) {
+            const auto &face = faces[std::abs( faceindex[faceIndexNum] )];
+            for( int edgeIndexNum = face.firstedge; edgeIndexNum < face.firstedge + face.numedges; ++edgeIndexNum ) {
+                const auto &edge = edges[std::abs( edgeindex[edgeIndexNum] )];
+                for( int edgeVertex = 0; edgeVertex < 2; ++edgeVertex ) {
+                    assert( edge.v[edgeVertex] >= 0 );
+                    const float *v = vertexes[edge.v[edgeVertex]];
+                    // For each coordinate check what "semi-space" it belongs to based on comparison to the area center.
+                    // Select the maximal value of mins and minimal one of maxs.
+                    for( int i = 0; i < 3; ++i ) {
+                        if( v[i] < area.center[i] ) {
+                            if( innerMins[i] < v[i] ) {
+                                innerMins[i] = v[i];
+                            }
+                        } else {
+                            if( innerMaxs[i] > v[i] ) {
+                                innerMaxs[i] = v[i];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        VectorAdd( innerMins, addToMins, innerMins );
+        VectorAdd( innerMaxs, addToMaxs, innerMaxs );
+        VectorCopy( innerMins, areaInnerBounds + areaNum * 6 + 0 );
+        VectorCopy( innerMaxs, areaInnerBounds + areaNum * 6 + 3 );
+    }
 }
 
 static void AAS_DData( unsigned char *data, int size ) {
@@ -1103,6 +1150,10 @@ AiAasWorld::~AiAasWorld() {
 	}
 	if( walkOffLedgePassThroughAirAreas ) {
 		G_Free( walkOffLedgePassThroughAirAreas );
+	}
+
+	if( areaInnerBounds ) {
+	    G_Free( areaInnerBounds );
 	}
 }
 

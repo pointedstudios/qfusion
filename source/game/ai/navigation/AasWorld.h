@@ -278,6 +278,10 @@ class AiAasWorld
 	uint16_t *elevatorReachPassThroughAreas { nullptr };
 	uint16_t *walkOffLedgePassThroughAirAreas { nullptr };
 
+	// Contains bounds of a maximal box that is fully within an area.
+	// Mins/maxs are rounded and stored as six 16-bit signed integers.
+	int16_t *areaInnerBounds { nullptr };
+
 	static AiAasWorld *instance;
 
 	AiAasWorld() {
@@ -313,6 +317,8 @@ class AiAasWorld
 	uint32_t ComputeFloorClustersVisibility();
 
 	bool ComputeVisibilityForClustersPair( int floorClusterNum1, int floorClusterNum2 );
+
+	void computeInnerBoundsForAreas();
 
 	void TrySetAreaLedgeFlags( int areaNum );
 	void TrySetAreaWallFlags( int areaNum );
@@ -497,6 +503,11 @@ public:
 	inline const int *AreaMapLeafsList( int areaNum ) const {
 		assert( areaNum >= 0 && areaNum < numareas );
 		return areaMapLeafsData + areaMapLeafListOffsets[areaNum];
+	}
+
+	const int16_t *getAreaInnerBounds( int areaNum ) const {
+	    assert( (unsigned)areaNum < (unsigned)numareas );
+	    return areaInnerBounds + 6 * areaNum;
 	}
 
 	/**
