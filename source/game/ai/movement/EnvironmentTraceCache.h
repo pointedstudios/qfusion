@@ -29,6 +29,7 @@ private:
 	TraceResult results[16];
 	const CMShapeList *cachedShapeList { nullptr };
 	unsigned resultsMask { 0 };
+	bool hasComputedShapeList { false };
 
 	template <typename T>
 	static inline void Assert( T condition, const char *message = nullptr ) {
@@ -42,8 +43,6 @@ private:
 		}
 #endif
 	}
-
-	const CMShapeList *getOrMakeRegionShapeList( class MovementPredictionContext *context );
 
 	/**
 	 * Selects indices of non-blocked dirs among 8 full-height ones.

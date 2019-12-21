@@ -142,21 +142,6 @@ void EnvironmentTraceCache::makeRandomKeyMoves( Context *context, int *keyMoves 
 	Vector2Set( keyMoves, 0, 0 );
 }
 
-const CMShapeList *EnvironmentTraceCache::getOrMakeRegionShapeList( Context *context ) {
-	if( cachedShapeList ) {
-		return cachedShapeList;
-	}
-
-	const float *__restrict origin = context->movementState->entityPhysicsState.Origin();
-	Vec3 regionMins = Vec3( -kTraceDepth, -kTraceDepth, -20 );
-	regionMins += playerbox_stand_mins;
-	regionMins += origin;
-	Vec3 regionMaxs = Vec3( +kTraceDepth, +kTraceDepth, +20 );
-	regionMaxs += playerbox_stand_maxs;
-	regionMaxs += origin;
-	return ( cachedShapeList = shapesListCache.prepareList( regionMins.Data(), regionMaxs.Data() ) );
-}
-
 void EnvironmentTraceCache::testForResultsMask( Context *context, unsigned requiredResultsMask ) {
 	// There must not be any extra bits
 	Assert( ( requiredResultsMask & ~0xFFFFu ) == 0 );
@@ -182,7 +167,7 @@ void EnvironmentTraceCache::testForResultsMask( Context *context, unsigned requi
 	const unsigned resultFullSides = requiredResultsMask & 0xFFu;
 	// If we do not have some of required result bit set
 	if( ( actualFullSides & resultFullSides ) != resultFullSides ) {
-		const auto *shapeList = getOrMakeRegionShapeList( context );
+		const auto *shapeList = getShapeListForPMoveCollision( context );
 
 		vec3_t mins;
 		VectorCopy( playerbox_stand_mins, mins );
@@ -226,7 +211,7 @@ void EnvironmentTraceCache::testForResultsMask( Context *context, unsigned requi
 	const unsigned resultJumpableSides = requiredResultsMask & 0xFF00u;
 	// If we do not have some of required result bit set
 	if( ( actualJumpableSides & resultJumpableSides ) != resultJumpableSides ) {
-		const auto *shapeList = getOrMakeRegionShapeList( context );
+		const auto *shapeList = getShapeListForPMoveCollision( context );
 
 		vec3_t mins;
 		VectorCopy( playerbox_stand_mins, mins );
@@ -260,8 +245,81 @@ void EnvironmentTraceCache::testForResultsMask( Context *context, unsigned requi
 }
 
 const CMShapeList *EnvironmentTraceCache::getShapeListForPMoveCollision( Context *context ) {
-	// TODO: Try skipping trace completely
-	// This requires revision of PMove() code so it never attempts using a null list (like it does sometimes now)
+    if( hasComputedShapeList ) {
+        return cachedShapeList;
+    }
 
-	return getOrMakeRegionShapeList( context );
+    cachedShapeList = nullptr;
+    hasComputedShapeList = true;
+
+    const auto &__restrict physicsState = context->movementState->entityPhysicsState;
+    // TODO: This is just a hack. There should be guarantees that millis for the
+    // current step are always set prior to shape list retrieval in this frame
+    const unsigned millis = std::max( context->predictionStepMillis, 48u );
+    const float moveDist = ( 0.001f * (float)millis * physicsState.Speed() );
+    const float sideExtent = std::max( kTraceDepth, moveDist );
+
+    const float zExtent = std::max( moveDist, 16.0f );
+    float topExtent, bottomExtent;
+    if ( physicsState.Velocity()[2] > 0 ) {
+        std::tie( topExtent, bottomExtent ) = std::make_pair( zExtent, 16.0f );
+    } else {
+        std::tie( topExtent, bottomExtent ) = std::make_pair( 16.0f, zExtent );
+    }
+
+    const float *__restrict origin = physicsState.Origin();
+    Vec3 regionMins = Vec3( -sideExtent, -sideExtent, -bottomExtent );
+    regionMins += playerbox_stand_mins;
+    regionMins += origin;
+    Vec3 regionMaxs = Vec3( +sideExtent, +sideExtent, +topExtent );
+    regionMaxs += playerbox_stand_maxs;
+    regionMaxs += origin;
+
+    if( physicsState.GroundEntity() ) {
+        return ( cachedShapeList = shapesListCache.prepareList( regionMins.Data(), regionMaxs.Data() ) );
+    }
+
+    const auto *aasWorld = AiAasWorld::Instance();
+    const int areaNum = physicsState.CurrAasAreaNum();
+    const auto areaFlags = aasWorld->AreaSettings()[areaNum].areaflags;
+
+    if( ( areaFlags & AREA_SKIP_COLLISION_MASK ) && physicsState.HeightOverGround() > bottomExtent ) {
+        if( sideExtent <= 32.0f ) {
+            assert( areaFlags & AREA_SKIP_COLLISION_32 );
+            return nullptr;
+        }
+        if( sideExtent <= 48.0f ) {
+            if( areaFlags & AREA_SKIP_COLLISION_48 ) {
+                return nullptr;
+            }
+        } else if( sideExtent <= 64.0f ) {
+            if( areaFlags & AREA_SKIP_COLLISION_64 ) {
+                return nullptr;
+            }
+        }
+    }
+
+    const int16_t *areaInnerBounds = aasWorld->getAreaInnerBounds( areaNum );
+    vec3_t areaInnerMins, areaInnerMaxs;
+    // Unpack
+    VectorCopy( areaInnerBounds + 0, areaInnerMins );
+    VectorCopy( areaInnerBounds + 3, areaInnerMaxs );
+
+    // TODO: There should be a "withinBounds" subroutine, preferably using SIMD
+    int i = 0;
+    for(; i < 3; ++i ) {
+        if( areaInnerMins[i] > regionMins.Data()[i] ) {
+            break;
+        }
+        if( areaInnerMaxs[i] < regionMaxs.Data()[i] ) {
+            break;
+        }
+    }
+
+    // If the region is within the area inner bounds
+    if( i == 3 ) {
+        return nullptr;
+    }
+
+    return ( cachedShapeList = shapesListCache.prepareList( regionMins.Data(), regionMaxs.Data() ) );
 }
