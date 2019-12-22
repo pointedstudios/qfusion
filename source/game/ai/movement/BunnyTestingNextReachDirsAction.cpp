@@ -141,7 +141,7 @@ void BunnyTestingNextReachDirsAction::SaveSuggestedLookDirs( Context *context ) 
 	// The target area of reachStoppedAt is the area "behind" trigger.
 	// The prediction gets always interrupted on touching trigger.
 	// Just supply a dummy value and rely on touching the trigger during prediction.
-	suggestedLookDirs.emplace_back( DirAndArea( toTriggerDir, 0 ) );
+	suggestedLookDirs.emplace_back( SuggestedDir( toTriggerDir, 0 ) );
 }
 
 inline bool NextReachDirsCollector::CheckForStairsCluster( int areaNum ) {

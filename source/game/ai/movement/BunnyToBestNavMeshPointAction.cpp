@@ -29,7 +29,7 @@ void BunnyToBestNavMeshPointAction::SaveSuggestedLookDirs( MovementPredictionCon
 	// Tests for these areas have failed if control flow reaches THIS action
 	const auto &failedSuggestions = module->bunnyTestingNextReachDirsAction.suggestedLookDirs;
 	// If we have already tested this area (and have failed)
-	for( const DirAndArea &oldSuggestion: failedSuggestions ) {
+	for( const SuggestedDir &oldSuggestion: failedSuggestions ) {
 		if( oldSuggestion.area == areaNum ) {
 			return;
 		}
@@ -50,5 +50,5 @@ void BunnyToBestNavMeshPointAction::SaveSuggestedLookDirs( MovementPredictionCon
 	dir -= point;
 	dir *= -1.0f / dir.Length();
 
-	suggestedLookDirs.emplace_back( DirAndArea( dir, areaNum ) );
+	suggestedLookDirs.emplace_back( SuggestedDir( dir, areaNum ) );
 }

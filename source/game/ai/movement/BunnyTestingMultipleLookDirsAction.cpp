@@ -6,7 +6,7 @@ void BunnyTestingMultipleLookDirsAction::BeforePlanning() {
 
 	// Ensure the suggested action has been set in subtype constructor
 	Assert( suggestedAction );
-	suggestedDir = nullptr;
+	currDir = nullptr;
 }
 
 void BunnyTestingSavedLookDirsAction::OnApplicationSequenceStarted( MovementPredictionContext *context ) {
@@ -22,7 +22,11 @@ void BunnyTestingSavedLookDirsAction::OnApplicationSequenceStarted( MovementPred
 		return;
 	}
 
-	suggestedDir = suggestedLookDirs[currSuggestedLookDirNum].dir.Data();
+	const SuggestedDir &suggestedDir = suggestedLookDirs[currSuggestedLookDirNum];
+	currDir = suggestedDir.dir.Data();
+	if( unsigned penalty = suggestedDir.pathPenalty ) {
+		EnsurePathPenalty( penalty );
+	}
 }
 
 void BunnyTestingSavedLookDirsAction::OnApplicationSequenceFailed( MovementPredictionContext *context, unsigned ) {
@@ -62,7 +66,7 @@ void BunnyTestingMultipleLookDirsAction::PlanPredictionStep( Context *context ) 
 		return;
 	}
 
-	if( !suggestedDir ) {
+	if( !currDir ) {
 		Debug( "There is no suggested look dirs yet/left\n" );
 		context->SetPendingRollback();
 		return;
@@ -73,7 +77,7 @@ void BunnyTestingMultipleLookDirsAction::PlanPredictionStep( Context *context ) 
 		return;
 	}
 
-	context->record->botInput.SetIntendedLookDir( suggestedDir, true );
+	context->record->botInput.SetIntendedLookDir(currDir, true );
 
 	if( !SetupBunnyHopping( context->record->botInput.IntendedLookDir(), context ) ) {
 		context->SetPendingRollback();
@@ -103,8 +107,8 @@ static inline bool areDirsSimilar( const Vec3 &a, const Vec3 &b ) {
 // We do not want to export the actual inner container/elem type that's why it's a template
 template <typename Container>
 static bool hasSavedASimilarDir( const Container &__restrict savedDirs, const Vec3 &__restrict dir ) {
-	for( const auto &dirAndAttr: savedDirs ) {
-		if( areDirsSimilar( dirAndAttr.dir, dir ) ) {
+	for( const auto &suggestedDir: savedDirs ) {
+		if( areDirsSimilar( suggestedDir.dir, dir ) ) {
 			return true;
 		}
 	}
@@ -112,10 +116,22 @@ static bool hasSavedASimilarDir( const Container &__restrict savedDirs, const Ve
 }
 
 class DirRotatorsCache {
-	enum { kMaxRotations = 16 };
-	enum { kMatrixStrideFloats = sizeof( mat3_t ) / sizeof( float ) };
+	enum { kMaxRotations = 20 };
 
-	mat3_t values[kMaxRotations];
+public:
+	struct Rotator {
+		mat3_t matrix;
+		unsigned pathPenalty;
+
+		Vec3 rotate( const Vec3 &__restrict v ) const {
+			vec3_t result;
+			assert( std::fabs( v.Length() - 1.0f ) < 0.001f );
+			Matrix3_TransformVector( matrix, v.Data(), result );
+			return Vec3( result );
+		}
+	};
+private:
+	Rotator values[kMaxRotations];
 public:
 	DirRotatorsCache() noexcept {
 		// We can't (?) use axis_identity due to initialization order issues (?), can we?
@@ -127,47 +143,42 @@ public:
 
 		int index = 0;
 		// The step is not monotonic and is not uniform intentionally
-		const float angles[kMaxRotations / 2] = { 6.0f, 3.0f, 12.0f, 9.0f, 18.0f, 15.0f, 24.0f, 30.0f };
+		const float angles[kMaxRotations / 2] = { 6.0f, 3.0f, 12.0f, 9.0f, 18.0f, 15.0f, 24.0f, 30.0f, 45.0f, 70.0f };
 		for( float angle : angles ) {
+		    unsigned penalty = 0;
+		    if( angle > 20.0f ) {
+		        penalty = (unsigned)( 3000 * ( ( angle - 20.0f ) / 90.0f ) );
+		    }
 			// TODO: Just negate some elements? Does not really matter for a static initializer
-			Matrix3_Rotate( identity, -angle, 0, 0, 1, values[index++] );
-			Matrix3_Rotate( identity, +angle, 0, 0, 1, values[index++] );
+			for( int sign = -1; sign <= 1; sign += 2 ) {
+			    auto &r = values[index++];
+			    Matrix3_Rotate( identity, (float)sign * angle, 0, 0, 1, r.matrix );
+			    r.pathPenalty = penalty;
+			}
 		}
 	}
 
-	class RotationRef {
-		const float *m;
-	public:
-		explicit RotationRef( const float *m_ ): m( m_ ) {}
-		Vec3 rotate( const Vec3 &__restrict v ) const {
-			vec3_t result;
-			assert( std::fabs( v.Length() - 1.0f ) < 0.001f );
-			Matrix3_TransformVector( m, v.Data(), result );
-			return Vec3( result );
-		}
-	};
-
 	class const_iterator {
 		friend class DirRotatorsCache;
-		const float *m;
-		explicit const_iterator( const float *m_ ): m( m_ ) {}
+		const Rotator *p;
+		explicit const_iterator( const Rotator *p_ ) : p( p_ ) {}
 	public:
 		const_iterator& operator++() {
-			m += kMatrixStrideFloats;
+		    p++;
 			return *this;
 		}
 		bool operator!=( const const_iterator &that ) const {
-			return m != that.m;
+			return p != that.p;
 		}
-		RotationRef operator*() const {
-			return RotationRef( m );
+		Rotator operator*() const {
+			return *p;
 		}
 	};
 
 	[[nodiscard]]
-	const_iterator begin() const { return const_iterator( &values[0][0] ); }
+	const_iterator begin() const { return const_iterator( values ); }
 	[[nodiscard]]
-	const_iterator end() const { return const_iterator( &values[0][0] + kMaxRotations * kMatrixStrideFloats ); }
+	const_iterator end() const { return const_iterator( values + kMaxRotations ); }
 };
 
 static DirRotatorsCache dirRotatorsCache;
@@ -212,7 +223,7 @@ void BunnyTestingSavedLookDirsAction::DeriveMoreDirsFromSavedDirs() {
 				continue;
 			}
 
-			suggestedLookDirs.emplace_back( DirAndArea( rotated, base.area ) );
+			suggestedLookDirs.emplace_back( SuggestedDir( rotated, base.area, rotator.pathPenalty ) );
 			if( suggestedLookDirs.size() == suggestedLookDirs.capacity() ) {
 				return;
 			}

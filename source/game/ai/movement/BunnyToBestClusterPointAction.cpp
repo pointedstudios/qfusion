@@ -29,11 +29,11 @@ void BunnyToBestFloorClusterPointAction::OnApplicationSequenceStarted( MovementP
 
 		localDirStorage -= context->movementState->entityPhysicsState.Origin();
 		localDirStorage.Normalize();
-		suggestedDir = localDirStorage.Data();
+        currDir = localDirStorage.Data();
 		return;
 	}
 
-	suggestedDir = nullptr;
+    currDir = nullptr;
 }
 
 void BunnyToBestFloorClusterPointAction::OnApplicationSequenceFailed( MovementPredictionContext *context, unsigned ) {

@@ -9,7 +9,7 @@ class BunnyTestingMultipleLookDirsAction : public BunnyHopAction {
 	friend class BunnyInterpolatingChainAtStartAction;
 protected:
 	BaseMovementAction *suggestedAction { nullptr };
-	const float *suggestedDir { nullptr };
+	const float *currDir {nullptr };
 
 	virtual void OnApplicationSequenceFailed( MovementPredictionContext *context, unsigned stoppedAtFrameIndex ) {};
 public:
@@ -27,15 +27,19 @@ class BunnyTestingSavedLookDirsAction : public BunnyTestingMultipleLookDirsActio
 protected:
 	static constexpr auto MAX_SUGGESTED_LOOK_DIRS = 32;
 
-	struct DirAndArea {
+	struct SuggestedDir {
 		Vec3 dir;
 		int area;
+		unsigned pathPenalty { 0 };
 
-		DirAndArea( const Vec3 &dir_, int area_ )
+		SuggestedDir( const Vec3 &dir_, int area_ )
 			: dir( dir_ ), area( area_ ) {}
+
+		SuggestedDir( const Vec3 &dir_, int area_, unsigned pathPenalty_ )
+			: dir( dir_ ), area( area_ ), pathPenalty( pathPenalty_ ) {}
 	};
 
-	StaticVector<DirAndArea, MAX_SUGGESTED_LOOK_DIRS> suggestedLookDirs;
+	StaticVector<SuggestedDir, MAX_SUGGESTED_LOOK_DIRS> suggestedLookDirs;
 
 	unsigned maxSuggestedLookDirs { MAX_SUGGESTED_LOOK_DIRS };
 	unsigned currSuggestedLookDirNum { 0 };
