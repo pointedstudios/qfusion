@@ -48,7 +48,35 @@ static const float kTopNodeCacheAddToMins[] = { -56, -56, -24 };
 static const float kTopNodeCacheAddToMaxs[] = { +56, +56, +24 };
 
 CollisionTopNodeCache::CollisionTopNodeCache() noexcept
-	: boundsCache( "TopNodeCache", kTopNodeCacheAddToMins, kTopNodeCacheAddToMaxs ) {}
+	: defaultBoundsCache( "TopNodeCache", kTopNodeCacheAddToMins, kTopNodeCacheAddToMaxs )
+	, zeroStepBoundsCache( nullptr, kTopNodeCacheAddToMins, kTopNodeCacheAddToMaxs ) {}
+
+int CollisionTopNodeCache::getTopNode( const float *absMins, const float *absMaxs, bool isZeroStep ) const {
+	// Put the likely case first
+	if( !isZeroStep ) {
+		if( defaultBoundsCache.checkOrUpdateBounds( absMins, absMaxs ) ) {
+			return *defaultCachedNode;
+		}
+
+		const auto [cachedMins, cachedMaxs] = defaultBoundsCache.getCachedBounds();
+		defaultCachedNode = trap_CM_FindTopNodeForBox( cachedMins, cachedMaxs );
+		return *defaultCachedNode;
+	}
+
+	// Take switching to another bot into account. That's why the bounds test is primarily needed.
+	if( !zeroStepBoundsCache.checkOrUpdateBounds( absMins, absMaxs ) ) {
+		// zeroStepBoundsCache is updated first so mins/maxs are always valid
+		const auto [cachedMins, cachedMaxs] = zeroStepBoundsCache.getCachedBounds();
+		cachedZeroStepNode = trap_CM_FindTopNodeForBox( cachedMins, cachedMaxs );
+	}
+
+	// Cached bounds initially are illegal so this value gets set on a first checkOnUpdateBounds() call.
+	assert( cachedZeroStepNode.has_value() );
+	defaultCachedNode = *cachedZeroStepNode;
+	// Force an update of the primary bounds cache
+	defaultBoundsCache.setFrom( zeroStepBoundsCache );
+	return *cachedZeroStepNode;
+}
 
 CollisionTopNodeCache collisionTopNodeCache;
 
@@ -56,30 +84,58 @@ static const float kShapesListCacheAddToMins[] = { -64, -64, -32 };
 static const float kShapesListCacheAddToMaxs[] = { +64, +64, +32 };
 
 CollisionShapesListCache::CollisionShapesListCache() noexcept
-	: boundsCache( "ShapesListCache", kShapesListCacheAddToMins, kShapesListCacheAddToMaxs ) {}
+	: defaultBoundsCache( "ShapesListCache", kShapesListCacheAddToMins, kShapesListCacheAddToMaxs )
+	, zeroStepBoundsCache( nullptr, kShapesListCacheAddToMins, kShapesListCacheAddToMaxs ) {}
 
 CollisionShapesListCache::~CollisionShapesListCache() {
-	GAME_IMPORT.CM_FreeShapeList( cachedList );
-	GAME_IMPORT.CM_FreeShapeList( clippedList );
+	GAME_IMPORT.CM_FreeShapeList( defaultCachedList );
+	GAME_IMPORT.CM_FreeShapeList( defaultClippedList );
+	GAME_IMPORT.CM_FreeShapeList( zeroStepCachedList );
+	GAME_IMPORT.CM_FreeShapeList( zeroStepClippedList );
 }
 
 CollisionShapesListCache shapesListCache;
 
-const CMShapeList *CollisionShapesListCache::prepareList( const float *mins, const float *maxs ) const {
-	if( boundsCache.checkOrUpdateBounds( mins, maxs ) ) {
-		GAME_IMPORT.CM_ClipShapeList( clippedList, cachedList, mins, maxs );
-		return clippedList;
+constexpr auto kListClipMask = MASK_PLAYERSOLID | MASK_WATER | CONTENTS_TRIGGER | CONTENTS_JUMPPAD | CONTENTS_TELEPORTER;
+
+const CMShapeList *CollisionShapesListCache::prepareList( const float *mins, const float *maxs, bool isZeroStep ) const {
+	// Put the likely case first
+	if( !isZeroStep ) {
+		return defaultPrepareList( mins, maxs );
 	}
 
-	if( !cachedList ) {
-		cachedList = GAME_IMPORT.CM_AllocShapeList();
-		clippedList = GAME_IMPORT.CM_AllocShapeList();
+	if( zeroStepBoundsCache.checkOrUpdateBounds( mins, maxs ) ) {
+		activeCachedList = zeroStepCachedList;
+		defaultBoundsCache.setFrom( zeroStepBoundsCache );
+		return zeroStepClippedList;
 	}
 
-	constexpr int mask = MASK_PLAYERSOLID | MASK_WATER | CONTENTS_TRIGGER | CONTENTS_JUMPPAD | CONTENTS_TELEPORTER;
-	cachedList = GAME_IMPORT.CM_BuildShapeList( cachedList, boundsCache.getCacheMins(), boundsCache.getCacheMaxs(), mask );
-	GAME_IMPORT.CM_ClipShapeList( clippedList, cachedList, mins, maxs );
-	return clippedList;
+	if( !defaultCachedList ) {
+		defaultCachedList = GAME_IMPORT.CM_AllocShapeList();
+		defaultClippedList = GAME_IMPORT.CM_AllocShapeList();
+		zeroStepCachedList = GAME_IMPORT.CM_AllocShapeList();
+		zeroStepClippedList = GAME_IMPORT.CM_AllocShapeList();
+	}
+
+	const auto [cachedMins, cachedMaxs] = zeroStepBoundsCache.getCachedBounds();
+	activeCachedList = GAME_IMPORT.CM_BuildShapeList( zeroStepCachedList, cachedMins, cachedMaxs, kListClipMask );
+	GAME_IMPORT.CM_ClipShapeList( zeroStepClippedList, zeroStepCachedList, mins, maxs );
+
+	defaultBoundsCache.setFrom( zeroStepBoundsCache );
+	return zeroStepClippedList;
+}
+
+const CMShapeList *CollisionShapesListCache::defaultPrepareList( const float *mins, const float *maxs ) const {
+	if( defaultBoundsCache.checkOrUpdateBounds( mins, maxs ) ) {
+		assert( activeCachedList == defaultCachedList || activeCachedList == zeroStepCachedList );
+		GAME_IMPORT.CM_ClipShapeList( defaultClippedList, activeCachedList, mins, maxs );
+		return defaultClippedList;
+	}
+
+	const auto [cachedMins, cachedMaxs] = defaultBoundsCache.getCachedBounds();
+	activeCachedList = GAME_IMPORT.CM_BuildShapeList( defaultCachedList, cachedMins, cachedMaxs, kListClipMask );
+	GAME_IMPORT.CM_ClipShapeList( defaultClippedList, activeCachedList, mins, maxs );
+	return defaultClippedList;
 }
 
 bool ReachChainWalker::Exec() {

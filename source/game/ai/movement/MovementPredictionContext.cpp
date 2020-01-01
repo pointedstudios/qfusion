@@ -274,6 +274,8 @@ static void Intercepted_PMoveTouchTriggers( pmove_t *pm, const vec3_t previous_o
 	game.edicts[pm->playerState->playerNum + 1].ai->botRef->OnInterceptedPMoveTouchTriggers( pm, previous_origin );
 }
 
+static MovementPredictionContext *currPredictionContext;
+
 static const CMShapeList *pmoveShapeList;
 
 static void Intercepted_Trace( trace_t *t, const vec3_t start, const vec3_t mins,
@@ -284,7 +286,7 @@ static void Intercepted_Trace( trace_t *t, const vec3_t start, const vec3_t mins
 }
 
 static int Intercepted_PointContents( const vec3_t p, int timeDelta ) {
-	int topNodeHint = ::collisionTopNodeCache.GetTopNode( p, p );
+	int topNodeHint = ::collisionTopNodeCache.getTopNode( p, p, !currPredictionContext->topOfStackIndex );
 	return trap_CM_TransformedPointContents( p, nullptr, nullptr, nullptr, topNodeHint );
 }
 
@@ -1066,6 +1068,8 @@ void MovementPredictionContext::NextMovementStep() {
 	// (that yields a zeroed output with fraction = 1) does not work.
 	// An actual logic tied to this flag has to be added in Pmove() for each module_Trace() call.
 	pm.skipCollision = !pmoveShapeList;
+
+	::currPredictionContext = this;
 
 	// We currently test collisions only against a solid world on each movement step and the corresponding PMove() call.
 	// Touching trigger entities is handled by Intercepted_PMoveTouchTriggers(), also we use AAS sampling for it.

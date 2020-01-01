@@ -276,7 +276,8 @@ const CMShapeList *EnvironmentTraceCache::getShapeListForPMoveCollision( Context
     regionMaxs += origin;
 
     if( physicsState.GroundEntity() ) {
-        return ( cachedShapeList = shapesListCache.prepareList( regionMins.Data(), regionMaxs.Data() ) );
+        bool isZeroStep = !context->topOfStackIndex;
+        return ( cachedShapeList = shapesListCache.prepareList( regionMins.Data(), regionMaxs.Data(), isZeroStep ) );
     }
 
     const auto *aasWorld = AiAasWorld::Instance();
@@ -321,5 +322,6 @@ const CMShapeList *EnvironmentTraceCache::getShapeListForPMoveCollision( Context
         return nullptr;
     }
 
-    return ( cachedShapeList = shapesListCache.prepareList( regionMins.Data(), regionMaxs.Data() ) );
+    bool isZeroStep = !context->topOfStackIndex;
+    return ( cachedShapeList = shapesListCache.prepareList( regionMins.Data(), regionMaxs.Data(), isZeroStep ) );
 }

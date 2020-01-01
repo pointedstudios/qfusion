@@ -458,9 +458,16 @@ public:
 	}
 
 	[[nodiscard]]
-	const float *getCacheMins() const { return cachedForMins; }
-	[[nodiscard]]
-	const float *getCacheMaxs() const { return cachedForMaxs; }
+	std::pair<const float *, const float *> getCachedBounds() const {
+		return std::make_pair( cachedForMins, cachedForMaxs );
+	}
+
+	void setFrom( const RegionBoundsCache &that ) {
+		assert( VectorCompare( addToMins, that.addToMins ) );
+		assert( VectorCompare( addToMaxs, that.addToMaxs ) );
+		VectorCopy( that.cachedForMins, cachedForMins );
+		VectorCopy( that.cachedForMaxs, cachedForMaxs );
+	}
 
 	[[nodiscard]]
 	bool checkOrUpdateBounds( const float *mins, const float *maxs ) {
@@ -486,7 +493,7 @@ public:
 	}
 
 	~RegionBoundsCache() {
-		if( !profileHits || !total ) {
+		if( !tag || !profileHits || !total ) {
 			return;
 		}
 		double rate = (double)hits / (double)total;
@@ -495,36 +502,33 @@ public:
 };
 
 class CollisionTopNodeCache {
-	mutable RegionBoundsCache boundsCache;
-	mutable int cachedNode { 0 };
+	mutable RegionBoundsCache defaultBoundsCache;
+	mutable RegionBoundsCache zeroStepBoundsCache;
+	mutable std::optional<int> defaultCachedNode;
+	mutable std::optional<int> cachedZeroStepNode;
 public:
 	CollisionTopNodeCache() noexcept;
 
-	int GetTopNode( const Vec3 &absMins, const Vec3 &absMaxs ) const {
-		return GetTopNode( absMins.Data(), absMaxs.Data() );
-	}
-
-	int GetTopNode( const float *absMins, const float *absMaxs ) const {
-		if( boundsCache.checkOrUpdateBounds( absMins, absMaxs ) ) {
-			return cachedNode;
-		}
-
-		cachedNode = trap_CM_FindTopNodeForBox( boundsCache.getCacheMins(), boundsCache.getCacheMaxs() );
-		return cachedNode;
-	}
+	int getTopNode( const float *absMins, const float *absMaxs, bool izZeroStep ) const;
 };
 
 extern CollisionTopNodeCache collisionTopNodeCache;
 
 class CollisionShapesListCache {
-	mutable CMShapeList *cachedList { nullptr };
-	mutable CMShapeList *clippedList { nullptr };
-	mutable RegionBoundsCache boundsCache;
+	mutable CMShapeList *activeCachedList { nullptr };
+	mutable CMShapeList *defaultCachedList { nullptr };
+	mutable CMShapeList *defaultClippedList { nullptr };
+	mutable CMShapeList *zeroStepCachedList { nullptr };
+	mutable CMShapeList *zeroStepClippedList { nullptr };
+	mutable RegionBoundsCache defaultBoundsCache;
+	mutable RegionBoundsCache zeroStepBoundsCache;
+
+	const CMShapeList *defaultPrepareList( const float *mins, const float *maxs ) const;
 public:
 	CollisionShapesListCache() noexcept;
 	~CollisionShapesListCache();
 
-	const CMShapeList *prepareList( const float *mins, const float *maxs ) const;
+	const CMShapeList *prepareList( const float *mins, const float *maxs, bool isZeroStep ) const;
 };
 
 extern CollisionShapesListCache shapesListCache;
