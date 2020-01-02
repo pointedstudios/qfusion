@@ -51,13 +51,13 @@ void AiAasWorld::Shutdown() {
 void AiAasWorld::Frame() {
 }
 
-int AiAasWorld::PointAreaNum( const vec3_t point ) const {
+int AiAasWorld::PointAreaNum( const vec3_t point, int topNodeHint ) const {
 	if( !loaded ) {
 		return 0;
 	}
 
-	//start with node 1 because node zero is a dummy used for solid leafs
-	int nodenum = 1;
+	assert( topNodeHint > 0 );
+	int nodenum = topNodeHint;
 
 	while( nodenum > 0 ) {
 		aas_node_t *node = &nodes[nodenum];
@@ -72,7 +72,7 @@ int AiAasWorld::PointAreaNum( const vec3_t point ) const {
 	return -nodenum;
 }
 
-int AiAasWorld::FindAreaNum( const vec3_t mins, const vec3_t maxs ) const {
+int AiAasWorld::FindAreaNum( const vec3_t mins, const vec3_t maxs, int topNodeHint ) const {
 	const vec_t *bounds[2] = { maxs, mins };
 	// Test all AABB vertices
 	vec3_t origin = { 0, 0, 0 };
@@ -81,7 +81,7 @@ int AiAasWorld::FindAreaNum( const vec3_t mins, const vec3_t maxs ) const {
 		origin[0] = bounds[( i >> 0 ) & 1][0];
 		origin[1] = bounds[( i >> 1 ) & 1][1];
 		origin[2] = bounds[( i >> 2 ) & 1][2];
-		int areaNum = PointAreaNum( origin );
+		int areaNum = PointAreaNum( origin, topNodeHint );
 		if( areaNum ) {
 			return areaNum;
 		}
@@ -89,8 +89,8 @@ int AiAasWorld::FindAreaNum( const vec3_t mins, const vec3_t maxs ) const {
 	return 0;
 }
 
-int AiAasWorld::FindAreaNum( const vec3_t origin ) const {
-	int areaNum = PointAreaNum( const_cast<float*>( origin ) );
+int AiAasWorld::FindAreaNum( const vec3_t origin, int topNodeHint ) const {
+	int areaNum = PointAreaNum( origin, topNodeHint );
 
 	if( areaNum ) {
 		return areaNum;
@@ -100,24 +100,24 @@ int AiAasWorld::FindAreaNum( const vec3_t origin ) const {
 	VectorAdd( mins, origin, mins );
 	vec3_t maxs = { +8, +8, 16 };
 	VectorAdd( maxs, origin, maxs );
-	return FindAreaNum( mins, maxs );
+	return FindAreaNum( mins, maxs, topNodeHint );
 }
 
-int AiAasWorld::FindAreaNum( const edict_t *ent ) const {
+int AiAasWorld::FindAreaNum( const edict_t *ent, int topNodeHint ) const {
 	// Reject degenerate case
 	if( ent->r.absmin[0] == ent->r.absmax[0] &&
 		ent->r.absmin[1] == ent->r.absmax[1] &&
 		ent->r.absmin[2] == ent->r.absmax[2] ) {
-		return FindAreaNum( ent->s.origin );
+		return FindAreaNum( ent->s.origin, topNodeHint );
 	}
 
 	Vec3 testedOrigin( ent->s.origin );
-	int areaNum = PointAreaNum( testedOrigin.Data() );
+	int areaNum = PointAreaNum( testedOrigin.Data(), topNodeHint );
 	if( areaNum ) {
 		return areaNum;
 	}
 
-	return FindAreaNum( ent->r.absmin, ent->r.absmax );
+	return FindAreaNum( ent->r.absmin, ent->r.absmax, topNodeHint );
 }
 
 typedef struct aas_tracestack_s {
@@ -255,20 +255,7 @@ int AiAasWorld::TraceAreas( const vec3_t start, const vec3_t end, int *areas_, v
 	}
 }
 
-int AiAasWorld::BBoxAreas( const vec3_t absMins, const vec3_t absMaxs, int *areaNums, int maxAreas ) const {
-	if( !loaded ) {
-		return 0;
-	}
-
-	// A lookup table for inlined BoxOnPlaneSide() body
-	vec3_t lookupTable[16];
-
-	constexpr const auto nodesStackSize = 1024;
-	// Make sure we can access two additional elements to use a single branch for testing stack overflow
-	int nodesStack[nodesStackSize + 2];
-	int *stackPtr = &nodesStack[0];
-	int *writePtr = &areaNums[0];
-
+void AiAasWorld::setupBoxLookupTable( vec3_t *lookupTable, const float *absMins, const float *absMaxs ) {
 	// sign bits 0
 	VectorSet( lookupTable[0], absMaxs[0], absMaxs[1], absMaxs[2] );
 	VectorSet( lookupTable[1], absMins[0], absMins[1], absMins[2] );
@@ -293,6 +280,23 @@ int AiAasWorld::BBoxAreas( const vec3_t absMins, const vec3_t absMaxs, int *area
 	// sign bits 7
 	VectorSet( lookupTable[14], absMins[0], absMins[1], absMins[2] );
 	VectorSet( lookupTable[15], absMaxs[0], absMaxs[1], absMaxs[2] );
+}
+
+int AiAasWorld::BBoxAreas( const vec3_t absMins, const vec3_t absMaxs,
+						   int *areaNums, int maxAreas, int topNodeHint ) const {
+	if( !loaded ) {
+		return 0;
+	}
+
+	// A lookup table for inlined BoxOnPlaneSide() body
+	vec3_t lookupTable[16];
+	setupBoxLookupTable( lookupTable, absMins, absMaxs );
+
+	constexpr const auto nodesStackSize = 1024;
+	// Make sure we can access two additional elements to use a single branch for testing stack overflow
+	int nodesStack[nodesStackSize + 2];
+	int *stackPtr = &nodesStack[0];
+	int *writePtr = &areaNums[0];
 
 	// A mask to exclude duplicates in the output (wtf?).
 	// We do not want to add AasElementsMask() for it as this is really a hack.
@@ -302,7 +306,8 @@ int AiAasWorld::BBoxAreas( const vec3_t absMins, const vec3_t absMaxs, int *area
 	const int actualNumWords = numareas % 32 ? ( numareas + 1 ) / 32 : numareas / 32;
 	::memset( areasMask, 0, actualNumWords * sizeof( uint32_t ) );
 
-	*stackPtr++ = 1;
+	assert( topNodeHint > 0 );
+	*stackPtr++ = topNodeHint;
 	for(;; ) {
 		// Pop the node
 		stackPtr--;
@@ -357,6 +362,82 @@ int AiAasWorld::BBoxAreas( const vec3_t absMins, const vec3_t absMaxs, int *area
 	}
 
 	return (int)( writePtr - areaNums );
+}
+
+int AiAasWorld::findTopNodeForBox( const float *boxMins, const float *boxMaxs ) const {
+	// Spread bounds a bit to ensure inclusion of boundary planes in an enclosing node
+	vec3_t testedMins { -2, -2, -2 };
+	vec3_t testedMaxs { +2, +2, +2 };
+	VectorAdd( boxMins, testedMins, testedMins );
+	VectorAdd( boxMaxs, testedMaxs, testedMaxs );
+
+	vec3_t lookupTable[16];
+	setupBoxLookupTable( lookupTable, boxMins, boxMaxs );
+
+	// Caution! AAS root node is 1 contrary to the CM BSP
+	int currNode = 1, lastGoodNode = 1;
+	for(;; ) {
+		const auto *const node = &nodes[currNode];
+		const auto *const plane = &planes[node->planenum];
+		const auto *__restrict normal = plane->normal;
+		const int lookupTableIndex = plane->signBits * 2;
+		const auto *__restrict lookup0 = lookupTable[lookupTableIndex + 0];
+		const auto *__restrict lookup1 = lookupTable[lookupTableIndex + 1];
+		const float planeDist = plane->dist;
+
+		// Bits of inlined BoxOnPlaneSide() code follow
+
+		int sides = 0;
+		// If on the front side of the node
+		if( DotProduct( normal, lookup0 ) >= planeDist ) {
+			sides = 1;
+		}
+		// If on the back side of the node
+		if( DotProduct( normal, lookup1 ) < planeDist ) {
+			sides |= 2;
+		}
+		// Stop at finding a splitting node
+		if( sides == 3 ) {
+			return lastGoodNode;
+		}
+		// TODO: Is there a proof?
+		assert( sides > 0 );
+		int child = node->children[sides - 1];
+		// Stop at areas and at solid world
+		if( child <= 0 ) {
+			return currNode;
+		}
+		lastGoodNode = currNode;
+		currNode = child;
+	}
+}
+
+int AiAasWorld::findTopNodeForSphere( const float *center, float radius ) const {
+	// Spread radius a bit
+	const float testedRadius = radius + 2.0f;
+	const float *const __restrict c = center;
+
+	// Caution! AAS root node is 1 contrary to the CM BSP
+	int currNode = 1, lastGoodNode = 1;
+	for(;; ) {
+		const auto *__restrict node = nodes + currNode;
+		const auto *__restrict plane = planes + node->planenum;
+		float distanceToPlane = DotProduct( plane->normal, c ) - plane->dist;
+		int child;
+		if( distanceToPlane > +testedRadius ) {
+			child = node->children[0];
+		} else if( distanceToPlane < -testedRadius ) {
+			child = node->children[1];
+		} else {
+			return lastGoodNode;
+		}
+		// Stop at areas and solid world
+		if( child <= 0 ) {
+			return currNode;
+		}
+		lastGoodNode = currNode;
+		currNode = child;
+	}
 }
 
 void AiAasWorld::ComputeExtraAreaData() {

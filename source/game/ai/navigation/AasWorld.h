@@ -330,8 +330,11 @@ class AiAasWorld
 	// Should be called after all other flags are computed
 	void TrySetAreaSkipCollisionFlags();
 
-	int FindAreaNum( const vec3_t mins, const vec3_t maxs ) const;
-	int BBoxAreasNonConst( const vec3_t absmins, const vec3_t absmaxs, int *areas_, int maxareas );
+	int FindAreaNum( const vec3_t mins, const vec3_t maxs, int topNodeHint ) const;
+
+	static void setupBoxLookupTable( vec3_t *__restrict lookupTable,
+									 const float *__restrict absMins,
+									 const float *__restrict absMaxs );
 public:
 	AiAasWorld( AiAasWorld &&that );
 	~AiAasWorld();
@@ -357,25 +360,28 @@ public:
 	//stores the areas the trace went through and returns the number of passed areas
 	int TraceAreas( const vec3_t start, const vec3_t end, int *areas_, vec3_t *points, int maxareas ) const;
 
-	int BBoxAreas( const Vec3 &absMins, const Vec3 &absMaxs, int *areaNums, int maxAreas ) const {
-		return BBoxAreas( absMins.Data(), absMaxs.Data(), areaNums, maxAreas );
+	int BBoxAreas( const Vec3 &absMins, const Vec3 &absMaxs, int *areaNums, int maxAreas, int topNodeHint = 1 ) const {
+		return BBoxAreas( absMins.Data(), absMaxs.Data(), areaNums, maxAreas, topNodeHint );
 	}
 
 	//returns the areas the bounding box is in
-	int BBoxAreas( const vec3_t absMins, const vec3_t absMaxs, int *areaNums, int maxAreas ) const;
+	int BBoxAreas( const vec3_t absMins, const vec3_t absMaxs, int *areaNums, int maxAreas, int topNodeHint = 1 ) const;
+
+	int findTopNodeForBox( const float *boxMins, const float *boxMaxs ) const;
+	int findTopNodeForSphere( const float *center, float radius ) const;
 
 	//returns the area the point is in
-	int PointAreaNum( const vec3_t point ) const;
+	int PointAreaNum( const vec3_t point, int topNodeHint = 1 ) const;
 
 	// If an area is not found, tries to adjust the origin a bit
-	inline int FindAreaNum( const Vec3 &origin ) const {
-		return FindAreaNum( origin.Data() );
+	inline int FindAreaNum( const Vec3 &origin, int topNodeHint = 1 ) const {
+		return FindAreaNum( origin.Data(), topNodeHint );
 	}
 
 	// If an area is not found, tries to adjust the origin a bit
-	int FindAreaNum( const vec3_t origin ) const;
+	int FindAreaNum( const vec3_t origin, int topNodeHint = 1 ) const;
 	// Tries to find some area the ent is in
-	int FindAreaNum( const struct edict_s *ent ) const;
+	int FindAreaNum( const struct edict_s *ent, int topNodeHint = 1 ) const;
 
 	//returns true if the area is crouch only
 	inline bool AreaCrouch( int areanum ) const {
