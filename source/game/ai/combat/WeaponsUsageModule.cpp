@@ -126,7 +126,7 @@ void BotWeaponsUsageModule::TryFire( BotInput *input ) {
 	}
 
 	// Always track enemy with a "crosshair" like a human does in each frame
-	LookAtEnemy( aimParams->EffectiveCoordError( bot->Skill() ), aimParams->fireOrigin, aimParams->fireTarget, input );
+	LookAtEnemy( aimParams->suggestedCoordError, aimParams->fireOrigin, aimParams->fireTarget, input );
 
 	// Attack only in Think() frames unless a continuousFire is required or the bot has hard skill
 	if( bot->ShouldSkipThinkFrame() && bot->Skill() < 0.66f ) {

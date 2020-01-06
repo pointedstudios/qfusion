@@ -162,8 +162,10 @@ void BotFireTargetCache::AdjustPredictionExplosiveAimTypeParams( const SelectedE
 		// Copy modified `target` value to cached value
 		cachedFireTarget.origin.Set( aimParams->fireTarget );
 	}
-	// Accuracy for air rockets is worse anyway (movement prediction in gravity field is approximate)
-	aimParams->suggestedBaseCoordError = 1.3f * ( 1.01f - bot->Skill() ) * GENERIC_PROJECTILE_COORD_AIM_ERROR;
+	aimParams->suggestedCoordError = 0.0f;
+	if( bot->Skill() < 0.66f ) {
+		aimParams->suggestedCoordError = ( 1.00f - bot->Skill() ) * GENERIC_PROJECTILE_COORD_AIM_ERROR;
+	}
 }
 
 
@@ -171,17 +173,10 @@ void BotFireTargetCache::AdjustPredictionAimTypeParams( const SelectedEnemies &s
 														const SelectedWeapons &selectedWeapons,
 														const GenericFireDef &fireDef,
 														AimParams *aimParams ) {
-	aimParams->suggestedBaseCoordError = GENERIC_PROJECTILE_COORD_AIM_ERROR;
-	if( fireDef.IsBuiltin() ) {
-		if( fireDef.WeaponNum() == WEAP_PLASMAGUN ) {
-			aimParams->suggestedBaseCoordError *= 0.5f * ( 1.0f - bot->Skill() );
-		} else if( fireDef.WeaponNum() == WEAP_ELECTROBOLT ) {
-			// This is not a mistake, the code is for projectile EB.
-			// Do not apply any error in this case (set it to some very low feasible value)
-			aimParams->suggestedBaseCoordError = 1.0f;
-		}
+	aimParams->suggestedCoordError = 0.0f;
+	if( bot->Skill() < 0.66f ) {
+		aimParams->suggestedCoordError = ( 1.00f - bot->Skill() ) * GENERIC_PROJECTILE_COORD_AIM_ERROR;
 	}
-
 	GetPredictedTargetOrigin( selectedEnemies, selectedWeapons, fireDef.ProjectileSpeed(), aimParams );
 }
 
@@ -190,7 +185,7 @@ void BotFireTargetCache::AdjustDropAimTypeParams( const SelectedEnemies &selecte
 												  const GenericFireDef &fireDef,
 												  AimParams *aimParams ) {
 	// This kind of weapons is not precise by its nature, do not add any more noise.
-	aimParams->suggestedBaseCoordError = 0.3f * ( 1.01f - bot->Skill() ) * GENERIC_PROJECTILE_COORD_AIM_ERROR;
+	aimParams->suggestedCoordError = 1.0f;
 
 	const bool wasCached = cachedFireTarget.IsValidFor( selectedEnemies, selectedWeapons );
 	GetPredictedTargetOrigin( selectedEnemies, selectedWeapons, fireDef.ProjectileSpeed(), aimParams );
@@ -229,7 +224,7 @@ void BotFireTargetCache::AdjustDropAimTypeParams( const SelectedEnemies &selecte
 void BotFireTargetCache::AdjustInstantAimTypeParams( const SelectedEnemies &selectedEnemies,
 													 const SelectedWeapons &selectedWeapons,
 													 const GenericFireDef &fireDef, AimParams *aimParams ) {
-	aimParams->suggestedBaseCoordError = GENERIC_INSTANTHIT_COORD_AIM_ERROR;
+	aimParams->suggestedCoordError = 32.0f + ( 1.0f - bot->Skill() ) * ( GENERIC_INSTANTHIT_COORD_AIM_ERROR - 32.0f );
 }
 
 void BotFireTargetCache::SetupCoarseFireTarget( const SelectedEnemies &selectedEnemies,
@@ -243,71 +238,10 @@ void BotFireTargetCache::SetupCoarseFireTarget( const SelectedEnemies &selectedE
 		VectorCopy( selectedEnemies.ActualOrigin().Data(), target );
 	}
 
-	// For hitscan weapons we try to imitate a human-like aiming.
-	// We get a weighted last seen enemy origin/velocity and extrapolate origin a bit.
-	// Do not add extra aiming error for other aim styles (these aim styles are not precise by their nature).
-	if( fireDef.AimType() == AI_WEAPON_AIM_TYPE_INSTANT_HIT ) {
-		AddHitscanAimingError( selectedEnemies, target );
-	}
-
 	const edict_t *self = game.edicts + bot->EntNum();
-
 	fire_origin[0] = self->s.origin[0];
 	fire_origin[1] = self->s.origin[1];
 	fire_origin[2] = self->s.origin[2] + self->viewheight;
-}
-
-void BotFireTargetCache::AddHitscanAimingError( const SelectedEnemies &selectedEnemies, vec3_t target ) {
-	const float skill = bot->Skill();
-
-	vec3_t velocity;
-	if( skill < 0.66f ) {
-		VectorCopy( selectedEnemies.LastSeenVelocity().Data(), velocity );
-	} else {
-		VectorCopy( selectedEnemies.ActualVelocity().Data(), velocity );
-	}
-
-	const int64_t levelTime = level.time;
-	// Skilled bots have this value lesser (this means target will be closer to an actual origin)
-	const auto maxTimeDelta = (unsigned)( 900 - 800 * skill );
-	const float weightTimeDeltaScale = 1.0f / maxTimeDelta;
-	float weightsSum = 1.0f;
-
-	// Iterate from oldest to newest snapshot
-	// This is not so bad as reverse iteration steps are more expensive
-	for( const auto &snapshot : selectedEnemies.LastSeenSnapshots() ) {
-		auto timeDelta = (unsigned)( levelTime - snapshot.Timestamp() );
-		if( timeDelta > maxTimeDelta ) {
-			continue;
-		}
-
-		// Recent snapshots have greater weight
-		float weight = 1.0f - timeDelta * weightTimeDeltaScale;
-		// We have to store these temporarily unpacked values in locals
-		Vec3 snapshotOrigin( snapshot.Origin() );
-		Vec3 snapshotVelocity( snapshot.Velocity() );
-		// Accumulate snapshot target origin using the weight
-		VectorMA( target, weight, snapshotOrigin.Data(), target );
-		// Accumulate snapshot target velocity using the weight
-		VectorMA( velocity, weight, snapshotVelocity.Data(), velocity );
-		weightsSum += weight;
-	}
-
-	const float invWeightsSum = 1.0f / weightsSum;
-	// Make `target` contain a weighted sum of enemy snapshot origin
-	VectorScale( target, invWeightsSum, target );
-	// Make `velocity` contain a weighted sum of enemy snapshot velocities
-	VectorScale( velocity, invWeightsSum, velocity );
-
-	if( extrapolationRandomTimeoutAt < levelTime ) {
-		// Make constant part lesser for higher skill
-		extrapolationRandom = random();
-		extrapolationRandomTimeoutAt = levelTime + 250;
-	}
-
-	const float extrapolationTimeSeconds = 0.001f * ( 900 - 800 * skill ) * extrapolationRandom;
-	// Add some extrapolated target movement
-	VectorMA( target, extrapolationTimeSeconds, velocity, target );
 }
 
 // This is a port of public domain projectile prediction code by Kain Shin

@@ -7,11 +7,7 @@
 struct AimParams {
 	vec3_t fireOrigin;
 	vec3_t fireTarget;
-	float suggestedBaseCoordError;
-
-	inline float EffectiveCoordError( float skill ) const {
-		return suggestedBaseCoordError * ( 1.5f - 1.35f * skill );
-	}
+	float suggestedCoordError;
 };
 
 class BotFireTargetCache {
@@ -40,15 +36,10 @@ class BotFireTargetCache {
 	const Bot *const bot;
 
 	CachedFireTarget cachedFireTarget;
-	// Contains a value in range [0, 1] used for extrapolation of enemy origin for imitation of human-like aiming
-	float extrapolationRandom { 0.5f };
-	int64_t extrapolationRandomTimeoutAt { 0 };
 
 	void SetupCoarseFireTarget( const SelectedEnemies &selectedEnemies,
 								const GenericFireDef &fireDef,
 								vec3_t fire_origin, vec3_t target );
-
-	void AddHitscanAimingError( const SelectedEnemies &selectedEnemies, vec3_t target );
 
 	void AdjustPredictionExplosiveAimTypeParams( const SelectedEnemies &selectedEnemies,
 												 const SelectedWeapons &selectedWeapons,
