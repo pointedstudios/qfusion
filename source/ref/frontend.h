@@ -69,8 +69,6 @@ void RF_DrawRotatedStretchPic( int x, int y, int w, int h, float s1, float t1, f
 							   const vec4_t color, const shader_t *shader );
 void RF_DrawStretchRaw( int x, int y, int w, int h, int cols, int rows,
 						float s1, float t1, float s2, float t2, uint8_t *data );
-void RF_DrawStretchRawYUV( int x, int y, int w, int h,
-						   float s1, float t1, float s2, float t2, struct cin_img_plane_s *yuv );
 void RF_DrawStretchPoly( const poly_t *poly, float x_offset, float y_offset );
 void RF_SetScissor( int x, int y, int w, int h );
 void RF_GetScissor( int *x, int *y, int *w, int *h );
@@ -89,7 +87,6 @@ void RF_TransformVectorToScreen( const refdef_t *rd, const vec3_t in, vec2_t out
 bool RF_LerpTag( orientation_t *orient, const model_t *mod, int oldframe, int frame, float lerpfrac, const char *name );
 void RF_LightForOrigin( const vec3_t origin, vec3_t dir, vec4_t ambient, vec4_t diffuse, float radius );
 shader_t *RF_GetShaderForOrigin( const vec3_t origin );
-struct cinematics_s *RF_GetShaderCinematic( shader_t *shader );
 void RF_Finish( void );
 
 #endif // R_FRONTEND_H

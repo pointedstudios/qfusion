@@ -1,8 +1,7 @@
 project(${QFUSION_CLIENT_NAME})
 
 include_directories(${ZLIB_INCLUDE_DIR} ${CURL_INCLUDE_DIR} ${JPEG_INCLUDE_DIR} ${PNG_INCLUDE_DIR})
-include_directories(${OGG_INCLUDE_DIR} ${VORBIS_INCLUDE_DIR} ${THEORA_INCLUDE_DIR})
-include_directories(${FREETYPE_INCLUDE_DIRS})
+include_directories(${OGG_INCLUDE_DIR} ${VORBIS_INCLUDE_DIR} ${FREETYPE_INCLUDE_DIRS})
 include_directories("../../third-party/magic_enum/include")
 
 if (USE_SDL2 OR (${CMAKE_SYSTEM_NAME} MATCHES "Linux"))
@@ -91,16 +90,6 @@ else()
 		set(REF_PLATFORM_LIBRARIES "X11" "Xext" "Xinerama" "Xrandr" "Xxf86vm" "m")
 	endif()
 endif()
-
-file(GLOB CIN_HEADERS
-		"../cin/*.h"
-		"../gameshared/q_*.h"
-		)
-
-file(GLOB CIN_SOURCES
-		"../cin/*.cpp"
-		"../gameshared/q_*.c"
-		)
 
 file(GLOB FTLIB_HEADERS
 		"../ftlib/*.h"
@@ -303,5 +292,5 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     add_custom_command(TARGET ${QFUSION_CLIENT_NAME} POST_BUILD COMMAND ${COPY_DYLIBS})
 endif()
 
-target_link_libraries(${QFUSION_CLIENT_NAME} PRIVATE ${CURL_LIBRARY} ${ZLIB_LIBRARY} ${JPEG_LIBRARIES} ${PNG_LIBRARIES} ${REF_PLATFORM_LIBRARIES} ${OGG_LIBRARY} ${VORBIS_LIBRARIES} ${THEORA_LIBRARY} ${FREETYPE_LIBRARIES} ${CLIENT_PLATFORM_LIBRARIES} snd_openal_soft)
+target_link_libraries(${QFUSION_CLIENT_NAME} PRIVATE ${CURL_LIBRARY} ${ZLIB_LIBRARY} ${JPEG_LIBRARIES} ${PNG_LIBRARIES} ${REF_PLATFORM_LIBRARIES} ${OGG_LIBRARY} ${VORBIS_LIBRARIES} ${FREETYPE_LIBRARIES} ${CLIENT_PLATFORM_LIBRARIES} snd_openal_soft)
 qf_set_output_dir(${QFUSION_CLIENT_NAME} "")

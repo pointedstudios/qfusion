@@ -2774,8 +2774,6 @@ void R_FreeUnusedImagesByTags( int tags ) {
 void R_FreeUnusedImages( void ) {
 	R_FreeUnusedImagesByTags( ~IMAGE_TAG_BUILTIN );
 
-	R_FinishLoadingImages();
-
 	memset( rsh.portalTextures, 0, sizeof( image_t * ) * MAX_PORTAL_TEXTURES );
 }
 

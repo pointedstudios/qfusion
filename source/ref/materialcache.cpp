@@ -109,10 +109,6 @@ void R_TouchShader( shader_t *s ) {
 				break;
 			}
 		}
-
-		if( pass->cin ) {
-			R_TouchCinematic( pass->cin );
-		}
 	}
 
 	if( s->flags & SHADER_SKY ) {

@@ -23,7 +23,6 @@ enum class PassKey {
 	AnimMap,
 	CubeMap,
 	ShadeCubeMap,
-	VideoMap,
 	ClampMap,
 	AnimClampMap,
 	Material,
@@ -695,7 +694,6 @@ class MaterialParser {
 	bool parseCubeMap();
 	bool parseShadeCubeMap();
 	bool parseSurroundMap();
-	bool parseVideoMap();
 	bool parseClampMap();
 	bool parseAnimClampMap();
 	bool parseMaterial();

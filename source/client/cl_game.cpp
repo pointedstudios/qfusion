@@ -19,7 +19,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "client.h"
-#include "../cin/cin.h"
 #include "../qcommon/asyncstream.h"
 #include "../ref/frontend.h"
 
@@ -162,54 +161,6 @@ static unsigned int CL_GameModule_GetRawSamplesLength( void *ptr ) {
 }
 
 /*
-* CL_GameModule_AddRawSamplesListener
-*/
-bool CG_AddRawSamplesListener( cinematics_s *cin, void *listener, cg_raw_samples_cb_t rs, cg_get_raw_samples_cb_t grs ) {
-	int i;
-	cg_raw_samples_listener_t *cglistener, *freel;
-
-	freel = NULL;
-
-	cglistener = cg_raw_samples_listeners;
-	for( i = 0; i < MAX_CGAME_RAW_SAMPLES_LISTENERS; i++ ) {
-		if( !freel && !cglistener->inuse ) {
-			// grab a free one
-			freel = cglistener;
-		} else if( cglistener->inuse
-				   && cglistener->cin == cin
-				   && cglistener->ptr == listener
-				   && cglistener->rs == rs
-				   && cglistener->grs == grs ) {
-			// same listener
-			return true;
-		}
-		cglistener++;
-	}
-
-	if( !freel ) {
-		return false;
-	}
-
-	// fill in our proxy
-	cglistener = freel;
-	cglistener->inuse = true;
-	cglistener->cin = cin;
-	cglistener->ptr = listener;
-	cglistener->load_seq = cg_load_seq;
-	cglistener->rs = (cin_raw_samples_cb_t)rs;
-	cglistener->grs = (cin_get_raw_samples_cb_t)grs;
-
-	if( !CIN_AddRawSamplesListener( cin, cglistener, &CL_GameModule_RawSamples,
-									&CL_GameModule_GetRawSamplesLength ) ) {
-		// free listener
-		cglistener->inuse = false;
-		return false;
-	}
-
-	return true;
-}
-
-/*
 * CL_GameModule_Init
 */
 void CL_GameModule_Init( void ) {
@@ -271,8 +222,6 @@ void CL_GameModule_Shutdown( void ) {
 void CL_GameModule_EscapeKey( void ) {
 	if( cge ) {
 		CG_EscapeKey();
-	} else if( cls.state == CA_CINEMATIC ) {
-		SCR_FinishCinematic();
 	}
 }
 

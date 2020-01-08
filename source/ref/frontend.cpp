@@ -20,7 +20,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "local.h"
 #include "frontend.h"
-#include "../cin/cin.h"
 #include "../qcommon/qcommon.h"
 
 static ref_frontend_t rrf;
@@ -177,9 +176,6 @@ void RF_BeginFrame( float cameraSeparation, bool forceClear, bool forceVsync, bo
 
 	RF_CheckCvars();
 
-	// run cinematic passes on shaders
-	R_RunAllCinematics();
-
 	rrf.adapter.noWait = uncappedFPS;
 
 	rrf.cameraSeparation = cameraSeparation;
@@ -287,15 +283,6 @@ void RF_DrawStretchRaw( int x, int y, int w, int h, int cols, int rows,
 	}
 
 	R_DrawStretchRaw( x, y, w, h, s1, t1, s2, t2 );
-}
-
-void RF_DrawStretchRawYUV( int x, int y, int w, int h,
-						   float s1, float t1, float s2, float t2, cin_img_plane_s *yuv ) {
-	if( yuv ) {
-		R_UploadRawYUVPic( rsh.rawYUVTextures, yuv );
-	}
-
-	R_DrawStretchRawYUV( x, y, w, h, s1, t1, s2, t2 );
 }
 
 void RF_DrawStretchPoly( const poly_t *poly, float x_offset, float y_offset ) {
@@ -516,11 +503,4 @@ shader_t *RF_GetShaderForOrigin( const vec3_t origin ) {
 	}
 
 	return best;
-}
-
-struct cinematics_s *RF_GetShaderCinematic( shader_t *shader ) {
-	if( !shader ) {
-		return NULL;
-	}
-	return R_GetCinematicById( shader->cin );
 }

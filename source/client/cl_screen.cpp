@@ -652,7 +652,6 @@ void SCR_UpdateScreen( void ) {
 	int numframes;
 	int i;
 	float separation[2];
-	bool cinematic;
 	bool forcevsync, forceclear;
 	bool timedemo;
 
@@ -694,9 +693,8 @@ void SCR_UpdateScreen( void ) {
 		numframes = 1;
 	}
 
-	cinematic = cls.state == CA_CINEMATIC ? true : false;
-	forcevsync = cinematic || ( cls.state == CA_DISCONNECTED && scr_con_current );
-	forceclear = cinematic;
+	forcevsync = ( cls.state == CA_DISCONNECTED && scr_con_current );
+	forceclear = forcevsync;
 	timedemo = cl_timedemo->integer != 0 && cls.demo.playing;
 
 	for( i = 0; i < numframes; i++ ) {
@@ -706,12 +704,6 @@ void SCR_UpdateScreen( void ) {
 			// loading plaque over APP_STARTUP_COLOR screen
 			scr_draw_loading = 0;
 			CL_UIModule_UpdateConnectScreen( true );
-		}
-		// if a cinematic is supposed to be running, handle menus
-		// and console specially
-		else if( cinematic ) {
-			SCR_DrawCinematic();
-			SCR_DrawConsole();
 		} else if( cls.state == CA_DISCONNECTED ) {
 			CL_UIModule_Refresh( true, true );
 			SCR_DrawConsole();

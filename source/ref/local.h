@@ -588,25 +588,6 @@ bool    R_AliasModelLerpTag( orientation_t *orient, const maliasmodel_t *aliasmo
 void        R_AliasModelFrameBounds( const model_t *mod, int frame, vec3_t mins, vec3_t maxs );
 
 //
-// r_cin.c
-//
-void        R_InitCinematics( void );
-void        R_ShutdownCinematics( void );
-
-unsigned int R_StartCinematic( const wsw::StringView &arg );
-
-void        R_FreeCinematic( unsigned int id );
-void        R_RunAllCinematics( void );
-void        R_TouchCinematic( unsigned int id );
-void        R_FreeUnusedCinematics( void );
-void        R_FinishLoadingImages( void );
-void        R_UploadCinematic( unsigned int id );
-image_t     *R_GetCinematicImage( unsigned int id );
-struct cinematics_s *R_GetCinematicById( unsigned int id );
-void        R_RestartCinematics( void );
-void        R_CinList_f( void );
-
-//
 // r_cmds.c
 //
 void        R_TakeScreenShot( const char *path, const char *name, const char *fmtString, int x, int y, int w, int h, bool silent, bool media );
@@ -759,7 +740,6 @@ void        R_DrawStretchPic( int x, int y, int w, int h, float s1, float t1, fl
 void        R_DrawRotatedStretchPic( int x, int y, int w, int h, float s1, float t1, float s2, float t2,
 									 float angle, const vec4_t color, const shader_t *shader );
 void        R_UploadRawPic( image_t *texture, int cols, int rows, uint8_t *data );
-void        R_UploadRawYUVPic( image_t **yuvTextures, struct cin_img_plane_s *yuv );
 void        R_DrawStretchRawYUVBuiltin( int x, int y, int w, int h, float s1, float t1, float s2, float t2,
 										image_t **yuvTextures, int flip );
 void        R_DrawStretchRaw( int x, int y, int w, int h, float s1, float t1, float s2, float t2 );

@@ -129,7 +129,6 @@ public:
 		add( "AnimMap", PassKey::AnimMap );
 		add( "CubeMap", PassKey::CubeMap );
 		add( "ShadeCubeMap", PassKey::ShadeCubeMap );
-		add( "VideoMap", PassKey::VideoMap );
 		add( "ClampMap", PassKey::ClampMap );
 		add( "AnimClampMap", PassKey::AnimClampMap );
 		add( "Material", PassKey::Material );

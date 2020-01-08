@@ -1369,7 +1369,6 @@ void R_RegisterWorldModel( const char *model ) {
 */
 void R_WaitWorldModel( void ) {
 	// load all world images if not yet
-	R_FinishLoadingImages();
 }
 
 /*

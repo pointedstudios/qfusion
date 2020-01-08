@@ -704,7 +704,6 @@ static void R_Register( const char *screenshotsPrefix ) {
 	Cmd_AddCommand( "modellist", Mod_Modellist_f );
 	Cmd_AddCommand( "gfxinfo", R_GfxInfo_f );
 	Cmd_AddCommand( "glslprogramlist", RP_ProgramList_f );
-	Cmd_AddCommand( "cinlist", R_CinList_f );
 }
 
 /*
@@ -939,8 +938,6 @@ static rserr_t R_PostInit( void ) {
 
 	MaterialCache::init();
 
-	R_InitCinematics();
-
 	R_InitSkinFiles();
 
 	R_InitModels();
@@ -1025,8 +1022,6 @@ static void R_DestroyVolatileAssets( void ) {
 * R_BeginRegistration
 */
 void R_BeginRegistration( void ) {
-	R_FinishLoadingImages();
-
 	R_DestroyVolatileAssets();
 
 	rsh.registrationSequence++;
@@ -1060,10 +1055,7 @@ void R_EndRegistration( void ) {
 
 	MaterialCache::instance()->freeUnusedMaterials();
 
-	R_FreeUnusedCinematics();
 	R_FreeUnusedImages();
-
-	R_RestartCinematics();
 
 	R_DeferDataSync();
 
@@ -1080,7 +1072,6 @@ void R_Shutdown( bool verbose ) {
 	Cmd_RemoveCommand( "imagelist" );
 	Cmd_RemoveCommand( "gfxinfo" );
 	Cmd_RemoveCommand( "glslprogramlist" );
-	Cmd_RemoveCommand( "cinlist" );
 
 	// free shaders, models, etc.
 
@@ -1095,8 +1086,6 @@ void R_Shutdown( bool verbose ) {
 	R_ShutdownVBO();
 
 	MaterialCache::shutdown();
-
-	R_ShutdownCinematics();
 
 	R_ShutdownImages();
 

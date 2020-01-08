@@ -484,7 +484,6 @@ void RB_GetShaderpassColor( const shaderpass_t *pass, byte_vec4_t rgba_, float *
 * RB_ShaderpassTex
 */
 static inline const image_t *RB_ShaderpassTex( const shaderpass_t *pass ) {
-	const image_t *tex;
 
 	if( pass->anim_fps && pass->anim_numframes ) {
 		return pass->images[(int)( pass->anim_fps * rb.currentShaderTime ) % pass->anim_numframes];
@@ -499,12 +498,7 @@ static inline const image_t *RB_ShaderpassTex( const shaderpass_t *pass ) {
 		return rb.skyboxShader->skyboxImages[rb.skyboxSide];
 	}
 
-	if( pass->cin ) {
-		tex = R_GetCinematicImage( pass->cin );
-	} else {
-		tex = pass->images[0];
-	}
-
+	const image_t *tex = pass->images[0];
 	if( !tex ) {
 		return rsh.noTexture;
 	}

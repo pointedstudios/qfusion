@@ -23,7 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../qcommon/qcommon.h"
 #include "../ref/frontend.h"
 #include "../client/snd_public.h"
-#include "../cin/cin.h"
 
 static void CG_UpdateEntities( void );
 
@@ -1566,19 +1565,6 @@ static void CG_UpdateVideoSpeakerEnt( centity_t *cent ) {
 	VectorCopy( cent->current.origin2, cent->ent.origin2 );
 
 	shader = RF_GetShaderForOrigin( cent->ent.origin2 );
-	cent->cin = RF_GetShaderCinematic( shader );
-}
-
-/*
-* CG_AddVideoSpeakerEnt
-*/
-static void CG_AddVideoSpeakerEnt( centity_t *cent ) {
-	if( cent->cin ) {
-		CG_AddRawSamplesListener( cent->cin, cent, CG_UpdateVideoSpeakerEnt, CG_VideoSpeakerEntGetRawSamples );
-	}
-
-	// DEBUG
-	//CG_AddEntityToScene( &cent->ent );
 }
 
 //==================================================
@@ -1961,8 +1947,8 @@ void CG_AddEntities( void ) {
 				CG_EntityLoopSound( state, ATTN_STATIC );
 				break;
 
+				// TODO: Remove once the net protocol gets updated
 			case ET_VIDEO_SPEAKER:
-				CG_AddVideoSpeakerEnt( cent );
 				break;
 
 			default:

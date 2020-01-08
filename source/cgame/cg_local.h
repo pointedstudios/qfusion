@@ -136,8 +136,6 @@ typedef struct {
 	bool jumpedLeft;
 	vec3_t animVelocity;
 	float yawVelocity;
-
-	struct cinematics_s *cin;
 } centity_t;
 
 #include "cg_pmodels.h"
@@ -1215,5 +1213,3 @@ bool CG_InPVS( const vec3_t p1, const vec3_t p2 );
 
 void *CG_MemAlloc( size_t size, const char *filename, int fileline );
 void CG_MemFree( void *data, const char *filename, int fileline );
-
-bool CG_AddRawSamplesListener( cinematics_s *cin, void *listener, cg_raw_samples_cb_t rs, cg_get_raw_samples_cb_t grs );

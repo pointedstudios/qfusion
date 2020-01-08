@@ -344,20 +344,6 @@ extern entity_state_t cl_baselines[MAX_EDICTS];
 
 //=============================================================================
 
-
-//
-// cl_cin.c
-//
-bool SCR_DrawCinematic( void );
-void SCR_RunCinematic( void );
-void SCR_StopCinematic( void );
-void SCR_FinishCinematic( void );
-bool SCR_AllowCinematicConsole( void );
-void SCR_PauseCinematic( bool pause );
-void CL_InitCinematics( void );
-void CL_ShutdownCinematics( void );
-float SCR_CinematicFramerate( void );
-
 //
 // cl_main.c
 //

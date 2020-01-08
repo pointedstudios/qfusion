@@ -50,8 +50,6 @@ std::optional<bool> MaterialParser::parsePass() {
 			return parseCubeMap();
 		case PassKey::ShadeCubeMap:
 			return parseShadeCubeMap();
-		case PassKey::VideoMap:
-			return parseVideoMap();
 		case PassKey::ClampMap:
 			return parseClampMap();
 		case PassKey::AnimClampMap:
@@ -473,20 +471,6 @@ bool MaterialParser::parseShadeCubeMap() {
 
 bool MaterialParser::parseSurroundMap() {
 	return parseCubeMapExt( IT_CLAMP, TC_GEN_SURROUND );
-}
-
-bool MaterialParser::parseVideoMap() {
-    auto maybeToken = lexer->getNextTokenInLine();
-    if( !maybeToken ) {
-        return false;
-    }
-
-    auto *const pass = currPass();
-    pass->cin = R_StartCinematic( *maybeToken );
-    pass->tcgen = TC_GEN_BASE;
-    pass->anim_fps = 0;
-    pass->flags &= ~(SHADERPASS_LIGHTMAP | SHADERPASS_PORTALMAP);
-    return true;
 }
 
 bool MaterialParser::parseClampMap() {
