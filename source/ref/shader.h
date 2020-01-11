@@ -195,7 +195,7 @@ typedef struct {
 
 typedef struct {
 	unsigned int type;
-	float               *args;
+	float args[3];
 	shaderfunc_t func;
 } colorgen_t;
 
@@ -217,8 +217,6 @@ typedef struct shaderpass_s {
 
 	unsigned int numtcmods;
 	tcmod_t             *tcmods;
-
-	unsigned int cin;
 
 	unsigned int program_type;
 
@@ -247,6 +245,16 @@ typedef struct shaderpass_s {
 	}
 } shaderpass_t;
 
+struct DeformSig {
+	const int *data { nullptr };
+	uint32_t hash { 0 };
+	uint32_t len { 0 };
+
+	bool operator==( const DeformSig &that ) const {
+		return hash == that.hash && len == that.len && !std::memcmp( data, that.data, len * sizeof( int ) );
+	}
+};
+
 // Shader information
 typedef struct alignas( 8 ) shader_s {
 	enum { kListLinks, kBinLinks };
@@ -267,19 +275,17 @@ typedef struct alignas( 8 ) shader_s {
 	                                                // on type, but if one shader can be requesed with
 	                                                // different tags, functions like R_TouchShader
 	                                                // should merge the existing and the requested tags
+	unsigned numpasses { 0 };
+	shaderpass_t *passes { nullptr };
 
-	unsigned int numpasses { 0 };
-	shaderpass_t        *passes { nullptr };
+	unsigned numdeforms { 0 };
+	deformv_t *deforms { nullptr };
 
-	unsigned int numdeforms { 0 };
-	deformv_t           *deforms { nullptr };
-	char                *deformsKey { nullptr };
+	DeformSig deformSig;
 
 	uint8_t fog_color[4] { 0, 0, 0, 0 };
 	float fog_dist { 0.0f };
 	float fog_clearDist { 0.0f };
-
-	unsigned int cin { 0 };
 
 	float glossIntensity { 0.0f };
 	float glossExponent { 0.0f };

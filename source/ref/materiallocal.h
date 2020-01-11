@@ -88,13 +88,13 @@ enum class CullMode {
 };
 
 enum class SortMode {
-	Portal,
-	Sky,
-	Opaque,
-	Banner,
-	Underwater,
-	Additive,
-	Nearest
+	Portal = SHADER_SORT_PORTAL,
+	Sky = SHADER_SORT_SKY,
+	Opaque = SHADER_SORT_OPAQUE,
+	Banner = SHADER_SORT_BANNER,
+	Underwater = SHADER_SORT_UNDERWATER,
+	Additive = SHADER_SORT_ADDITIVE,
+	Nearest = SHADER_SORT_NEAREST
 };
 
 enum class MaterialKey {
@@ -322,13 +322,14 @@ class MaterialLexer {
 
 	template <typename T>
 	std::optional<T> getNumber() {
-		if( auto token = getNextToken() ) {
-			// Just to avoid a lint warning
-			char tmp = '\0';
-			const char *endPtr = &tmp;
-			if( auto number = Q_tonum<T>( ( *token ).data(), &endPtr ) ) {
-				if( std::isspace( *endPtr ) ) {
-					return *number;
+		if( auto token = getNextTokenInLine() ) {
+			// Unfortunately we're forced to make a copy as multiple consequent tokens are glued together
+			if( token->size() < 31 ) {
+				char buffer[32];
+				memcpy( buffer, token->data(), token->size());
+				buffer[token->size()] = '\0';
+				if ( auto number = Q_tonum<T>( buffer )) {
+					return number;
 				}
 			}
 			unGetToken();
@@ -338,15 +339,17 @@ class MaterialLexer {
 
 	template <typename T>
 	T getNumberOr( T defaultValue ) {
-		if( auto token = getNextToken() ) {
-			// Just to avoid a lint warning
-			char tmp = '\0';
-			const char *endPtr = &tmp;
-			if( auto number = Q_tonum<T>( ( *token ).data(), &endPtr ) ) {
-				if( std::isspace( *endPtr ) ) {
+		if( auto token = getNextTokenInLine() ) {
+			if( token->size() < 31 ) {
+				char buffer[32];
+				memcpy( buffer, token->data(), token->size());
+				buffer[token->size()] = '\0';
+				// Just to avoid a lint warning
+				if( auto number = Q_tonum<T>( buffer ) ) {
 					return *number;
 				}
 			}
+			unGetToken();
 		}
 		return defaultValue;
 	}
@@ -631,19 +634,16 @@ class MaterialParser {
 	MaterialLexer defaultLexer;
 	MaterialLexer *lexer;
 
-	shaderpass_t passes[MAX_SHADER_PASSES];
-	deformv_t deforms[MAX_SHADER_DEFORMVS];
+	const wsw::StringView name;
+	const wsw::HashedStringView cleanName;
 
-	int deformSignature[256];
-	unsigned numSigElementsSoFar { 0 };
-
-	unsigned numPassesSoFar { 0 };
-	unsigned numDeformsSoFar { 0 };
-
-	unsigned cin { 0 };
+	StaticVector<int, 256> deformSig;
+	StaticVector<shaderpass_t, MAX_SHADER_PASSES> passes;
+	StaticVector<deformv_t, MAX_SHADER_DEFORMVS> deforms;
+	StaticVector<tcmod_t, MAX_SHADER_PASSES * MAX_SHADER_TCMODS> tcMods;
 
 	int sort { 0 };
-	int flags { 0 };
+	int flags { SHADER_CULL_FRONT };
 	shaderType_e type { (shaderType_e)0 };
 
 	std::optional<int> minMipSize;
@@ -667,21 +667,17 @@ class MaterialParser {
 
 	bool hasLightmapPass { false };
 
-	shaderpass_t *currPass() { return &passes[numPassesSoFar]; }
+	shaderpass_t *currPass() {
+		assert( !passes.empty() );
+		return &passes.back();
+	}
 
-	const wsw::StringView &getName() { abort(); }
+	tcmod_t *tryAddingPassTCMod( TCMod modType );
+	deformv_t *tryAddingDeform( Deform deformType );
 
-	[[nodiscard]]
-	bool canAllocTCMod() const { abort(); }
-
-	[[nodiscard]]
-	bool canAllocDeform() const { abort(); }
-
-	tcmod_t *addPassTCMod() { abort(); }
-	deformv_t *addDeform() { abort(); }
-
-	std::optional<bool> parsePass();
-	std::optional<bool> parseKey();
+	bool parsePass();
+	bool parsePassKey();
+	bool parseKey();
 
 	bool parseRgbGen();
 	bool parseBlendFunc();
@@ -714,38 +710,38 @@ class MaterialParser {
 	bool parseAnimMapExt( int addFlags );
 	bool parseCubeMapExt( int addFlags, int tcGen );
 
-	std::optional<bool> parseCull();
-	std::optional<bool> parseSkyParms();
-	std::optional<bool> parseSkyParms2();
-	std::optional<bool> parseSkyParmsSides();
-	std::optional<bool> parseFogParams();
-	std::optional<bool> parseNoMipmaps();
-	std::optional<bool> parseNoPicmip();
-	std::optional<bool> parseNoCompress();
-	std::optional<bool> parseNofiltering();
-	std::optional<bool> parseSmallestMipSize();
-	std::optional<bool> parsePolygonOffset();
-	std::optional<bool> parseStencilTest();
-	std::optional<bool> parseEntityMergable();
-	std::optional<bool> parseSort();
-	std::optional<bool> parseDeformVertexes();
-	std::optional<bool> parsePortal();
-	std::optional<bool> parseIf();
-	std::optional<bool> parseOffsetMappingScale();
-	std::optional<bool> parseGlossExponent();
-	std::optional<bool> parseGlossIntensity();
-	std::optional<bool> parseTemplate();
-	std::optional<bool> parseSoftParticle();
-	std::optional<bool> parseForceWorldOutlines();
+	bool parseCull();
+	bool parseSkyParms();
+	bool parseSkyParms2();
+	bool parseSkyParmsSides();
+	bool parseFogParams();
+	bool parseNoMipmaps();
+	bool parseNoPicmip();
+	bool parseNoCompress();
+	bool parseNofiltering();
+	bool parseSmallestMipSize();
+	bool parsePolygonOffset();
+	bool parseStencilTest();
+	bool parseEntityMergable();
+	bool parseSort();
+	bool parseDeformVertexes();
+	bool parsePortal();
+	bool parseIf();
+	bool parseOffsetMappingScale();
+	bool parseGlossExponent();
+	bool parseGlossIntensity();
+	bool parseTemplate();
+	bool parseSoftParticle();
+	bool parseForceWorldOutlines();
 
 	std::optional<bool> parseCondition();
 	void skipConditionBlock();
 	static int getIntConditionVarValue( IntConditionVar var );
 	static bool getBoolConditionVarValue( BoolConditionVar var );
 
-	std::optional<bool> parseDeformWave();
-	std::optional<bool> parseDeformBulge();
-	std::optional<bool> parseDeformMove();
+	bool parseDeformWave();
+	bool parseDeformBulge();
+	bool parseDeformMove();
 
 	[[nodiscard]]
 	bool parseFunc( shaderfunc_s *func );
@@ -778,8 +774,8 @@ class MaterialParser {
 
 	[[nodiscard]]
 	bool tryAddingToSignature( int value ) {
-		if( numSigElementsSoFar < sizeof( deformSignature ) / sizeof( *deformSignature ) ) {
-			deformSignature[numSigElementsSoFar++] = value;
+		if( deformSig.size() != deformSig.capacity() ) {
+			deformSig.push_back( value );
 			return true;
 		}
 		return false;
@@ -791,7 +787,7 @@ class MaterialParser {
 	int getImageFlags();
 
 	image_s *findImage( const wsw::StringView &name_, int flags_ ) {
-		return materialCache->findImage( name_, flags_, imageTags, minMipSize.value_or( 0 ) );
+		return materialCache->findImage( name_, flags_, imageTags, minMipSize.value_or( 1 ) );
 	}
 
 	void fixLightmapsForVertexLight();
@@ -806,10 +802,18 @@ class MaterialParser {
 	static int getAlphaGenVertexAttribs( const colorgen_t &gen );
 	static int getTCGenVertexAttribs( unsigned gen );
 public:
-    MaterialParser( MaterialCache *materialCache_, TokenStream *mainTokenStream_, shaderType_e type_ )
-        : materialCache( materialCache_ ), defaultLexer( mainTokenStream_ ), lexer( &defaultLexer ), type( type_ ) {}
+	MaterialParser( MaterialCache *materialCache_,
+					TokenStream *mainTokenStream_,
+					const wsw::StringView &name_,
+					const wsw::HashedStringView &cleanName_,
+					shaderType_e type_ );
 
     shader_t *exec();
 };
+
+const wsw::StringView kNormSuffix( "_norm" );
+const wsw::StringView kGlossSuffix( "_gloss" );
+const wsw::StringView kDecalSuffix( "_decal" );
+const wsw::StringView kAddSuffix( "_add" );
 
 #endif

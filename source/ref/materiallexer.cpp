@@ -204,7 +204,7 @@ public:
 		add( "Backside", CullMode::Back );
 		add( "Backsided", CullMode::Back );
 
-		// TODO: Allow to specify an "otherwise" value
+		add( "Front", CullMode::Front );
 	}
 };
 
@@ -476,14 +476,14 @@ bool MaterialLexer::parseVector( float *dest, size_t numElems ) {
 	// Modify the dest array if and only if parsing has succeeded
 
 	if( !hadParenAtStart ) {
-		std::copy( dest, scratchpad, scratchpad + numElems );
+		std::copy( scratchpad, scratchpad + numElems, dest );
 		return true;
 	}
 
 	if( auto maybeNextToken = getNextTokenInLine() ) {
 		auto token = *maybeNextToken;
 		if( token.equals( wsw::StringView( ")" ) ) ) {
-			std::copy( dest, scratchpad, scratchpad + numElems );
+			std::copy( scratchpad, scratchpad + numElems, dest );
 			return true;
 		}
 	}
@@ -522,9 +522,10 @@ void MaterialLexer::parseVectorOrFill( float *dest, size_t numElems, float defau
 }
 
 bool MaterialLexer::skipToEndOfLine() {
-	// Could be optimized but it gets called rarely
+	// Could be optimized but it gets called rarely (TODO: Really?)
 	for(;; ) {
-		if( !getNextTokenInLine() ) {
+		auto maybeToken = getNextTokenInLine();
+		if( !maybeToken ) {
 			return true;
 		}
 	}

@@ -644,7 +644,6 @@ void R_DrawStretchQuick( int x, int y, int w, int h, float s1, float t1, float s
 						 const vec4_t color, int program_type, image_t *image, int blendMask ) {
 	static shaderpass_t p;
 	static shader_t s;
-	static float rgba[4];
 
 	s.vattribs = VATTRIB_POSITION_BIT | VATTRIB_TEXCOORDS_BIT;
 	s.sort = SHADER_SORT_NEAREST;
@@ -652,11 +651,10 @@ void R_DrawStretchQuick( int x, int y, int w, int h, float s1, float t1, float s
 	s.name = kBuiltinImage;
 	s.passes = &p;
 
-	Vector4Copy( color, rgba );
 	p.rgbgen.type = RGB_GEN_CONST;
-	p.rgbgen.args = rgba;
+	VectorCopy( color, p.rgbgen.args );
 	p.alphagen.type = ALPHA_GEN_CONST;
-	p.alphagen.args = &rgba[3];
+	p.alphagen.args[0] = color[3];
 	p.tcgen = TC_GEN_BASE;
 	p.images[0] = image;
 	p.flags = blendMask;

@@ -45,8 +45,9 @@ typedef struct glsl_program_s {
 	int type;
 	r_glslfeat_t features;
 	const char      *string;
-	char            *deformsKey;
 	struct glsl_program_s *hash_next;
+
+	DeformSig deformSig;
 
 	int object;
 	int vertexShader;
@@ -157,7 +158,7 @@ static void RP_GetUniformLocations( glsl_program_t *program );
 static void RP_BindAttrbibutesLocations( glsl_program_t *program );
 
 static void *RP_GetProgramBinary( int elem, int *format, unsigned *length );
-static int RP_RegisterProgramBinary( int type, const char *name, const char *deformsKey,
+static int RP_RegisterProgramBinary( int type, const char *name, const DeformSig &deformSig,
 									 const deformv_t *deforms, int numDeforms, r_glslfeat_t features,
 									 int binaryFormat, unsigned binaryLength, void *binary );
 
@@ -177,22 +178,22 @@ void RP_Init( void ) {
 	Trie_Create( TRIE_CASE_INSENSITIVE, &glsl_cache_trie );
 
 	// register base programs
-	RP_RegisterProgram( GLSL_PROGRAM_TYPE_MATERIAL, DEFAULT_GLSL_MATERIAL_PROGRAM, NULL, NULL, 0, 0 );
-	RP_RegisterProgram( GLSL_PROGRAM_TYPE_DISTORTION, DEFAULT_GLSL_DISTORTION_PROGRAM, NULL, NULL, 0, 0 );
-	RP_RegisterProgram( GLSL_PROGRAM_TYPE_RGB_SHADOW, DEFAULT_GLSL_RGB_SHADOW_PROGRAM, NULL, NULL, 0, 0 );
-	RP_RegisterProgram( GLSL_PROGRAM_TYPE_SHADOWMAP, DEFAULT_GLSL_SHADOWMAP_PROGRAM, NULL, NULL, 0, 0 );
-	RP_RegisterProgram( GLSL_PROGRAM_TYPE_OUTLINE, DEFAULT_GLSL_OUTLINE_PROGRAM, NULL, NULL, 0, 0 );
-	RP_RegisterProgram( GLSL_PROGRAM_TYPE_Q3A_SHADER, DEFAULT_GLSL_Q3A_SHADER_PROGRAM, NULL, NULL, 0, 0 );
-	RP_RegisterProgram( GLSL_PROGRAM_TYPE_CELSHADE, DEFAULT_GLSL_CELSHADE_PROGRAM, NULL, NULL, 0, 0 );
-	RP_RegisterProgram( GLSL_PROGRAM_TYPE_FOG, DEFAULT_GLSL_FOG_PROGRAM, NULL, NULL, 0, 0 );
-	RP_RegisterProgram( GLSL_PROGRAM_TYPE_FXAA, DEFAULT_GLSL_FXAA_PROGRAM, NULL, NULL, 0, 0 );
-	RP_RegisterProgram( GLSL_PROGRAM_TYPE_YUV, DEFAULT_GLSL_YUV_PROGRAM, NULL, NULL, 0, 0 );
-	RP_RegisterProgram( GLSL_PROGRAM_TYPE_COLOR_CORRECTION, DEFAULT_GLSL_COLORCORRECTION_PROGRAM, NULL, NULL, 0, 0 );
-	RP_RegisterProgram( GLSL_PROGRAM_TYPE_KAWASE_BLUR, DEFAULT_GLSL_KAWASE_BLUR_PROGRAM, NULL, NULL, 0, 0 );
+	RP_RegisterProgram( GLSL_PROGRAM_TYPE_MATERIAL, DEFAULT_GLSL_MATERIAL_PROGRAM, DeformSig(), NULL, 0, 0 );
+	RP_RegisterProgram( GLSL_PROGRAM_TYPE_DISTORTION, DEFAULT_GLSL_DISTORTION_PROGRAM, DeformSig(), NULL, 0, 0 );
+	RP_RegisterProgram( GLSL_PROGRAM_TYPE_RGB_SHADOW, DEFAULT_GLSL_RGB_SHADOW_PROGRAM, DeformSig(), NULL, 0, 0 );
+	RP_RegisterProgram( GLSL_PROGRAM_TYPE_SHADOWMAP, DEFAULT_GLSL_SHADOWMAP_PROGRAM, DeformSig(), NULL, 0, 0 );
+	RP_RegisterProgram( GLSL_PROGRAM_TYPE_OUTLINE, DEFAULT_GLSL_OUTLINE_PROGRAM, DeformSig(), NULL, 0, 0 );
+	RP_RegisterProgram( GLSL_PROGRAM_TYPE_Q3A_SHADER, DEFAULT_GLSL_Q3A_SHADER_PROGRAM, DeformSig(), NULL, 0, 0 );
+	RP_RegisterProgram( GLSL_PROGRAM_TYPE_CELSHADE, DEFAULT_GLSL_CELSHADE_PROGRAM, DeformSig(), NULL, 0, 0 );
+	RP_RegisterProgram( GLSL_PROGRAM_TYPE_FOG, DEFAULT_GLSL_FOG_PROGRAM, DeformSig(), NULL, 0, 0 );
+	RP_RegisterProgram( GLSL_PROGRAM_TYPE_FXAA, DEFAULT_GLSL_FXAA_PROGRAM, DeformSig(), NULL, 0, 0 );
+	RP_RegisterProgram( GLSL_PROGRAM_TYPE_YUV, DEFAULT_GLSL_YUV_PROGRAM, DeformSig(), NULL, 0, 0 );
+	RP_RegisterProgram( GLSL_PROGRAM_TYPE_COLOR_CORRECTION, DEFAULT_GLSL_COLORCORRECTION_PROGRAM, DeformSig(), NULL, 0, 0 );
+	RP_RegisterProgram( GLSL_PROGRAM_TYPE_KAWASE_BLUR, DEFAULT_GLSL_KAWASE_BLUR_PROGRAM, DeformSig(), NULL, 0, 0 );
 
 	// check whether compilation of the shader with GPU skinning succeeds, if not, disable GPU bone transforms
 	if( glConfig.maxGLSLBones ) {
-		program = RP_RegisterProgram( GLSL_PROGRAM_TYPE_MATERIAL, DEFAULT_GLSL_MATERIAL_PROGRAM, NULL, NULL, 0, GLSL_SHADER_COMMON_BONE_TRANSFORMS1 );
+		program = RP_RegisterProgram( GLSL_PROGRAM_TYPE_MATERIAL, DEFAULT_GLSL_MATERIAL_PROGRAM, DeformSig(), NULL, 0, GLSL_SHADER_COMMON_BONE_TRANSFORMS1 );
 		if( !program ) {
 			glConfig.maxGLSLBones = 0;
 		}
@@ -349,7 +350,7 @@ void RP_PrecachePrograms( void ) {
 
 				Com_DPrintf( "Loading binary program %s...\n", name );
 
-				elem = RP_RegisterProgramBinary( type, name, NULL, NULL, 0, features,
+				elem = RP_RegisterProgramBinary( type, name, DeformSig(), NULL, 0, features,
 												 binaryFormat, binaryLength, binary );
 
 				if( RP_GetProgramObject( elem ) == 0 ) {
@@ -376,7 +377,7 @@ void RP_PrecachePrograms( void ) {
 
 			Com_DPrintf( "Loading program %s...\n", name );
 
-			RP_RegisterProgram( type, name, NULL, NULL, 0, features );
+			RP_RegisterProgram( type, name, DeformSig(), NULL, 0, features );
 		}
 	}
 
@@ -436,7 +437,7 @@ void RP_StorePrecacheList( void ) {
 		unsigned binaryLength = 0;
 		int binaryPos = 0;
 
-		if( *program->deformsKey ) {
+		if( program->deformSig.data ) {
 			continue;
 		}
 		if( !program->features ) {
@@ -504,8 +505,8 @@ static void RF_DeleteProgram( glsl_program_t *program ) {
 	if( program->name ) {
 		R_Free( program->name );
 	}
-	if( program->deformsKey ) {
-		R_Free( program->deformsKey );
+	if( program->deformSig.data ) {
+		R_Free( const_cast<int *>(program->deformSig.data ) );
 	}
 
 	hash_next = program->hash_next;
@@ -1622,7 +1623,7 @@ static int R_Features2HashKey( r_glslfeat_t features ) {
 /*
 * RP_RegisterProgramBinary
 */
-static int RP_RegisterProgramBinary( int type, const char *name, const char *deformsKey,
+static int RP_RegisterProgramBinary( int type, const char *name, const DeformSig &deformSig,
 									 const deformv_t *deforms, int numDeforms, r_glslfeat_t features,
 									 int binaryFormat, unsigned binaryLength, void *binary ) {
 	unsigned int i;
@@ -1647,16 +1648,9 @@ static int RP_RegisterProgramBinary( int type, const char *name, const char *def
 		return 0;
 	}
 
-	assert( !deforms || deformsKey );
-
-	// default deformsKey to empty string, easier on checking later
-	if( !deforms || !deformsKey ) {
-		deformsKey = "";
-	}
-
 	hash = R_Features2HashKey( features );
 	for( program = r_glslprograms_hash[type][hash]; program; program = program->hash_next ) {
-		if( ( program->features == features ) && !strcmp( program->deformsKey, deformsKey ) ) {
+		if( ( program->features == features ) && deformSig == program->deformSig ) {
 			return ( ( program - r_glslprograms ) + 1 );
 		}
 	}
@@ -1879,7 +1873,14 @@ done:
 	program->type = type;
 	program->features = features;
 	program->name = R_CopyString( name );
-	program->deformsKey = R_CopyString( deformsKey ? deformsKey : "" );
+	if( deformSig.data ) {
+		auto *sigData = (int *)R_Malloc( sizeof( int ) * deformSig.len );
+		std::memcpy( sigData, deformSig.data, sizeof( int ) * deformSig.len );
+		program->deformSig = deformSig;
+		program->deformSig.data = sigData;
+		assert( deformSig.len == program->deformSig.len );
+		assert( deformSig.hash == program->deformSig.hash );
+	}
 
 	if( !program->hash_next ) {
 		program->hash_next = r_glslprograms_hash[type][hash];
@@ -1897,9 +1898,9 @@ done:
 /*
 * RP_RegisterProgram
 */
-int RP_RegisterProgram( int type, const char *name, const char *deformsKey,
+int RP_RegisterProgram( int type, const char *name, const DeformSig &deformSig,
 						const deformv_t *deforms, int numDeforms, r_glslfeat_t features ) {
-	return RP_RegisterProgramBinary( type, name, deformsKey, deforms, numDeforms,
+	return RP_RegisterProgramBinary( type, name, deformSig, deforms, numDeforms,
 									 features, 0, 0, NULL );
 }
 
@@ -1971,9 +1972,6 @@ void RP_ProgramList_f( void ) {
 		R_ProgramFeatures2Defines( glsl_programtypes_features[program->type], program->features, fullName, sizeof( fullName ) );
 
 		Com_Printf( " %3i %s", i + 1, fullName );
-		if( *program->deformsKey ) {
-			Com_Printf( " dv:%s", program->deformsKey );
-		}
 		Com_Printf( "\n" );
 	}
 	Com_Printf( "%i programs total\n", i );

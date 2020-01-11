@@ -1018,7 +1018,7 @@ static void RB_RenderMeshGLSL_Material( const shaderpass_t *pass, r_glslfeat_t p
 	}
 
 	program = RB_RegisterProgram( GLSL_PROGRAM_TYPE_MATERIAL, NULL,
-								  rb.currentShader->deformsKey, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
+								  rb.currentShader->deformSig, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
 	if( RB_BindProgram( program ) ) {
 		// update uniforms
 
@@ -1121,7 +1121,7 @@ static void RB_RenderMeshGLSL_Distortion( const shaderpass_t *pass, r_glslfeat_t
 
 	// update uniforms
 	program = RB_RegisterProgram( GLSL_PROGRAM_TYPE_DISTORTION, NULL,
-								  rb.currentShader->deformsKey, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
+								  rb.currentShader->deformSig, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
 	if( RB_BindProgram( program ) ) {
 		RB_UpdateCommonUniforms( program, pass, texMatrix );
 
@@ -1151,7 +1151,7 @@ static void RB_RenderMeshGLSL_Outline( const shaderpass_t *pass, r_glslfeat_t pr
 
 	// update uniforcms
 	program = RB_RegisterProgram( GLSL_PROGRAM_TYPE_OUTLINE, NULL,
-								  rb.currentShader->deformsKey, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
+								  rb.currentShader->deformSig, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
 	if( !RB_BindProgram( program ) ) {
 		return;
 	}
@@ -1361,7 +1361,7 @@ static void RB_RenderMeshGLSL_Q3AShader( const shaderpass_t *pass, r_glslfeat_t 
 
 	// update uniforms
 	program = RB_RegisterProgram( GLSL_PROGRAM_TYPE_Q3A_SHADER, NULL,
-								  rb.currentShader->deformsKey, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
+								  rb.currentShader->deformSig, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
 	if( RB_BindProgram( program ) ) {
 		RB_UpdateCommonUniforms( program, pass, texMatrix );
 
@@ -1470,7 +1470,7 @@ static void RB_RenderMeshGLSL_Celshade( const shaderpass_t *pass, r_glslfeat_t p
 
 	// update uniforms
 	program = RB_RegisterProgram( GLSL_PROGRAM_TYPE_CELSHADE, NULL,
-								  rb.currentShader->deformsKey, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
+								  rb.currentShader->deformSig, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
 	if( RB_BindProgram( program ) ) {
 		RB_UpdateCommonUniforms( program, pass, texMatrix );
 
@@ -1504,7 +1504,7 @@ static void RB_RenderMeshGLSL_Fog( const shaderpass_t *pass, r_glslfeat_t progra
 
 	// update uniforms
 	program = RB_RegisterProgram( GLSL_PROGRAM_TYPE_FOG, NULL,
-								  rb.currentShader->deformsKey, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
+								  rb.currentShader->deformSig, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
 	if( RB_BindProgram( program ) ) {
 		RB_UpdateCommonUniforms( program, pass, texMatrix );
 
@@ -1544,7 +1544,7 @@ static void RB_RenderMeshGLSL_FXAA( const shaderpass_t *pass, r_glslfeat_t progr
 
 	// update uniforms
 	program = RB_RegisterProgram( GLSL_PROGRAM_TYPE_FXAA, NULL,
-								  rb.currentShader->deformsKey, rb.currentShader->deforms,
+								  rb.currentShader->deformSig, rb.currentShader->deforms,
 								  rb.currentShader->numdeforms, programFeatures );
 	if( RB_BindProgram( program ) ) {
 		RB_UpdateCommonUniforms( program, pass, texMatrix );
@@ -1571,7 +1571,7 @@ static void RB_RenderMeshGLSL_YUV( const shaderpass_t *pass, r_glslfeat_t progra
 
 	// update uniforms
 	program = RB_RegisterProgram( GLSL_PROGRAM_TYPE_YUV, NULL,
-								  rb.currentShader->deformsKey, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
+								  rb.currentShader->deformSig, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
 	if( RB_BindProgram( program ) ) {
 		RB_UpdateCommonUniforms( program, pass, texMatrix );
 
@@ -1624,7 +1624,7 @@ static void RB_RenderMeshGLSL_ColorCorrection( const shaderpass_t *pass, r_glslf
 
 	// update uniforms
 	program = RB_RegisterProgram( GLSL_PROGRAM_TYPE_COLOR_CORRECTION, NULL,
-								  rb.currentShader->deformsKey, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
+								  rb.currentShader->deformSig, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
 	if( RB_BindProgram( program ) ) {
 		RB_UpdateCommonUniforms( program, pass, texMatrix );
 
@@ -1650,7 +1650,7 @@ static void RB_RenderMeshGLSL_KawaseBlur( const shaderpass_t *pass, r_glslfeat_t
 
 	// update uniforms
 	program = RB_RegisterProgram( GLSL_PROGRAM_TYPE_KAWASE_BLUR, NULL,
-								  rb.currentShader->deformsKey, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
+								  rb.currentShader->deformSig, rb.currentShader->deforms, rb.currentShader->numdeforms, programFeatures );
 	if( RB_BindProgram( program ) ) {
 		RB_UpdateCommonUniforms( program, pass, texMatrix );
 
@@ -1930,16 +1930,16 @@ void RB_SetScreenImageSet( const refScreenTexSet_t *st ) {
 /*
 * RB_RegisterProgram
 */
-int RB_RegisterProgram( int type, const char *name, const char *deformsKey,
+int RB_RegisterProgram( int type, const char *name, const DeformSig &deformSig,
 						const deformv_t *deforms, int numDeforms, r_glslfeat_t features ) {
 	int program;
-	bool noDeforms = !deformsKey || !*deformsKey;
+	bool noDeforms = !numDeforms;
 
 	if( rb.currentRegProgramType == type && noDeforms && rb.currentRegProgramFeatures == features ) {
 		return rb.currentRegProgram;
 	}
 
-	program = RP_RegisterProgram( type, name, deformsKey, deforms, numDeforms, features );
+	program = RP_RegisterProgram( type, name, deformSig, deforms, numDeforms, features );
 	if( noDeforms ) {
 		rb.currentRegProgram = program;
 		rb.currentRegProgramType = type;
@@ -2131,9 +2131,9 @@ void RB_DrawOutlinedElements( void ) {
 	// copy and override
 	r_triLinesPass = *pass;
 	r_triLinesPass.rgbgen.type = RGB_GEN_CONST;
-	r_triLinesPass.rgbgen.args = &r_triLinesColor[0];
+	VectorCopy( r_triLinesColor + 0, r_triLinesPass.rgbgen.args );
 	r_triLinesPass.alphagen.type = ALPHA_GEN_CONST;
-	r_triLinesPass.alphagen.args = &r_triLinesColor[3];
+	VectorCopy( r_triLinesColor + 3, r_triLinesPass.alphagen.args );
 	r_triLinesPass.flags = 0;
 	r_triLinesPass.images[0] = rsh.whiteTexture;
 	r_triLinesPass.anim_fps = 0;

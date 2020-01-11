@@ -637,9 +637,6 @@ shader_s *MaterialCache::newOpaqueEnvMaterial( const wsw::HashedStringView &clea
 	MemSpecBuilder memSpec;
 	memSpec.add<shader_t>();
 	auto passSpec = memSpec.add<shaderpass_t>();
-	// TODO: Should it be aligned?
-	auto rgbgenArgsSpec = memSpec.add<float>( 4 );
-
 
 	auto *s = initMaterial( SHADER_TYPE_OPAQUE_ENV, cleanName, memSpec );
 
@@ -648,7 +645,6 @@ shader_s *MaterialCache::newOpaqueEnvMaterial( const wsw::HashedStringView &clea
 	s->flags = SHADER_CULL_FRONT | SHADER_DEPTHWRITE;
 	s->numpasses = 1;
 	s->passes = passSpec.get( s );
-	s->passes[0].rgbgen.args = rgbgenArgsSpec.get( s );
 
 	auto *pass = &s->passes[0];
 	pass->flags = GLSTATE_DEPTHWRITE;
@@ -701,7 +697,7 @@ shader_t *MaterialCache::newFogMaterial( const wsw::HashedStringView &cleanName,
 shader_s *MaterialCache::loadMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name, int type, TokenStream *stream ) {
 	shader_s *result = nullptr;
 	if( stream ) {
-		MaterialParser parser( this, stream, (shaderType_e)type );
+		MaterialParser parser( this, stream, name, cleanName, (shaderType_e)type );
 		result = parser.exec();
 	}
 
@@ -887,9 +883,9 @@ bool MaterialCache::tryAddingFileCacheContents( const FileCache *fileCache ) {
 		}
 
 		fileMaterialNames.emplace_back( *maybeNameToken );
-		assert( tokenNum >= shaderSpanStart );
-		// TODO: Check the range correctness (shouldn't include the last })
-		fileSourceSpans.emplace_back( std::make_pair( shaderSpanStart, tokenNum - shaderSpanStart + 1 ) );
+		assert( tokenNum > shaderSpanStart );
+		// Exclude the closing brace from the range
+		fileSourceSpans.emplace_back( std::make_pair( shaderSpanStart, tokenNum - shaderSpanStart - 1 ) );
 	}
 
 	auto *mem = (uint8_t *)::malloc( sizeof( Source ) * fileMaterialNames.size() );
@@ -914,7 +910,7 @@ bool MaterialCache::tryAddingFileCacheContents( const FileCache *fileCache ) {
 		sourcesHead = source;
 
 		auto binIndex = source->name.getHash() % kNumBins;
-		source->nextInList = sourceBins[binIndex];
+		source->nextInBin = sourceBins[binIndex];
 		sourceBins[binIndex] = source;
 	}
 
@@ -1112,6 +1108,8 @@ static BuiltinTexMatcher builtinTexMatcher;
 static const wsw::StringView kLightmapPrefix( "*lm" );
 
 image_t *MaterialCache::findImage( const wsw::StringView &name, int flags, int imageTags, int minMipSize ) {
+	assert( minMipSize );
+
 	if( auto maybeBuiltinTexNum = builtinTexMatcher.match( name ) ) {
 		// TODO... add a builtin tex getter by num
 	}
@@ -1131,11 +1129,6 @@ image_t *MaterialCache::findImage( const wsw::StringView &name, int flags, int i
 
 	return image;
 }
-
-static const wsw::StringView kNormSuffix( "_norm" );
-static const wsw::StringView kGlossSuffix( "_gloss" );
-static const wsw::StringView kDecalSuffix( "_decal" );
-static const wsw::StringView kAddSuffix( "_add" );
 
 void MaterialCache::loadMaterial( image_t **images, const wsw::StringView &fullName, int addFlags, int imagetags, int minMipSize ) {
     // set defaults

@@ -1786,6 +1786,8 @@ static image_t *R_CreateImage( const char *name, int width, int height, int laye
 * R_LoadImage
 */
 image_t *R_LoadImage( const char *name, uint8_t **pic, int width, int height, int flags, int minmipsize, int tags, int samples ) {
+	assert( minmipsize > 0 );
+
 	image_t *image;
 
 	if( !glConfig.sSRGB ) {
@@ -1954,6 +1956,8 @@ void R_ReplaceImageLayer( image_t *image, int layer, uint8_t **pic ) {
 * For synchronous missing images, NULL is returned.
 */
 image_t *R_FindImage( const wsw::StringView &name, const wsw::StringView &suffix, int flags, int minmipsize, int tags ) {
+	assert( minmipsize > 0 );
+
 	uint8_t *empty_data[6] = { NULL, NULL, NULL, NULL, NULL, NULL };
 	bool loaded;
 
