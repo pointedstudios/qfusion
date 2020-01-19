@@ -776,7 +776,17 @@ MaterialCache::FileCache *MaterialCache::createFileCache( const char *filename )
 		return nullptr;
 	}
 
-	TokenSplitter splitter( fileContents->data(), fileContents->size() );
+	int offsetShift = 0;
+	// Strip an UTF8 BOM (if any)
+	if( fileContents->size() > 2 ) {
+		// The data must be cast to an unsigned type first, otherwise a comparison gets elided by a compiler
+		const auto *p = (const uint8_t *)fileContents->data();
+		if( ( p[0] == 0xEFu ) && ( p[1] == 0xBBu ) && ( p[2] == 0xBFu ) ) {
+			offsetShift = 3;
+		}
+	}
+
+	TokenSplitter splitter( fileContents->data() + offsetShift, fileContents->size() - offsetShift );
 
 	fileTokenSpans.clear();
 
@@ -785,7 +795,7 @@ MaterialCache::FileCache *MaterialCache::createFileCache( const char *filename )
 	while( !splitter.isAtEof() ) {
 		while( auto maybeToken = splitter.fetchNextTokenInLine() ) {
 			const auto &[off, len] = *maybeToken;
-			fileTokenSpans.emplace_back( TokenSpan {(int)off, len, lineNum } );
+			fileTokenSpans.emplace_back( TokenSpan { (int)( off + offsetShift ), len, lineNum } );
 			numKeptChars += len;
 		}
 		lineNum++;
