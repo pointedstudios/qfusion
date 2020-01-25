@@ -84,9 +84,6 @@ and Zephaniah E. Hull. Adapted by Victor Luchits for qfusion project.
 #undef QGL_FUNC_OPT
 #undef QGL_FUNC
 
-static const char *_qglGetGLWExtensionsString( void );
-static const char *_qglGetGLWExtensionsStringInit( void );
-
 /*
 ** QGL_Shutdown
 **
@@ -97,8 +94,6 @@ void QGL_Shutdown( void ) {
 		FreeLibrary( glw_state.hinstOpenGL );
 	}
 	glw_state.hinstOpenGL = NULL;
-
-	qglGetGLWExtensionsString = NULL;
 
 #define QGL_FUNC( type, name, params ) ( q ## name ) = nullptr;
 #define QGL_FUNC_OPT( type, name, params ) ( q ## name ) = nullptr;
@@ -139,21 +134,32 @@ const qgl_driverinfo_t *QGL_GetDriverInfo( void ) {
 	return &driver;
 }
 
-/*
-** QGL_Init
-**
-** This is responsible for binding our qgl function pointers to
-** the appropriate GL stuff. In Windows this means doing a
-** LoadLibrary and a bunch of calls to GetProcAddress. On other
-** operating systems we need to do the right thing, whatever that
-** might be.
-**
-*/
+#define QGL_FUNC( type, name, params ) \
+    QGL_ASSIGN_VAR( q ## name, GetProcAddress( glw_state.hinstOpenGL, # name ) );
+#define QGL_FUNC_OPT( type, name, params ) \
+    QGL_ASSIGN_VAR( q ## name, GetProcAddress( glw_state.hinstOpenGL, # name ) );
+
+#define QGL_EXT( type, name, params )
+
+#define QGL_WGL( type, name, params ) \
+	do { \
+	    ( q ## name ) = ( decltype( q ## name ) )GetProcAddress( glw_state.hinstOpenGL, # name ); \
+	    if( !( q ## name ) ) { \
+	        Com_Printf( "QGL_Init: Failed to get address for %s\n", # name ); \
+	        return qgl_initerr_invalid_driver; \
+	    } \
+	} while( 0 )
+
+// WGL extensions are handled in win_glw.cpp at its own
+#define QGL_WGL_EXT( type, name, params )
+#define QGL_GLX( type, name, params )
+#define QGL_GLX_EXT( type, name, params )
+#define QGL_EGL( type, name, params )
+#define QGL_EGL_EXT( type, name, params )
+
 qgl_initerr_t QGL_Init( const char *dllname ) {
 	if( ( glw_state.hinstOpenGL = LoadLibrary( dllname ) ) == 0 ) {
-		char *buf;
-
-		buf = NULL;
+		char *buf = NULL;
 		FormatMessage( FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(), MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ), (LPTSTR) &buf, 0, NULL );
 		if( buf ) {
 			Com_Printf( "%s\n", buf );
@@ -165,19 +171,9 @@ qgl_initerr_t QGL_Init( const char *dllname ) {
 		return qgl_initerr_invalid_driver;
 	}
 
-#define QGL_FUNC( type, name, params ) QGL_ASSIGN_VAR( q ## name, GetProcAddress( glw_state.hinstOpenGL, # name ) ); \
-	if( !( q ## name ) ) { Com_Printf( "QGL_Init: Failed to get address for %s\n", # name ); return qgl_initerr_invalid_driver; }
-#define QGL_FUNC_OPT( type, name, params ) QGL_ASSIGN_VAR( q ## name, GetProcAddress( glw_state.hinstOpenGL, # name ) );
-#define QGL_EXT( type, name, params ) ( q ## name ) = NULL;
-#define QGL_WGL( type, name, params ) ( q ## name ) = (decltype( q ## name ))GetProcAddress( glw_state.hinstOpenGL, # name ); \
-	if( !( q ## name ) ) { Com_Printf( "QGL_Init: Failed to get address for %s\n", # name ); return qgl_initerr_invalid_driver; }
-#define QGL_WGL_EXT( type, name, params ) ( q ## name ) = NULL;
-#define QGL_GLX( type, name, params )
-#define QGL_GLX_EXT( type, name, params )
-#define QGL_EGL( type, name, params )
-#define QGL_EGL_EXT( type, name, params )
-
 #include "../ref/qgl.h"
+	return qgl_initerr_ok;
+}
 
 #undef QGL_EGL_EXT
 #undef QGL_EGL
@@ -189,31 +185,45 @@ qgl_initerr_t QGL_Init( const char *dllname ) {
 #undef QGL_FUNC_OPT
 #undef QGL_FUNC
 
-	qglGetGLWExtensionsString = _qglGetGLWExtensionsStringInit;
+// Stage 2
 
-	return qgl_initerr_ok;
+#define QGL_FUNC( type, name, params ) \
+    do { \
+        if( !( q ## name ) ) { \
+            QGL_ASSIGN_VAR( q ## name, qwglGetProcAddress( # name ) ); \
+            if( !( q ## name ) ) { \
+                Com_Printf( "QGL_Init: Failed to get address for %s using qwglGetProcAddress()\n", #name ); \
+                return qgl_initerr_invalid_driver; \
+            } \
+        } \
+    } while( 0 );
+
+#define QGL_FUNC_OPT( type, name, params ) \
+    do { \
+        if( !( q ## name ) ) { \
+            QGL_ASSIGN_VAR( q ## name, qwglGetProcAddress( # name ) ); \
+        } \
+    } while( 0 );
+
+#define QGL_EXT( type, name, params )
+#define QGL_WGL( type, name, params )
+#define QGL_WGL_EXT( type, name, params )
+#define QGL_GLX( type, name, params )
+#define QGL_GLX_EXT( type, name, params )
+#define QGL_EGL( type, name, params )
+#define QGL_EGL_EXT( type, name, params )
+
+qgl_initerr_t QGL_PostInit() {
+#include "../ref/qgl.h"
+    return qgl_initerr_ok;
 }
 
-/*
-** qglGetProcAddress
-*/
-void *qglGetProcAddress( const GLubyte *procName ) {
-	return (void *)qwglGetProcAddress( (LPCSTR)procName );
-}
-
-/*
-** qglGetGLWExtensionsString
-*/
-static const char *_qglGetGLWExtensionsStringInit( void ) {
-	qwglGetExtensionsStringEXT = (decltype( qwglGetExtensionsStringEXT ))
-		qglGetProcAddress( (const GLubyte *)"wglGetExtensionsStringEXT" );
-	qglGetGLWExtensionsString = _qglGetGLWExtensionsString;
-	return qglGetGLWExtensionsString();
-}
-
-static const char *_qglGetGLWExtensionsString( void ) {
-	if( qwglGetExtensionsStringEXT ) {
-		return qwglGetExtensionsStringEXT();
-	}
-	return NULL;
-}
+#undef QGL_EGL_EXT
+#undef QGL_EGL
+#undef QGL_GLX_EXT
+#undef QGL_GLX
+#undef QGL_WGL_EXT
+#undef QGL_WGL
+#undef QGL_EXT
+#undef QGL_FUNC_OPT
+#undef QGL_FUNC

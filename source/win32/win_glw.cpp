@@ -30,14 +30,58 @@
 **
 */
 #include <assert.h>
-#include "../ref/r_local.h"
+#include "../ref/local.h"
 #include "../qcommon/qcommon.h"
 #include "win_glw.h"
 
+// It's better to load all this stuff locally here
+
+#define WGL_CONTEXT_MAJOR_VERSION_ARB           0x2091
+#define WGL_CONTEXT_MINOR_VERSION_ARB           0x2092
+#define WGL_CONTEXT_PROFILE_MASK_ARB            0x9126
+#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB        0x00000001
+
+#define WGL_DRAW_TO_WINDOW_ARB            0x2001
+#define WGL_SUPPORT_OPENGL_ARB            0x2010
+#define WGL_DOUBLE_BUFFER_ARB             0x2011
+#define WGL_STEREO_ARB                    0x2012
+#define WGL_PIXEL_TYPE_ARB                0x2013
+#define WGL_COLOR_BITS_ARB                0x2014
+#define WGL_RED_BITS_ARB                  0x2015
+#define WGL_GREEN_BITS_ARB                0x2017
+#define WGL_BLUE_BITS_ARB                 0x2019
+#define WGL_ALPHA_BITS_ARB                0x201B
+#define WGL_DEPTH_BITS_ARB                0x2022
+#define WGL_STENCIL_BITS_ARB              0x2023
+#define WGL_TYPE_RGBA_ARB                 0x202B
+
+#define WGL_SAMPLE_BUFFERS_ARB            0x2041
+#define WGL_SAMPLES_ARB                   0x2042
+
+static const char *( APIENTRY *qwglGetExtensionsStringEXT )();
+static BOOL ( APIENTRY *qwglGetDeviceGammaRamp3DFX )( HDC, WORD * );
+static BOOL ( APIENTRY *qwglSetDeviceGammaRamp3DFX )( HDC, WORD * );
+static BOOL ( APIENTRY *qwglSwapIntervalEXT )( int interval );
+
+static BOOL ( APIENTRY *qwglGetPixelFormatAttribivARB )( HDC hdc, int iPixelFormat, int iLayerPlane, UINT nAttributes, const int *piAttributes, int *piValues );
+static BOOL ( APIENTRY *qwglGetPixelFormatAttribfvARB )( HDC hdc, int iPixelFormat, int iLayerPlane, UINT nAttributes, const int *piAttributes, FLOAT * pfValues );
+static BOOL ( APIENTRY *qwglChoosePixelFormatARB )( HDC hdc, const int *piAttribIList, const FLOAT * pfAttribFList, UINT nMaxFormats, int *piFormats, UINT * nNumFormats );
+static HGLRC ( APIENTRY *qwglCreateContextAttribsARB )( HDC hdc, HGLRC hshareContext, const int *attribList );
+
+/*
+** qglGetProcAddress
+*/
+void *qglGetProcAddress( const GLubyte *procName ) {
+	return (void *)qwglGetProcAddress( (LPCSTR)procName );
+}
+
+const char *qglGetGLWExtensionsString() {
+	return qwglGetExtensionsStringEXT();
+}
+
 #define WINDOW_STYLE    ( WS_OVERLAPPED | WS_BORDER | WS_CAPTION | WS_VISIBLE | WS_SYSMENU | WS_MINIMIZEBOX )
 
-static bool GLimp_InitGL( void );
-
+static bool GLimp_InitGL( bool isInitialDummyContext );
 glwstate_t glw_state;
 
 /*
@@ -277,7 +321,7 @@ rserr_t GLimp_SetMode( int x, int y, int width, int height, int displayFrequency
 	GLimp_CreateWindow( false );
 
 	// init all the gl stuff for the window
-	if( !GLimp_InitGL() ) {
+	if( !GLimp_InitGL( false ) ) {
 		Com_Printf( "GLimp_CreateWindow() - GLimp_InitGL failed\n" );
 		return rserr_unknown;
 	}
@@ -346,6 +390,15 @@ void GLimp_Shutdown( void ) {
 	glConfig.height = 0;
 }
 
+#define GET_WGL_EXTENSION( name ) \
+	do { \
+		if( !( q ## name ) ) { \
+			q ## name = ( decltype( q ## name ) )qwglGetProcAddress( #name ); \
+			if( !( q ## name ) ) { \
+				Com_DPrintf( "Missing a WGL extension %s\n", #name ); \
+			} \
+		} \
+	} while( 0 )
 
 /*
 ** GLimp_Init
@@ -373,28 +426,29 @@ static int GLimp_Init_( const char *applicationName, void *hinstance, void *wndp
     // create a temporary window and startup temporary OpenGL context
     // to get the function pointer to wglChoosePixelFormatARB
 	if( needPixelFormatARB ) {
-		const char *wglExtensions;
-
 		GLimp_CreateWindow( true );
 
-		if( !GLimp_InitGL() ) {
+		if( !GLimp_InitGL( true ) ) {
 			return false;
 		}
 
-		wglExtensions = qglGetGLWExtensionsString();
+		GET_WGL_EXTENSION( wglGetExtensionsStringEXT );
+		GET_WGL_EXTENSION( wglGetDeviceGammaRamp3DFX );
+		GET_WGL_EXTENSION( wglSetDeviceGammaRamp3DFX );
+		GET_WGL_EXTENSION( wglSwapIntervalEXT );
 
-		if( wglExtensions && strstr( wglExtensions, "WGL_ARB_pixel_format" ) ) {
-			qwglChoosePixelFormatARB = (decltype( qwglChoosePixelFormatARB ))
-				qglGetProcAddress( (const GLubyte *)"wglChoosePixelFormatARB" );
-			qwglGetPixelFormatAttribivARB = (decltype( qwglGetPixelFormatAttribivARB ))
-				qglGetProcAddress( (const GLubyte *)"wglGetPixelFormatAttribivARB" );
-		}
+		GET_WGL_EXTENSION( wglGetPixelFormatAttribivARB );
+		GET_WGL_EXTENSION( wglGetPixelFormatAttribfvARB );
+		GET_WGL_EXTENSION( wglChoosePixelFormatARB );
+		GET_WGL_EXTENSION( wglCreateContextAttribsARB );
 
 		GLimp_Shutdown();
 	}
 
 	return true;
 }
+
+#undef GET_WGL_EXTENSION
 
 bool GLimp_Init( const char *applicationName, void *hinstance, void *wndproc, void *parenthWnd,
 				 int iconResource, const int *iconXPM ) {
@@ -404,7 +458,7 @@ bool GLimp_Init( const char *applicationName, void *hinstance, void *wndproc, vo
 	return GLimp_Init_( applicationName, hinstance, wndproc, parenthWnd, iconResource, iconXPM, false );
 }
 
-static bool GLimp_InitGL( void ) {
+static bool GLimp_InitGL( bool isInitialDummyContext ) {
 	PIXELFORMATDESCRIPTOR pfd =
 	{
 		sizeof( PIXELFORMATDESCRIPTOR ), // size of this pfd
@@ -460,9 +514,9 @@ static bool GLimp_InitGL( void ) {
 		iAttributes[3 * 2 + 1] = GL_TRUE; // WGL_STEREO_ARB
 	}
 
-    /*
-    ** Get a DC for the specified window
-    */
+	/*
+	** Get a DC for the specified window
+	*/
 	if( glw_state.hDC != NULL ) {
 		Com_Printf( "GLimp_Init() - non-NULL DC exists\n" );
 	}
@@ -472,8 +526,9 @@ static bool GLimp_InitGL( void ) {
 		return false;
 	}
 
-	if( qwglChoosePixelFormatARB ) {
+	if( !isInitialDummyContext ) {
 		UINT numFormats;
+		assert( qwglChoosePixelFormatARB );
 		if( qwglChoosePixelFormatARB( glw_state.hDC, iAttributes, NULL, 1, &pixelformat, &numFormats ) == 0 ) {
 			Com_Printf( "GLimp_Init() - wglChoosePixelFormatARB failed\n" );
 			return false;
@@ -501,23 +556,40 @@ static bool GLimp_InitGL( void ) {
 		glConfig.stereoEnabled = false;
 	}
 
-    /*
-    ** startup the OpenGL subsystem by creating a context and making
-    ** it current
-    */
-	if( ( glw_state.hGLRC = qwglCreateContext( glw_state.hDC ) ) == 0 ) {
-		Com_Printf( "GLimp_Init() - qwglCreateContext failed\n" );
-		goto fail;
+	/*
+	** startup the OpenGL subsystem by creating a context and making
+	** it current
+	*/
+
+	if( isInitialDummyContext ) {
+		if( !( glw_state.hGLRC = qwglCreateContext( glw_state.hDC ) ) ) {
+			Com_Printf("GLimp_Init() - qwglCreateContext failed\n");
+			goto fail;
+		}
+	} else {
+		assert( qwglCreateContextAttribsARB );
+
+		int attribs[] = {
+			WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
+			WGL_CONTEXT_MINOR_VERSION_ARB, 3,
+			WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+			0, 0
+		};
+
+		if( !( glw_state.hGLRC = qwglCreateContextAttribsARB( glw_state.hDC, nullptr, attribs ) ) ) {
+			Com_Printf( "GLimp_Init() - qwglCreateContextAttribsARB failed\n" );
+			goto fail;
+		}
 	}
 
 	if( !qwglMakeCurrent( glw_state.hDC, glw_state.hGLRC ) ) {
-		Com_Printf( "GLimp_Init() - qwglMakeCurrent failed\n" );
+		Com_Printf("GLimp_Init() - qwglMakeCurrent failed\n");
 		goto fail;
 	}
 
-    /*
-    ** print out PFD specifics
-    */
+	/*
+	** print out PFD specifics
+	*/
 	Com_DPrintf( "GL PFD: color(%d-bits) Z(%d-bit) stencil(%d-bits)\n", ( int ) pfd.cColorBits, ( int ) pfd.cDepthBits, ( int )pfd.cStencilBits );
 
 	return true;

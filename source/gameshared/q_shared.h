@@ -268,6 +268,14 @@ char *va_r( char *dst, size_t size, _Printf_format_string_ const char *format, .
 #include <cerrno>
 #include <optional>
 
+#ifdef min
+#undef min
+#endif
+
+#ifdef max
+#undef max
+#endif
+
 /**
  * Tries to convert a given string to a number.
  * @tparam T a supplied number type
@@ -290,7 +298,8 @@ std::optional<T> Q_tonum( const char *s, const char **endPtr = nullptr ) {
 	std::optional<T> result;
 	if constexpr( isTypeParamIntegral ) {
 		if constexpr( std::is_signed<T>::value ) {
-			long long val = std::strtoll( s, &tmp, 10 );
+			// MSVC: Can't be qualified by std::
+			long long val = strtoll( s, &tmp, 10 );
 			if( !val && !( tmp - s ) ) {
 				return std::nullopt;
 			}
@@ -307,7 +316,8 @@ std::optional<T> Q_tonum( const char *s, const char **endPtr = nullptr ) {
 			}
 			result = std::make_optional( (T)val );
 		} else {
-			unsigned long long val = std::strtoull( s, &tmp, 10 );
+			// MSVC: Can't be qualified by std::
+			unsigned long long val = strtoull( s, &tmp, 10 );
 			if( !val && !( tmp - s ) ) {
 				return std::nullopt;
 			}

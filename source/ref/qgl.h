@@ -227,12 +227,13 @@ typedef enum {
 	qgl_initerr_unknown
 } qgl_initerr_t;
 
-QGL_EXTERN const qgl_driverinfo_t  *QGL_GetDriverInfo( void );
-QGL_EXTERN qgl_initerr_t           QGL_Init( const char *dllname );
-QGL_EXTERN void                    QGL_Shutdown( void );
+const qgl_driverinfo_t  *QGL_GetDriverInfo();
+qgl_initerr_t           QGL_Init( const char *dllname );
+qgl_initerr_t           QGL_PostInit();
+void                    QGL_Shutdown();
 
-QGL_EXTERN void                    *qglGetProcAddress( const GLubyte * );
-QGL_EXTERN const char              *(*qglGetGLWExtensionsString)( void );
+void                    *qglGetProcAddress( const GLubyte * );
+const char              *qglGetGLWExtensionsString();
 
 #define GL_FALSE				0
 #define GL_TRUE					1
@@ -714,16 +715,3 @@ QGL_FUNC( void, glTexSubImage3D, ( GLenum target, GLint level, GLint xoffset, GL
 QGL_FUNC( void, glDrawBuffers, ( GLsizei n, const GLenum * bufs ) );
 
 QGL_FUNC( void, glSampleCoverage, ( GLfloat value, GLboolean invert ) );
-
-// WGL_EXT Functions
-QGL_WGL_EXT( const char *, wglGetExtensionsStringEXT, ( void ) );
-QGL_WGL_EXT( BOOL, wglGetDeviceGammaRamp3DFX, ( HDC, WORD * ) );
-QGL_WGL_EXT( BOOL, wglSetDeviceGammaRamp3DFX, ( HDC, WORD * ) );
-QGL_WGL_EXT( BOOL, wglSwapIntervalEXT, ( int interval ) );
-
-QGL_WGL_EXT( BOOL, wglGetPixelFormatAttribivARB, ( HDC hdc, int iPixelFormat, int iLayerPlane, UINT nAttributes, const int *piAttributes, int *piValues ) );
-QGL_WGL_EXT( BOOL, wglGetPixelFormatAttribfvARB, ( HDC hdc, int iPixelFormat, int iLayerPlane, UINT nAttributes, const int *piAttributes, FLOAT * pfValues ) );
-QGL_WGL_EXT( BOOL, wglChoosePixelFormatARB, ( HDC hdc, const int *piAttribIList, const FLOAT * pfAttribFList, UINT nMaxFormats, int *piFormats, UINT * nNumFormats ) );
-
-// GLX_EXT Functions
-QGL_GLX_EXT( int, glXSwapIntervalSGI, ( int interval ) );

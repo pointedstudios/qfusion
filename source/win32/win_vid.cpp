@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <assert.h>
 #include <float.h>
 #include "../client/client.h"
-#include "../ref/r_frontend.h"
+#include "../ref/frontend.h"
 #include "winquake.h"
 #include "resource.h"
 
@@ -276,7 +276,6 @@ void AppActivate( BOOL fActive, BOOL minimize, BOOL destroy ) {
 	IN_Activate( ActiveApp );
 
 	if( prevActiveApp != ActiveApp ) {
-		SCR_PauseCinematic( !ActiveApp );
 		// Use the Win32-specific SoundSystem accessor hack
 		if( auto *soundSystem = SoundSystem::InstanceOrNull() ) {
 			soundSystem->Activate( ActiveApp );

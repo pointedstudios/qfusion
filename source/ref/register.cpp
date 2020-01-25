@@ -182,26 +182,6 @@ static const gl_extension_func_t gl_ext_get_program_binary_ARB_funcs[] =
 
 #ifndef USE_SDL2
 
-#ifdef _WIN32
-
-/* WGL_EXT_swap_interval */
-static const gl_extension_func_t wgl_ext_swap_interval_EXT_funcs[] =
-{
-	GL_EXTENSION_FUNC_EXT( "wglSwapIntervalEXT",&qwglSwapIntervalEXT )
-
-	,GL_EXTENSION_FUNC_EXT( NULL,NULL )
-};
-
-/* WGL_ARB_pixel_format */
-static const gl_extension_func_t wgl_ext_pixel_format_ARB_funcs[] =
-{
-	GL_EXTENSION_FUNC_EXT( "wglChoosePixelFormatARB",&qwglChoosePixelFormatARB )
-
-	,GL_EXTENSION_FUNC_EXT( NULL,NULL )
-};
-
-#endif
-
 #ifdef GLX_VERSION
 
 /* GLX_SGI_swap_control */
@@ -246,12 +226,6 @@ static const gl_extension_t gl_extensions_decl[] =
 #ifndef USE_SDL2
 #ifdef GLX_VERSION
 	,GL_EXTENSION( GLX_SGI, swap_control, true, false, &glx_ext_swap_control_SGI_funcs )
-#endif
-#ifdef _WIN32
-	,GL_EXTENSION( WGL_EXT, swap_control, true, false, &wgl_ext_swap_interval_EXT_funcs )
-#endif
-#ifdef _WIN32
-	,GL_EXTENSION_EXT( WGL_EXT, pixel_format, true, false, &wgl_ext_pixel_format_ARB_funcs )
 #endif
 #endif
 };
@@ -863,6 +837,10 @@ init_qgl:
 static rserr_t R_PostInit( void ) {
 	int i;
 	GLenum glerr;
+
+	if( QGL_PostInit() != qgl_initerr_ok ) {
+		return rserr_unknown;
+	}
 
 	glConfig.hwGamma = GLimp_GetGammaRamp( GAMMARAMP_STRIDE, &glConfig.gammaRampSize, glConfig.originalGammaRamp );
 	if( glConfig.hwGamma ) {

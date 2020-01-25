@@ -81,7 +81,7 @@ typedef struct superLightStyle_s {
 #include "mesh.h"
 #include "shader.h"
 #include "backend.h"
-#include "shadow.h"
+//#include "shadow.h"
 #include "model.h"
 #include "trace.h"
 #include "program.h"

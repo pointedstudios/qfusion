@@ -172,8 +172,10 @@ qgl_initerr_t QGL_Init( const char *dllname ) {
 #undef QGL_FUNC_OPT
 #undef QGL_FUNC
 
-	qglGetGLWExtensionsString = _qglGetGLWExtensionsString;
+	return qgl_initerr_ok;
+}
 
+qgl_initerr_t QGL_PostInit() {
 	return qgl_initerr_ok;
 }
 
@@ -196,9 +198,6 @@ void *qglGetProcAddress( const GLubyte *procName ) {
 	return NULL;
 }
 
-/*
-** qglGetGLWExtensionsString
-*/
-static const char *_qglGetGLWExtensionsString( void ) {
+const char *qglGetGLWExtensionsString() {
 	return NULL;
 }
