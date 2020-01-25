@@ -40,7 +40,7 @@ void MaterialCache::shutdown() {
 	::materialCacheInstanceHolder.Shutdown();
 }
 
-MaterialCache *MaterialCache::instance() {
+auto MaterialCache::instance() -> MaterialCache * {
 	return ::materialCacheInstanceHolder.Instance();
 }
 
@@ -150,7 +150,7 @@ void MaterialCache::unlinkAndFree( shader_t *s ) {
 	abort();
 }
 
-unsigned MaterialCache::getNextMaterialId() {
+auto MaterialCache::getNextMaterialId() -> unsigned {
 	if( freeMaterialIds.empty() ) {
 		Com_Error( ERR_FATAL, "Out of free material ids\n" );
 	}
@@ -159,7 +159,7 @@ unsigned MaterialCache::getNextMaterialId() {
 	return result;
 }
 
-wsw::HashedStringView MaterialCache::makeCleanName( const wsw::StringView &name ) {
+auto MaterialCache::makeCleanName( const wsw::StringView &name ) -> wsw::HashedStringView {
 	cleanNameBuffer.clear();
 	cleanNameBuffer.reserve( name.length() + 1 );
 
@@ -207,7 +207,7 @@ wsw::HashedStringView MaterialCache::makeCleanName( const wsw::StringView &name 
 	return wsw::HashedStringView( cleanNameBuffer.data(), cleanNameBuffer.length(), hash );
 }
 
-TokenStream *MaterialCache::getTokenStreamForShader( const wsw::HashedStringView &cleanName ) {
+auto MaterialCache::getTokenStreamForShader( const wsw::HashedStringView &cleanName ) -> TokenStream * {
 	Source *source = findSourceByName( cleanName );
 	if( !source ) {
 		return nullptr;
@@ -271,7 +271,8 @@ void MaterialCache::touchMaterialsByName( const wsw::StringView &name ) {
 	}
 }
 
-shader_t *MaterialCache::loadMaterial( const wsw::StringView &name, int type, bool forceDefault, image_t *defaultImage ) {
+auto MaterialCache::loadMaterial( const wsw::StringView &name, int type, bool forceDefault, image_t *defaultImage )
+	-> shader_t * {
 	wsw::HashedStringView cleanName( makeCleanName( name ) );
 	const auto binIndex = cleanName.getHash() % kNumBins;
 
@@ -457,7 +458,8 @@ void R_ReplaceRawSubPic( shader_t *shader, int x, int y, int width, int height, 
 	R_ReplaceSubImage( baseImage, 0, x, y, &data, width, height );
 }
 
-shader_t *MaterialCache::initMaterial( int type, const wsw::HashedStringView &cleanName, MemSpecBuilder memSpec ) {
+auto MaterialCache::initMaterial( int type, const wsw::HashedStringView &cleanName, MemSpecBuilder memSpec )
+	-> shader_t * {
 	assert( memSpec.sizeSoFar() >= sizeof( shader_t ) );
 	auto nameSpec = memSpec.add<char>( cleanName.size() + 1 );
 
@@ -494,7 +496,8 @@ shader_t *MaterialCache::initMaterial( int type, const wsw::HashedStringView &cl
 	return s;
 }
 
-shader_t *MaterialCache::newDefaultVertexMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) {
+auto MaterialCache::newDefaultVertexMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name )
+	-> shader_t * {
 	MemSpecBuilder memSpec;
 	memSpec.add<shader_t>();
 	auto passSpec = memSpec.add<shaderpass_t>();
@@ -517,7 +520,8 @@ shader_t *MaterialCache::newDefaultVertexMaterial( const wsw::HashedStringView &
 	return s;
 }
 
-shader_t *MaterialCache::newDefaultDeluxeMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) {
+auto MaterialCache::newDefaultDeluxeMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name )
+	-> shader_t * {
 	MemSpecBuilder memSpec;
 	memSpec.add<shader_t>();
 	auto passSpec = memSpec.add<shaderpass_t>();
@@ -549,7 +553,8 @@ shader_t *MaterialCache::newDefaultDeluxeMaterial( const wsw::HashedStringView &
 	return s;
 }
 
-shader_t *MaterialCache::newDefaultCoronaMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) {
+auto MaterialCache::newDefaultCoronaMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name )
+	-> shader_t * {
 	MemSpecBuilder memSpec;
 	memSpec.add<shader_t>();
 	auto passSpec = memSpec.add<shaderpass_t>();
@@ -572,7 +577,8 @@ shader_t *MaterialCache::newDefaultCoronaMaterial( const wsw::HashedStringView &
 	return s;
 }
 
-shader_s *MaterialCache::newDefaultDiffuseMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) {
+auto MaterialCache::newDefaultDiffuseMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name )
+	-> shader_t * {
 	MemSpecBuilder memSpec;
 	memSpec.add<shader_t>();
 	auto passSpec = memSpec.add<shaderpass_t>();
@@ -606,7 +612,10 @@ shader_s *MaterialCache::newDefaultDiffuseMaterial( const wsw::HashedStringView 
 	return s;
 }
 
-shader_t *MaterialCache::newDefault2DLikeMaterial( int type, const wsw::HashedStringView &cleanName, const wsw::StringView &name ) {
+auto MaterialCache::newDefault2DLikeMaterial( int type,
+											  const wsw::HashedStringView &cleanName,
+											  const wsw::StringView &name )
+												-> shader_t * {
 	MemSpecBuilder memSpec;
 	memSpec.add<shader_t>();
 	auto passSpec = memSpec.add<shaderpass_t>();
@@ -633,7 +642,7 @@ shader_t *MaterialCache::newDefault2DLikeMaterial( int type, const wsw::HashedSt
 	return s;
 }
 
-shader_s *MaterialCache::newOpaqueEnvMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) {
+auto MaterialCache::newOpaqueEnvMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) -> shader_s * {
 	MemSpecBuilder memSpec;
 	memSpec.add<shader_t>();
 	auto passSpec = memSpec.add<shaderpass_t>();
@@ -658,7 +667,7 @@ shader_s *MaterialCache::newOpaqueEnvMaterial( const wsw::HashedStringView &clea
 	return s;
 }
 
-shader_t *MaterialCache::newSkyBoxMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) {
+auto MaterialCache::newSkyBoxMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) -> shader_t * {
 	MemSpecBuilder memSpec;
 	memSpec.add<shader_t>();
 	auto passSpec = memSpec.add<shaderpass_t>();
@@ -682,7 +691,7 @@ shader_t *MaterialCache::newSkyBoxMaterial( const wsw::HashedStringView &cleanNa
 	return s;
 }
 
-shader_t *MaterialCache::newFogMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) {
+auto MaterialCache::newFogMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) -> shader_t * {
 	MemSpecBuilder memSpec;
 	memSpec.add<shaderpass_t>();
 
@@ -694,7 +703,10 @@ shader_t *MaterialCache::newFogMaterial( const wsw::HashedStringView &cleanName,
 	return s;
 }
 
-shader_s *MaterialCache::loadMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name, int type, TokenStream *stream ) {
+auto MaterialCache::loadMaterial( const wsw::HashedStringView &cleanName,
+								  const wsw::StringView &name,
+								  int type, TokenStream *stream )
+									-> shader_t * {
 	shader_s *result = nullptr;
 	if( stream ) {
 		MaterialParser parser( this, stream, name, cleanName, (shaderType_e)type );
@@ -711,7 +723,8 @@ shader_s *MaterialCache::loadMaterial( const wsw::HashedStringView &cleanName, c
 	return result;
 }
 
-shader_s *MaterialCache::newDefaultMaterial( int type, const wsw::HashedStringView &cleanName, const wsw::StringView &name ) {
+auto MaterialCache::newDefaultMaterial( int type, const wsw::HashedStringView &cleanName, const wsw::StringView &name )
+	-> shader_t * {
 	switch( type ) {
 		case SHADER_TYPE_VERTEX:
 			return newDefaultVertexMaterial( cleanName, name );
@@ -737,7 +750,7 @@ shader_s *MaterialCache::newDefaultMaterial( int type, const wsw::HashedStringVi
 	return nullptr;
 }
 
-const wsw::String *MaterialCache::readFileContents( const char *filename ) {
+auto MaterialCache::readFileContents( const char *filename ) -> const wsw::String * {
 	wsw::String &pathName = pathNameBuffer;
 	pathName.clear();
 	pathName.append( "scripts/" );
@@ -770,7 +783,7 @@ const wsw::String *MaterialCache::readFileContents( const char *filename ) {
 	return &fileContentsBuffer;
 }
 
-MaterialCache::FileCache *MaterialCache::createFileCache( const char *filename ) {
+auto MaterialCache::createFileCache( const char *filename ) -> FileCache * {
 	const wsw::String *fileContents = readFileContents( filename );
 	if( !fileContents ) {
 		return nullptr;
@@ -927,7 +940,7 @@ bool MaterialCache::tryAddingFileCacheContents( const FileCache *fileCache ) {
 	return true;
 }
 
-std::optional<MaterialCache::Source::Placeholders> MaterialCache::Source::preparePlaceholders() {
+auto MaterialCache::Source::preparePlaceholders() -> std::optional<Placeholders> {
 	std::vector<PlaceholderSpan> buffer;
 
 	TokenSpan *tokenSpans = file->spans + this->tokenSpansOffset;
@@ -975,7 +988,7 @@ void MaterialCache::Source::findPlaceholdersInToken( const wsw::StringView &toke
 	}
 }
 
-MaterialCache::Source *MaterialCache::findSourceByName( const wsw::HashedStringView &name ) {
+auto MaterialCache::findSourceByName( const wsw::HashedStringView &name ) -> Source * {
 	auto binIndex = name.getHash() % kNumBins;
 	for( Source *source = sourceBins[binIndex]; source; source = source->nextInBin ) {
 		if( source->name.equalsIgnoreCase( name ) ) {
@@ -985,7 +998,8 @@ MaterialCache::Source *MaterialCache::findSourceByName( const wsw::HashedStringV
 	return nullptr;
 }
 
-MaterialLexer *MaterialCache::expandTemplate( const wsw::StringView &name, const wsw::StringView *args, size_t numArgs ) {
+auto MaterialCache::expandTemplate( const wsw::StringView &name, const wsw::StringView *args, size_t numArgs )
+	-> MaterialLexer * {
 	Source *source = findSourceByName( name );
 	if( !source ) {
 		return nullptr;
@@ -1073,7 +1087,7 @@ class BuiltinTexMatcher {
 	TexNumberViews longTexNumbers;
 	TexNumberViews shortTexNumbers;
 
-	wsw::StringView makeView( const char *prefix, const char *name, const char *suffix ) {
+	auto makeView( const char *prefix, const char *name, const char *suffix ) -> wsw::StringView {
 		char *data = stringChunks.unsafe_grow_back()->data;
 		Q_snprintfz( data, sizeof( Chunk::data ), "%s%s%s", prefix, name, suffix );
 		return wsw::StringView( data );
@@ -1086,7 +1100,8 @@ class BuiltinTexMatcher {
 		shortTexNumbers.emplace_back( std::make_pair( makeView( "*", name, "" ), texNumber ) );
 	}
 
-	static std::optional<BuiltinTexNumber> matchInList( const wsw::StringView &image, const TexNumberViews &views ) {
+	static auto matchInList( const wsw::StringView &image, const TexNumberViews &views )
+		-> std::optional<BuiltinTexNumber> {
 		for( const auto &[name, texNum] : views ) {
 			if( name.equalsIgnoreCase( image ) ) {
 				return std::optional( texNum );
@@ -1104,7 +1119,7 @@ public:
 		add( "corona", BuiltinTexNumber::Corona );
 	}
 
-	std::optional<BuiltinTexNumber> match( const wsw::StringView &image ) {
+	auto match( const wsw::StringView &image ) -> std::optional<BuiltinTexNumber> {
 		// Try matching long tokens (they're more likely to be met in wsw assets)
 		if( auto num = matchInList( image, longTexNumbers ) ) {
 			return num;
@@ -1117,7 +1132,7 @@ static BuiltinTexMatcher builtinTexMatcher;
 
 static const wsw::StringView kLightmapPrefix( "*lm" );
 
-image_t *MaterialCache::findImage( const wsw::StringView &name, int flags, int imageTags, int minMipSize ) {
+auto MaterialCache::findImage( const wsw::StringView &name, int flags, int imageTags, int minMipSize ) -> image_t * {
 	assert( minMipSize );
 
 	if( auto maybeBuiltinTexNum = builtinTexMatcher.match( name ) ) {

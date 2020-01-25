@@ -221,7 +221,7 @@ class TokenSplitter {
 	size_t dataSize;
 	ptrdiff_t offset { 0 };
 
-	std::optional<unsigned> tryMatching1Or2CharsToken( const char *tokenStart ) const;
+	auto tryMatching1Or2CharsToken( const char *tokenStart ) const -> std::optional<unsigned>;
 
 	[[nodiscard]]
 	static bool mustCloseTokenAtChar( char ch, char nextCh );
@@ -238,7 +238,7 @@ public:
 		return data[offset] == '\0';
 	}
 
-	std::optional<std::pair<uint32_t, uint32_t>> fetchNextTokenInLine();
+	auto fetchNextTokenInLine() -> std::optional<std::pair<uint32_t, uint32_t>>;
 };
 
 struct TokenSpan {
@@ -257,7 +257,8 @@ class TokenStream {
 	int currToken { 0 };
 	int currLine { 0 };
 
-	wsw::StringView getView( int offset, unsigned len ) {
+	[[nodiscard]]
+	auto getView( int offset, unsigned len ) -> wsw::StringView {
 		// Use either a data or an alt data as a base ptr based on the offset sign
 		const char *p = this->data[offset < 0] + std::abs( offset );
 		assert( p );
@@ -276,7 +277,7 @@ public:
 	}
 
 	[[nodiscard]]
-	int getCurrTokenNum() { return currToken; }
+	auto getCurrTokenNum() -> int { return currToken; }
 
 	void setCurrTokenNum( int num ) {
 		assert( num >= 0 && num <= numTokens );
@@ -284,7 +285,7 @@ public:
 	}
 
 	[[nodiscard]]
-	std::optional<wsw::StringView> getNextTokenInLine() {
+	auto getNextTokenInLine() -> std::optional<wsw::StringView> {
 		if( currToken >= numTokens ) {
 			return std::nullopt;
 		}
@@ -297,7 +298,7 @@ public:
 	}
 
 	[[nodiscard]]
-	std::optional<wsw::StringView> getNextToken() {
+	auto getNextToken() -> std::optional<wsw::StringView> {
 		if( currToken >= numTokens ) {
 			return std::nullopt;
 		}
@@ -321,7 +322,7 @@ class MaterialLexer {
 	TokenStream *stream { nullptr };
 
 	template <typename T>
-	std::optional<T> getNumber() {
+	auto getNumber() -> std::optional<T> {
 		if( auto token = getNextTokenInLine() ) {
 			// Unfortunately we're forced to make a copy as multiple consequent tokens are glued together
 			if( token->size() < 31 ) {
@@ -338,7 +339,7 @@ class MaterialLexer {
 	}
 
 	template <typename T>
-	T getNumberOr( T defaultValue ) {
+	auto getNumberOr( T defaultValue ) -> T {
 		if( auto token = getNextTokenInLine() ) {
 			if( token->size() < 31 ) {
 				char buffer[32];
@@ -357,7 +358,7 @@ class MaterialLexer {
 	bool parseVector( float *dest, size_t numElems );
 	void parseVectorOrFill( float *dest, size_t numElems, float defaultValue );
 
-	std::optional<bool> getSingleCharToken( char ch ) {
+	auto getSingleCharToken( char ch ) -> std::optional<bool> {
 		if( auto maybeToken = getNextToken() ) {
 			auto token = *maybeToken;
 			return std::optional( token.length() == 1 && token[0] == ch );
@@ -372,22 +373,18 @@ public:
 		return stream->isAtEof();
 	}
 
-	std::optional<wsw::StringView> getNextToken() {
+	[[nodiscard]]
+	auto getNextToken() -> std::optional<wsw::StringView> {
 		return stream->getNextToken();
 	}
 
-	std::optional<wsw::StringView> getNextTokenInLine() {
+	auto getNextTokenInLine() -> std::optional<wsw::StringView> {
 		return stream->getNextTokenInLine();
 	}
 
 	bool unGetToken() {
 		return stream->unGetToken();
 	}
-
-	std::optional<bool> getLeftBrace() { return getSingleCharToken( '{' ); }
-	std::optional<bool> getRightBrace() { return getSingleCharToken( '}' ); }
-	std::optional<bool> getLeftParen() { return getSingleCharToken('(' ); }
-	std::optional<bool> getRightParen() { return getSingleCharToken( ')' ); }
 
 	std::optional<PassKey> getPassKey();
 	std::optional<Deform> getDeform();
@@ -412,11 +409,11 @@ public:
 
 	bool skipToEndOfLine();
 
-	std::optional<float> getFloat() { return getNumber<float>(); }
-	std::optional<int> getInt() { return getNumber<int>(); }
+	auto getFloat() -> std::optional<float> { return getNumber<float>(); }
+	auto getInt() -> std::optional<int> { return getNumber<int>(); }
 
-	float getFloatOr( float defaultValue ) { return getNumberOr<float>( defaultValue ); }
-	int getIntOr( int defaultValue ) { return getNumberOr<int>( defaultValue ); }
+	auto getFloatOr( float defaultValue ) -> float { return getNumberOr<float>( defaultValue ); }
+	auto getIntOr( int defaultValue ) -> int { return getNumberOr<int>( defaultValue ); }
 
 	template <size_t N>
 	bool getVector( float *dest ) {
@@ -447,7 +444,7 @@ public:
 		}
 	}
 
-	std::optional<bool> getBool();
+	auto getBool() -> std::optional<bool>;
 };
 
 #include <vector>
@@ -460,7 +457,7 @@ public:
 		friend class MemSpecBuilder;
 		size_t offset;
 	public:
-		T *get( void *base ) const {
+		auto get( void *base ) const -> T * {
 			auto *p = (uint8_t *)base;
 			p += offset;
 			assert( !( (uintptr_t)p % alignof( T ) ) );
@@ -469,12 +466,12 @@ public:
 	};
 
 	template <typename T>
-	Spec<T> add() {
+	auto add() -> Spec<T> {
 		return add<T>( 1 );
 	}
 
 	template <typename T>
-	Spec<T> add( size_t numElems ) {
+	auto add( size_t numElems ) -> Spec<T> {
 		if( size % alignof( T ) ) {
 			size += alignof( T ) - size % alignof( T );
 		}
@@ -484,7 +481,7 @@ public:
 		return result;
 	}
 
-	size_t sizeSoFar() { return size; }
+	auto sizeSoFar() -> size_t { return size; }
 };
 
 struct PlaceholderSpan {
@@ -522,7 +519,7 @@ class MaterialCache {
 		unsigned tokenSpansOffset { ~0u };
 		unsigned numTokens { ~0u };
 
-		std::optional<Placeholders> preparePlaceholders();
+		auto preparePlaceholders() -> std::optional<Placeholders>;
 
 		void findPlaceholdersInToken( const wsw::StringView &token, int tokenNum, std::vector<PlaceholderSpan> &spans );
 
@@ -558,16 +555,16 @@ class MaterialCache {
 	StaticVector<MaterialLexer, 1> templateLexerHolder;
 	StaticVector<TokenStream, 1> primaryTokenStreamHolder;
 
-	FileCache *createFileCache( const char *filename );
-	const wsw::String *readFileContents( const char *filename );
+	auto createFileCache( const char *filename ) -> FileCache *;
+	auto readFileContents( const char *filename ) -> const wsw::String *;
 
-	Source *findSourceByName( const wsw::StringView &name ) {
+	auto findSourceByName( const wsw::StringView &name ) -> Source * {
 		return findSourceByName( wsw::HashedStringView( name ) );
 	}
 
-	Source *findSourceByName( const wsw::HashedStringView &name );
+	auto findSourceByName( const wsw::HashedStringView &name ) -> Source *;
 
-	image_s *findImage( const wsw::StringView &name, int flags, int imageTags, int minMipSize = 1 );
+	auto findImage( const wsw::StringView &name, int flags, int imageTags, int minMipSize = 1 ) -> image_s *;
 	void loadMaterial( image_s **images, const wsw::StringView &fullName, int flags, int imageTags, int minMipSize = 1 );
 
 	void loadDirContents( const char *dir );
@@ -577,33 +574,35 @@ class MaterialCache {
 
 	void unlinkAndFree( shader_t *s );
 
-	unsigned getNextMaterialId();
+	auto getNextMaterialId() -> unsigned;
 
-	wsw::HashedStringView makeCleanName( const wsw::StringView &name );
+	auto makeCleanName( const wsw::StringView &name ) -> wsw::HashedStringView;
 
-	TokenStream *getTokenStreamForShader( const wsw::HashedStringView &cleanName );
+	auto getTokenStreamForShader( const wsw::HashedStringView &cleanName ) -> TokenStream *;
 
-	shader_t *loadMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name, int type, TokenStream *tokenStream );
+	auto loadMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name, int type, TokenStream *tokenStream ) -> shader_t *;
 
 	// This must go once sane material classes get implemented
-	shader_t *initMaterial( int type, const wsw::HashedStringView &cleanName, MemSpecBuilder memSpec );
+	auto initMaterial( int type, const wsw::HashedStringView &cleanName, MemSpecBuilder memSpec ) -> shader_t *;
 
-	shader_t *newDefaultMaterial( int type, const wsw::HashedStringView &cleanName, const wsw::StringView &name );
-	shader_t *newDefaultVertexMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name );
-	shader_t *newDefaultDeluxeMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name );
-	shader_t *newDefaultCoronaMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name );
-	shader_t *newDefaultDiffuseMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name );
-	shader_t *newDefault2DLikeMaterial( int type, const wsw::HashedStringView &cleanName, const wsw::StringView &name );
-	shader_t *newOpaqueEnvMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name );
-	shader_t *newSkyBoxMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name );
-	shader_t *newFogMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name );
+	auto newDefaultMaterial( int type, const wsw::HashedStringView &cleanName, const wsw::StringView &name ) -> shader_t *;
+	auto newDefaultVertexMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) -> shader_t *;
+	auto newDefaultDeluxeMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) -> shader_t *;
+	auto newDefaultCoronaMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) -> shader_t *;
+	auto newDefaultDiffuseMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) -> shader_t *;
+	auto newDefault2DLikeMaterial( int type, const wsw::HashedStringView &cleanName, const wsw::StringView &name ) -> shader_t *;
+	auto newOpaqueEnvMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) -> shader_t *;
+	auto newSkyBoxMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) -> shader_t *;
+	auto newFogMaterial( const wsw::HashedStringView &cleanName, const wsw::StringView &name ) -> shader_t *;
 public:
 	MaterialCache();
 	~MaterialCache();
 
 	static void init();
 	static void shutdown();
-	static MaterialCache *instance();
+
+	[[nodiscard]]
+	static auto instance() -> MaterialCache *;
 
 	void freeUnusedMaterialsByType( const shaderType_e *types, unsigned numTypes );
 
@@ -613,15 +612,19 @@ public:
 
 	void touchMaterialsByName( const wsw::StringView &name );
 
-	shader_t *getMaterialById( int id ) {
+	[[nodiscard]]
+	auto getMaterialById( int id ) -> shader_t * {
 		return materialById[id];
 	}
 
-	MaterialLexer *expandTemplate( const wsw::StringView &name, const wsw::StringView *args, size_t numArgs );
+	[[nodiscard]]
+	auto expandTemplate( const wsw::StringView &name, const wsw::StringView *args, size_t numArgs ) -> MaterialLexer *;
 
-	shader_t *loadMaterial( const wsw::StringView &name, int type, bool forceDefault, image_s *defaultImage );
+	[[nodiscard]]
+	auto loadMaterial( const wsw::StringView &name, int type, bool forceDefault, image_s *defaultImage ) -> shader_t *;
 
-	shader_t *loadDefaultMaterial( const wsw::StringView &name, int type );
+	[[nodiscard]]
+	auto loadDefaultMaterial( const wsw::StringView &name, int type ) -> shader_t *;
 };
 
 struct shader_s;
@@ -667,13 +670,14 @@ class MaterialParser {
 
 	bool hasLightmapPass { false };
 
-	shaderpass_t *currPass() {
+	[[nodiscard]]
+	auto currPass() -> shaderpass_t * {
 		assert( !passes.empty() );
 		return &passes.back();
 	}
 
-	tcmod_t *tryAddingPassTCMod( TCMod modType );
-	deformv_t *tryAddingDeform( Deform deformType );
+	auto tryAddingPassTCMod( TCMod modType ) -> tcmod_t *;
+	auto tryAddingDeform( Deform deformType ) -> deformv_t *;
 
 	bool parsePass();
 	bool parsePassKey();
@@ -734,10 +738,10 @@ class MaterialParser {
 	bool parseSoftParticle();
 	bool parseForceWorldOutlines();
 
-	std::optional<bool> parseCondition();
+	auto parseCondition() -> std::optional<bool>;
 	void skipConditionBlock();
-	static int getIntConditionVarValue( IntConditionVar var );
-	static bool getBoolConditionVarValue( BoolConditionVar var );
+	static auto getIntConditionVarValue( IntConditionVar var ) -> int;
+	static auto getBoolConditionVarValue( BoolConditionVar var ) -> bool;
 
 	bool parseDeformWave();
 	bool parseDeformBulge();
@@ -786,21 +790,21 @@ class MaterialParser {
 
 	int getImageFlags();
 
-	image_s *findImage( const wsw::StringView &name_, int flags_ ) {
+	auto findImage( const wsw::StringView &name_, int flags_ ) -> image_s * {
 		return materialCache->findImage( name_, flags_, imageTags, minMipSize.value_or( 1 ) );
 	}
 
 	void fixLightmapsForVertexLight();
 	void fixFlagsAndSortingOrder();
 
-	shader_t *build();
+	auto build() -> shader_t *;
 
-	int buildVertexAttribs();
-	static int getDeformVertexAttribs( const deformv_t &deform );
-	static int getPassVertexAttribs( const shaderpass_t &pass );
-	static int getRgbGenVertexAttribs( const shaderpass_t &pass, const colorgen_t &gen );
-	static int getAlphaGenVertexAttribs( const colorgen_t &gen );
-	static int getTCGenVertexAttribs( unsigned gen );
+	auto buildVertexAttribs() -> int;
+	static auto getDeformVertexAttribs( const deformv_t &deform ) -> int;
+	static auto getPassVertexAttribs( const shaderpass_t &pass ) -> int;
+	static auto getRgbGenVertexAttribs( const shaderpass_t &pass, const colorgen_t &gen ) -> int;
+	static auto getAlphaGenVertexAttribs( const colorgen_t &gen ) -> int;
+	static auto getTCGenVertexAttribs( unsigned gen ) -> int;
 public:
 	MaterialParser( MaterialCache *materialCache_,
 					TokenStream *mainTokenStream_,
@@ -808,7 +812,7 @@ public:
 					const wsw::HashedStringView &cleanName_,
 					shaderType_e type_ );
 
-    shader_t *exec();
+    auto exec() -> shader_t *;
 };
 
 const wsw::StringView kNormSuffix( "_norm" );

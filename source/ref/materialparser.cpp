@@ -18,7 +18,7 @@ static inline bool isAPlaceholder( const wsw::StringView &view ) {
 	return view.length() == 1 && view[0] == '-';
 }
 
-tcmod_t *MaterialParser::tryAddingPassTCMod( TCMod modType ) {
+auto MaterialParser::tryAddingPassTCMod( TCMod modType ) -> tcmod_t * {
 	auto *const pass = currPass();
 	if( pass->numtcmods == MAX_SHADER_TCMODS ) {
 		return nullptr;
@@ -37,7 +37,7 @@ tcmod_t *MaterialParser::tryAddingPassTCMod( TCMod modType ) {
 	return newMod;
 }
 
-deformv_t *MaterialParser::tryAddingDeform( Deform deformType ) {
+auto MaterialParser::tryAddingDeform( Deform deformType ) -> deformv_t * {
 	if( deforms.size() == deforms.capacity() ) {
 		return nullptr;
 	}
@@ -59,7 +59,7 @@ MaterialParser::MaterialParser( MaterialCache *materialCache_,
 	, cleanName( cleanName_ )
 	, type( type_ ) {}
 
-shader_t *MaterialParser::exec() {
+auto MaterialParser::exec() -> shader_t * {
 	for(;;) {
 		auto maybeToken = lexer->getNextToken();
 		if( !maybeToken ) {
@@ -1238,14 +1238,14 @@ private:
 	static_assert( sizeof( Value ) == 6 );
 #pragma pack( pop )
 
-	TapeEntry *makeEntry( Tag tag ) {
+	auto makeEntry( Tag tag ) -> TapeEntry * {
 		assert( numEntries < Capacity );
 		auto *e = &tape[numEntries++];
 		e->tag = tag;
 		return e;
 	}
 
-	std::optional<Tag> nextTokenTag() {
+	auto nextTokenTag() -> std::optional<Tag> {
 		return ( tapeCursor < numEntries ) ? std::optional( tape[tapeCursor++].tag ) : std::nullopt;
 	}
 
@@ -1255,34 +1255,35 @@ private:
 	}
 
 	[[nodiscard]]
-	const TapeEntry &lastEntry() const {
+	auto lastEntry() const -> const TapeEntry & {
 		assert( tapeCursor - 1 < numEntries );
 		return tape[tapeCursor - 1];
 	}
 
 	template <typename T>
 	[[nodiscard]]
-	T lastEntryAs() const {
+	auto lastEntryAs() const -> T {
 		return *( ( const T *)lastEntry().data );
 	}
 
 	[[nodiscard]]
-	Tag lastTag() const {
+	auto lastTag() const -> Tag {
 		assert( tapeCursor - 1 < numEntries );
 		return tape[tapeCursor - 1].tag;
 	}
 
-	std::optional<Value> lastValue() {
+	[[nodiscard]]
+	auto lastValue() -> std::optional<Value> {
 		return ( lastTag() == Tag::Value ) ? std::optional( lastEntryAs<Value>() ) : std::nullopt;
 	}
 
 	[[nodiscard]]
-	std::optional<LogicOp> lastLogicOp() {
+	auto lastLogicOp() -> std::optional<LogicOp> {
 		return ( lastTag() == Tag::LogicOp ) ? std::optional( lastEntryAs<LogicOp>() ) : std::nullopt;
 	}
 
 	[[nodiscard]]
-	std::optional<CmpOp> lastCmpOp() {
+	auto lastCmpOp() -> std::optional<CmpOp> {
 		return ( lastTag() == Tag::CmpOp ) ? std::optional( lastEntryAs<CmpOp>() ) : std::nullopt;
 	}
 
@@ -1298,14 +1299,14 @@ private:
 	void warnIntegerToBooleanConversion( const Value &value, const char *desc, const char *context );
 
 	[[nodiscard]]
-	std::optional<Value> evalUnaryExpr();
+	auto evalUnaryExpr() -> std::optional<Value>;
 	[[nodiscard]]
-	std::optional<Value> evalCmpExpr();
+	auto evalCmpExpr() -> std::optional<Value>;
 	[[nodiscard]]
-	std::optional<Value> evalLogicExpr();
+	auto evalLogicExpr() -> std::optional<Value>;
 
 	[[nodiscard]]
-	std::optional<Value> evalExpr() { return evalLogicExpr(); }
+	auto evalExpr() -> std::optional<Value> { return evalLogicExpr(); }
 public:
 
 	void addInt( int value ) {
@@ -1332,10 +1333,10 @@ public:
 	void addRightParen() { makeEntry( Tag::RParen ); }
 
 	[[nodiscard]]
-	std::optional<bool> exec();
+	auto exec() -> std::optional<bool>;
 };
 
-std::nullopt_t Evaluator::withError( const char *fmt, ... ) {
+auto Evaluator::withError( const char *fmt, ... ) -> std::nullopt_t {
 	if( hadError ) {
 		return std::nullopt;
 	}
@@ -1384,7 +1385,7 @@ void Evaluator::warnIntegerToBooleanConversion( const Value &value, const char *
 	}
 }
 
-std::optional<Evaluator::Value> Evaluator::evalUnaryExpr() {
+auto Evaluator::evalUnaryExpr() -> std::optional<Value> {
 	std::optional<Tag> maybeTag = nextTokenTag();
 	if( !maybeTag ) {
 		return std::nullopt;
@@ -1421,7 +1422,7 @@ std::optional<Evaluator::Value> Evaluator::evalUnaryExpr() {
 	return withError( "Expected a value, an unary NOT operator or a left paren" );
 }
 
-std::optional<Evaluator::Value> Evaluator::evalCmpExpr() {
+auto Evaluator::evalCmpExpr() -> std::optional<Value> {
 	std::optional<Value> maybeLeft = evalUnaryExpr();
 	if( !maybeLeft ) {
 		return std::nullopt;
@@ -1470,7 +1471,7 @@ std::optional<Evaluator::Value> Evaluator::evalCmpExpr() {
 	}
 }
 
-std::optional<Evaluator::Value> Evaluator::evalLogicExpr() {
+auto Evaluator::evalLogicExpr() -> std::optional<Value> {
 	std::optional<Value> maybeLeft = evalCmpExpr();
 	if( !maybeLeft ) {
 		return std::nullopt;
@@ -1511,7 +1512,7 @@ std::optional<Evaluator::Value> Evaluator::evalLogicExpr() {
 	}
 }
 
-std::optional<bool> Evaluator::exec() {
+auto Evaluator::exec() -> std::optional<bool> {
 	std::optional<Value> maybeValue = evalExpr();
 	if( hadError ) {
 		return std::nullopt;
@@ -1559,7 +1560,7 @@ void MaterialParser::skipConditionBlock() {
 	}
 }
 
-std::optional<bool> MaterialParser::parseCondition() {
+auto MaterialParser::parseCondition() -> std::optional<bool> {
 	Evaluator evaluator;
 
 	int numTokens = 0;

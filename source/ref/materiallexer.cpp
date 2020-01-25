@@ -65,7 +65,7 @@ protected:
 	}
 
 	[[nodiscard]]
-	std::optional<T> matchInList( const TokenPattern *head, const wsw::StringView &v ) const {
+	auto matchInList( const TokenPattern *head, const wsw::StringView &v ) const -> std::optional<T> {
 		for( const auto *pattern = head; pattern; pattern = pattern->next ) {
 			if( pattern->match( v ) ) {
 				return std::make_optional( pattern->token );
@@ -75,7 +75,7 @@ protected:
 	}
 public:
 	[[nodiscard]]
-	std::optional<T> match( const wsw::StringView &v ) const {
+	auto match( const wsw::StringView &v ) const -> std::optional<T> {
 		auto len = v.length();
 		if( !len ) {
 			return std::nullopt;
@@ -405,7 +405,7 @@ public:
 static SkySideMatcher skySideMatcher;
 
 #define IMPLEMENT_GET_ENUM_METHOD( type, method, matcher ) \
-std::optional<type> MaterialLexer::method() {\
+auto MaterialLexer::method() -> std::optional<type> {\
 	if( auto token = getNextTokenInLine() ) {\
 		if ( auto func = ::matcher.match( *token ) ) {\
 			return func;\
@@ -439,7 +439,7 @@ IMPLEMENT_GET_ENUM_METHOD( SkySide, getSkySide, skySideMatcher )
 static const wsw::StringView kTrueLiteral( "true" );
 static const wsw::StringView kFalseLiteral( "false" );
 
-std::optional<bool> MaterialLexer::getBool() {
+auto MaterialLexer::getBool() -> std::optional<bool> {
 	if( auto maybeToken = getNextToken() ) {
 		if( kTrueLiteral.equalsIgnoreCase( *maybeToken ) ) {
 			return true;
@@ -531,7 +531,7 @@ bool MaterialLexer::skipToEndOfLine() {
 	}
 }
 
-std::optional<std::pair<unsigned, unsigned>> TokenSplitter::fetchNextTokenInLine() {
+auto TokenSplitter::fetchNextTokenInLine() -> std::optional<std::pair<unsigned, unsigned>> {
 	const char *__restrict p = data + offset;
 
 start:
@@ -629,7 +629,7 @@ start:
 	}
 }
 
-std::optional<unsigned> TokenSplitter::tryMatching1Or2CharsToken( const char *tokenStart ) const {
+auto TokenSplitter::tryMatching1Or2CharsToken( const char *tokenStart ) const -> std::optional<unsigned> {
 	char ch = tokenStart[0];
 
 	if( ch == '{' || ch == '}' || ch == '(' || ch == ')' ) {
