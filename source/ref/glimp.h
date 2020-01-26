@@ -97,7 +97,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define GAMMARAMP_STRIDE                4096
 
 extern cvar_t *r_stencilbits;
-extern cvar_t *gl_drawbuffer;
 extern cvar_t *gl_driver;
 
 //====================================================================
@@ -197,7 +196,6 @@ typedef struct {
 	bool fullScreen;
 	bool borderless;
 
-	bool stereoEnabled;
 	int stencilBits;
 
 	bool hwGamma;
@@ -243,7 +241,7 @@ void    GLimp_EndFrame( void );
 bool    GLimp_Init( const char *applicationName, void *hinstance, void *wndproc, void *parenthWnd,
 					int iconResource, const int *iconXPM );
 void    GLimp_Shutdown( void );
-rserr_t GLimp_SetMode( int x, int y, int width, int height, int displayFrequency, bool fullscreen, bool stereo, bool borderless );
+rserr_t GLimp_SetMode( int x, int y, int width, int height, int displayFrequency, bool fullscreen, bool borderless );
 rserr_t GLimp_SetWindow( void *hinstance, void *wndproc, void *parenthWnd, bool *surfaceChangePending );
 rserr_t GLimp_SetFullscreenMode( int displayFrequency, bool fullscreen );
 void    GLimp_AppActivate( bool active, bool minimize, bool destroy );

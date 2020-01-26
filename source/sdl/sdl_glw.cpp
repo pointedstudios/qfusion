@@ -27,7 +27,7 @@
 
 glwstate_t glw_state = {NULL, NULL};
 
-static bool GLimp_InitGL( int stencilbits, bool stereo );
+static bool GLimp_InitGL( int stencilbits );
 
 void GLimp_SetWindowIcon( void ) {
 #ifndef __APPLE__
@@ -95,7 +95,7 @@ static void GLimp_CreateWindow( int x, int y, int width, int height ) {
  * @param fullscreen <code>true</code> for a fullscreen mode,
  *     <code>false</code> otherwise
  */
-rserr_t GLimp_SetMode( int x, int y, int width, int height, int displayFrequency, bool fullscreen, bool stereo, bool borderless ) {
+rserr_t GLimp_SetMode( int x, int y, int width, int height, int displayFrequency, bool fullscreen, bool borderless ) {
 	const char *win_fs[] = {"W", "FS"};
 
 #ifdef __APPLE__
@@ -118,7 +118,7 @@ rserr_t GLimp_SetMode( int x, int y, int width, int height, int displayFrequency
 	GLimp_CreateWindow( x, y, width, height );
 
 	// init all the gl stuff for the window
-	if( !GLimp_InitGL( r_stencilbits->integer, stereo ) ) {
+	if( !GLimp_InitGL( r_stencilbits->integer ) ) {
 		Com_Printf( "VID_CreateWindow() - GLimp_InitGL failed\n" );
 		return rserr_invalid_mode;
 	}
@@ -173,15 +173,10 @@ bool GLimp_Init( const char *applicationName, void *hinstance, void *wndproc, vo
 	return true;
 }
 
-static bool GLimp_InitGL( int stencilbits, bool stereo ) {
-	int colorBits, depthBits, stencilBits, stereo_;
+static bool GLimp_InitGL( int stencilbits ) {
+	int colorBits, depthBits, stencilBits;
 
 	SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, std::max( 0, stencilbits ) );
-
-	if( stereo ) {
-		Com_Printf( "GLimp_Init() - Attempting to use stereo\n" );
-		SDL_GL_SetAttribute( SDL_GL_STEREO, 1 );
-	}
 
 	glw_state.sdl_glcontext = SDL_GL_CreateContext( glw_state.sdl_window );
 	if( glw_state.sdl_glcontext == 0 ) {
@@ -200,10 +195,8 @@ static bool GLimp_InitGL( int stencilbits, bool stereo ) {
 	SDL_GL_GetAttribute( SDL_GL_BUFFER_SIZE, &colorBits );
 	SDL_GL_GetAttribute( SDL_GL_DEPTH_SIZE, &depthBits );
 	SDL_GL_GetAttribute( SDL_GL_STENCIL_SIZE, &stencilBits );
-	SDL_GL_GetAttribute( SDL_GL_STEREO, &stereo_ );
 
 	glConfig.stencilBits = stencilBits;
-	glConfig.stereoEnabled = stereo_ != 0;
 
 	Com_Printf( "GL PFD: color(%d-bits) Z(%d-bit) stencil(%d-bits)\n", colorBits, depthBits, stencilBits );
 

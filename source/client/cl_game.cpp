@@ -272,10 +272,10 @@ bool CL_GameModule_NewSnapshot( int pendingSnapshot ) {
 /*
 * CL_GameModule_RenderView
 */
-void CL_GameModule_RenderView( float stereo_separation ) {
+void CL_GameModule_RenderView() {
 	if( cge && cls.cgameActive ) {
-		CG_RenderView( cls.frametime, cls.realFrameTime, cls.realtime, cl.serverTime, stereo_separation,
-						 cl_extrapolate->integer && !cls.demo.playing ? cl_extrapolationTime->integer : 0 );
+		unsigned extrapolationTime = cl_extrapolate->integer && !cls.demo.playing ? cl_extrapolationTime->integer : 0;
+		CG_RenderView( cls.frametime, cls.realFrameTime, cls.realtime, cl.serverTime, extrapolationTime );
 	}
 }
 

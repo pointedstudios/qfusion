@@ -76,7 +76,7 @@ rserr_t RF_Init( const char *applicationName, const char *screenshotPrefix, int 
 	return rserr_ok;
 }
 
-rserr_t RF_SetMode( int x, int y, int width, int height, int displayFrequency, bool fullScreen, bool stereo, bool borderless ) {
+rserr_t RF_SetMode( int x, int y, int width, int height, int displayFrequency, bool fullScreen, bool borderless ) {
 	rserr_t err;
 
 	if( glConfig.width == width && glConfig.height == height && glConfig.fullScreen != fullScreen ) {
@@ -85,7 +85,7 @@ rserr_t RF_SetMode( int x, int y, int width, int height, int displayFrequency, b
 
 	RF_AdapterShutdown( &rrf.adapter );
 
-	err = R_SetMode( x, y, width, height, displayFrequency, fullScreen, stereo, borderless );
+	err = R_SetMode( x, y, width, height, displayFrequency, fullScreen, borderless );
 	if( err != rserr_ok ) {
 		return err;
 	}
@@ -149,11 +149,6 @@ static void RF_CheckCvars( void ) {
 		R_SetWallFloorColors( wallColor, floorColor );
 	}
 
-	if( gl_drawbuffer->modified ) {
-		gl_drawbuffer->modified = false;
-		R_SetDrawBuffer( gl_drawbuffer->string );
-	}
-
 	// texturemode stuff
 	if( r_texturemode->modified ) {
 		r_texturemode->modified = false;
@@ -171,21 +166,19 @@ static void RF_CheckCvars( void ) {
 	}
 }
 
-void RF_BeginFrame( float cameraSeparation, bool forceClear, bool forceVsync, bool uncappedFPS ) {
+void RF_BeginFrame( bool forceClear, bool forceVsync, bool uncappedFPS ) {
 	int swapInterval;
 
 	RF_CheckCvars();
 
 	rrf.adapter.noWait = uncappedFPS;
 
-	rrf.cameraSeparation = cameraSeparation;
-
 	R_DataSync();
 
 	swapInterval = r_swapinterval->integer || forceVsync ? 1 : 0;
 	clamp_low( swapInterval, r_swapinterval_min->integer );
 
-	R_BeginFrame( cameraSeparation, forceClear, swapInterval );
+	R_BeginFrame( forceClear, swapInterval );
 }
 
 void RF_EndFrame( void ) {
@@ -424,8 +417,7 @@ void RF_TransformVectorToScreen( const refdef_t *rd, const vec3_t in, vec2_t out
 		Matrix4_OrthogonalProjection( rd->ortho_x, rd->ortho_x, rd->ortho_y, rd->ortho_y,
 									  -4096.0f, 4096.0f, p );
 	} else {
-		Matrix4_InfinitePerspectiveProjection( rd->fov_x, rd->fov_y, Z_NEAR, rrf.cameraSeparation,
-											   p, glConfig.depthEpsilon );
+		Matrix4_InfinitePerspectiveProjection( rd->fov_x, rd->fov_y, Z_NEAR, p, glConfig.depthEpsilon );
 	}
 
 	if( rd->rdflags & RDF_FLIPPED ) {

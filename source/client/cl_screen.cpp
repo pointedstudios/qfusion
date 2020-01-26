@@ -626,7 +626,7 @@ void SCR_ShutDownConsoleMedia( void ) {
 /*
 * SCR_RenderView
 */
-static void SCR_RenderView( float stereo_separation, bool timedemo ) {
+static void SCR_RenderView( bool timedemo ) {
 	if( timedemo ) {
 		if( !cl.timedemo.startTime ) {
 			cl.timedemo.startTime = Sys_Milliseconds();
@@ -636,7 +636,7 @@ static void SCR_RenderView( float stereo_separation, bool timedemo ) {
 
 	// frame is not valid until we load the CM data
 	if( cl.cms != NULL ) {
-		CL_GameModule_RenderView( stereo_separation );
+		CL_GameModule_RenderView();
 	}
 }
 
@@ -649,12 +649,6 @@ static void SCR_RenderView( float stereo_separation, bool timedemo ) {
 * text to the screen.
 */
 void SCR_UpdateScreen( void ) {
-	int numframes;
-	int i;
-	float separation[2];
-	bool forcevsync, forceclear;
-	bool timedemo;
-
 	// if the screen is disabled (loading plaque is up, or vid mode changing)
 	// do nothing at all
 	if( cls.disable_screen ) {
@@ -673,66 +667,45 @@ void SCR_UpdateScreen( void ) {
 
 	SCR_CheckSystemFontsModified();
 
-	/*
-	** range check cl_camera_separation so we don't inadvertently fry someone's
-	** brain
-	*/
-	if( cl_stereo_separation->value > 1.0 ) {
-		Cvar_SetValue( "cl_stereo_separation", 1.0 );
-	} else if( cl_stereo_separation->value < 0 ) {
-		Cvar_SetValue( "cl_stereo_separation", 0.0 );
-	}
+	// TODO: Pass as flags
+	const bool forcevsync = ( cls.state == CA_DISCONNECTED && scr_con_current );
+	const bool forceclear = forcevsync;
+	const bool timedemo = cl_timedemo->integer != 0 && cls.demo.playing;
 
-	if( cl_stereo->integer ) {
-		numframes = 2;
-		separation[0] = -cl_stereo_separation->value / 2;
-		separation[1] =  cl_stereo_separation->value / 2;
-	} else {
-		separation[0] = 0;
-		separation[1] = 0;
-		numframes = 1;
-	}
+	RF_BeginFrame( forceclear, forcevsync, timedemo );
 
-	forcevsync = ( cls.state == CA_DISCONNECTED && scr_con_current );
-	forceclear = forcevsync;
-	timedemo = cl_timedemo->integer != 0 && cls.demo.playing;
-
-	for( i = 0; i < numframes; i++ ) {
-		RF_BeginFrame( separation[i], forceclear, forcevsync, timedemo );
-
-		if( scr_draw_loading == 2 ) {
-			// loading plaque over APP_STARTUP_COLOR screen
-			scr_draw_loading = 0;
+	if( scr_draw_loading == 2 ) {
+		// loading plaque over APP_STARTUP_COLOR screen
+		scr_draw_loading = 0;
+		CL_UIModule_UpdateConnectScreen( true );
+	} else if( cls.state == CA_DISCONNECTED ) {
+		CL_UIModule_Refresh( true, true );
+		SCR_DrawConsole();
+	} else if( cls.state == CA_GETTING_TICKET || cls.state == CA_CONNECTING  || cls.state == CA_HANDSHAKE ) {
+		CL_UIModule_UpdateConnectScreen( true );
+	} else if( cls.state == CA_CONNECTED ) {
+		if( cls.cgameActive ) {
+			CL_UIModule_UpdateConnectScreen( false );
+			SCR_RenderView( timedemo );
+		} else {
 			CL_UIModule_UpdateConnectScreen( true );
-		} else if( cls.state == CA_DISCONNECTED ) {
-			CL_UIModule_Refresh( true, true );
-			SCR_DrawConsole();
-		} else if( cls.state == CA_GETTING_TICKET || cls.state == CA_CONNECTING  || cls.state == CA_HANDSHAKE ) {
-			CL_UIModule_UpdateConnectScreen( true );
-		} else if( cls.state == CA_CONNECTED ) {
-			if( cls.cgameActive ) {
-				CL_UIModule_UpdateConnectScreen( false );
-				SCR_RenderView( separation[i], timedemo );
-			} else {
-				CL_UIModule_UpdateConnectScreen( true );
-			}
-		} else if( cls.state == CA_ACTIVE ) {
-			SCR_RenderView( separation[i], timedemo );
+		}
+	} else if( cls.state == CA_ACTIVE ) {
+		SCR_RenderView( timedemo );
 
-			CL_UIModule_Refresh( false, true );
+		CL_UIModule_Refresh( false, true );
 
-			if( scr_timegraph->integer ) {
-				SCR_DebugGraph( cls.frametime * 0.3f, 1, 1, 1 );
-			}
-
-			if( scr_debuggraph->integer || scr_timegraph->integer || scr_netgraph->integer ) {
-				SCR_DrawDebugGraph();
-			}
-
-			SCR_DrawConsole();
-			SCR_DrawNotify();
+		if( scr_timegraph->integer ) {
+			SCR_DebugGraph( cls.frametime * 0.3f, 1, 1, 1 );
 		}
 
-		RF_EndFrame();
+		if( scr_debuggraph->integer || scr_timegraph->integer || scr_netgraph->integer ) {
+			SCR_DrawDebugGraph();
+		}
+
+		SCR_DrawConsole();
+		SCR_DrawNotify();
 	}
+
+	RF_EndFrame();
 }

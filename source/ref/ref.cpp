@@ -921,8 +921,7 @@ static void R_SetupViewMatrices( void ) {
 		Matrix4_OrthogonalProjection( -rd->ortho_x, rd->ortho_x, -rd->ortho_y, rd->ortho_y,
 									  -rn.farClip, rn.farClip, rn.projectionMatrix );
 	} else {
-		Matrix4_PerspectiveProjection( rd->fov_x, rd->fov_y,
-									   Z_NEAR, rn.farClip, rf.cameraSeparation, rn.projectionMatrix );
+		Matrix4_PerspectiveProjection( rd->fov_x, rd->fov_y, Z_NEAR, rn.farClip, rn.projectionMatrix );
 	}
 
 	if( rd->rdflags & RDF_FLIPPED ) {
@@ -1285,10 +1284,6 @@ void R_DataSync( void ) {
 * R_SetSwapInterval
 */
 int R_SetSwapInterval( int swapInterval, int oldSwapInterval ) {
-	if( glConfig.stereoEnabled ) {
-		return oldSwapInterval;
-	}
-
 	if( swapInterval != oldSwapInterval ) {
 		GLimp_SetSwapInterval( swapInterval );
 	}
@@ -1516,38 +1511,23 @@ void R_RenderDebugSurface( const refdef_t *fd ) {
 /*
 * R_BeginFrame
 */
-void R_BeginFrame( float cameraSeparation, bool forceClear, int swapInterval ) {
+void R_BeginFrame( bool forceClear, int swapInterval ) {
 	int64_t time = Sys_Milliseconds();
 
 	GLimp_BeginFrame();
 
 	RB_BeginFrame();
 
-	if( cameraSeparation && ( !glConfig.stereoEnabled || !R_IsRenderingToScreen() ) ) {
-		cameraSeparation = 0;
-	}
-
-	if( rf.cameraSeparation != cameraSeparation ) {
-		rf.cameraSeparation = cameraSeparation;
-		if( cameraSeparation < 0 ) {
-			qglDrawBuffer( GL_BACK_LEFT );
-		} else if( cameraSeparation > 0 ) {
-			qglDrawBuffer( GL_BACK_RIGHT );
-		} else {
-			qglDrawBuffer( GL_BACK );
-		}
-	}
+	qglDrawBuffer( GL_BACK );
 
 	// draw buffer stuff
 	if( rf.newDrawBuffer ) {
 		rf.newDrawBuffer = false;
 
-		if( cameraSeparation == 0 || !glConfig.stereoEnabled ) {
-			if( Q_stricmp( rf.drawBuffer, "GL_FRONT" ) == 0 ) {
-				qglDrawBuffer( GL_FRONT );
-			} else {
-				qglDrawBuffer( GL_BACK );
-			}
+		if( Q_stricmp( rf.drawBuffer, "GL_FRONT" ) == 0 ) {
+			qglDrawBuffer( GL_FRONT );
+		} else {
+			qglDrawBuffer( GL_BACK );
 		}
 	}
 

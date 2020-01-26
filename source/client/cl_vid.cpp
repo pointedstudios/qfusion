@@ -197,13 +197,11 @@ static rserr_t VID_ChangeMode( void ) {
 	bool fs;
 	bool borderless;
 	rserr_t err;
-	bool stereo;
 
 	vid_fullscreen->modified = false;
 
 	disp_freq = vid_displayfrequency->integer;
 	borderless = vid_borderless->integer != 0;
-	stereo = Cvar_Value( "cl_stereo" ) != 0;
 	fs = vid_fullscreen->integer != 0;
 	if( borderless && fs ) {
 		x = 0;
@@ -223,7 +221,7 @@ static rserr_t VID_ChangeMode( void ) {
 		return rserr_restart_required;
 	}
 
-	err = RF_SetMode( x, y, w, h, disp_freq, fs, stereo, borderless );
+	err = RF_SetMode( x, y, w, h, disp_freq, fs, borderless );
 
 	if( err == rserr_ok ) {
 		// store fallback mode
@@ -252,7 +250,7 @@ static rserr_t VID_ChangeMode( void ) {
 			vid_fullscreen->modified = false;
 			fs = false;
 
-			err = RF_SetMode( x, y, w, h, disp_freq, false, stereo, borderless );
+			err = RF_SetMode( x, y, w, h, disp_freq, false, borderless );
 		}
 
 		if( err == rserr_invalid_mode ) {
@@ -264,7 +262,7 @@ static rserr_t VID_ChangeMode( void ) {
 			Cvar_ForceSet( vid_height->name, va( "%i", h ) );
 
 			// try setting it back to something safe
-			err = RF_SetMode( x, y, w, h, disp_freq, fs, stereo, borderless );
+			err = RF_SetMode( x, y, w, h, disp_freq, fs, borderless );
 			if( err == rserr_invalid_fullscreen ) {
 				Com_Printf( "VID_ChangeMode() - could not revert to safe fullscreen mode\n" );
 
@@ -272,7 +270,7 @@ static rserr_t VID_ChangeMode( void ) {
 				vid_fullscreen->modified = false;
 				fs = false;
 
-				err = RF_SetMode( x, y, w, h, disp_freq, false, stereo, borderless );
+				err = RF_SetMode( x, y, w, h, disp_freq, false, borderless );
 			}
 			if( err != rserr_ok ) {
 				Com_Printf( "VID_ChangeMode() - could not revert to safe mode\n" );

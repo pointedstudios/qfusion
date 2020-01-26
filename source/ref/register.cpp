@@ -129,7 +129,6 @@ cvar_t *r_usenotexture;
 
 cvar_t *r_maxglslbones;
 
-cvar_t *gl_drawbuffer;
 cvar_t *gl_driver;
 cvar_t *gl_cull;
 cvar_t *r_multithreading;
@@ -528,13 +527,6 @@ static void R_FinalizeGLExtensions( void ) {
 static void R_FillStartupBackgroundColor( float r, float g, float b ) {
 	qglClearColor( r, g, b, 1.0 );
 	GLimp_BeginFrame();
-	if( glConfig.stereoEnabled ) {
-		qglDrawBuffer( GL_BACK_LEFT );
-		qglClear( GL_COLOR_BUFFER_BIT );
-		qglDrawBuffer( GL_BACK_RIGHT );
-		qglClear( GL_COLOR_BUFFER_BIT );
-		qglDrawBuffer( GL_BACK );
-	}
 	qglClear( GL_COLOR_BUFFER_BIT );
 	qglFinish();
 	GLimp_EndFrame();
@@ -663,7 +655,6 @@ static void R_Register( const char *screenshotsPrefix ) {
 	r_showShaderCache = Cvar_Get( "r_showShaderCache", "1", CVAR_ARCHIVE );
 
 	gl_cull = Cvar_Get( "gl_cull", "1", 0 );
-	gl_drawbuffer = Cvar_Get( "gl_drawbuffer", "GL_BACK", 0 );
 
 	driver = QGL_GetDriverInfo();
 	if( driver && driver->dllcvarname ) {
@@ -936,13 +927,8 @@ static rserr_t R_PostInit( void ) {
 	return rserr_ok;
 }
 
-/*
-* R_SetMode
-*/
-rserr_t R_SetMode( int x, int y, int width, int height, int displayFrequency, bool fullScreen, bool stereo, bool borderless ) {
-	rserr_t err;
-
-	err = GLimp_SetMode( x, y, width, height, displayFrequency, fullScreen, stereo, borderless );
+rserr_t R_SetMode( int x, int y, int width, int height, int displayFrequency, bool fullScreen, bool borderless ) {
+	rserr_t err = GLimp_SetMode( x, y, width, height, displayFrequency, fullScreen, borderless );
 	if( err != rserr_ok ) {
 		Com_Printf( "Could not GLimp_SetMode()\n" );
 		return err;

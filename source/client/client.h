@@ -313,12 +313,6 @@ extern client_static_t cls;
 
 //=============================================================================
 
-//
-// cvars
-//
-extern cvar_t *cl_stereo_separation;
-extern cvar_t *cl_stereo;
-
 extern cvar_t *cl_shownet;
 
 extern cvar_t *cl_extrapolationTime;
@@ -399,7 +393,7 @@ void CL_GameModule_ConfigString( int number, const char *value );
 void CL_GameModule_EscapeKey( void );
 float CL_GameModule_GetSensitivityScale( float sens, float zoomSens );
 bool CL_GameModule_NewSnapshot( int pendingSnapshot );
-void CL_GameModule_RenderView( float stereo_separation );
+void CL_GameModule_RenderView();
 void CL_GameModule_GetEntitySpatilization( int entnum, vec3_t origin, vec3_t velocity );
 void CL_GameModule_InputFrame( int frameTime );
 void CL_GameModule_ClearInputState( void );

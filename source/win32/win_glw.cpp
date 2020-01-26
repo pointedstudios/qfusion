@@ -279,7 +279,7 @@ rserr_t GLimp_SetFullscreenMode( int displayFrequency, bool fullscreen ) {
 /*
 ** GLimp_SetMode
 */
-rserr_t GLimp_SetMode( int x, int y, int width, int height, int displayFrequency, bool fullscreen, bool stereo, bool borderless ) {
+rserr_t GLimp_SetMode( int x, int y, int width, int height, int displayFrequency, bool fullscreen, bool borderless ) {
 	const char *win_fs[] = { "W", "FS" };
 
 	Com_Printf( "Setting video mode:" );
@@ -307,7 +307,6 @@ rserr_t GLimp_SetMode( int x, int y, int width, int height, int displayFrequency
 
 	glConfig.width = width;
 	glConfig.height = height;
-	glConfig.stereoEnabled = stereo;
 	glConfig.borderless = borderless;
 
 	GLimp_SetFullscreenMode( displayFrequency, fullscreen );
@@ -505,15 +504,6 @@ static bool GLimp_InitGL( bool isInitialDummyContext ) {
 		iAttributes[0 * 2 + 1] = glConfig.stencilBits; // WGL_STENCIL_BITS_ARB
 	}
 
-    /*
-    ** set PFD_STEREO if necessary
-    */
-	if( glConfig.stereoEnabled ) {
-		Com_DPrintf( "...attempting to use stereo\n" );
-		pfd.dwFlags |= PFD_STEREO;
-		iAttributes[3 * 2 + 1] = GL_TRUE; // WGL_STEREO_ARB
-	}
-
 	/*
 	** Get a DC for the specified window
 	*/
@@ -547,14 +537,6 @@ static bool GLimp_InitGL( bool isInitialDummyContext ) {
 	DescribePixelFormat( glw_state.hDC, pixelformat, sizeof( pfd ), &pfd );
 
 	glConfig.stencilBits = pfd.cStencilBits;
-
-    /*
-    ** report if stereo is desired but unavailable
-    */
-	if( !( pfd.dwFlags & PFD_STEREO ) && glConfig.stereoEnabled ) {
-		Com_Printf( "...failed to select stereo pixel format\n" );
-		glConfig.stereoEnabled = false;
-	}
 
 	/*
 	** startup the OpenGL subsystem by creating a context and making

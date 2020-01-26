@@ -403,7 +403,6 @@ typedef struct {
 
 	int frameBufferWidth, frameBufferHeight;
 
-	float cameraSeparation;
 	int swapInterval;
 
 	int worldModelSequence;
@@ -693,12 +692,11 @@ void        R_FreeFile_( void *buffer, const char *filename, int fileline );
 #define     R_FreeFile( buffer ) R_FreeFile_( buffer,__FILE__,__LINE__ )
 
 bool        R_IsRenderingToScreen( void );
-void        R_BeginFrame( float cameraSeparation, bool forceClear, int swapInterval );
+void        R_BeginFrame( bool forceClear, int swapInterval );
 void        R_EndFrame( void );
 int         R_SetSwapInterval( int swapInterval, int oldSwapInterval );
 void        R_SetGamma( float gamma );
 void        R_SetWallFloorColors( const vec3_t wallColor, const vec3_t floorColor );
-void        R_SetDrawBuffer( const char *drawbuffer );
 void        R_Set2DMode( bool enable );
 void        R_RenderView( const refdef_t *fd );
 const msurface_t *R_GetDebugSurface( void );
@@ -822,7 +820,7 @@ rserr_t     R_Init( const char *applicationName, const char *screenshotPrefix, i
 void        R_BeginRegistration( void );
 void        R_EndRegistration( void );
 void        R_Shutdown( bool verbose );
-rserr_t     R_SetMode( int x, int y, int width, int height, int displayFrequency, bool fullScreen, bool stereo, bool borderless );
+rserr_t     R_SetMode( int x, int y, int width, int height, int displayFrequency, bool fullScreen, bool borderless );
 
 //
 // r_scene.c

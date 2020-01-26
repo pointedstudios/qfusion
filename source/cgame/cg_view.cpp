@@ -953,7 +953,7 @@ static void CG_SetupViewDef( cg_viewdef_t *view, int type ) {
 */
 #define WAVE_AMPLITUDE  0.015   // [0..1]
 #define WAVE_FREQUENCY  0.6     // [0..1]
-void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t serverTime, float stereo_separation, unsigned extrapolationTime ) {
+void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t serverTime, unsigned extrapolationTime ) {
 	refdef_t *rd = &cg.view.refdef;
 
 	// update time
@@ -1097,9 +1097,6 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 #ifndef PUBLIC_BUILD
 	CG_AddTest();
 #endif
-
-	// offset vieworg appropriately if we're doing stereo separation
-	VectorMA( cg.view.origin, stereo_separation, &cg.view.axis[AXIS_RIGHT], rd->vieworg );
 
 	AnglesToAxis( cg.view.angles, rd->viewaxis );
 
