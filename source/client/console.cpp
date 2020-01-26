@@ -1162,7 +1162,7 @@ static void Con_CompleteCommandLine() {
 	char stub[1] = { '\0' };
 	char *cmd = stub;
 	char *s;
-	int c, v, a, d, ca, i;
+	int c, v, a, ca, i;
 	int cmd_len;
 	char **list[6] = { 0, 0, 0, 0, 0, 0 };
 
@@ -1178,10 +1178,9 @@ static void Con_CompleteCommandLine() {
 	c = Cmd_CompleteCountPossible( s );
 	v = Cvar_CompleteCountPossible( s );
 	a = Cmd_CompleteAliasCountPossible( s );
-	d = Dynvar_CompleteCountPossible( s );
 	ca = 0;
 
-	if( !( c + v + a + d ) ) {
+	if( !( c + v + a ) ) {
 		// now see if there's any valid cmd in there, providing
 		// a list of matching arguments
 		list[4] = Cmd_CompleteBuildArgList( s );
@@ -1201,7 +1200,7 @@ static void Con_CompleteCommandLine() {
 		}
 	}
 
-	if( c + v + a + d + ca == 1 ) {
+	if( c + v + a + ca == 1 ) {
 		// find the one match to rule them all
 		if( c ) {
 			list[0] = Cmd_CompleteBuildList( s );
@@ -1209,8 +1208,6 @@ static void Con_CompleteCommandLine() {
 			list[0] = Cvar_CompleteBuildList( s );
 		} else if( a ) {
 			list[0] = Cmd_CompleteAliasBuildList( s );
-		} else if( d ) {
-			list[0] = (char **) Dynvar_CompleteBuildList( s );
 		} else {
 			list[0] = list[4], list[4] = NULL;
 		}
@@ -1227,9 +1224,6 @@ static void Con_CompleteCommandLine() {
 		}
 		if( a ) {
 			cmd = *( list[2] = Cmd_CompleteAliasBuildList( s ) );
-		}
-		if( d ) {
-			cmd = *( list[3] = (char **) Dynvar_CompleteBuildList( s ) );
 		}
 		if( ca ) {
 			s = strstr( s, " " ) + 1, cmd = *( list[4] ), i_start = 4;
@@ -1269,11 +1263,6 @@ static void Con_CompleteCommandLine() {
 			Con_DisplayList( list[2] );
 		}
 
-		if( d ) {
-			Com_Printf( S_COLOR_YELLOW "%i possible dynvar%s%s\n", d, ( d > 1 ) ? "s: " : ":", S_COLOR_WHITE );
-			Con_DisplayList( list[3] );
-		}
-
 		if( ca ) {
 			Com_Printf( S_COLOR_GREEN "%i possible argument%s%s\n", ca, ( ca > 1 ) ? "s: " : ":", S_COLOR_WHITE );
 			Con_DisplayList( list[4] );
@@ -1310,7 +1299,7 @@ static void Con_CompleteCommandLine() {
 		Q_strncpyz( key_lines[edit_line] + skip, cmd, sizeof( key_lines[edit_line] ) - ( 1 + skip ) );
 		key_linepos = std::min( (unsigned)( cmd_len + skip ), (unsigned)sizeof( key_lines[edit_line] ) - 1 );
 
-		if( c + v + a + d == 1 && key_linepos < sizeof( key_lines[edit_line] ) - 1 ) {
+		if( c + v + a == 1 && key_linepos < sizeof( key_lines[edit_line] ) - 1 ) {
 			key_lines[edit_line][key_linepos] = ' ';
 			key_linepos++;
 		}
@@ -2028,13 +2017,12 @@ static void Con_MessageCompletion( const char *partial, bool teamonly ) {
 			comp_len += 2;
 		}
 	} else {
-		int c, v, a, d, t;
+		int c, v, a, t;
 
 		c = Cmd_CompleteCountPossible( partial );
 		v = Cvar_CompleteCountPossible( partial );
 		a = Cmd_CompleteAliasCountPossible( partial );
-		d = Dynvar_CompleteCountPossible( partial );
-		t = c + v + a + d;
+		t = c + v + a;
 
 		if( t > 0 ) {
 			int i;
@@ -2049,9 +2037,6 @@ static void Con_MessageCompletion( const char *partial, bool teamonly ) {
 			}
 			if( a ) {
 				cmd = *( list[2] = Cmd_CompleteAliasBuildList( partial ) );
-			}
-			if( d ) {
-				cmd = *( list[3] = (char **) Dynvar_CompleteBuildList( partial ) );
 			}
 
 			if( t == 1 ) {
