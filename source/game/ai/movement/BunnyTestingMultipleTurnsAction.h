@@ -8,7 +8,11 @@ class BunnyTestingMultipleTurnsAction : public BunnyHopAction {
 	int attemptNum { 0 };
 	bool hasWalljumped { false };
 
-	enum { kMaxAttempts = 12 };
+	static constexpr const auto kMaxAngles = 6;
+	static constexpr const auto kAttemptsPerAngle = 4;
+	static constexpr const auto kMaxAttempts = kAttemptsPerAngle * kMaxAngles;
+
+	static const float kAngularSpeed[kMaxAngles];
 public:
 	explicit BunnyTestingMultipleTurnsAction( BotMovementModule *module_ )
 		: BunnyHopAction( module_, "BunnyTestingMultipleTurnsAction", COLOR_RGB( 255, 0, 0 ) ) {}

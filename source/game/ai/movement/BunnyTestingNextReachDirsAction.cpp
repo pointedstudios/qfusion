@@ -7,7 +7,7 @@ BunnyTestingNextReachDirsAction::BunnyTestingNextReachDirsAction( BotMovementMod
 	: BunnyTestingSavedLookDirsAction( module_, NAME, COLOR_RGB( 0, 192, 0 ) ) {
 	// The constructor cannot be defined in the header due to this bot member access
 	suggestedAction = &module->bunnyToBestVisibleReachAction;
-	maxSuggestedLookDirs = MAX_SUGGESTED_LOOK_DIRS;
+	maxSuggestedLookDirs = kMaxSuggestedLookDirs;
 }
 
 void BunnyTestingNextReachDirsAction::BeforePlanning() {
@@ -22,7 +22,7 @@ void BunnyTestingNextReachDirsAction::BeforePlanning() {
 		return;
 	}
 
-	maxSuggestedLookDirs = MAX_SUGGESTED_LOOK_DIRS;
+	maxSuggestedLookDirs = kMaxSuggestedLookDirs;
 	// Use the maximum possible number of suggested dirs for hard bots.
 	if( skill >= 0.66f ) {
 		return;
@@ -45,8 +45,8 @@ void BunnyTestingNextReachDirsAction::BeforePlanning() {
 	// Grow quadratic starting from a weakest mid-skill bot
 	float skillFrac = ( skill - 0.33f ) / ( 0.66f - 0.33f );
 	Assert( skillFrac > 0.0f && skillFrac < 1.0f );
-	maxSuggestedLookDirs = (unsigned)( 2 + ( skillFrac * skillFrac ) * MAX_SUGGESTED_LOOK_DIRS );
-	maxSuggestedLookDirs = std::min( maxSuggestedLookDirs, (unsigned)MAX_SUGGESTED_LOOK_DIRS );
+	maxSuggestedLookDirs = (unsigned)( 2 + ( skillFrac * skillFrac ) * kMaxSuggestedLookDirs );
+	maxSuggestedLookDirs = std::min( maxSuggestedLookDirs, (unsigned)kMaxSuggestedLookDirs );
 }
 
 class NextReachDirsCollector final : public ReachChainWalker {
@@ -107,8 +107,8 @@ void BunnyTestingNextReachDirsAction::SaveSuggestedLookDirs( Context *context ) 
 		return;
 	}
 
-	AreaAndScore candidates[MAX_SUGGESTED_LOOK_DIRS];
-	NextReachDirsCollector collector( bot, context, candidates, MAX_SUGGESTED_LOOK_DIRS );
+	AreaAndScore candidates[kMaxSuggestedLookDirs];
+	NextReachDirsCollector collector( bot, context, candidates, kMaxSuggestedLookDirs );
 	if( !collector.Exec() ) {
 		Debug( "Can't find areas for straightening a look dir\n" );
 	}

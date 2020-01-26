@@ -25,7 +25,7 @@ public:
 
 class BunnyTestingSavedLookDirsAction : public BunnyTestingMultipleLookDirsAction {
 protected:
-	static constexpr auto MAX_SUGGESTED_LOOK_DIRS = 32;
+	static constexpr auto kMaxSuggestedLookDirs = 28;
 
 	struct SuggestedDir {
 		Vec3 dir;
@@ -39,9 +39,9 @@ protected:
 			: dir( dir_ ), area( area_ ), pathPenalty( pathPenalty_ ) {}
 	};
 
-	StaticVector<SuggestedDir, MAX_SUGGESTED_LOOK_DIRS> suggestedLookDirs;
+	StaticVector<SuggestedDir, kMaxSuggestedLookDirs> suggestedLookDirs;
 
-	unsigned maxSuggestedLookDirs { MAX_SUGGESTED_LOOK_DIRS };
+	unsigned maxSuggestedLookDirs {kMaxSuggestedLookDirs };
 	unsigned currSuggestedLookDirNum { 0 };
 
 	void BeforePlanning() override {

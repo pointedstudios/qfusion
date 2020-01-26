@@ -116,7 +116,7 @@ static bool hasSavedASimilarDir( const Container &__restrict savedDirs, const Ve
 }
 
 class DirRotatorsCache {
-	enum { kMaxRotations = 20 };
+	enum { kMaxRotations = 16 };
 
 public:
 	struct Rotator {
@@ -143,7 +143,7 @@ public:
 
 		int index = 0;
 		// The step is not monotonic and is not uniform intentionally
-		const float angles[kMaxRotations / 2] = { 6.0f, 3.0f, 12.0f, 9.0f, 18.0f, 15.0f, 24.0f, 30.0f, 45.0f, 70.0f };
+		const float angles[kMaxRotations / 2] = { 8.0f, 4.0f, 12.0f, 19.0f, 24.0f, 33.0f, 45.0f, 70.0f };
 		for( float angle : angles ) {
 		    unsigned penalty = 0;
 		    if( angle > 20.0f ) {

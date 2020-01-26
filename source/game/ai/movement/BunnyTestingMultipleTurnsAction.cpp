@@ -2,6 +2,10 @@
 #include "MovementLocal.h"
 #include "MovementModule.h"
 
+const float BunnyTestingMultipleTurnsAction::kAngularSpeed[kMaxAngles] = {
+	45.0f, 60.0f, 90.0f, 180.0f, 270.0f, 360.0f
+};
+
 void BunnyTestingMultipleTurnsAction::PlanPredictionStep( MovementPredictionContext *context ) {
 	// This action is the first applied action as it is specialized
 	// and falls back to other bunnying actions if it cannot be applied.
@@ -28,10 +32,27 @@ void BunnyTestingMultipleTurnsAction::PlanPredictionStep( MovementPredictionCont
 					hasWalljumped = true;
 				}
 			}
-			const float rotationSpeed[kMaxAttempts / 2] = { 30.0f, 45.0f, 60.0f, 90.0f, 135.0f, 180.0f };
-			const float seconds = 0.001f * context->totalMillisAhead;
-			const float sign = attemptNum % 2 ? -1.0f : +1.0f;
-			float angle = ( sign * rotationSpeed[attemptNum / 2] ) * seconds;
+
+			const float totalSecondsAhead = 0.001f * context->totalMillisAhead;
+			const int angleNum = attemptNum / kAttemptsPerAngle;
+			const int attemptDesc = attemptNum % kAttemptsPerAngle;
+
+			float timeLike = totalSecondsAhead;
+			// There are 4 attempts per every angular speed value.
+			// Every attempt is controlled by attemptDesc value.
+			// An oddity of the value controls resulting angle sign.
+			// Values of attemptDesc that are greater than 2 produce non-linear requested angle changes.
+			// Note that a resulting bot turn is never linear due to view control lag, finite view speed, etc.
+			static_assert( kAttemptsPerAngle == 4 );
+			const float sign = attemptDesc % 2 ? +1.0f : -1.0f;
+			if( attemptDesc >= 2 ) {
+				// Shorten the time scale for this transform
+				timeLike *= 2.0f;
+				timeLike = timeLike < 1.0f ? Q_Sqrt( Q_Sqrt( timeLike ) ) : 1.0f;
+				timeLike *= 0.5f;
+			}
+
+			const float angle = ( sign * kAngularSpeed[angleNum] ) * timeLike;
 			mat3_t m;
 			Matrix3_Rotate( axis_identity, angle, 0.0f, 0.0f, 1.0f, m );
 			Matrix3_TransformVector( m, initialDir.Data(), lookDir );
