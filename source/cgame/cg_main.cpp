@@ -89,7 +89,6 @@ cvar_t *cg_movementStyle;
 cvar_t *cg_noAutohop;
 cvar_t *cg_predictLaserBeam;
 cvar_t *cg_voiceChats;
-cvar_t *cg_shadows;
 cvar_t *cg_showSelfShadow;
 cvar_t *cg_laserBeamSubdivisions;
 cvar_t *cg_projectileAntilagOffset;
@@ -662,7 +661,6 @@ static void CG_RegisterVariables( void ) {
 	cg_weaponAutoSwitch =   Cvar_Get( "cg_weaponAutoSwitch", "2", CVAR_ARCHIVE );
 
 	cg_voiceChats =     Cvar_Get( "cg_voiceChats", "1", CVAR_ARCHIVE );
-	cg_shadows =        Cvar_Get( "cg_shadows", "1", CVAR_ARCHIVE );
 
 	cg_laserBeamSubdivisions = Cvar_Get( "cg_laserBeamSubdivisions", "10", CVAR_ARCHIVE );
 	cg_projectileAntilagOffset = Cvar_Get( "cg_projectileAntilagOffset", "1.0", CVAR_ARCHIVE );

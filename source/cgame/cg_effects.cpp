@@ -106,237 +106,6 @@ void CG_AddLightStyles( void ) {
 /*
 ==============================================================
 
-BLOB SHADOWS MANAGEMENT
-
-==============================================================
-*/
-#define MAX_CGSHADEBOXES 128
-
-#define MAX_BLOBSHADOW_VERTS 128
-#define MAX_BLOBSHADOW_FRAGMENTS 64
-
-typedef struct
-{
-	vec3_t origin;
-	vec3_t mins, maxs;
-	int entNum;
-	struct shader_s *shader;
-
-	vec4_t verts[MAX_BLOBSHADOW_VERTS];
-	vec4_t norms[MAX_BLOBSHADOW_VERTS];
-	vec2_t stcoords[MAX_BLOBSHADOW_VERTS];
-	byte_vec4_t colors[MAX_BLOBSHADOW_VERTS];
-} cgshadebox_t;
-
-cgshadebox_t cg_shadeBoxes[MAX_CGSHADEBOXES];
-static int cg_numShadeBoxes = 0;   // cleared each frame
-
-/*
-* CG_AddBlobShadow
-*
-* Ok, to not use decals space we need these arrays to store the
-* polygons info. We do not need the linked list nor registration
-*/
-static void CG_AddBlobShadow( vec3_t origin, vec3_t dir, float orient, float radius,
-							  float r, float g, float b, float a, cgshadebox_t *shadeBox ) {
-	int i, j, c, nverts;
-	vec3_t axis[3];
-	byte_vec4_t color;
-	fragment_t *fr, fragments[MAX_BLOBSHADOW_FRAGMENTS];
-	int numfragments;
-	poly_t poly;
-	vec4_t verts[MAX_BLOBSHADOW_VERTS];
-
-	if( radius <= 0 || VectorCompare( dir, vec3_origin ) ) {
-		return; // invalid
-
-	}
-
-	// calculate orientation matrix
-	VectorNormalize2( dir, axis[0] );
-	PerpendicularVector( axis[1], axis[0] );
-	RotatePointAroundVector( axis[2], axis[0], axis[1], orient );
-	CrossProduct( axis[0], axis[2], axis[1] );
-
-	numfragments = R_GetClippedFragments( origin, radius, axis, // clip it
-											   MAX_BLOBSHADOW_VERTS, verts, MAX_BLOBSHADOW_FRAGMENTS, fragments );
-
-	// no valid fragments
-	if( !numfragments ) {
-		return;
-	}
-
-	// clamp and scale colors
-	if( r < 0 ) {
-		r = 0;
-	} else if( r > 1 ) {
-		r = 255;
-	} else {
-		r *= 255;
-	}
-	if( g < 0 ) {
-		g = 0;
-	} else if( g > 1 ) {
-		g = 255;
-	} else {
-		g *= 255;
-	}
-	if( b < 0 ) {
-		b = 0;
-	} else if( b > 1 ) {
-		b = 255;
-	} else {
-		b *= 255;
-	}
-	if( a < 0 ) {
-		a = 0;
-	} else if( a > 1 ) {
-		a = 255;
-	} else {
-		a *= 255;
-	}
-
-	color[0] = ( uint8_t )( r );
-	color[1] = ( uint8_t )( g );
-	color[2] = ( uint8_t )( b );
-	color[3] = ( uint8_t )( a );
-	c = *( int * )color;
-
-	radius = 0.5f / radius;
-	VectorScale( axis[1], radius, axis[1] );
-	VectorScale( axis[2], radius, axis[2] );
-
-	memset( &poly, 0, sizeof( poly ) );
-
-	for( i = 0, nverts = 0, fr = fragments; i < numfragments; i++, fr++ ) {
-		if( nverts + fr->numverts > MAX_BLOBSHADOW_VERTS ) {
-			return;
-		}
-		if( fr->numverts <= 0 ) {
-			continue;
-		}
-
-		poly.shader = shadeBox->shader;
-		poly.verts = &shadeBox->verts[nverts];
-		poly.normals = &shadeBox->norms[nverts];
-		poly.stcoords = &shadeBox->stcoords[nverts];
-		poly.colors = &shadeBox->colors[nverts];
-		poly.numverts = fr->numverts;
-		poly.fognum = fr->fognum;
-		nverts += fr->numverts;
-
-		for( j = 0; j < fr->numverts; j++ ) {
-			vec3_t v;
-
-			Vector4Copy( verts[fr->firstvert + j], poly.verts[j] );
-			VectorCopy( axis[0], poly.normals[j] ); poly.normals[j][3] = 0;
-			VectorSubtract( poly.verts[j], origin, v );
-			poly.stcoords[j][0] = DotProduct( v, axis[1] ) + 0.5f;
-			poly.stcoords[j][1] = DotProduct( v, axis[2] ) + 0.5f;
-			*( int * )poly.colors[j] = c;
-		}
-
-		RF_AddPolyToScene( &poly );
-	}
-}
-
-/*
-* CG_ClearShadeBoxes
-*/
-static void CG_ClearShadeBoxes( void ) {
-	cg_numShadeBoxes = 0;
-	memset( cg_shadeBoxes, 0, sizeof( cg_shadeBoxes ) );
-}
-
-/*
-* CG_AllocShadeBox
-*/
-void CG_AllocShadeBox( int entNum, const vec3_t origin, const vec3_t mins, const vec3_t maxs, struct shader_s *shader ) {
-	float dist;
-	vec3_t dir;
-	cgshadebox_t *sb;
-
-	if( !cg_shadows->integer ) {
-		return;
-	}
-	if( cg_numShadeBoxes == MAX_CGSHADEBOXES ) {
-		return;
-	}
-
-	// Kill if behind the view or if too far away
-	VectorSubtract( origin, cg.view.origin, dir );
-	dist = VectorNormalize2( dir, dir ) * cg.view.fracDistFOV;
-	if( dist > 1024 ) {
-		return;
-	}
-
-	if( DotProduct( dir, &cg.view.axis[AXIS_FORWARD] ) < 0 ) {
-		return;
-	}
-
-	sb = &cg_shadeBoxes[cg_numShadeBoxes++];
-	VectorCopy( origin, sb->origin );
-	VectorCopy( mins, sb->mins );
-	VectorCopy( maxs, sb->maxs );
-	sb->entNum = entNum;
-	sb->shader = shader;
-	if( !sb->shader ) {
-		sb->shader = CG_MediaShader( cgs.media.shaderPlayerShadow );
-	}
-}
-
-/*
-* CG_AddShadeBoxes - Which in reality means CalcBlobShadows
-* Note:	This function should be called after every dynamic light has been added to the rendering list.
-* ShadeBoxes exist for the solely reason of waiting until all dlights are sent before doing the shadows.
-*/
-#define SHADOW_PROJECTION_DISTANCE 96
-#define SHADOW_MAX_SIZE 100
-#define SHADOW_MIN_SIZE 24
-
-void CG_AddShadeBoxes( void ) {
-	// ok, what we have to do here is finding the light direction of each of the shadeboxes origins
-	int i;
-	cgshadebox_t *sb;
-	vec3_t lightdir, end, sborigin;
-	trace_t trace;
-
-	if( !cg_shadows->integer ) {
-		return;
-	}
-
-	for( i = 0, sb = cg_shadeBoxes; i < cg_numShadeBoxes; i++, sb++ ) {
-		VectorClear( lightdir );
-		RF_LightForOrigin( sb->origin, lightdir, NULL, NULL, RadiusFromBounds( sb->mins, sb->maxs ) );
-
-		// move the point we will project close to the bottom of the bbox (so shadow doesn't dance much to the sides)
-		VectorSet( sborigin, sb->origin[0], sb->origin[1], sb->origin[2] + sb->mins[2] + 8 );
-		VectorMA( sborigin, -SHADOW_PROJECTION_DISTANCE, lightdir, end );
-
-		//CG_DrawTestLine( sb->origin, end ); // lightdir testline
-		CG_Trace( &trace, sborigin, vec3_origin, vec3_origin, end, sb->entNum, MASK_OPAQUE );
-		if( trace.fraction < 1.0f ) { // we have a shadow
-			float blobradius;
-			float alpha, maxalpha = 0.95f;
-			vec3_t shangles;
-
-			VecToAngles( lightdir, shangles );
-			blobradius = SHADOW_MIN_SIZE + trace.fraction * ( SHADOW_MAX_SIZE - SHADOW_MIN_SIZE );
-
-			alpha = ( 1.0f - trace.fraction ) * maxalpha;
-
-			CG_AddBlobShadow( trace.endpos, trace.plane.normal, shangles[YAW], blobradius,
-							  1, 1, 1, alpha, sb );
-		}
-	}
-
-	// clean up the polygons list from old frames
-	cg_numShadeBoxes = 0;
-}
-
-/*
-==============================================================
-
 TEMPORARY (ONE-FRAME) DECALS
 
 ==============================================================
@@ -366,7 +135,7 @@ void CG_AddFragmentedDecal( vec3_t origin, vec3_t dir, float orient, float radiu
 	fragment_t *fr, fragments[MAX_TEMPDECAL_FRAGMENTS];
 	int numfragments;
 	poly_t poly;
-	vec4_t verts[MAX_BLOBSHADOW_VERTS];
+	vec4_t verts[MAX_TEMPDECAL_VERTS];
 	static vec4_t t_verts[MAX_TEMPDECAL_VERTS * MAX_TEMPDECALS];
 	static vec4_t t_norms[MAX_TEMPDECAL_VERTS * MAX_TEMPDECALS];
 	static vec2_t t_stcoords[MAX_TEMPDECAL_VERTS * MAX_TEMPDECALS];
@@ -384,7 +153,7 @@ void CG_AddFragmentedDecal( vec3_t origin, vec3_t dir, float orient, float radiu
 	CrossProduct( axis[0], axis[2], axis[1] );
 
 	numfragments = R_GetClippedFragments( origin, radius, axis, // clip it
-											   MAX_BLOBSHADOW_VERTS, verts, MAX_TEMPDECAL_FRAGMENTS, fragments );
+											   MAX_TEMPDECAL_VERTS, verts, MAX_TEMPDECAL_FRAGMENTS, fragments );
 
 	// no valid fragments
 	if( !numfragments ) {
@@ -1015,5 +784,4 @@ void CG_AddParticles( void ) {
 void CG_ClearEffects( void ) {
 	CG_ClearFragmentedDecals();
 	CG_ClearParticles();
-	CG_ClearShadeBoxes();
 }

@@ -823,14 +823,6 @@ static void CG_AddGenericEnt( centity_t *cent ) {
 			cent->ent.shaderRGBA[3] = 255;
 		}
 
-		// add shadows for items (do it before offseting for weapons)
-		if( !( cent->renderfx & RF_NOSHADOW ) && cg_shadows->integer ) {
-			CG_AllocShadeBox( cent->current.number, cent->ent.origin, item_box_mins, item_box_maxs, NULL );
-			cent->ent.renderfx |= RF_NOSHADOW;
-		} else {
-			cent->ent.renderfx |= RF_NOSHADOW;
-		}
-
 		cent->ent.renderfx |= RF_MINLIGHT;
 
 		// offset weapon items by their special tag

@@ -1090,7 +1090,6 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 	CG_AddViewWeapon( &cg.weapon );
 	CG_AddLocalEntities();
 	CG_AddParticles();
-	CG_AddShadeBoxes();
 	CG_AddDecals();
 	CG_AddPolys();
 	CG_AddLightStyles();
