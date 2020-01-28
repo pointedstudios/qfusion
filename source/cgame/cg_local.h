@@ -743,7 +743,7 @@ extern cvar_t *cg_showChasers;
 void CG_ScreenInit( void );
 void CG_ScreenShutdown( void );
 void CG_Draw2D( void );
-void CG_DrawHUD( bool touch );
+void CG_DrawHUD();
 void CG_CalcVrect( void );
 void CG_TileClear( void );
 void CG_DrawLoading( void );
@@ -784,42 +784,6 @@ void CG_RefreshQuickMenu( void );
  */
 void CG_ShowQuickMenu( int state );
 
-/**
- * Touch area ID namespaces.
- */
-enum {
-	TOUCHAREA_NONE,
-	TOUCHAREA_HUD
-	// next would be 0x101, 0x201... until 0xf01
-};
-
-#define TOUCHAREA_SUB_SHIFT 16
-#define TOUCHAREA_MASK ( ( 1 << TOUCHAREA_SUB_SHIFT ) - 1 )
-
-typedef struct {
-	bool down; // is the finger currently down?
-	int x, y; // current x and y of the touch
-	int64_t time; // system time when pressed
-	int area; // hud area unique id (TOUCHAREA_NONE = not caught by hud)
-	bool area_valid; // was the area of this touch checked this frame, if not, the area doesn't exist anymore
-	void ( *upfunc )( int id, int64_t time ); // function to call when the finger is released, time is 0 if cancelled
-} cg_touch_t;
-
-extern cg_touch_t cg_touches[];
-
-int CG_TouchArea( int area, int x, int y, int w, int h, void ( *upfunc )( int id, int64_t time ) );
-void CG_TouchFrame( void );
-void CG_CancelTouches( void );
-
-enum {
-	TOUCHPAD_MOVE,
-	TOUCHPAD_VIEW,
-
-	TOUCHPAD_COUNT
-};
-
-void CG_SetTouchpad( int padID, int touchID );
-
 //
 // cg_hud.c
 //
@@ -827,16 +791,11 @@ extern cvar_t *cg_showminimap;
 extern cvar_t *cg_showitemtimers;
 extern cvar_t *cg_placebo;
 extern cvar_t *cg_strafeHUD;
-extern cvar_t *cg_touch_flip;
-extern cvar_t *cg_touch_scale;
-extern cvar_t *cg_touch_showMoveDir;
-extern cvar_t *cg_touch_zoomThres;
-extern cvar_t *cg_touch_zoomTime;
 
 void CG_SC_ResetObituaries( void );
 void CG_SC_Obituary( void );
 void Cmd_CG_PrintHudHelp_f( void );
-void CG_ExecuteLayoutProgram( struct cg_layoutnode_s *rootnode, bool touch );
+void CG_ExecuteLayoutProgram( struct cg_layoutnode_s *rootnode );
 void CG_GetHUDTouchButtons( int *buttons, int *upmove );
 void CG_UpdateHUDPostDraw( void );
 void CG_UpdateHUDPostTouch( void );

@@ -391,18 +391,14 @@ void CL_GameModule_Reset( void );
 void CL_GameModule_Shutdown( void );
 void CL_GameModule_ConfigString( int number, const char *value );
 void CL_GameModule_EscapeKey( void );
-float CL_GameModule_GetSensitivityScale( float sens, float zoomSens );
 bool CL_GameModule_NewSnapshot( int pendingSnapshot );
 void CL_GameModule_RenderView();
-void CL_GameModule_GetEntitySpatilization( int entnum, vec3_t origin, vec3_t velocity );
 void CL_GameModule_InputFrame( int frameTime );
 void CL_GameModule_ClearInputState( void );
 unsigned CL_GameModule_GetButtonBits( void );
 void CL_GameModule_AddViewAngles( vec3_t viewAngles );
 void CL_GameModule_AddMovement( vec3_t movement );
 void CL_GameModule_MouseMove( int dx, int dy );
-void CL_GameModule_TouchEvent( int id, touchevent_t type, int x, int y, int64_t time );
-bool CL_GameModule_IsTouchDown( int id );
 
 //
 // cl_sound.c
@@ -410,24 +406,6 @@ bool CL_GameModule_IsTouchDown( int id );
 void CL_SoundModule_Init( bool verbose );
 void CL_SoundModule_Shutdown( bool verbose );
 void CL_SoundModule_StopAllSounds( bool clear, bool stopMusic );
-void CL_SoundModule_SetEntitySpatilization( int entNum, vec3_t origin, vec3_t velocity );
-struct sfx_s *CL_SoundModule_RegisterSound( const char *sample );
-void CL_SoundModule_StartFixedSound( struct sfx_s *sfx, const vec3_t origin, int channel, float fvol, float attenuation );
-void CL_SoundModule_StartRelativeSound( struct sfx_s *sfx, int entnum, int channel, float fvol, float attenuation );
-void CL_SoundModule_StartGlobalSound( struct sfx_s *sfx, int channel, float fvol );
-void CL_SoundModule_StartLocalSoundByName( const char *s, float fvol );
-void CL_SoundModule_StartLocalSound( struct sfx_s *sfx, float fvol );
-void CL_SoundModule_AddLoopSound( struct sfx_s *sfx, int entnum, float fvol, float attenuation );
-void CL_SoundModule_RawSamples( unsigned int samples, unsigned int rate,
-								unsigned short width, unsigned short channels, const uint8_t *data, bool music );
-void CL_SoundModule_PositionedRawSamples( int entnum, float fvol, float attenuation,
-										  unsigned int samples, unsigned int rate,
-										  unsigned short width, unsigned short channels, const uint8_t *data );
-unsigned int CL_SoundModule_GetRawSamplesLength( void );
-unsigned int CL_SoundModule_GetPositionedRawSamplesLength( int entnum );
-void CL_SoundModule_StartBackgroundTrack( const char *intro, const char *loop, int mode );
-void CL_SoundModule_StopBackgroundTrack( void );
-void CL_SoundModule_LockBackgroundTrack( bool lock );
 
 //
 // cl_ui.c
@@ -440,22 +418,13 @@ void CL_UIModule_Keyup( int key );
 void CL_UIModule_KeydownQuick( int key );
 void CL_UIModule_KeyupQuick( int key );
 void CL_UIModule_CharEvent( wchar_t key );
-bool CL_UIModule_TouchEvent( int id, touchevent_t type, int x, int y );
-bool CL_UIModule_TouchEventQuick( int id, touchevent_t type, int x, int y );
-bool CL_UIModule_IsTouchDown( int id );
-bool CL_UIModule_IsTouchDownQuick( int id );
-void CL_UIModule_CancelTouches( void );
 void CL_UIModule_Refresh( bool backGround, bool showCursor );
 void CL_UIModule_UpdateConnectScreen( bool backGround );
 void CL_UIModule_ForceMenuOn( void );
 void CL_UIModule_ForceMenuOff( void );
 void CL_UIModule_ShowQuickMenu( bool show );
 bool CL_UIModule_HaveQuickMenu( void );
-void CL_UIModule_AddToServerList( const char *adr, const char *info );
 void CL_UIModule_MouseMove( int frameTime, int dx, int dy );
-void CL_UIModule_MouseSet( int mx, int my, bool showCursor );
-
-void CL_ParseGetServersResponse( const socket_t *socket, const netadr_t *address, msg_t *msg, bool extended );
 
 //
 // cl_input.c
@@ -464,14 +433,6 @@ void CL_InitInput( void );
 void CL_ShutdownInput( void );
 void CL_UserInputFrame( int realMsec );
 void CL_WriteUcmdsToMessage( msg_t *msg );
-
-/**
-* Mouse input for systems with basic mouse support (without centering
-* and possibly without toggleable cursor).
-*/
-void CL_MouseSet( int mx, int my, bool showCursor );
-
-void CL_TouchEvent( int id, touchevent_t type, int x, int y, int64_t time );
 
 /**
  * Resets the input state to the same as when no input is done,

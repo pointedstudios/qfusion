@@ -1744,7 +1744,7 @@ void CL_SetClientState( int state ) {
 			cls.cgameActive = false;
 			Con_Close();
 			CL_UIModule_ForceMenuOff();
-			CL_SoundModule_StopBackgroundTrack();
+			SoundSystem::Instance()->StopBackgroundTrack();
 			SoundSystem::Instance()->Clear();
 			CL_SetKeyDest( key_game );
 			//SCR_UpdateScreen();

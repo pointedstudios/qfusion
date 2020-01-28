@@ -743,12 +743,7 @@ static void Con_DrawInput( int vislines ) {
 * Returns the prompt for the chat input
 */
 static const char *Con_ChatPrompt( void ) {
-	if( chat_team || ctrl_is_down ) {
-		return "say (to team):";
-	} else if( IN_SupportedDevices() & IN_DEVICE_TOUCHSCREEN ) {
-		return "say (to all):";
-	}
-	return "say:";
+	return ( chat_team || ctrl_is_down ) ? "say (to team):" : "say:";
 }
 
 /*

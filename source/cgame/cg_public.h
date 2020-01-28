@@ -92,8 +92,5 @@ unsigned CG_GetButtonBits();
 void CG_AddViewAngles( vec3_t viewAngles );
 void CG_AddMovement( vec3_t movement );
 void CG_MouseMove( int mx, int my );
-void CG_GetTouchMovement( vec3_t movement );
-void CG_TouchEvent( int id, touchevent_t type, int x, int y, int64_t time );
-bool CG_IsTouchDown( int id );
 
 #endif

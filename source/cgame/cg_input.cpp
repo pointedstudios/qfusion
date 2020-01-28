@@ -577,304 +577,6 @@ static void CG_AddGamepadMovement( vec3_t movement ) {
 /*
 ===============================================================================
 
-TOUCH INPUT
-
-===============================================================================
-*/
-
-cg_touch_t cg_touches[CG_MAX_TOUCHES];
-
-typedef struct {
-	int touch;
-	float x, y;
-} cg_touchpad_t;
-
-static cg_touchpad_t cg_touchpads[TOUCHPAD_COUNT];
-
-static cvar_t *cg_touch_moveThres;
-static cvar_t *cg_touch_strafeThres;
-static cvar_t *cg_touch_lookThres;
-static cvar_t *cg_touch_lookSens;
-static cvar_t *cg_touch_lookInvert;
-static cvar_t *cg_touch_lookDecel;
-
-/*
-* CG_TouchArea
-*
-* Touches a rectangle. Returns touch id if it's a new touch.
-*/
-int CG_TouchArea( int area, int x, int y, int w, int h, void ( *upfunc )( int id, int64_t time ) ) {
-	if( ( w <= 0 ) || ( h <= 0 ) ) {
-		return -1;
-	}
-
-	int i;
-	int x2 = x + w, y2 = y + h;
-
-	// first check if already touched
-	for( i = 0; i < CG_MAX_TOUCHES; ++i ) {
-		cg_touch_t &touch = cg_touches[i];
-
-		if( touch.down && ( ( touch.area & TOUCHAREA_MASK ) == ( area & TOUCHAREA_MASK ) ) ) {
-			touch.area_valid = true;
-			if( ( ( touch.area >> TOUCHAREA_SUB_SHIFT ) != ( area >> TOUCHAREA_SUB_SHIFT ) ) &&
-				( touch.x >= x ) && ( touch.y >= y ) && ( touch.x < x2 ) && ( touch.y < y2 ) ) {
-				if( touch.upfunc ) {
-					touch.upfunc( i, 0 );
-				}
-				touch.area = area;
-				return i;
-			}
-			return -1;
-		}
-	}
-
-	// now add a new touch
-	for( i = 0; i < CG_MAX_TOUCHES; ++i ) {
-		cg_touch_t &touch = cg_touches[i];
-
-		if( touch.down && ( touch.area == TOUCHAREA_NONE ) &&
-			( touch.x >= x ) && ( touch.y >= y ) && ( touch.x < x2 ) && ( touch.y < y2 ) ) {
-			touch.area = area;
-			touch.area_valid = true;
-			touch.upfunc = upfunc;
-			return i;
-		}
-	}
-
-	return -1;
-}
-
-/*
-* CG_TouchEvent
-*/
-void CG_TouchEvent( int id, touchevent_t type, int x, int y, int64_t time ) {
-	if( id < 0 || id >= CG_MAX_TOUCHES ) {
-		return;
-	}
-
-	cg_touch_t &touch = cg_touches[id];
-	touch.x = x;
-	touch.y = y;
-
-	switch( type ) {
-	case TOUCH_DOWN:
-	case TOUCH_MOVE:
-		if( !touch.down ) {
-			touch.down = true;
-			touch.time = time;
-			touch.area = TOUCHAREA_NONE;
-		}
-		break;
-
-	case TOUCH_UP:
-		if( touch.down ) {
-			touch.down = false;
-			if( ( touch.area != TOUCHAREA_NONE ) && touch.upfunc ) {
-				touch.upfunc( id, time );
-			}
-		}
-		break;
-	}
-}
-
-/*
-* CG_IsTouchDown
-*/
-bool CG_IsTouchDown( int id ) {
-	if( id < 0 || id >= CG_MAX_TOUCHES ) {
-		return false;
-	}
-
-	return cg_touches[id].down;
-}
-
-/*
-* CG_TouchFrame
-*/
-void CG_TouchFrame( void ) {
-	int i;
-	bool touching = false;
-
-	cg_touchpad_t &viewpad = cg_touchpads[TOUCHPAD_VIEW];
-	if( viewpad.touch >= 0 ) {
-		if( cg_touch_lookDecel->modified ) {
-			if( cg_touch_lookDecel->value < 0.0f ) {
-				Cvar_Set( cg_touch_lookDecel->name, cg_touch_lookDecel->dvalue );
-			}
-			cg_touch_lookDecel->modified = false;
-		}
-
-		cg_touch_t &touch = cg_touches[viewpad.touch];
-
-		float decel = cg_touch_lookDecel->value * ( float )cg_inputFrameTime * 0.001f;
-		float xdist = ( float )touch.x - viewpad.x;
-		float ydist = ( float )touch.y - viewpad.y;
-		viewpad.x += xdist * decel;
-		viewpad.y += ydist * decel;
-
-		// Check if decelerated too much (to the opposite direction)
-		if( ( ( ( float )touch.x - viewpad.x ) * xdist ) < 0.0f ) {
-			viewpad.x = touch.x;
-		}
-		if( ( ( ( float )touch.y - viewpad.y ) * ydist ) < 0.0f ) {
-			viewpad.y = touch.y;
-		}
-	}
-
-	for( i = 0; i < CG_MAX_TOUCHES; ++i ) {
-		cg_touches[i].area_valid = false;
-		if( cg_touches[i].down ) {
-			touching = true;
-		}
-	}
-
-	if( touching ) {
-		CG_DrawHUD( true ); // FIXME
-
-		// cancel non-existent areas
-		for( i = 0; i < CG_MAX_TOUCHES; ++i ) {
-			cg_touch_t &touch = cg_touches[i];
-			if( touch.down ) {
-				if( ( touch.area != TOUCHAREA_NONE ) && !touch.area_valid ) {
-					if( touch.upfunc ) {
-						touch.upfunc( i, 0 );
-					}
-					touch.area = TOUCHAREA_NONE;
-				}
-			}
-		}
-	}
-
-	CG_UpdateHUDPostTouch();
-}
-
-/*
-* CG_GetTouchButtonBits
-*/
-static int CG_GetTouchButtonBits( void ) {
-	int buttons;
-	CG_GetHUDTouchButtons( &buttons, NULL );
-	return buttons;
-}
-
-static void CG_AddTouchViewAngles( vec3_t viewAngles ) {
-	cg_touchpad_t &viewpad = cg_touchpads[TOUCHPAD_VIEW];
-	if( viewpad.touch >= 0 ) {
-		if( cg_touch_lookThres->modified ) {
-			if( cg_touch_lookThres->value < 0.0f ) {
-				Cvar_Set( cg_touch_lookThres->name, cg_touch_lookThres->dvalue );
-			}
-			cg_touch_lookThres->modified = false;
-		}
-
-		cg_touch_t &touch = cg_touches[viewpad.touch];
-
-		float speed = cg_touch_lookSens->value * cg_inputFrameTime * 0.001f * CG_GetSensitivityScale( 1.0f, 0.0f );
-		float scale = 1.0f / cgs.pixelRatio;
-
-		float angle = ( ( float )touch.y - viewpad.y ) * scale;
-		if( cg_touch_lookInvert->integer ) {
-			angle = -angle;
-		}
-		float dir = ( ( angle < 0.0f ) ? -1.0f : 1.0f );
-		angle = fabs( angle ) - cg_touch_lookThres->value;
-		if( angle > 0.0f ) {
-			viewAngles[PITCH] += angle * dir * speed;
-		}
-
-		angle = ( viewpad.x - ( float )touch.x ) * scale;
-		dir = ( ( angle < 0.0f ) ? -1.0f : 1.0f );
-		angle = fabs( angle ) - cg_touch_lookThres->value;
-		if( angle > 0.0f ) {
-			viewAngles[YAW] += angle * dir * speed;
-		}
-	}
-}
-
-void CG_GetTouchMovement( vec3_t movement ) {
-	int upmove;
-	cg_touchpad_t &movepad = cg_touchpads[TOUCHPAD_MOVE];
-
-	VectorClear( movement );
-
-	if( movepad.touch >= 0 ) {
-		if( cg_touch_moveThres->modified ) {
-			if( cg_touch_moveThres->value < 0.0f ) {
-				Cvar_Set( cg_touch_moveThres->name, cg_touch_moveThres->dvalue );
-			}
-			cg_touch_moveThres->modified = false;
-		}
-		if( cg_touch_strafeThres->modified ) {
-			if( cg_touch_strafeThres->value < 0.0f ) {
-				Cvar_Set( cg_touch_strafeThres->name, cg_touch_strafeThres->dvalue );
-			}
-			cg_touch_strafeThres->modified = false;
-		}
-
-		cg_touch_t &touch = cg_touches[movepad.touch];
-
-		float move = ( float )touch.x - movepad.x;
-		if( fabs( move ) > cg_touch_strafeThres->value * cgs.pixelRatio ) {
-			movement[0] += ( move < 0 ) ? -1.0f : 1.0f;
-		}
-
-		move = movepad.y - ( float )touch.y;
-		if( fabs( move ) > cg_touch_moveThres->value * cgs.pixelRatio ) {
-			movement[1] += ( move < 0 ) ? -1.0f : 1.0f;
-		}
-	}
-
-	CG_GetHUDTouchButtons( NULL, &upmove );
-	movement[2] = ( float )upmove;
-}
-
-static void CG_AddTouchMovement( vec3_t movement ) {
-	vec3_t tm;
-
-	CG_GetTouchMovement( tm );
-
-	VectorAdd( movement, tm, movement );
-}
-
-/*
-* CG_CancelTouches
-*/
-void CG_CancelTouches( void ) {
-	int i;
-
-	for( i = 0; i < CG_MAX_TOUCHES; ++i ) {
-		cg_touch_t &touch = cg_touches[i];
-		if( touch.down ) {
-			if( touch.area != TOUCHAREA_NONE ) {
-				if( touch.upfunc ) {
-					touch.upfunc( i, 0 );
-				}
-				touch.area = TOUCHAREA_NONE;
-			}
-			touch.down = false;
-		}
-	}
-}
-
-/*
-* CG_SetTouchpad
-*/
-void CG_SetTouchpad( int padID, int touchID ) {
-	cg_touchpad_t &pad = cg_touchpads[padID];
-
-	pad.touch = touchID;
-
-	if( touchID >= 0 ) {
-		cg_touch_t &touch = cg_touches[touchID];
-		pad.x = ( float )touch.x;
-		pad.y = ( float )touch.y;
-	}
-}
-
-/*
-===============================================================================
-
 COMMON
 
 ===============================================================================
@@ -959,13 +661,6 @@ void CG_InitInput( void ) {
 	cg_gamepad_accelSpeed = Cvar_Get( "cg_gamepad_accelSpeed", "3", CVAR_ARCHIVE );
 	cg_gamepad_accelThres = Cvar_Get( "cg_gamepad_accelThres", "0.9", CVAR_ARCHIVE );
 	cg_gamepad_swapSticks = Cvar_Get( "cg_gamepad_swapSticks", "0", CVAR_ARCHIVE );
-
-	cg_touch_moveThres = Cvar_Get( "cg_touch_moveThres", "24", CVAR_ARCHIVE );
-	cg_touch_strafeThres = Cvar_Get( "cg_touch_strafeThres", "32", CVAR_ARCHIVE );
-	cg_touch_lookThres = Cvar_Get( "cg_touch_lookThres", "5", CVAR_ARCHIVE );
-	cg_touch_lookSens = Cvar_Get( "cg_touch_lookSens", "9", CVAR_ARCHIVE );
-	cg_touch_lookInvert = Cvar_Get( "cg_touch_lookInvert", "0", CVAR_ARCHIVE );
-	cg_touch_lookDecel = Cvar_Get( "cg_touch_lookDecel", "8.5", CVAR_ARCHIVE );
 }
 
 /*
@@ -1015,14 +710,7 @@ void CG_ShutdownInput( void ) {
 * CG_GetButtonBits
 */
 unsigned int CG_GetButtonBits( void ) {
-	int buttons = 0;
-
-	// figure button bits
-	buttons |= CG_GetButtonBitsFromKeys();
-
-	buttons |= CG_GetTouchButtonBits();
-
-	return buttons;
+	return CG_GetButtonBitsFromKeys();
 }
 
 /**
@@ -1039,7 +727,6 @@ void CG_AddViewAngles( vec3_t viewAngles ) {
 
 	CG_AddKeysViewAngles( am );
 	CG_AddGamepadViewAngles( am );
-	CG_AddTouchViewAngles( am );
 	CG_AddMouseViewAngles( am );
 
 	if( flipped ) {
@@ -1064,7 +751,6 @@ void CG_AddMovement( vec3_t movement ) {
 
 	CG_AddKeysMovement( dm );
 	CG_AddGamepadMovement( dm );
-	CG_AddTouchMovement( dm );
 
 	if( flipped ) {
 		dm[0] = dm[0] * -1.0;
@@ -1080,8 +766,6 @@ void CG_InputFrame( int frameTime ) {
 	cg_inputFrameTime = frameTime;
 
 	CG_GamepadFrame();
-
-	CG_TouchFrame();
 }
 
 /*

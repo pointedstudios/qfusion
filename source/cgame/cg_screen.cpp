@@ -331,10 +331,6 @@ void CG_ScreenInit( void ) {
 
 	Cmd_AddCommand( "+quickmenu", &CG_QuickMenuOn_f );
 	Cmd_AddCommand( "-quickmenu", &CG_QuickMenuOff_f );
-
-	int i;
-	for( i = 0; i < TOUCHPAD_COUNT; ++i )
-		CG_SetTouchpad( i, -1 );
 }
 
 /*
@@ -1365,7 +1361,7 @@ static void CG_SCRDrawViewBlend( void ) {
 /*
 * CG_DrawHUD
 */
-void CG_DrawHUD( bool touch ) {
+void CG_DrawHUD() {
 	if( !cg_showHUD->integer ) {
 		return;
 	}
@@ -1382,7 +1378,7 @@ void CG_DrawHUD( bool touch ) {
 		hud->modified = false;
 	}
 
-	CG_ExecuteLayoutProgram( cg.statusBar, touch );
+	CG_ExecuteLayoutProgram( cg.statusBar );
 }
 
 /*
@@ -1408,19 +1404,17 @@ void CG_Draw2DView( void ) {
 		cg.motd = NULL;
 	}
 
-	CG_DrawHUD( false );
+	CG_DrawHUD();
 
 	CG_UpdateHUDPostDraw();
 
 	CG_CheckDamageCrosshair();
 
 	scr_centertime_off -= cg.frameTime;
-	if( !( ( IN_SupportedDevices() & IN_DEVICE_SOFTKEYBOARD ) && ( int )Cvar_Value( "con_messageMode" ) ) ) {
-		if( CG_IsScoreboardShown() ) {
-			CG_DrawScoreboard();
-		} else if( scr_centertime_off > 0 ) {
-			CG_DrawCenterString();
-		}
+	if( CG_IsScoreboardShown() ) {
+		CG_DrawScoreboard();
+	} else if( scr_centertime_off > 0 ) {
+		CG_DrawCenterString();
 	}
 
 	CG_DrawRSpeeds( cgs.vidWidth, cgs.vidHeight / 2 + 8 * cgs.vidHeight / 600,

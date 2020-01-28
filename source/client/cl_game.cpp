@@ -107,59 +107,6 @@ void CG_MemFree( void *data, const char *filename, int fileline ) {
 	_Mem_Free( data, MEMPOOL_CLIENTGAME, 0, filename, fileline );
 }
 
-//==============================================
-
-// wrap cgame listeners into proxies so that
-// cinematics won't attempt to pass samples to
-// entities which are not valid anymore due to
-// module reload
-
-#define MAX_CGAME_RAW_SAMPLES_LISTENERS 8
-
-typedef struct {
-	bool inuse;
-	struct cinematics_s *cin;
-	void *ptr;
-	int load_seq;
-	cg_raw_samples_cb_t rs;
-	cg_get_raw_samples_cb_t grs;
-} cg_raw_samples_listener_t;
-
-cg_raw_samples_listener_t cg_raw_samples_listeners[MAX_CGAME_RAW_SAMPLES_LISTENERS];
-
-/*
-* CL_GameModule_RawSamples
-*/
-static void CL_GameModule_RawSamples( void *ptr, unsigned int samples,
-									  unsigned int rate, unsigned short width, unsigned short channels,
-									  const uint8_t *data ) {
-	cg_raw_samples_listener_t *cglistener;
-
-	// free listener
-	cglistener = ( cg_raw_samples_listener_t * )ptr;
-
-	// each listener gets samples passed exactly once
-	cglistener->inuse = false;
-
-	if( cglistener->load_seq != cg_load_seq ) {
-		return;
-	}
-	cglistener->rs( cglistener->ptr, samples, rate, width, channels, data );
-}
-
-/*
-* CL_GameModule_GetRawSamplesLength
-*/
-static unsigned int CL_GameModule_GetRawSamplesLength( void *ptr ) {
-	cg_raw_samples_listener_t *cglistener;
-
-	cglistener = ( cg_raw_samples_listener_t * )ptr;
-	if( cglistener->load_seq != cg_load_seq ) {
-		return 0;
-	}
-	return cglistener->grs( cglistener->ptr );
-}
-
 /*
 * CL_GameModule_Init
 */
@@ -244,17 +191,6 @@ void CL_GameModule_ConfigString( int number, const char *value ) {
 }
 
 /*
-* CL_GameModule_GetSensitivityScale
-*/
-float CL_GameModule_GetSensitivityScale( float sens, float zoomSens ) {
-	if( cge ) {
-		return CG_GetSensitivityScale( sens, zoomSens );
-	} else {
-		return 1.0f;
-	}
-}
-
-/*
 * CL_GameModule_NewSnapshot
 */
 bool CL_GameModule_NewSnapshot( int pendingSnapshot ) {
@@ -332,24 +268,4 @@ void CL_GameModule_MouseMove( int dx, int dy ) {
 	if( cge ) {
 		CG_MouseMove( dx, dy );
 	}
-}
-
-/*
-* CL_GameModule_TouchEvent
-*/
-void CL_GameModule_TouchEvent( int id, touchevent_t type, int x, int y, int64_t time ) {
-	if( cge ) {
-		CG_TouchEvent( id, type, x, y, time );
-	}
-}
-
-/*
-* CL_GameModule_IsTouchDown
-*/
-bool CL_GameModule_IsTouchDown( int id ) {
-	if( cge ) {
-		return CG_IsTouchDown( id );
-	}
-
-	return false;
 }

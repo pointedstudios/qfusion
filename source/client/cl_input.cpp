@@ -33,55 +33,6 @@ cvar_t *cl_ucmdTimeNudge;
 static void CL_CreateNewUserCommand( int realMsec );
 
 /*
-* CL_MouseSet
-*/
-void CL_MouseSet( int mx, int my, bool showCursor ) {
-	if( cls.key_dest == key_menu ) {
-		CL_UIModule_MouseSet( mx, my, showCursor );
-	}
-}
-
-/*
-* CL_TouchEvent
-*/
-void CL_TouchEvent( int id, touchevent_t type, int x, int y, int64_t time ) {
-	switch( cls.key_dest ) {
-		case key_game:
-		{
-			bool toQuickMenu = false;
-
-			if( SCR_IsQuickMenuShown() && !CL_GameModule_IsTouchDown( id ) ) {
-				if( CL_UIModule_IsTouchDownQuick( id ) ) {
-					toQuickMenu = true;
-				}
-
-				// if the quick menu has consumed the touch event, don't send the event to the game
-				toQuickMenu |= CL_UIModule_TouchEventQuick( id, type, x, y );
-			}
-
-			if( !toQuickMenu ) {
-				CL_GameModule_TouchEvent( id, type, x, y, time );
-			}
-		}
-		break;
-
-		case key_console:
-		case key_message:
-			if( id == 0 ) {
-				Con_TouchEvent( ( type != TOUCH_UP ) ? true : false, x, y );
-			}
-			break;
-
-		case key_menu:
-			CL_UIModule_TouchEvent( id, type, x, y );
-			break;
-
-		default:
-			break;
-	}
-}
-
-/*
 * CL_ClearInputState
 */
 void CL_ClearInputState( void ) {
@@ -89,18 +40,8 @@ void CL_ClearInputState( void ) {
 
 	Key_ClearStates();
 
-	switch( cls.key_dest ) {
-		case key_game:
-			CL_GameModule_ClearInputState();
-			break;
-		case key_console:
-		case key_message:
-			Con_TouchEvent( false, -1, -1 );
-			break;
-		case key_menu:
-			CL_UIModule_CancelTouches();
-		default:
-			break;
+	if( cls.key_dest == key_game ) {
+		CL_GameModule_ClearInputState();
 	}
 }
 
