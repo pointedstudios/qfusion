@@ -1516,49 +1516,6 @@ static void CG_AddPortalSurfaceEnt( centity_t *cent ) {
 	CG_AddEntityToScene( &cent->ent );
 }
 
-//==========================================================================
-//		ET_VIDEO_SPEAKER
-//==========================================================================
-
-/*
-* CG_VideoSpeakerEntRawSamples
-*/
-static void CG_UpdateVideoSpeakerEnt( void *centp,
-									  unsigned int samples, unsigned int rate,
-									  unsigned short width, unsigned short channels, const uint8_t *data ) {
-	centity_t *cent = ( centity_t * )centp;
-
-	SoundSystem::Instance()->PositionedRawSamples( cent->current.number, 1.0,
-								 cent->current.attenuation, samples, rate, width, channels, data );
-}
-
-/*
-* CG_VideoSpeakerEntGetRawSamples
-*/
-static unsigned int CG_VideoSpeakerEntGetRawSamples( void *centp ) {
-	centity_t *cent = ( centity_t * )centp;
-
-	return SoundSystem::Instance()->GetPositionedRawSamplesLength( cent->current.number );
-}
-
-/*
-* CG_UpdateVideoSpeakerEnt
-*/
-static void CG_UpdateVideoSpeakerEnt( centity_t *cent ) {
-	struct shader_s *shader;
-
-	// start from clean
-	memset( &cent->ent, 0, sizeof( cent->ent ) );
-
-	cent->ent.scale = 1;
-	cent->ent.rtype = RT_MODEL;
-	Matrix3_Identity( cent->ent.axis );
-	VectorCopy( cent->current.origin, cent->ent.origin );
-	VectorCopy( cent->current.origin2, cent->ent.origin2 );
-
-	shader = RF_GetShaderForOrigin( cent->ent.origin2 );
-}
-
 //==================================================
 // ET_PARTICLES
 //==================================================
@@ -2161,7 +2118,6 @@ void CG_UpdateEntities( void ) {
 				break;
 
 			case ET_VIDEO_SPEAKER:
-				CG_UpdateVideoSpeakerEnt( cent );
 				break;
 
 			default:

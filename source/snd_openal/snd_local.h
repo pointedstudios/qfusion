@@ -372,13 +372,6 @@ public:
 	void StartLocalSound( sfx_s *sfx, float fvol ) override;
 	void AddLoopSound( sfx_s *sfx, int entNum, float fvol, float attenuation ) override;
 
-	void RawSamples( unsigned samples, unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data, bool music ) override;
-	void PositionedRawSamples( int entNum, float fvol, float attenuation, unsigned samples,
-							   unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data ) override;
-
-	unsigned GetRawSamplesLength() override;
-	unsigned GetPositionedRawSamplesLength( int entNum ) override;
-
 	void StartBackgroundTrack( const char *intro, const char *loop, int mode ) override;
 	void StopBackgroundTrack() override;
 	void LockBackgroundTrack( bool lock ) override;

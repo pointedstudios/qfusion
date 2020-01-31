@@ -50,8 +50,6 @@ enum {
 	SND_CMD_PAUSE_BACKGROUND_TRACK,
 	SND_CMD_ACTIVATE,
 	SND_CMD_AVI_DEMO,
-	SND_CMD_RAW_SAMPLES,
-	SND_CMD_POSITIONED_RAW_SAMPLES,
 	SND_CMD_STUFFCMD,
 	SND_CMD_SET_MUL_ENTITY_SPATIALIZATION,
 
@@ -262,12 +260,6 @@ void S_IssueAdvanceBackgroundTrackCmd( sndCmdPipe_t *queue, int val );
 void S_IssuePauseBackgroundTrackCmd( sndCmdPipe_t *queue );
 void S_IssueActivateCmd( sndCmdPipe_t *queue, bool active );
 void S_IssueAviDemoCmd( sndCmdPipe_t *queue, bool begin );
-void S_IssueRawSamplesCmd( sndCmdPipe_t *queue, unsigned int samples,
-						   unsigned int rate, unsigned short width, unsigned short channels,
-						   uint8_t *data, bool music );
-void S_IssuePositionedRawSamplesCmd( sndCmdPipe_t *queue, int entnum,
-									 float fvol, float attenuation, unsigned int samples, unsigned int rate,
-									 unsigned short width, unsigned short channels, uint8_t *data );
 void S_IssueStuffCmd( sndCmdPipe_t *queue, const char *text );
 void S_IssueSetMulEntitySpatializationCmd( sndCmdPipe_t *queue, unsigned numEnts,
 										   const smdCmdSpatialization_t *spat );

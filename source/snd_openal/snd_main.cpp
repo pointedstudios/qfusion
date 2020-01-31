@@ -51,12 +51,6 @@ public:
 	void StartLocalSound( sfx_s *, float ) override {}
 	void AddLoopSound( sfx_s *, int, float, float ) override {}
 
-	void RawSamples( unsigned, unsigned, uint16_t, uint16_t, const uint8_t *, bool ) override {}
-	void PositionedRawSamples( int, float, float, unsigned, unsigned, uint16_t, uint16_t, const uint8_t * ) override {}
-
-	unsigned GetRawSamplesLength() override { return 0; }
-	unsigned GetPositionedRawSamplesLength( int ) override { return 0; }
-
 	void StartBackgroundTrack( const char *, const char *, int ) override {}
 	void StopBackgroundTrack() override {}
 	void LockBackgroundTrack( bool lock ) override {}
@@ -469,32 +463,6 @@ void ALSoundSystem::Update( const vec3_t origin, const vec3_t velocity, const ma
 	}
 
 	S_IssueSetListenerCmd( pipe, origin, velocity, axis, avidump );
-}
-
-void ALSoundSystem::RawSamples( unsigned samples, unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data, bool music ) {
-	size_t data_size = samples * width * channels;
-	uint8_t *data_copy = (uint8_t *)S_Malloc( data_size );
-
-	memcpy( data_copy, data, data_size );
-
-	S_IssueRawSamplesCmd( pipe, samples, rate, width, channels, data_copy, music );
-}
-
-void ALSoundSystem::PositionedRawSamples( int entnum, float fvol, float attenuation, unsigned samples, unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data ) {
-	size_t data_size = samples * width * channels;
-	uint8_t *data_copy = (uint8_t *)S_Malloc( data_size );
-
-	memcpy( data_copy, data, data_size );
-
-	S_IssuePositionedRawSamplesCmd( pipe, entnum, fvol, attenuation, samples, rate, width, channels, data_copy );
-}
-
-unsigned ALSoundSystem::GetRawSamplesLength() {
-	return S_GetRawSamplesLength();
-}
-
-unsigned ALSoundSystem::GetPositionedRawSamplesLength( int entNum ) {
-	return S_GetPositionedRawSamplesLength( entNum );
 }
 
 void S_Trace( trace_t *tr, const vec3_t start,

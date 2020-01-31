@@ -303,49 +303,10 @@ void S_IssueActivateCmd( sndCmdPipe_t *queue, bool active ) {
 	S_EnqueueCmd( queue, &cmd, sizeof( cmd ) );
 }
 
-/*
-* S_IssueAviDemoCmd
-*/
 void S_IssueAviDemoCmd( sndCmdPipe_t *queue, bool begin ) {
 	sndAviDemo_t cmd;
 	cmd.id = SND_CMD_AVI_DEMO;
 	cmd.begin = begin ? 1 : 0;
-	S_EnqueueCmd( queue, &cmd, sizeof( cmd ) );
-}
-
-/*
-* S_IssueRawSamplesCmd
-*/
-void S_IssueRawSamplesCmd( sndCmdPipe_t *queue, unsigned int samples,
-						   unsigned int rate, unsigned short width, unsigned short channels,
-						   uint8_t *data, bool music ) {
-	sndRawSamplesCmd_t cmd;
-	cmd.id = SND_CMD_RAW_SAMPLES;
-	cmd.samples = samples;
-	cmd.rate = rate;
-	cmd.width = width;
-	cmd.channels = channels;
-	cmd.data = data;
-	cmd.music = music;
-	S_EnqueueCmd( queue, &cmd, sizeof( cmd ) );
-}
-
-/*
-* S_IssuePositionedRawSamplesCmd
-*/
-void S_IssuePositionedRawSamplesCmd( sndCmdPipe_t *queue, int entnum,
-									 float fvol, float attenuation, unsigned int samples, unsigned int rate,
-									 unsigned short width, unsigned short channels, uint8_t *data ) {
-	sndPositionedRawSamplesCmd_t cmd;
-	cmd.id = SND_CMD_POSITIONED_RAW_SAMPLES;
-	cmd.entnum = entnum;
-	cmd.fvol = fvol;
-	cmd.attenuation = attenuation;
-	cmd.samples = samples;
-	cmd.rate = rate;
-	cmd.width = width;
-	cmd.channels = channels;
-	cmd.data = data;
 	S_EnqueueCmd( queue, &cmd, sizeof( cmd ) );
 }
 

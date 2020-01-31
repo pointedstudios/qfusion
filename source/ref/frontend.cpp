@@ -462,37 +462,3 @@ bool RF_LerpTag( orientation_t *orient, const model_t *mod, int oldframe, int fr
 void RF_LightForOrigin( const vec3_t origin, vec3_t dir, vec4_t ambient, vec4_t diffuse, float radius ) {
 	R_LightForOrigin( origin, dir, ambient, diffuse, radius, false );
 }
-
-/*
-* RF_GetShaderForOrigin
-*
-* Trace 64 units in all axial directions to find the closest surface
-*/
-shader_t *RF_GetShaderForOrigin( const vec3_t origin ) {
-	int i, j;
-	vec3_t dir, end;
-	rtrace_t tr;
-	shader_t *best = NULL;
-	float best_frac = 1000.0f;
-
-	for( i = 0; i < 3; i++ ) {
-		VectorClear( dir );
-
-		for( j = -1; j <= 1; j += 2 ) {
-			dir[i] = j;
-			VectorMA( origin, 64, dir, end );
-
-			R_TraceLine( &tr, origin, end, 0 );
-			if( !tr.shader ) {
-				continue;
-			}
-
-			if( tr.fraction < best_frac ) {
-				best = tr.shader;
-				best_frac = tr.fraction;
-			}
-		}
-	}
-
-	return best;
-}

@@ -101,13 +101,6 @@ public:
 	virtual void StartLocalSound( sfx_s *sfx, float fvol ) = 0;
 	virtual void AddLoopSound( sfx_s *sfx, int entNum, float fvol, float attenuation ) = 0;
 
-	virtual void RawSamples( unsigned samples, unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data, bool music ) = 0;
-	virtual void PositionedRawSamples( int entNum, float fvol, float attenuation, unsigned samples,
-		unsigned rate, uint16_t width, uint16_t channels, const uint8_t *data ) = 0;
-
-	virtual unsigned GetRawSamplesLength() = 0;
-	virtual unsigned GetPositionedRawSamplesLength( int entNum ) = 0;
-
 	virtual void StartBackgroundTrack( const char *intro, const char *loop, int mode ) = 0;
 	virtual void StopBackgroundTrack() = 0;
 	virtual void LockBackgroundTrack( bool lock ) = 0;
