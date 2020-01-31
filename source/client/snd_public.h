@@ -80,7 +80,12 @@ public:
 	virtual void BeginRegistration() = 0;
 	virtual void EndRegistration() = 0;
 
-	virtual void StopAllSounds( bool clear, bool stopAllMusic ) = 0;
+	enum StopFlags : unsigned {
+		StopAndClear = 0x1,
+		StopMusic = 0x2
+	};
+
+	virtual void StopAllSounds( unsigned flags = 0 ) = 0;
 
 	virtual void Clear() = 0;
 	virtual void Update( const float *origin, const float *velocity, const mat3_t axis, bool dumpAvi ) = 0;

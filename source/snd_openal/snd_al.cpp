@@ -410,11 +410,7 @@ static void S_Update( void ) {
 * S_StopAllSounds
 */
 void S_StopAllSounds( bool stopMusic ) {
-	S_StopStreams();
-	S_StopAllSources();
-	if( stopMusic ) {
-		S_StopBackgroundTrack();
-	}
+
 }
 
 /*
@@ -477,7 +473,14 @@ static unsigned S_HandleClearCmd( const sndCmdClear_t *cmd ) {
 */
 static unsigned S_HandleStopCmd( const sndCmdStop_t *cmd ) {
 	//Com_Printf("S_HandleStopCmd\n");
-	S_StopAllSounds( cmd->stopMusic );
+	S_StopStreams();
+	S_StopAllSources();
+	if( cmd->flags & SoundSystem::StopMusic ) {
+		S_StopBackgroundTrack();
+	}
+	if( cmd->flags & SoundSystem::StopAndClear ) {
+		S_Clear();
+	}
 	return sizeof( *cmd );
 }
 

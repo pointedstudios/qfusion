@@ -35,7 +35,7 @@ public:
 	void BeginRegistration() override {}
 	void EndRegistration() override {}
 
-	void StopAllSounds( bool, bool ) override {}
+	void StopAllSounds( unsigned ) override {}
 
 	void Clear() override {}
 	void Update( const float *, const float *, const mat3_t, bool ) override {}
@@ -234,7 +234,7 @@ ALSoundSystem::~ALSoundSystem() {
 		return;
 	}
 
-	StopAllSounds( true, true );
+	StopAllSounds( StopAndClear | StopMusic );
 
 	// wake up the mixer
 	Activate( true );
@@ -365,8 +365,8 @@ void ALSoundSystem::LockBackgroundTrack( bool lock ) {
 	S_IssueLockBackgroundTrackCmd( pipe, lock );
 }
 
-void ALSoundSystem::StopAllSounds( bool clear, bool stopMusic ) {
-	S_IssueStopAllSoundsCmd( pipe, clear, stopMusic );
+void ALSoundSystem::StopAllSounds( unsigned flags ) {
+	S_IssueStopAllSoundsCmd( pipe, flags );
 }
 
 void SF_StopBackgroundTrack() {

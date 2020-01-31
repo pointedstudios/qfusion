@@ -110,9 +110,6 @@ extern ALCcontext *alContext;
 #define SRCPRI_LOCAL    3   // Local sounds
 #define SRCPRI_STREAM   4   // Streams (music, cutscenes)
 
-void S_FreeSounds( void );
-void S_StopAllSounds( bool stopMusic );
-
 void S_Clear( void );
 void S_Activate( bool active );
 
@@ -356,7 +353,7 @@ public:
 	void BeginRegistration() override;
 	void EndRegistration() override;
 
-	void StopAllSounds( bool clear, bool stopAllMusic ) override;
+	void StopAllSounds( unsigned flags ) override;
 
 	void Clear() override;
 	void Update( const float *origin, const float *velocity, const mat3_t axis, bool dumpAvi ) override;

@@ -405,7 +405,6 @@ void CL_GameModule_MouseMove( int dx, int dy );
 //
 void CL_SoundModule_Init( bool verbose );
 void CL_SoundModule_Shutdown( bool verbose );
-void CL_SoundModule_StopAllSounds( bool clear, bool stopMusic );
 
 //
 // cl_ui.c

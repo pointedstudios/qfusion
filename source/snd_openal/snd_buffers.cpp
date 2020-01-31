@@ -424,15 +424,5 @@ void S_UseBuffer( sfx_t *sfx ) {
 	sfx->used = Sys_Milliseconds();
 }
 
-
-/**
-* Global functions (sound.h)
-*/
-
-void S_FreeSounds() {
-	S_ShutdownBuffers();
-	S_InitBuffers();
-}
-
 void S_Clear() {
 }

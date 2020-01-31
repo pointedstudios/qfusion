@@ -583,7 +583,7 @@ static void SCR_DrawNotify( void ) {
 void SCR_BeginLoadingPlaque( void ) {
 	CL_UIModule_ForceMenuOff();
 
-	CL_SoundModule_StopAllSounds( true, true );
+	SoundSystem::Instance()->StopAllSounds( SoundSystem::StopAndClear | SoundSystem::StopMusic );
 
 	memset( cl.configstrings, 0, sizeof( cl.configstrings ) );
 

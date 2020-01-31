@@ -88,11 +88,10 @@ void S_IssueClearCmd( sndCmdPipe_t *queue ) {
 /*
 * S_IssueStopAllSoundsCmd
 */
-void S_IssueStopAllSoundsCmd( sndCmdPipe_t *queue, bool clear, bool stopMusic ) {
+void S_IssueStopAllSoundsCmd( sndCmdPipe_t *queue, unsigned flags ) {
 	sndCmdStop_t cmd;
 	cmd.id = SND_CMD_STOP_ALL_SOUNDS;
-	cmd.clear = clear;
-	cmd.stopMusic = stopMusic;
+	cmd.flags = flags;
 	S_EnqueueCmd( queue, &cmd, sizeof( cmd ) );
 }
 

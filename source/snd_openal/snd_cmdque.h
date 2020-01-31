@@ -80,8 +80,7 @@ typedef struct {
 
 typedef struct {
 	int id;
-	int clear;
-	int stopMusic;
+	unsigned flags;
 } sndCmdStop_t;
 
 typedef struct {
@@ -235,7 +234,7 @@ void S_FinishSoundCmdPipe( sndCmdPipe_t *queue );
 void S_IssueInitCmd( sndCmdPipe_t *queue, void *hwnd, int maxents, bool verbose );
 void S_IssueShutdownCmd( sndCmdPipe_t *queue, bool verbose );
 void S_IssueClearCmd( sndCmdPipe_t *queue );
-void S_IssueStopAllSoundsCmd( sndCmdPipe_t *queue, bool clear, bool stopMusic );
+void S_IssueStopAllSoundsCmd( sndCmdPipe_t *queue, unsigned flags );
 void S_IssueFreeSfxCmd( sndCmdPipe_t *queue, int sfx );
 void S_IssueLoadSfxCmd( sndCmdPipe_t *queue, int sfx );
 void S_IssueSetAttenuationCmd( sndCmdPipe_t *queue, int model,

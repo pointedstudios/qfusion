@@ -114,7 +114,7 @@ void CL_GameModule_Init( void ) {
 	int64_t start;
 
 	// stop all playing sounds
-	CL_SoundModule_StopAllSounds( true, true );
+	SoundSystem::Instance()->StopAllSounds( SoundSystem::StopAndClear | SoundSystem::StopMusic );
 
 	CL_GameModule_Shutdown();
 

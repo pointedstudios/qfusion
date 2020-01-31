@@ -99,10 +99,3 @@ void SoundSystem::Shutdown( bool verbose ) {
 	instance->DeleteSelf( verbose );
 	instance = nullptr;
 }
-
-/*
-* CL_SoundModule_StopAllSounds
-*/
-void CL_SoundModule_StopAllSounds( bool clear, bool stopMusic ) {
-	SoundSystem::Instance()->StopAllSounds( clear, stopMusic );
-}

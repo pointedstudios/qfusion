@@ -1000,7 +1000,7 @@ void CL_ServerReconnect_f( void ) {
 	cls.rejected = false;
 
 	CL_GameModule_Shutdown();
-	CL_SoundModule_StopAllSounds( true, true );
+	SoundSystem::Instance()->StopAllSounds( SoundSystem::StopAndClear | SoundSystem::StopMusic );
 
 	Com_Printf( "Reconnecting...\n" );
 
@@ -1630,7 +1630,7 @@ void CL_Precache_f( void ) {
 			CL_GameModule_Init();
 		} else {
 			CL_GameModule_Reset();
-			CL_SoundModule_StopAllSounds( false, false );
+			SoundSystem::Instance()->StopAllSounds();
 		}
 
 		cls.demo.play_ignore_next_frametime = true;
@@ -1800,7 +1800,7 @@ void CL_InitMedia( void ) {
 
 	cls.mediaInitialized = true;
 
-	CL_SoundModule_StopAllSounds( true, true );
+	SoundSystem::Instance()->StopAllSounds( SoundSystem::StopAndClear | SoundSystem::StopMusic );
 
 	// register console font and background
 	SCR_RegisterConsoleMedia();
@@ -1827,7 +1827,7 @@ void CL_ShutdownMedia( void ) {
 
 	cls.mediaInitialized = false;
 
-	CL_SoundModule_StopAllSounds( true, true );
+	SoundSystem::Instance()->StopAllSounds( SoundSystem::StopAndClear | SoundSystem::StopMusic );
 
 	// shutdown cgame
 	CL_GameModule_Shutdown();
@@ -1853,7 +1853,7 @@ void CL_RestartMedia( void ) {
 		cls.mediaInitialized = false;
 	}
 
-	CL_SoundModule_StopAllSounds( true, true );
+	SoundSystem::Instance()->StopAllSounds( SoundSystem::StopAndClear | SoundSystem::StopMusic );
 
 	// random seed to be shared among game modules so pseudo-random stuff is in sync
 	if( cls.state != CA_CONNECTED ) {
@@ -2927,7 +2927,7 @@ void CL_Shutdown( void ) {
 		return;
 	}
 
-	CL_SoundModule_StopAllSounds( true, true );
+	SoundSystem::Instance()->StopAllSounds( SoundSystem::StopAndClear | SoundSystem::StopMusic );
 
 	ML_Shutdown();
 
