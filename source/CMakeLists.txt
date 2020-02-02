@@ -2,6 +2,8 @@ project(qfusion)
 
 cmake_minimum_required(VERSION 2.8.12)
 
+set(CMAKE_CXX_STANDARD 17)
+
 message(STATUS "CMAKE_SYSTEM: " ${CMAKE_SYSTEM})
 message(STATUS "CMAKE_SYSTEM_NAME: " ${CMAKE_SYSTEM_NAME})
 message(STATUS "CMAKE_SYSTEM_VERSION: " ${CMAKE_SYSTEM_VERSION})
@@ -94,7 +96,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     if (MSVC)
         add_release_link_flags("/LTCG")
 
-        set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} /std:c++17")
+        set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
 
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD /W4 /GL /O2 /Ot /Ob2 /Oi")
         set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd /W4")
@@ -142,7 +144,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux" OR MINGW)
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -D_DEBUG")
     set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fno-strict-aliasing -ffast-math -fno-finite-math-only -funroll-loops -msse2 -O2")
 
-    set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++17")
+    set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
 
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
