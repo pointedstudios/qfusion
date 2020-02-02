@@ -531,21 +531,78 @@ bool MaterialLexer::skipToEndOfLine() {
 	}
 }
 
+template <typename Predicate>
+class CharLookupTable {
+	bool values[256];
+public:
+	CharLookupTable() noexcept {
+		memset( values, 0, sizeof( values ) );
+
+		const Predicate predicate;
+		for( int i = 0; i < 256; ++i ) {
+			if( predicate( (uint8_t)i ) ) {
+				values[i] = true;
+			}
+		}
+	}
+
+	bool operator()( char ch ) const {
+		return values[(uint8_t)ch];
+	}
+};
+
+struct IsSpace {
+	bool operator()( uint8_t ch ) const {
+		for( uint8_t spaceCh : { ' ', '\f', '\n', '\r', '\t', '\v' } ) {
+			if( spaceCh == ch ) {
+				return true;
+			}
+		}
+		return false;
+	}
+};
+
+static CharLookupTable<IsSpace> isSpace;
+
+struct IsNewlineChar {
+	bool operator()( uint8_t ch ) const {
+		return ch == (uint8_t)'\n' || ch == (uint8_t)'\r';
+	}
+};
+
+static CharLookupTable<IsNewlineChar> isNewlineChar;
+
+struct IsValidNonNewlineChar {
+	bool operator()( uint8_t ch ) const {
+		return ch != (uint8_t)'\0' && ch != (uint8_t)'\n' && ch != (uint8_t)'\r';
+	}
+};
+
+static CharLookupTable<IsValidNonNewlineChar> isValidNonNewlineChar;
+
+struct IsLastStringLiteralChar {
+	bool operator()( uint8_t ch ) const {
+		return ch == (uint8_t)'"' || ch == (uint8_t)'\0';
+	}
+};
+
+static CharLookupTable<IsLastStringLiteralChar> isLastStringLiteralChar;
+
 auto TokenSplitter::fetchNextTokenInLine() -> std::optional<std::pair<unsigned, unsigned>> {
 	const char *__restrict p = data + offset;
 
 start:
 	// Strip whitespace characters until a non-whitespace one or a newline character is met
 	for(;; p++ ) {
-		if( !isspace( *p ) ) {
+		if( !isSpace( *p ) ) {
 			break;
 		}
-		if( *p != '\n' && *p != '\r' ) {
+		if( !isNewlineChar( *p ) ) {
 			continue;
 		}
 		// Strip newline characters
 		p++;
-		while( *p && ( *p == '\n' || *p == '\r' ) ) {
+		while( isNewlineChar( *p ) ) {
 			p++;
 		}
 		offset = p - data;
@@ -560,11 +617,11 @@ start:
 	if( *p == '/' ) {
 		if( p[1] == '/' ) {
 			// Skip till end of line
-			while (*p && (*p != '\n' && *p != '\r')) {
+			while( isValidNonNewlineChar( *p ) ) {
 				p++;
 			}
 			// Strip newline at the end
-			while (*p && (*p == '\n' || *p == '\r')) {
+			while( isNewlineChar( *p ) ) {
 				p++;
 			}
 			offset = p - data;
@@ -574,7 +631,7 @@ start:
 		if( p[1] == '*' ) {
 			bool metNewline = false;
 			// Skip till "*/" is met
-			for(;; p++) {
+			for(;; p++ ) {
 				if( !*p ) {
 					offset = p - data;
 					return std::nullopt;
@@ -587,7 +644,7 @@ start:
 						break;
 					}
 				}
-				metNewline |= ( *p == '\n' ) | ( *p == '\r' );
+				metNewline |= isNewlineChar( *p );
 			}
 			if( metNewline ) {
 				offset = p - data;
@@ -603,7 +660,7 @@ start:
 		const char *tokenStart = p;
 		for(;; p++ ) {
 			// TODO: What if '\n', '\r' (as a single byte) are met inside a string?
-			if( !*p || *p == '"' ) {
+			if( isLastStringLiteralChar( *p ) ) {
 				offset = p - data + 1;
 				// What if a string is empty?
 				return std::make_pair( tokenStart - data, p - tokenStart );
@@ -647,21 +704,34 @@ auto TokenSplitter::tryMatching1Or2CharsToken( const char *tokenStart ) const ->
 	return std::nullopt;
 }
 
+struct CloseTokenAt1Char {
+	bool operator()( char ch ) const {
+		if( isSpace( ch ) ) {
+			return true;
+		}
+		if( ch == '\0' || ch == '"' ) {
+			return true;
+		}
+		if( ch == '{' || ch == '}' || ch == '(' || ch == ')' ) {
+			return true;
+		}
+		if( ch == '>' || ch == '<' || ch == '!' ) {
+			return true;
+		}
+		return false;
+	}
+};
+
+static CharLookupTable<CloseTokenAt1Char> closeTokenAt1Char;
+
 bool TokenSplitter::mustCloseTokenAtChar( char ch, char nextCh ) {
-	if( ::isspace( ch ) ) {
+	if( closeTokenAt1Char( ch ) ) {
 		return true;
 	}
-	if( ch == '\0' || ch == '"' ) {
-		return true;
-	}
+
 	if( ch == '/' && ( nextCh == '/' || nextCh == '*' ) ) {
 		return true;
 	}
-	if( ch == '{' || ch == '}' || ch == '(' || ch == ')' ) {
-		return true;
-	}
-	if( ch == '>' || ch == '<' || ch == '!' ) {
-		return true;
-	}
+
 	return ch == '=' && nextCh == '=';
 }
