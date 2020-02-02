@@ -56,7 +56,6 @@ file(GLOB SERVER_SOURCES
     "../qcommon/steam.cpp"
 	"../qcommon/q_trie.cpp"
     "*.cpp"
-    "../null/cl_null.cpp"
     "../gameshared/q_*.cpp"
 	"../../third-party/sqlite-amalgamation/sqlite3.c"
 )
@@ -70,7 +69,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
         "../win32/win_time.cpp"
         "../win32/win_lib.cpp"
         "../win32/win_threads.cpp"
-        "../null/sys_vfs_null.cpp"
         "../win32/conproc.cpp"
     )
 
@@ -86,7 +84,6 @@ else()
         "../unix/unix_time.cpp"
         "../unix/unix_lib.cpp"
         "../unix/unix_threads.cpp"
-        "../null/sys_vfs_null.cpp"
     )
 
     # Link libuuid

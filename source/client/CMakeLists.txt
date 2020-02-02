@@ -126,7 +126,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
             "../win32/win_sys.cpp"
             "../win32/win_console.cpp"
             "../win32/win_threads.cpp"
-            "../null/sys_vfs_null.cpp"
 
             "../sdl/sdl_input.cpp"
             "../sdl/sdl_input_joy.cpp"
@@ -152,7 +151,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
             "../win32/win_clipboard.cpp"
             "../win32/win_time.cpp"
             "../win32/win_threads.cpp"
-            "../null/sys_vfs_null.cpp"
 
             "../win32/win_client.cpp"
             "../win32/win_input.cpp"
@@ -179,7 +177,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
         "../unix/unix_sys.cpp"
         "../unix/unix_console.cpp"
         "../unix/unix_threads.cpp"
-        "../null/sys_vfs_null.cpp"
 
         "../sdl/sdl_input.cpp"
         "../sdl/sdl_input_joy.cpp"
@@ -220,7 +217,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
             "../unix/unix_sys.cpp"
             "../unix/unix_console.cpp"
             "../unix/unix_threads.cpp"
-            "../null/sys_vfs_null.cpp"
 
             "../sdl/sdl_input.cpp"
             "../sdl/sdl_input_joy.cpp"
@@ -244,7 +240,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
             "../unix/unix_clipboard.cpp"
             "../unix/unix_time.cpp"
             "../unix/unix_threads.cpp"
-            "../null/sys_vfs_null.cpp"
 
             "../unix/keysym2ucs.c"
             "../unix/unix_client.cpp"
