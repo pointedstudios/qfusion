@@ -4,7 +4,7 @@
 #include "teamplay/ObjectiveBasedTeam.h"
 #include "bot.h"
 #include "../g_as_local.h"
-#include "../../angelwrap/addon/addon_any.h"
+#include "../ascript/addon/addon_any.h"
 #include "ai_manager.h"
 
 // We have to declare a prototype first (GCC cannot apply attributes to a definition)

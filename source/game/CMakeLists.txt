@@ -13,6 +13,8 @@ file(GLOB GAME_HEADERS
 	"ai/navigation/*.h"
 	"ai/planning/*.h"
 	"ai/teamplay/*.h"
+	"ascript/*.h"
+	"ascript/addon/*.h"
 	"../gameshared/*.h"
 	"../qcommon/base64.h"
 	"../qcommon/hash.h"
@@ -33,6 +35,8 @@ file(GLOB GAME_SOURCES
 	"ai/navigation/*.cpp"
 	"ai/planning/*.cpp"
 	"ai/teamplay/*.cpp"
+	"ascript/*.cpp"
+	"ascript/addon/*.cpp"
 	"../gameshared/*.cpp"
 	"../qcommon/mmrating.cpp"
 	"../qcommon/base64.cpp"
@@ -44,5 +48,5 @@ file(GLOB GAME_SOURCES
 )
 
 add_library(game SHARED ${GAME_SOURCES} ${GAME_HEADERS})
-target_link_libraries(game PRIVATE angelwrap)
+target_link_libraries(game PRIVATE angelscript)
 qf_set_output_dir(game ${QFUSION_GAME_DIR})

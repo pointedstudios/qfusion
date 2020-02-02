@@ -19,10 +19,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "../qas_local.h"
+#include "../local.h"
 #include "addon_string.h"
 #include "addon_cvar.h"
-#include "../../qcommon/cvar.h"
+#include "../../../qcommon/cvar.h"
 
 //#define CVAR_FORCESET
 

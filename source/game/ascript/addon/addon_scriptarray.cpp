@@ -1,4 +1,4 @@
-#include "../qas_local.h"
+#include "../local.h"
 #include "addon_scriptarray.h"
 
 using namespace std;
