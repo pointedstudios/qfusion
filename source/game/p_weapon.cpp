@@ -86,10 +86,7 @@ void Use_Weapon( edict_t *ent, const gsitem_t *item ) {
 * Pickup_Weapon
 */
 bool Pickup_Weapon( edict_t *other, const gsitem_t *item, int flags, int ammo_count ) {
-	int ammo_tag;
-	gs_weapon_definition_t *weapondef;
-
-	weapondef = GS_GetWeaponDef( item->tag );
+	const auto *weapondef = GS_GetWeaponDef( item->tag );
 
 	if( !( flags & DROPPED_ITEM ) ) {
 		// weapons stay in race
@@ -105,15 +102,14 @@ bool Pickup_Weapon( edict_t *other, const gsitem_t *item, int flags, int ammo_co
 		other->r.client->ps.inventory[item->tag] = item->inventory_max;
 	}
 
+	const auto ammo_tag = item->weakammo_tag;
 	if( !( flags & DROPPED_ITEM ) ) {
 		// give them some ammo with it
-		ammo_tag = item->ammo_tag;
 		if( ammo_tag ) {
-			Add_Ammo( other->r.client, GS_FindItemByTag( ammo_tag ), weapondef->firedef.weapon_pickup, true );
+			Add_Ammo( other->r.client, GS_FindItemByTag( ammo_tag ), weapondef->firedef_weak.weapon_pickup, true );
 		}
 	} else {
 		// it's a dropped weapon
-		ammo_tag = item->ammo_tag;
 		if( ammo_count && ammo_tag ) {
 			Add_Ammo( other->r.client, GS_FindItemByTag( ammo_tag ), ammo_count, true );
 		}
@@ -830,9 +826,10 @@ void G_FireWeapon( edict_t *ent, int parm ) {
 
 	// Disable antilag for all projectiles regardless of type.
 	projectile->timeDelta = 0;
-	// Use a time prestep for rockets and a very limited one for plasma/blasts.
-	if( projectile->s.type != ET_ROCKET ) {
-		if( projectile->s.type != ET_PLASMA && projectile->s.type != ET_BLASTER ) {
+	// Use a time prestep for rockets and a very limited one for plasma/blasts/bolts.
+	const auto type = projectile->s.type;
+	if( type != ET_ROCKET ) {
+		if( type != ET_PLASMA && type != ET_BLASTER && type != ET_ELECTRO_WEAK ) {
 			return;
 		}
 		if( !GS_RaceGametype() ) {

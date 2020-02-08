@@ -684,6 +684,16 @@ int GClip_AreaEdicts( const vec3_t mins, const vec3_t maxs,
 	return std::min( count, maxcount );
 }
 
+static bool tryUsingOldHitBox = false;
+
+void enableOldHitBox() {
+	tryUsingOldHitBox = true;
+}
+
+void disableOldHitBox() {
+	tryUsingOldHitBox = false;
+}
+
 /*
 * GClip_CollisionModelForEntity
 *
@@ -704,11 +714,27 @@ static struct cmodel_s *GClip_CollisionModelForEntity( entity_state_t *s, entity
 	}
 
 	// create a temp hull from bounding box sizes
-	if( s->type == ET_PLAYER || s->type == ET_CORPSE ) {
-		return trap_CM_OctagonModelForBBox( r->mins, r->maxs );
-	} else {
+	if( s->type != ET_PLAYER && s->type != ET_CORPSE ) {
 		return trap_CM_ModelForBBox( r->mins, r->maxs );
 	}
+
+	if( !tryUsingOldHitBox ) {
+		return trap_CM_OctagonModelForBBox( r->mins, r->maxs );
+	}
+
+	assert( playerbox_stand_maxs[0] == playerbox_stand_maxs[1] );
+	assert( playerbox_stand_mins[0] == playerbox_stand_mins[1] );
+	const float width = playerbox_stand_maxs[0] - playerbox_stand_mins[0];
+	const float minOldWidth = width;
+	const float maxOldWidth = (float)M_SQRT2 * width;
+	// It was/is not linear rather something like cosine but this is fine regardless of that
+	const float effectiveWidth = 0.5f * ( minOldWidth + maxOldWidth );
+	const float halfAddedExtent = 0.5f * ( effectiveWidth - width );
+	vec3_t mins { -halfAddedExtent, -halfAddedExtent, -halfAddedExtent };
+	vec3_t maxs { +halfAddedExtent, +halfAddedExtent, +halfAddedExtent };
+	VectorAdd( mins, r->mins, mins );
+	VectorAdd( maxs, r->maxs, maxs );
+	return trap_CM_OctagonModelForBBox( mins, maxs );
 }
 
 

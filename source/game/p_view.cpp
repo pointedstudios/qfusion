@@ -202,9 +202,9 @@ void G_ClientDamageFeedback( edict_t *ent ) {
 		} else {
 			if( ent->snap.kill ) {
 				G_AddPlayerStateEvent( ent->r.client, PSEV_HIT, 4 );
-			} else if( ent->snap.damage_given >= 75 ) {
+			} else if( ent->snap.damage_given >= 70 ) {
 				G_AddPlayerStateEvent( ent->r.client, PSEV_HIT, 0 );
-			} else if( ent->snap.damage_given >= 45 ) {
+			} else if( ent->snap.damage_given >= 40 ) {
 				G_AddPlayerStateEvent( ent->r.client, PSEV_HIT, 1 );
 			} else if( ent->snap.damage_given >= 20 ) {
 				G_AddPlayerStateEvent( ent->r.client, PSEV_HIT, 2 );
