@@ -516,37 +516,40 @@ bool BotWeaponsUsageModule::CheckShot( const AimParams &aimParams,
 	return toTargetDotLookDir >= dotThreshold;
 }
 
-void BotWeaponsUsageModule::SetSelectedWeapons( int builtinWeapon, int scriptWeapon,
-												bool preferBuiltinWeapon, unsigned timeoutPeriod ) {
+void BotWeaponsUsageModule::SetSelectedWeapons( const WeaponsToSelect &weaponsToSelect, unsigned timeoutPeriod ) {
 	selectedWeapons.hasSelectedBuiltinWeapon = false;
 	selectedWeapons.hasSelectedScriptWeapon = false;
-	if( builtinWeapon >= 0 ) {
-		const auto *weaponDef = GS_GetWeaponDef( builtinWeapon );
-		const auto *fireDef = &weaponDef->firedef;
-		// TODO: We avoid issues with blade attack until melee aim style handling is introduced
-		if( builtinWeapon != WEAP_GUNBLADE ) {
-			const auto *inventory = bot->PlayerState()->inventory;
-			// If there is no strong ammo but there is some weak ammo
-			if( !inventory[builtinWeapon + WEAP_TOTAL] ) {
-				static_assert( AMMO_WEAK_GUNBLADE > AMMO_GUNBLADE, "" );
-				if( inventory[builtinWeapon + WEAP_TOTAL + ( AMMO_WEAK_GUNBLADE - AMMO_GUNBLADE )] ) {
-					fireDef = &weaponDef->firedef_weak;
-				}
+
+	const int builtinWeapon = weaponsToSelect.getBuiltinWeapon();
+	const auto *weaponDef = GS_GetWeaponDef( builtinWeapon );
+	const auto *fireDef = &weaponDef->firedef;
+
+	// TODO: We avoid issues with blade attack until melee aim style handling is introduced
+	if( builtinWeapon != WEAP_GUNBLADE ) {
+		const auto *inventory = bot->PlayerState()->inventory;
+		// If there is no strong ammo but there is some weak ammo
+		if( !inventory[builtinWeapon + WEAP_TOTAL] ) {
+			static_assert( AMMO_WEAK_GUNBLADE > AMMO_GUNBLADE, "" );
+			if( inventory[builtinWeapon + WEAP_TOTAL + ( AMMO_WEAK_GUNBLADE - AMMO_GUNBLADE )] ) {
+				fireDef = &weaponDef->firedef_weak;
 			}
 		}
-		selectedWeapons.builtinFireDef = GenericFireDef( builtinWeapon, fireDef );
-		selectedWeapons.hasSelectedBuiltinWeapon = true;
 	}
-	if( scriptWeapon >= 0 ) {
+
+	selectedWeapons.builtinFireDef = GenericFireDef( builtinWeapon, fireDef );
+	selectedWeapons.hasSelectedBuiltinWeapon = true;
+
+	if( auto maybeScriptWeapon = weaponsToSelect.getScriptWeapon() ) {
+		auto scriptWeapon = *maybeScriptWeapon;
 		selectedWeapons.scriptFireDef = GenericFireDef( scriptWeapon, &scriptWeaponDefs[scriptWeapon] );
 		selectedWeapons.hasSelectedScriptWeapon = true;
 	}
+
 	selectedWeapons.instanceId++;
-	selectedWeapons.preferBuiltinWeapon = preferBuiltinWeapon;
+	selectedWeapons.preferBuiltinWeapon = weaponsToSelect.shouldPreferBuiltin().value_or( true );
 	selectedWeapons.timeoutAt = level.time + timeoutPeriod;
 }
 
-void BotWeaponSelector::SetSelectedWeapons( int builtinWeapon, int scriptWeapon,
-											bool preferBuiltinWeapon, unsigned timeoutPeriod ) {
-	bot->weaponsUsageModule.SetSelectedWeapons( builtinWeapon, scriptWeapon, preferBuiltinWeapon, timeoutPeriod );
+void BotWeaponSelector::setSelectedWeapons( const WeaponsToSelect &weaponsToSelect, unsigned timeoutPeriod ) {
+	bot->weaponsUsageModule.SetSelectedWeapons( weaponsToSelect, timeoutPeriod );
 }

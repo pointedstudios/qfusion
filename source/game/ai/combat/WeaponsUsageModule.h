@@ -8,6 +8,39 @@
 class Bot;
 class BotInput;
 
+class WeaponsToSelect {
+	int builtin { WEAP_NONE };
+	int script { -1 };
+	bool preferBuiltin { true };
+	WeaponsToSelect( int builtin_, int script_, bool preferBuiltin_ )
+		: builtin( builtin_ ), script( script_ ), preferBuiltin( preferBuiltin_ ) {}
+public:
+	[[nodiscard]]
+	auto getScriptWeapon() const -> std::optional<int> {
+		return script >= 0 ? std::make_optional( script ) : std::nullopt;
+	}
+	[[nodiscard]]
+	auto getBuiltinWeapon() const -> int {
+		return builtin;
+	}
+	[[nodiscard]]
+	auto shouldPreferBuiltin() const -> std::optional<bool> {
+		return script >= 0 ? std::make_optional( preferBuiltin ) : std::nullopt;
+	}
+	static auto bultinOnly( int builtin ) -> WeaponsToSelect {
+		assert( builtin > 0 );
+		return WeaponsToSelect( builtin, -1, true );
+	}
+	static auto builtinAndPrimaryScript( int builtin, int script ) -> WeaponsToSelect {
+		assert( builtin > 0 && script >= 0 );
+		return WeaponsToSelect( builtin, script, false );
+	}
+	static auto builtinAndSecondaryScript( int builtin, int script ) -> WeaponsToSelect {
+		assert( builtin > 0 && script >= 0 );
+		return WeaponsToSelect( builtin, script, true );
+	}
+};
+
 class BotWeaponsUsageModule {
 	friend class BotWeaponSelector;
 
@@ -84,7 +117,7 @@ class BotWeaponsUsageModule {
 
 	AimingRandomHolder aimingRandomHolder;
 
-	void SetSelectedWeapons( int builtinWeapon, int scriptWeapon, bool preferBuiltinWeapon, unsigned timeoutPeriod );
+	void SetSelectedWeapons( const WeaponsToSelect &weaponsToSelect, unsigned timeoutPeriod );
 public:
 	explicit BotWeaponsUsageModule( Bot *bot_ );
 

@@ -2,6 +2,8 @@
 #define QFUSION_BOT_WEAPON_SELECTOR_H
 
 #include "../awareness/EnemiesTracker.h"
+#include <optional>
+#include <utility>
 
 class WorldState;
 
@@ -93,101 +95,54 @@ public:
 };
 
 class Bot;
+class WeaponsToSelect;
 
-class BotWeaponSelector
-{
+class BotWeaponSelector {
 	Bot *const bot;
 
-	float weaponChoiceRandom;
-	int64_t weaponChoiceRandomTimeoutAt;
+	float weaponChoiceRandom { 0.5f };
+	int64_t weaponChoiceRandomTimeoutAt { 0 };
 
-	int64_t nextFastWeaponSwitchActionCheckAt;
+	int64_t nextFastWeaponSwitchActionCheckAt { 0 };
 	const unsigned weaponChoicePeriod;
 
 public:
 	BotWeaponSelector( Bot *bot_, unsigned weaponChoicePeriod_ )
-		: bot( bot_ )
-		, weaponChoiceRandom( 0.5f )
-		, weaponChoiceRandomTimeoutAt( 0 )
-		, nextFastWeaponSwitchActionCheckAt( 0 )
-		, weaponChoicePeriod( weaponChoicePeriod_ ) {
-		// Shut an analyzer up
-		memset( &targetEnvironment, 0, sizeof( TargetEnvironment ) );
-	}
+		: bot( bot_ ), weaponChoicePeriod( weaponChoicePeriod_ ) {}
 
 	void Frame( const WorldState &cachedWorldState );
 	void Think( const WorldState &cachedWorldState );
 
 private:
-#ifndef _MSC_VER
-	inline void Debug( const char *format, ... ) const __attribute__( ( format( printf, 2, 3 ) ) );
-#else
-	inline void Debug( _Printf_format_string_ const char *format, ... ) const;
-#endif
+	[[nodiscard]]
+	bool checkFastWeaponSwitchAction( const WorldState &worldState );
 
-	// All these method cannot be defined in this header as there is a cyclic dependency with bot.h
+	[[nodiscard]]
+	bool hasWeakOrStrong( int weapon ) const;
 
-	inline bool BotHasQuad() const;
-	inline bool BotHasShell() const;
-	inline bool BotHasPowerups() const;
-	inline bool BotIsCarrier() const;
+	void selectWeapon( const WorldState &worldState );
 
-	inline float DamageToKill( const edict_t *client ) const {
-		return ::DamageToKill( client, g_armor_protection->value, g_armor_degradation->value );
-	}
+	[[nodiscard]]
+	auto suggestSniperRangeWeapon( const WorldState &worldState ) -> std::optional<int>;
+	[[nodiscard]]
+	auto suggestFarRangeWeapon( const WorldState &worldState ) -> std::optional<int>;
+	[[nodiscard]]
+	auto suggestMiddleRangeWeapon( const WorldState &worldState ) -> std::optional<int>;
+	[[nodiscard]]
+	auto suggestCloseRangeWeapon( const WorldState &worldState ) -> std::optional<int>;
 
-	inline const int *Inventory() const;
+	[[nodiscard]]
+	auto suggestFarOrSniperStaticCombatWeapon( const WorldState &ws, bool hasEB, bool hasMG ) -> std::optional<int>;
 
-	template <int Weapon> inline int AmmoReadyToFireCount() const;
+	[[nodiscard]]
+	auto suggestInstagibWeapon( const WorldState &worldState ) -> std::optional<int>;
+	[[nodiscard]]
+	auto suggestFinishWeapon( const WorldState &worldState ) -> std::optional<int>;
 
-	inline int BlastsReadyToFireCount() const;
-	inline int ShellsReadyToFireCount() const;
-	inline int GrenadesReadyToFireCount() const;
-	inline int RocketsReadyToFireCount() const;
-	inline int PlasmasReadyToFireCount() const;
-	inline int BulletsReadyToFireCount() const;
-	inline int LasersReadyToFireCount() const;
-	inline int WavesReadyToFireCount() const;
-	inline int BoltsReadyToFireCount() const;
+	[[nodiscard]]
+	auto suggestScriptWeapon( const WorldState &worldState ) -> std::optional<std::pair<int, int>>;
 
-	bool CheckFastWeaponSwitchAction( const WorldState &worldState );
-
-	void SuggestAimWeapon( const WorldState &worldState );
-	void SuggestSniperRangeWeapon( const WorldState &worldState );
-	void SuggestFarRangeWeapon( const WorldState &worldState );
-	void SuggestMiddleRangeWeapon( const WorldState &worldState );
-	void SuggestCloseRangeWeapon( const WorldState &worldState );
-
-	int SuggestInstagibWeapon( const WorldState &worldState );
-	int SuggestFinishWeapon( const WorldState &worldState );
-
-	const AiScriptWeaponDef *SuggestScriptWeapon( const WorldState &worldState, int *effectiveTier );
-	bool IsEnemyEscaping( const WorldState &worldState, bool *botMovesFast, bool *enemyMovesFast );
-
-	int SuggestHitEscapingEnemyWeapon( const WorldState &worldState, bool botMovesFast, bool enemyMovesFast );
-
-	int SuggestQuadBearerWeapon( const WorldState &worldState );
-
-	int ChooseWeaponByScores( struct WeaponAndScore *begin, struct WeaponAndScore *end );
-
-	struct TargetEnvironment {
-		// Sides are relative to direction from bot origin to target origin
-		// Order: top, bottom, front, back, left, right
-		trace_t sideTraces[6];
-
-		enum Side { TOP, BOTTOM, FRONT, BACK, LEFT, RIGHT };
-
-		float factor;
-		static const float TRACE_DEPTH;
-	};
-
-	TargetEnvironment targetEnvironment;
-	void TestTargetEnvironment( const Vec3 &botOrigin, const Vec3 &targetOrigin, const edict_t *traceKey );
-
-	void SetSelectedWeapons( int builtinWeapon, int scriptWeapon, bool preferBuiltinWeapon, unsigned timeoutPeriod );
-	void SetSelectedWeapons( int builtinWeapon, unsigned timeoutPeriod ) {
-		SetSelectedWeapons( builtinWeapon, -1, true, timeoutPeriod );
-	}
+	void setSelectedWeapons( const WeaponsToSelect &weaponsToSelect, unsigned timeoutPeriod );
 };
 
 #endif
