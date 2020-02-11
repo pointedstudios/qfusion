@@ -313,26 +313,6 @@ void MovementPredictionContext::OnInterceptedPredictedEvent( int ev, int parm ) 
 }
 
 void MovementPredictionContext::OnInterceptedPMoveTouchTriggers( pmove_t *pm, vec3_t const previousOrigin ) {
-	edict_t *ent = game.edicts + pm->playerState->POVnum;
-	// update the entity with the new position
-	VectorCopy( pm->playerState->pmove.origin, ent->s.origin );
-	VectorCopy( pm->playerState->pmove.velocity, ent->velocity );
-	VectorCopy( pm->playerState->viewangles, ent->s.angles );
-	ent->viewheight = (int)pm->playerState->viewheight;
-	VectorCopy( pm->mins, ent->r.mins );
-	VectorCopy( pm->maxs, ent->r.maxs );
-
-	ent->waterlevel = pm->waterlevel;
-	ent->watertype = pm->watertype;
-	if( pm->groundentity == -1 ) {
-		ent->groundentity = NULL;
-	} else {
-		ent->groundentity = &game.edicts[pm->groundentity];
-		ent->groundentity_linkcount = ent->groundentity->linkcount;
-	}
-
-	GClip_LinkEntity( ent );
-
 	// expand the search bounds to include the space between the previous and current origin
 	vec3_t mins, maxs;
 	for( int i = 0; i < 3; i++ ) {
@@ -901,7 +881,9 @@ void MovementPredictionContext::BuildPlan() {
 
 	edict_t *const self = game.edicts + bot->EntNum();
 
-	// The entity state might be modified by Intercepted_PMoveTouchTriggers(), so we have to save it
+	// We used to modify real entity state every prediction frame so this was an initial state backup.
+	// Modifications are no longer performed. This is still useful for validation purposes.
+
 	const Vec3 origin( self->s.origin );
 	const Vec3 velocity( self->velocity );
 	const Vec3 angles( self->s.angles );
@@ -910,11 +892,11 @@ void MovementPredictionContext::BuildPlan() {
 	const Vec3 maxs( self->r.maxs );
 	const int waterLevel = self->waterlevel;
 	const int waterType = self->watertype;
-	edict_t *const groundEntity = self->groundentity;
+	const edict_t *const groundEntity = self->groundentity;
 	const int groundEntityLinkCount = self->groundentity_linkcount;
 
-	auto savedPlayerState = self->r.client->ps;
-	auto savedPMove = self->r.client->old_pmove;
+	const auto savedPlayerState = self->r.client->ps;
+	const auto savedPMove = self->r.client->old_pmove;
 
 	Assert( self->ai->botRef->entityPhysicsState == &module->movementState.entityPhysicsState );
 	// Save current entity physics state (it will be modified even for a single prediction step)
@@ -962,23 +944,22 @@ void MovementPredictionContext::BuildPlan() {
 	}
 #endif
 
-	// The entity might be linked for some predicted state by Intercepted_PMoveTouchTriggers()
-	GClip_UnlinkEntity( self );
+	// Ensure that the entity state is not modified by any remnants of old code that used to do that
+	Assert( VectorCompare( origin.Data(),  self->s.origin ) );
+	Assert( VectorCompare( velocity.Data(), self->velocity ) );
+	Assert( VectorCompare( angles.Data(), self->s.angles ) );
+	Assert( self->viewheight == viewHeight );
+	Assert( VectorCompare( mins.Data(), self->r.mins ) );
+	Assert( VectorCompare( maxs.Data(), self->r.maxs ) );
+	Assert( self->waterlevel == waterLevel );
+	Assert( self->watertype == waterType );
+	Assert( self->groundentity == groundEntity );
+	Assert( self->groundentity_linkcount == groundEntityLinkCount );
 
-	// Restore entity state
-	origin.CopyTo( self->s.origin );
-	velocity.CopyTo( self->velocity );
-	angles.CopyTo( self->s.angles );
-	self->viewheight = viewHeight;
-	mins.CopyTo( self->r.mins );
-	maxs.CopyTo( self->r.maxs );
-	self->waterlevel = waterLevel;
-	self->watertype = waterType;
-	self->groundentity = groundEntity;
-	self->groundentity_linkcount = groundEntityLinkCount;
-
-	self->r.client->ps = savedPlayerState;
-	self->r.client->old_pmove = savedPMove;
+	// It's fine even if there are structure member gaps as memcpy is really used by a compiler.
+	// These checks are supposed to be turned off in production builds anyway
+	Assert( !std::memcmp( &self->r.client->ps, &savedPlayerState, sizeof( savedPlayerState ) ) );
+	Assert( !std::memcmp( &self->r.client->old_pmove, &savedPMove, sizeof( savedPMove ) ) );
 
 	// Set first predicted movement state as the current bot movement state
 	module->movementState = botMovementStatesStack[0];
