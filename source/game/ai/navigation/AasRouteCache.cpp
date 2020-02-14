@@ -1161,6 +1161,30 @@ constexpr const int8_t UNREACHED = 0;
 constexpr const int8_t LABELED = -1;
 constexpr const int8_t SCANNED = +1;
 
+struct BucketNode {
+	uint16_t areaNum { 0 };
+	uint16_t nextNodeNum { 0 };
+};
+
+struct MonotonicIntegerHeap {
+	BucketNode nodesStorage[(1u << 16) + 1];
+	uint16_t bucketHeads[(1u << 16)];
+	int numUsedNodes { 0 };
+
+	void clear() {
+		// Let zero refer to a null node
+		// so we can use memset for fast preparation of buckets
+		memset( bucketHeads, 0, sizeof( bucketHeads ) );
+	}
+
+	// We do not want to put additional methods to ensure there's no
+	// hidden function call costs in the tight path-finding loop.
+};
+
+// Let it be global for saving memory bandwidth when switching from bot to bot.
+// It's unlikely that routing is going performed from multiple threads simultaneously in foreseeable future.
+static MonotonicIntegerHeap globalHeap;
+
 void AiAasRouteCache::UpdateAreaRoutingCache( const aas_areasettings_t *aasAreaSettings,
 											  const aas_portal_t *aasPortals,
 											  AreaOrPortalCacheTable *areaCache ) const {
@@ -1189,90 +1213,111 @@ void AiAasRouteCache::UpdateAreaRoutingCache( const aas_areasettings_t *aasAreaS
 		pathFindingNodes[i].dijkstraLabel = UNREACHED;
 	}
 
-	PathFinderNode *currNode = &pathFindingNodes[clusterAreaNum];
-	currNode->areaNum = areaCache->areaNum;
-	currNode->areaTravelTimes = startAreaTravelTimes;
-	currNode->tmpTravelTime = ToUint16CheckingRange( areaCache->startTravelTime );
-	areaCache->travelTimes[clusterAreaNum] = ToUint16CheckingRange( areaCache->startTravelTime );
-	currNode->dijkstraLabel = LABELED;
+	MonotonicIntegerHeap *const __restrict heap = &::globalHeap;
+	heap->clear();
 
-	StaticVector<RoutingUpdateRef, 1024> updateHeap;
-	updateHeap.push_back( RoutingUpdateRef( clusterAreaNum, currNode->tmpTravelTime ) );
+	PathFinderNode *currAreaNode = &pathFindingNodes[clusterAreaNum];
+	currAreaNode->areaNum = areaCache->areaNum;
+	currAreaNode->areaTravelTimes = startAreaTravelTimes;
+	currAreaNode->tmpTravelTime = ToUint16CheckingRange( areaCache->startTravelTime );
+	areaCache->travelTimes[clusterAreaNum] = ToUint16CheckingRange( areaCache->startTravelTime );
+	currAreaNode->dijkstraLabel = LABELED;
+
+	// Put the initial node after the first element
+	// (0 is considered a "null" node index)
+	heap->nodesStorage[1].areaNum = clusterAreaNum;
+	heap->nodesStorage[1].nextNodeNum = 0;
+	heap->bucketHeads[0] = 1;
+	heap->numUsedNodes = 2;
+
+	int lastBucketTime = 0;
+	int maxTravelTimeSoFar = 0;
 
 	//while there are updates in the current list
-	while( !updateHeap.empty() ) {
-		std::pop_heap( updateHeap.begin(), updateHeap.end() );
-		RoutingUpdateRef currUpdateRef = updateHeap.back();
-		currNode = &pathFindingNodes[currUpdateRef.index];
-		currNode->dijkstraLabel = SCANNED;
-		updateHeap.pop_back();
+	for(; lastBucketTime <= maxTravelTimeSoFar; lastBucketTime++ ) {
+		int heapNodeNum = heap->bucketHeads[lastBucketTime];
+		for(; heapNodeNum; ) {
+			const BucketNode *currHeapNode = &heap->nodesStorage[heapNodeNum];
+			currAreaNode = &pathFindingNodes[currHeapNode->areaNum];
+			currAreaNode->dijkstraLabel = SCANNED;
+			heapNodeNum = currHeapNode->nextNodeNum;
 
-		// Check all reversed reachability links
-		const auto &revReach = aasRevReach[currNode->areaNum];
-		const int numLinks = revReach.numLinks;
-		int revLinkNum = revReach.firstRevLink;
-		const RevLink *revLink;
-		for( int revLinkAreaIndex = 0; revLinkAreaIndex < numLinks; revLinkNum = revLink->nextLink, revLinkAreaIndex++ ) {
-			revLink = aasRevLinks + revLinkNum;
-			const auto reachNum = revLink->linkNum;
-			const auto &reachData = reachPathFindingData[reachNum];
-			// If the reachability has an undesired travel type
-			if( reachData.travelFlags & badTravelFlags ) {
-				continue;
+			// Check all reversed reachability links
+			const auto &revReach = aasRevReach[currAreaNode->areaNum];
+			const int numLinks = revReach.numLinks;
+			int revLinkNum = revReach.firstRevLink;
+			const RevLink *revLink;
+			int revLinkAreaIndex = 0;
+			for(; revLinkAreaIndex < numLinks; revLinkNum = revLink->nextLink, revLinkAreaIndex++ ) {
+				revLink = aasRevLinks + revLinkNum;
+				const auto reachNum = revLink->linkNum;
+				const auto &reachData = reachPathFindingData[reachNum];
+				// If the reachability has an undesired travel type
+				if( reachData.travelFlags & badTravelFlags ) {
+					continue;
+				}
+
+				// Number of the area the reversed reachability leads to
+				const auto nextAreaNum = revLink->areaNum;
+
+				const auto &nextAreaData = areaPathFindingData[nextAreaNum];
+				// If it is not allowed to enter the next area
+				if( nextAreaData.disabledStatus.CurrStatus() ) {
+					continue;
+				}
+
+				// Get the cluster number of the area
+				const auto clusterOrPortalNum = nextAreaData.clusterOrPortalNum;
+				// Don't leave the cluster
+				if( clusterOrPortalNum > 0 && clusterOrPortalNum != areaCache->cluster ) {
+					continue;
+				}
+
+				clusterAreaNum = nextAreaData.clusterAreaNum;
+				if( clusterAreaNum >= numReachAreas ) {
+					continue;
+				}
+
+				auto *const nextNode = &pathFindingNodes[clusterAreaNum];
+				if( nextNode->dijkstraLabel != UNREACHED ) {
+					continue;
+				}
+
+				// Time already travelled
+				// plus the traveltime through the current area
+				// plus the travel time from the reachability
+				int relaxedTime = currAreaNode->tmpTravelTime;
+				relaxedTime += currAreaNode->areaTravelTimes[revLinkAreaIndex];
+				relaxedTime += reachData.travelTime;
+				// We must check overflow, should never happen in production
+				uint16_t t = ToUint16CheckingRange( relaxedTime );
+
+				// Check whether we can "relax" the edge (in Dijkstra terms)
+				auto *const timeToRelax = &areaCache->travelTimes[clusterAreaNum];
+				if( *timeToRelax && *timeToRelax <= t ) {
+					continue;
+				}
+
+				*timeToRelax = t;
+				maxTravelTimeSoFar = std::max( relaxedTime, maxTravelTimeSoFar );
+
+				const auto reachOffset = reachNum - nextAreaData.firstReachNum;
+				assert( (unsigned) reachOffset < 255 );
+				areaCache->reachOffsets[clusterAreaNum] = (uint8_t) reachOffset;
+
+				nextNode->areaNum = ToUint16CheckingRange( nextAreaNum );
+				nextNode->tmpTravelTime = t;
+				nextNode->areaTravelTimes = areaTravelTimes[nextAreaNum][reachOffset];
+				nextNode->dijkstraLabel = LABELED;
+
+				// Allocate a new node for the `clusterAreaNum` area
+				const auto newNodeNum = (uint16_t)heap->numUsedNodes++;
+				BucketNode *const newNode = &heap->nodesStorage[newNodeNum];
+				newNode->areaNum = clusterAreaNum;
+				// Link the newly allocated node to the bucket for `relaxedTime`
+				newNode->nextNodeNum = heap->bucketHeads[relaxedTime];
+				heap->bucketHeads[relaxedTime] = newNodeNum;
 			}
-			// Number of the area the reversed reachability leads to
-			const auto nextAreaNum = revLink->areaNum;
-
-			const auto &nextAreaData = areaPathFindingData[nextAreaNum];
-			// If it is not allowed to enter the next area
-			if( nextAreaData.disabledStatus.CurrStatus() ) {
-				continue;
-			}
-
-			// Get the cluster number of the area
-			const auto clusterOrPortalNum = nextAreaData.clusterOrPortalNum;
-			// Don't leave the cluster
-			if( clusterOrPortalNum > 0 && clusterOrPortalNum != areaCache->cluster ) {
-				continue;
-			}
-
-			clusterAreaNum = nextAreaData.clusterAreaNum;
-			if( clusterAreaNum >= numReachAreas ) {
-				continue;
-			}
-
-			auto *const nextNode = &pathFindingNodes[clusterAreaNum];
-			if( nextNode->dijkstraLabel != UNREACHED ) {
-				continue;
-			}
-
-			// Time already travelled
-			// plus the traveltime through the current area
-			// plus the travel time from the reachability
-			int relaxedTime = currNode->tmpTravelTime;
-			relaxedTime += currNode->areaTravelTimes[revLinkAreaIndex];
-			relaxedTime += reachData.travelTime;
-			// We must check overflow, should never happen in production
-			uint16_t t = ToUint16CheckingRange( relaxedTime );
-
-			// Check whether we can "relax" the edge (in Dijkstra terms)
-			auto *const timeToRelax = &areaCache->travelTimes[clusterAreaNum];
-			if( *timeToRelax && *timeToRelax <= t ) {
-				continue;
-			}
-
-			*timeToRelax = t;
-
-			const auto reachOffset = reachNum - nextAreaData.firstReachNum;
-			assert( (unsigned)reachOffset < 255 );
-			areaCache->reachOffsets[clusterAreaNum] = (uint8_t)reachOffset;
-
-			nextNode->areaNum = ToUint16CheckingRange( nextAreaNum );
-			nextNode->tmpTravelTime = t;
-			nextNode->areaTravelTimes = areaTravelTimes[nextAreaNum][reachOffset];
-			nextNode->dijkstraLabel = LABELED;
-			updateHeap.push_back( RoutingUpdateRef( clusterAreaNum, t ) );
-			std::push_heap( updateHeap.begin(), updateHeap.end() );
 		}
 	}
 }
