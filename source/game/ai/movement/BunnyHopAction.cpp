@@ -36,10 +36,24 @@ bool BunnyHopAction::CheckCommonBunnyHopPreconditions( Context *context ) {
 		const auto &selectedEnemies = bot->GetSelectedEnemies();
 		if( selectedEnemies.AreValid() && selectedEnemies.ArePotentiallyHittable() ) {
 			if( !context->MayHitWhileRunning().CanHit() ) {
-				Debug( "Cannot apply action: cannot hit an enemy while keeping the crosshair on it is required\n" );
-				context->SetPendingRollback();
-				this->isDisabledForPlanning = true;
-				return false;
+				const float *currOrigin = context->movementState->entityPhysicsState.Origin();
+				const float squareDistance = originAtSequenceStart.SquareDistance2DTo( currOrigin );
+				constexpr const float kShortRange = 56.0f;
+				constexpr const float kMidRange = 128.0f;
+				// Unable to hit even at the initial path part
+				if( squareDistance < SQUARE( kShortRange ) ) {
+					Debug( "Cannot apply action: cannot hit an enemy while keeping the crosshair on it is required\n" );
+					context->SetPendingRollback();
+					this->isDisabledForPlanning = true;
+					return false;
+				}
+				// Things are very likely to change so consider the path legit.
+				// Apply a penalty if it seems to be necessary.
+				if( squareDistance < SQUARE( kMidRange ) ) {
+					float frac = ( Q_Sqrt( squareDistance ) - kShortRange );
+					frac *= 1.0f / ( kMidRange - kShortRange );
+					EnsurePathPenalty( (unsigned)( 500 - 200 * frac ) );
+				}
 			}
 		}
 	}
@@ -83,13 +97,6 @@ void BunnyHopAction::SetupCommonBunnyHopInput( Context *context ) {
 
 	botInput->SetForwardMovement( 1 );
 	const auto &hitWhileRunningTestResult = context->MayHitWhileRunning();
-	if( bot->ShouldKeepXhairOnEnemy() ) {
-		const auto &selectedEnemies = bot->GetSelectedEnemies();
-		if( selectedEnemies.AreValid() && selectedEnemies.ArePotentiallyHittable() ) {
-			Assert( hitWhileRunningTestResult.CanHit() );
-		}
-	}
-
 	botInput->canOverrideLookVec = hitWhileRunningTestResult.canHitAsIs;
 	botInput->canOverridePitch = true;
 
