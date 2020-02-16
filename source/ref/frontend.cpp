@@ -332,7 +332,7 @@ void RF_IssueAviShotReliableCmd( ref_cmdpipe_t *cmdpipe, const char *path, const
 
 void RF_ScreenShot( const char *path, const char *name, const char *fmtstring, bool silent ) {
 	if( RF_RenderingEnabled() ) {
-		R_TakeScreenShot( path, name, fmtstring, 0, 0, glConfig.width, glConfig.height, silent, true );
+		R_TakeScreenShot( path, name, fmtstring, 0, 0, glConfig.width, glConfig.height, silent );
 	}
 }
 
@@ -394,7 +394,7 @@ void RF_WriteAviFrame( int frame, bool scissor ) {
 	Q_snprintfz( path, path_size, "%s/%s/avi/", writedir, gamedir );
 	Q_snprintfz( name, sizeof( name ), "%06i", frame );
 
-	R_TakeScreenShot( path, name, "", x, y, w, h, true, false );
+	R_TakeScreenShot( path, name, "", x, y, w, h, true );
 }
 
 void RF_StopAviDemo( void ) {

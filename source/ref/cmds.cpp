@@ -42,7 +42,7 @@ static struct tm *R_Localtime( const time_t time, struct tm* _tm ) {
 /*
 * R_TakeScreenShot
 */
-void R_TakeScreenShot( const char *path, const char *name, const char *fmtString, int x, int y, int w, int h, bool silent, bool media ) {
+void R_TakeScreenShot( const char *path, const char *name, const char *fmtString, int x, int y, int w, int h, bool silent ) {
 	const char *extension;
 	size_t path_size = strlen( path ) + 1;
 	char *checkname = NULL;
@@ -130,10 +130,6 @@ void R_TakeScreenShot( const char *path, const char *name, const char *fmtString
 	R_ScreenShot( checkname,
 				  x, y, w, h, quality,
 				  false, false, false, silent );
-
-	if( media ) {
-		FS_AddFileToMedia( checkname );
-	}
 }
 
 /*

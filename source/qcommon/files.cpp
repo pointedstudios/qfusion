@@ -3882,13 +3882,6 @@ int FS_RemoveNotifications( int bitmask ) {
 }
 
 /*
-* FS_AddFileToMedia
-*/
-void FS_AddFileToMedia( const char *filename ) {
-	Sys_FS_AddFileToMedia( filename );
-}
-
-/*
 * Cmd_FS_SearchExt_f
 */
 static void Cmd_FS_SearchExt_f( int cantHaveFlags, int mustHaveFlags ) {

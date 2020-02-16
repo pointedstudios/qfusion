@@ -667,8 +667,6 @@ bool    FS_IsPakValid( const char *filename, unsigned *checksum );
 bool    FS_AddPurePak( unsigned checksum );
 void    FS_RemovePurePaks( void );
 
-void    FS_AddFileToMedia( const char *filename );
-
 /*
 ==============================================================
 
