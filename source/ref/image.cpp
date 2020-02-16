@@ -29,15 +29,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define IMAGES_HASH_SIZE    64
 
 typedef struct {
-	int ctx;
 	int side;
 } loaderCbInfo_t;
 
 static image_t r_images[MAX_GLIMAGES];
 static image_t r_images_hash_headnode[IMAGES_HASH_SIZE], *r_free_images;
-static qmutex_t *r_imagesLock;
 
-static int r_unpackAlignment[NUM_QGL_CONTEXTS];
+static int r_unpackAlignment;
 
 static unsigned *r_8to24table[2];
 
@@ -61,9 +59,6 @@ static int gl_filter_max = GL_LINEAR;
 static int gl_filter_depth = GL_LINEAR;
 
 static int gl_anisotropic_filter = 0;
-static void R_InitImageLoader( int id );
-static void R_ShutdownImageLoader( int id );
-static bool R_LoadAsyncImageFromDisk( image_t *image );
 
 typedef struct {
 	const char *name;
@@ -190,12 +185,12 @@ void R_TextureMode( char *string ) {
 /*
 * R_UnpackAlignment
 */
-static void R_UnpackAlignment( int ctx, int value ) {
-	if( r_unpackAlignment[ctx] == value ) {
+static void R_UnpackAlignment( int value ) {
+	if( r_unpackAlignment == value ) {
 		return;
 	}
 
-	r_unpackAlignment[ctx] = value;
+	r_unpackAlignment = value;
 	qglPixelStorei( GL_UNPACK_ALIGNMENT, value );
 }
 
@@ -317,43 +312,40 @@ enum {
 static uint8_t *r_screenShotBuffer;
 static size_t r_screenShotBufferSize;
 
-static uint8_t *r_imageBuffers[NUM_QGL_CONTEXTS][NUM_IMAGE_BUFFERS];
-static size_t r_imageBufSize[NUM_QGL_CONTEXTS][NUM_IMAGE_BUFFERS];
+static uint8_t *r_imageBuffers[NUM_IMAGE_BUFFERS];
+static size_t r_imageBufSize[NUM_IMAGE_BUFFERS];
 
-#define R_PrepareImageBuffer( ctx,buffer,size ) _R_PrepareImageBuffer( ctx,buffer,size,__FILE__,__LINE__ )
+#define R_PrepareImageBuffer( buffer,size ) _R_PrepareImageBuffer( buffer, size, __FILE__, __LINE__ )
 
 /*
 * R_PrepareImageBuffer
 */
-static uint8_t *_R_PrepareImageBuffer( int ctx, int buffer, size_t size,
+static uint8_t *_R_PrepareImageBuffer( int buffer, size_t size,
 									   const char *filename, int fileline ) {
-	if( r_imageBufSize[ctx][buffer] < size ) {
-		r_imageBufSize[ctx][buffer] = size;
-		if( r_imageBuffers[ctx][buffer] ) {
-			R_Free( r_imageBuffers[ctx][buffer] );
+	if( r_imageBufSize[buffer] < size ) {
+		r_imageBufSize[buffer] = size;
+		if( r_imageBuffers[buffer] ) {
+			R_Free( r_imageBuffers[buffer] );
 		}
-		r_imageBuffers[ctx][buffer] = (uint8_t *)R_MallocExt( r_imagesPool, size, 0, 1 );
+		r_imageBuffers[buffer] = (uint8_t *)R_MallocExt( r_imagesPool, size, 0, 1 );
 	}
 
-	memset( r_imageBuffers[ctx][buffer], 255, size );
+	memset( r_imageBuffers[buffer], 255, size );
 
-	return r_imageBuffers[ctx][buffer];
+	return r_imageBuffers[buffer];
 }
 
 /*
 * R_FreeImageBuffers
 */
 void R_FreeImageBuffers( void ) {
-	int i, j;
-
-	for( i = 0; i < NUM_QGL_CONTEXTS; i++ )
-		for( j = 0; j < NUM_IMAGE_BUFFERS; j++ ) {
-			if( r_imageBuffers[i][j] ) {
-				R_Free( r_imageBuffers[i][j] );
-				r_imageBuffers[i][j] = NULL;
-			}
-			r_imageBufSize[i][j] = 0;
+	for( int i = 0; i < NUM_IMAGE_BUFFERS; i++ ) {
+		if( r_imageBuffers[i] ) {
+			R_Free( r_imageBuffers[i] );
+			r_imageBuffers[i] = NULL;
 		}
+		r_imageBufSize[i] = 0;
+	}
 }
 
 /*
@@ -392,13 +384,13 @@ static void R_EndianSwap16BitImage( unsigned short *data, int width, int height 
 */
 static uint8_t *_R_AllocImageBufferCb( void *ptr, size_t size, const char *filename, int linenum ) {
 	auto *cbinfo = (loaderCbInfo_t *)ptr;
-	return _R_PrepareImageBuffer( cbinfo->ctx, cbinfo->side, size, filename, linenum );
+	return _R_PrepareImageBuffer( cbinfo->side, size, filename, linenum );
 }
 
 /*
 * R_ReadImageFromDisk
 */
-static int R_ReadImageFromDisk( int ctx, char *pathname, size_t pathname_size,
+static int R_ReadImageFromDisk( char *pathname, size_t pathname_size,
 								uint8_t **pic, int *width, int *height, int *flags, int side ) {
 	const char *extension;
 	int samples;
@@ -410,7 +402,7 @@ static int R_ReadImageFromDisk( int ctx, char *pathname, size_t pathname_size,
 	extension =FS_FirstExtension( pathname, IMAGE_EXTENSIONS, NUM_IMAGE_EXTENSIONS - 1 ); // last is KTX
 	if( extension ) {
 		r_imginfo_t imginfo;
-		loaderCbInfo_t cbinfo = { ctx, side };
+		loaderCbInfo_t cbinfo = { side };
 
 		COM_ReplaceExtension( pathname, extension, pathname_size );
 
@@ -577,7 +569,7 @@ static void R_CutImage( const uint8_t *in, int inwidth, int height, uint8_t *out
 /*
 * R_ResampleTexture
 */
-static void R_ResampleTexture( int ctx, const uint8_t *in, int inwidth, int inheight, uint8_t *out,
+static void R_ResampleTexture( const uint8_t *in, int inwidth, int inheight, uint8_t *out,
 							   int outwidth, int outheight, int samples, int alignment ) {
 	int i, j, k;
 	int inwidthS, outwidthS;
@@ -591,7 +583,7 @@ static void R_ResampleTexture( int ctx, const uint8_t *in, int inwidth, int inhe
 		return;
 	}
 
-	p1 = ( unsigned * )R_PrepareImageBuffer( ctx, TEXTURE_LINE_BUF, outwidth * sizeof( *p1 ) * 2 );
+	p1 = ( unsigned * )R_PrepareImageBuffer( TEXTURE_LINE_BUF, outwidth * sizeof( *p1 ) * 2 );
 	p2 = p1 + outwidth;
 
 	fracstep = inwidth * 0x10000 / outwidth;
@@ -631,7 +623,7 @@ static void R_ResampleTexture( int ctx, const uint8_t *in, int inwidth, int inhe
 *
 * Assumes 16-bit unpack alignment
 */
-static void R_ResampleTexture16( int ctx, const unsigned short *in, int inwidth, int inheight,
+static void R_ResampleTexture16( const unsigned short *in, int inwidth, int inheight,
 								 unsigned short *out, int outwidth, int outheight, int rMask, int gMask, int bMask, int aMask ) {
 	int i, j;
 	int inwidthA, outwidthA;
@@ -645,7 +637,7 @@ static void R_ResampleTexture16( int ctx, const unsigned short *in, int inwidth,
 		return;
 	}
 
-	p1 = ( unsigned * )R_PrepareImageBuffer( ctx, TEXTURE_LINE_BUF, outwidth * sizeof( *p1 ) * 2 );
+	p1 = ( unsigned * )R_PrepareImageBuffer( TEXTURE_LINE_BUF, outwidth * sizeof( *p1 ) * 2 );
 	p2 = p1 + outwidth;
 
 	fracstep = inwidth * 0x10000 / outwidth;
@@ -946,7 +938,7 @@ static void R_SetupTexParameters( int flags, int upload_width, int upload_height
 /*
 * R_Upload32
 */
-static void R_Upload32( int ctx, uint8_t **data, int layer,
+static void R_Upload32( uint8_t **data, int layer,
 						int x, int y, int width, int height,
 						int flags, int minmipsize, int *upload_width, int *upload_height, int samples,
 						bool subImage, bool noScale ) {
@@ -969,22 +961,22 @@ static void R_Upload32( int ctx, uint8_t **data, int layer,
 	} else {
 		if( flags & ( IT_LEFTHALF | IT_RIGHTHALF ) ) {
 			// assume width represents half of the original image width
-			uint8_t *temp = R_PrepareImageBuffer( ctx, TEXTURE_CUT_BUF, width * height * samples );
+			uint8_t *temp = R_PrepareImageBuffer( TEXTURE_CUT_BUF, width * height * samples );
 			if( flags & IT_LEFTHALF ) {
 				R_CutImage( *data, width * 2, height, temp, 0, 0, width, height, samples );
 			} else {
 				R_CutImage( *data, width * 2, height, temp, width, 0, width, height, samples );
 			}
-			data = &r_imageBuffers[ctx][TEXTURE_CUT_BUF];
+			data = &r_imageBuffers[TEXTURE_CUT_BUF];
 		}
 
 		if( flags & ( IT_FLIPX | IT_FLIPY | IT_FLIPDIAGONAL ) ) {
-			uint8_t *temp = R_PrepareImageBuffer( ctx, TEXTURE_FLIPPING_BUF0, width * height * samples );
+			uint8_t *temp = R_PrepareImageBuffer( TEXTURE_FLIPPING_BUF0, width * height * samples );
 			R_FlipTexture( data[0], temp, width, height, samples,
 						   ( flags & IT_FLIPX ) ? true : false,
 						   ( flags & IT_FLIPY ) ? true : false,
 						   ( flags & IT_FLIPDIAGONAL ) ? true : false );
-			data = &r_imageBuffers[ctx][TEXTURE_FLIPPING_BUF0];
+			data = &r_imageBuffers[TEXTURE_FLIPPING_BUF0];
 		}
 
 		numTextures = 1;
@@ -1005,7 +997,7 @@ static void R_Upload32( int ctx, uint8_t **data, int layer,
 		qglTexParameteriv( R_TextureTarget( flags, nullptr ), GL_TEXTURE_SWIZZLE_RGBA, swizzleMask );
 	}
 
-	R_UnpackAlignment( ctx, 1 );
+	R_UnpackAlignment( 1 );
 
 	if( ( scaledWidth == width ) && ( scaledHeight == height ) && ( flags & IT_NOMIPMAP ) ) {
 		if( flags & ( IT_ARRAY | IT_3D ) ) {
@@ -1023,14 +1015,14 @@ static void R_Upload32( int ctx, uint8_t **data, int layer,
 			uint8_t *mip;
 
 			if( !scaled ) {
-				scaled = R_PrepareImageBuffer( ctx, TEXTURE_RESAMPLING_BUF0,
+				scaled = R_PrepareImageBuffer( TEXTURE_RESAMPLING_BUF0,
 											   scaledWidth * scaledHeight * samples );
 			}
 
 			// resample the texture
 			mip = scaled;
 			if( data[i] ) {
-				R_ResampleTexture( ctx, data[i], width, height, (uint8_t *)mip, scaledWidth, scaledHeight, samples, 1 );
+				R_ResampleTexture( data[i], width, height, (uint8_t *)mip, scaledWidth, scaledHeight, samples, 1 );
 			} else {
 				mip = NULL;
 			}
@@ -1136,7 +1128,7 @@ static int R_MipCount( int width, int height, int minmipsize ) {
 * If the image is a cubemap, each face is data[mip * 6 + face].
 * Otherwise, it's data[mip].
 */
-static void R_UploadMipmapped( int ctx, uint8_t **data,
+static void R_UploadMipmapped( uint8_t **data,
 							   int width, int height, int mipLevels, int flags, int minmipsize,
 							   int *upload_width, int *upload_height,
 							   int format, int type ) {
@@ -1189,7 +1181,7 @@ static void R_UploadMipmapped( int ctx, uint8_t **data,
 		faceSize = ALIGN( scaledWidth * pixelSize, 4 ) * scaledHeight;
 
 		for( i = 0; i < faces; i++ )
-			scaled[i] = R_PrepareImageBuffer( ctx, TEXTURE_RESAMPLING_BUF0 + i, faceSize );
+			scaled[i] = R_PrepareImageBuffer( TEXTURE_RESAMPLING_BUF0 + i, faceSize );
 
 		// find the mip with the size closest to the target
 		for( mip = 0; mip < ( mipLevels - 1 ); mip++ ) {
@@ -1208,12 +1200,12 @@ static void R_UploadMipmapped( int ctx, uint8_t **data,
 
 		if( type == GL_UNSIGNED_BYTE ) {
 			for( i = 0; i < faces; i++ ) {
-				R_ResampleTexture( ctx, data[mip * faces + i], width, height,
+				R_ResampleTexture( data[mip * faces + i], width, height,
 								   scaled[i], scaledWidth, scaledHeight, pixelSize, 4 );
 			}
 		} else {
 			for( i = 0; i < faces; i++ ) {
-				R_ResampleTexture16( ctx, ( unsigned short * )( data[mip * faces + i] ), width, height,
+				R_ResampleTexture16( ( unsigned short * )( data[mip * faces + i] ), width, height,
 									 ( unsigned short * )( scaled[i] ), scaledWidth, scaledHeight, rMask, gMask, bMask, aMask );
 			}
 		}
@@ -1233,7 +1225,7 @@ static void R_UploadMipmapped( int ctx, uint8_t **data,
 		format = GL_RG;
 	}
 
-	R_UnpackAlignment( ctx, 4 );
+	R_UnpackAlignment( 4 );
 
 	mips = ( flags & IT_NOMIPMAP ) ? 1 : R_MipCount( scaledWidth, scaledHeight, minmipsize );
 	for( i = 0; ( i < mips ) && ( mip < mipLevels ); i++, mip++ ) {
@@ -1255,7 +1247,7 @@ static void R_UploadMipmapped( int ctx, uint8_t **data,
 	for( ; i < mips; i++ ) {
 		for( j = 0; j < faces; j++ ) {
 			if( !( scaled[j] ) ) {
-				scaled[j] = R_PrepareImageBuffer( ctx, TEXTURE_RESAMPLING_BUF0 + j, faceSize );
+				scaled[j] = R_PrepareImageBuffer( TEXTURE_RESAMPLING_BUF0 + j, faceSize );
 				memcpy( scaled[j], data[( mip - 1 ) * faces + j], faceSize );
 			}
 			face = scaled[j];
@@ -1328,7 +1320,7 @@ typedef struct ktx_header_s {
 /*
 * R_LoadKTX
 */
-static bool R_LoadKTX( int ctx, image_t *image, const char *pathname ) {
+static bool R_LoadKTX( image_t *image, const char *pathname ) {
 	int i, j;
 	uint8_t *buffer;
 	ktx_header_t *header;
@@ -1426,12 +1418,12 @@ static bool R_LoadKTX( int ctx, image_t *image, const char *pathname ) {
 			uint8_t *decompressed[6];
 
 			for( i = 0; i < numFaces; ++i ) {
-				decompressed[i] = R_PrepareImageBuffer( ctx, TEXTURE_LOADING_BUF0 + i, outSize );
+				decompressed[i] = R_PrepareImageBuffer( TEXTURE_LOADING_BUF0 + i, outSize );
 				DecompressETC1( in, header->pixelWidth, header->pixelHeight, decompressed[i], glConfig.ext.bgra ? true : false );
 				in += inSize;
 			}
 
-			R_UploadMipmapped( ctx, decompressed, header->pixelWidth, header->pixelHeight, 1,
+			R_UploadMipmapped( decompressed, header->pixelWidth, header->pixelHeight, 1,
 							   image->flags, image->minmipsize, &image->upload_width, &image->upload_height,
 							   glConfig.ext.bgra ? GL_BGR_EXT : GL_RGB, GL_UNSIGNED_BYTE );
 		} else {
@@ -1556,7 +1548,7 @@ static bool R_LoadKTX( int ctx, image_t *image, const char *pathname ) {
 			}
 		}
 
-		R_UploadMipmapped( ctx, images, header->pixelWidth, header->pixelHeight, mips, image->flags, image->minmipsize,
+		R_UploadMipmapped( images, header->pixelWidth, header->pixelHeight, mips, image->flags, image->minmipsize,
 						   &image->upload_width, &image->upload_height, header->baseInternalFormat, header->type );
 	}
 
@@ -1576,7 +1568,7 @@ error: // must not be reached after actually starting uploading the texture
 /*
 * R_LoadImageFromDisk
 */
-static bool R_LoadImageFromDisk( int ctx, image_t *image ) {
+static bool R_LoadImageFromDisk( image_t *image ) {
 	int flags = image->flags;
 	size_t len = strlen( image->name );
 	char pathname[1024];
@@ -1591,7 +1583,7 @@ static bool R_LoadImageFromDisk( int ctx, image_t *image ) {
 	memcpy( pathname, image->name, len + 1 );
 
 	Q_strncatz( pathname, ".ktx", pathsize );
-	if( R_LoadKTX( ctx, image, pathname ) ) {
+	if( R_LoadKTX( image, pathname ) ) {
 		return true;
 	}
 	pathname[len] = 0;
@@ -1623,8 +1615,7 @@ static bool R_LoadImageFromDisk( int ctx, image_t *image ) {
 				pathname[len + 3] = 0;
 
 				Q_strncatz( pathname, ".tga", pathsize );
-				samples = R_ReadImageFromDisk( ctx, pathname, pathsize,
-											   &( pic[j] ), &width, &height, &flags, j );
+				samples = R_ReadImageFromDisk( pathname, pathsize, &( pic[j] ), &width, &height, &flags, j );
 				if( pic[j] ) {
 					if( width != height ) {
 						Com_DPrintf( S_COLOR_YELLOW "Not square cubemap image %s\n", pathname );
@@ -1637,8 +1628,7 @@ static bool R_LoadImageFromDisk( int ctx, image_t *image ) {
 						break;
 					}
 					if( cbflags & ( IT_FLIPX | IT_FLIPY | IT_FLIPDIAGONAL ) ) {
-						uint8_t *temp = R_PrepareImageBuffer( ctx,
-															  TEXTURE_FLIPPING_BUF0 + j, width * height * samples );
+						uint8_t *temp = R_PrepareImageBuffer( TEXTURE_FLIPPING_BUF0 + j, width * height * samples );
 						R_FlipTexture( pic[j], temp, width, height, 4,
 									   ( cbflags & IT_FLIPX ) ? true : false,
 									   ( cbflags & IT_FLIPY ) ? true : false,
@@ -1661,7 +1651,7 @@ static bool R_LoadImageFromDisk( int ctx, image_t *image ) {
 
 			R_BindImage( image );
 
-			R_Upload32( ctx, pic, 0, 0, 0, width, height, flags, image->minmipsize, &image->upload_width,
+			R_Upload32( pic, 0, 0, 0, width, height, flags, image->minmipsize, &image->upload_width,
 						&image->upload_height, samples, false, false );
 
 			Q_strncpyz( image->extension, &pathname[len + 3], sizeof( image->extension ) );
@@ -1673,7 +1663,7 @@ static bool R_LoadImageFromDisk( int ctx, image_t *image ) {
 		uint8_t *pic = NULL;
 
 		Q_strncatz( pathname, ".tga", pathsize );
-		samples = R_ReadImageFromDisk( ctx, pathname, pathsize, &pic, &width, &height, &flags, 0 );
+		samples = R_ReadImageFromDisk( pathname, pathsize, &pic, &width, &height, &flags, 0 );
 
 		if( pic ) {
 			image->width = width;
@@ -1682,7 +1672,7 @@ static bool R_LoadImageFromDisk( int ctx, image_t *image ) {
 
 			R_BindImage( image );
 
-			R_Upload32( ctx, &pic, 0, 0, 0, width, height, flags, image->minmipsize, &image->upload_width,
+			R_Upload32( &pic, 0, 0, 0, width, height, flags, image->minmipsize, &image->upload_width,
 						&image->upload_height, samples, false, false );
 
 			Q_strncpyz( image->extension, &pathname[len], sizeof( image->extension ) );
@@ -1711,8 +1701,6 @@ static image_t *R_LinkPic( unsigned int hash ) {
 		return NULL;
 	}
 
-	QMutex_Lock( r_imagesLock );
-
 	hash = hash % IMAGES_HASH_SIZE;
 	image = r_free_images;
 	r_free_images = image->next;
@@ -1723,8 +1711,6 @@ static image_t *R_LinkPic( unsigned int hash ) {
 	image->next->prev = image;
 	image->prev->next = image;
 
-	QMutex_Unlock( r_imagesLock );
-
 	return image;
 }
 
@@ -1732,8 +1718,6 @@ static image_t *R_LinkPic( unsigned int hash ) {
 * R_UnlinkPic
 */
 static void R_UnlinkPic( image_t *image ) {
-	QMutex_Lock( r_imagesLock );
-
 	// remove from linked active list
 	image->prev->next = image->next;
 	image->next->prev = image->prev;
@@ -1741,8 +1725,6 @@ static void R_UnlinkPic( image_t *image ) {
 	// insert into linked free list
 	image->next = r_free_images;
 	r_free_images = image;
-
-	QMutex_Unlock( r_imagesLock );
 }
 
 /*
@@ -1802,7 +1784,7 @@ image_t *R_LoadImage( const char *name, uint8_t **pic, int width, int height, in
 
 	R_BindImage( image );
 
-	R_Upload32( QGL_CONTEXT_MAIN, pic, 0, 0, 0, width, height, flags, minmipsize,
+	R_Upload32( pic, 0, 0, 0, width, height, flags, minmipsize,
 				&image->upload_width, &image->upload_height, image->samples, false, false );
 
 	return image;
@@ -1891,10 +1873,10 @@ void R_ReplaceImage( image_t *image, uint8_t **pic, int width, int height, int f
 	R_BindImage( image );
 
 	if( image->width != width || image->height != height || image->samples != samples ) {
-		R_Upload32( QGL_CONTEXT_MAIN, pic, 0, 0, 0, width, height, flags, minmipsize,
+		R_Upload32( pic, 0, 0, 0, width, height, flags, minmipsize,
 					&( image->upload_width ), &( image->upload_height ), samples, false, false );
 	} else {
-		R_Upload32( QGL_CONTEXT_MAIN, pic, 0, 0, 0, width, height, flags, minmipsize,
+		R_Upload32( pic, 0, 0, 0, width, height, flags, minmipsize,
 					&( image->upload_width ), &( image->upload_height ), samples, true, false );
 	}
 
@@ -1920,7 +1902,7 @@ void R_ReplaceSubImage( image_t *image, int layer, int x, int y, uint8_t **pic, 
 
 	R_BindImage( image );
 
-	R_Upload32( QGL_CONTEXT_MAIN, pic, layer, x, y, width, height, image->flags, image->minmipsize,
+	R_Upload32( pic, layer, x, y, width, height, image->flags, image->minmipsize,
 				NULL, NULL, image->samples, true, true );
 
 	if( !( image->flags & IT_NO_DATA_SYNC ) ) {
@@ -1939,7 +1921,7 @@ void R_ReplaceImageLayer( image_t *image, int layer, uint8_t **pic ) {
 
 	R_BindImage( image );
 
-	R_Upload32( QGL_CONTEXT_MAIN, pic, layer, 0, 0, image->width, image->height, image->flags, image->minmipsize,
+	R_Upload32( pic, layer, 0, 0, image->width, image->height, image->flags, image->minmipsize,
 				NULL, NULL, image->samples, true, false );
 
 	if( !( image->flags & IT_NO_DATA_SYNC ) ) {
@@ -2025,13 +2007,7 @@ image_t *R_FindImage( const wsw::StringView &name, const wsw::StringView &suffix
 	//
 	image_t *image = R_LoadImage( buffer.data(), empty_data, 1, 1, flags, minmipsize, tags, 1 );
 
-	if( !( image->flags & IT_SYNC ) ) {
-		if( R_LoadAsyncImageFromDisk( image ) ) {
-			return image;
-		}
-	}
-
-	loaded = R_LoadImageFromDisk( QGL_CONTEXT_MAIN, image );
+	loaded = R_LoadImageFromDisk( image );
 	R_UnbindImage( image );
 
 	if( !loaded ) {
@@ -2162,7 +2138,7 @@ static void R_InitNoTexture( int *w, int *h, int *flags, int *samples ) {
 	*samples = 3;
 
 	// ch : check samples
-	data = R_PrepareImageBuffer( QGL_CONTEXT_MAIN, TEXTURE_LOADING_BUF0, 8 * 8 * 3 );
+	data = R_PrepareImageBuffer( TEXTURE_LOADING_BUF0, 8 * 8 * 3 );
 	for( x = 0; x < 8; x++ ) {
 		for( y = 0; y < 8; y++ ) {
 			data[( y * 8 + x ) * 3 + 0] = dottexture[x & 3][y & 3] * 127;
@@ -2189,7 +2165,7 @@ static uint8_t *R_InitSolidColorTexture( int *w, int *h, int *flags, int *sample
 	}
 
 	// ch : check samples
-	data = R_PrepareImageBuffer( QGL_CONTEXT_MAIN, TEXTURE_LOADING_BUF0, 1 * 1 * 3 );
+	data = R_PrepareImageBuffer( TEXTURE_LOADING_BUF0, 1 * 1 * 3 );
 	data[0] = data[1] = data[2] = color;
 	return data;
 }
@@ -2210,7 +2186,7 @@ static void R_InitParticleTexture( int *w, int *h, int *flags, int *samples ) {
 	*flags = IT_NOPICMIP | IT_NOMIPMAP | IT_SRGB;
 	*samples = 4;
 
-	data = R_PrepareImageBuffer( QGL_CONTEXT_MAIN, TEXTURE_LOADING_BUF0, 16 * 16 * 4 );
+	data = R_PrepareImageBuffer( TEXTURE_LOADING_BUF0, 16 * 16 * 4 );
 	for( x = 0; x < 16; x++ ) {
 		dx2 = x - 8;
 		dx2 = dx2 * dx2;
@@ -2243,7 +2219,7 @@ static void R_InitWhiteCubemapTexture( int *w, int *h, int *flags, int *samples 
 
 	for( i = 0; i < 6; i++ ) {
 		uint8_t *data;
-		data = R_PrepareImageBuffer( QGL_CONTEXT_MAIN, TEXTURE_LOADING_BUF0 + i, 1 * 1 * 3 );
+		data = R_PrepareImageBuffer( TEXTURE_LOADING_BUF0 + i, 1 * 1 * 3 );
 		data[0] = data[1] = data[2] = 255;
 	}
 }
@@ -2291,7 +2267,7 @@ static void R_InitCoronaTexture( int *w, int *h, int *flags, int *samples ) {
 	*flags = IT_SPECIAL | IT_SRGB;
 	*samples = 4;
 
-	data = R_PrepareImageBuffer( QGL_CONTEXT_MAIN, TEXTURE_LOADING_BUF0, 32 * 32 * 4 );
+	data = R_PrepareImageBuffer( TEXTURE_LOADING_BUF0, 32 * 32 * 4 );
 	for( y = 0; y < 32; y++ ) {
 		dy = ( y - 15.5f ) * ( 1.0f / 16.0f );
 		for( x = 0; x < 32; x++ ) {
@@ -2379,7 +2355,7 @@ void R_InitViewportTexture( image_t **texture, const char *name, int id,
 
 			R_BindImage( t );
 
-			R_Upload32( QGL_CONTEXT_MAIN, &data, 0, 0, 0, width, height, flags, 1,
+			R_Upload32( &data, 0, 0, 0, width, height, flags, 1,
 						&t->upload_width, &t->upload_height, t->samples, false, false );
 		}
 
@@ -2657,7 +2633,7 @@ static void R_InitBuiltinImages( void ) {
 	for( i = 0; i < num_builtin_textures; i++ ) {
 		textures[i].init( &w, &h, &flags, &samples );
 
-		image = R_LoadImage( textures[i].name, r_imageBuffers[QGL_CONTEXT_MAIN], w, h, flags, 1, IMAGE_TAG_BUILTIN, samples );
+		image = R_LoadImage( textures[i].name, r_imageBuffers, w, h, flags, 1, IMAGE_TAG_BUILTIN, samples );
 
 		if( textures[i].image ) {
 			*( textures[i].image ) = image;
@@ -2694,9 +2670,8 @@ void R_InitImages( void ) {
 	R_Imagelib_Init();
 
 	r_imagesPool = R_AllocPool( r_mempool, "Images" );
-	r_imagesLock = QMutex_Create();
 
-	r_unpackAlignment[QGL_CONTEXT_MAIN] = 4;
+	r_unpackAlignment = 4;
 	qglPixelStorei( GL_PACK_ALIGNMENT, 1 );
 
 	r_imagePathBuf = r_imagePathBuf2 = NULL;
@@ -2714,10 +2689,6 @@ void R_InitImages( void ) {
 	}
 	for( i = 0; i < MAX_GLIMAGES - 1; i++ ) {
 		r_images[i].next = &r_images[i + 1];
-	}
-
-	for( i = 0; i < NUM_LOADER_THREADS; i++ ) {
-		R_InitImageLoader( i );
 	}
 
 	R_InitStretchRawImages();
@@ -2792,10 +2763,6 @@ void R_ShutdownImages( void ) {
 		return;
 	}
 
-	for( i = 0; i < NUM_LOADER_THREADS; i++ ) {
-		R_ShutdownImageLoader( i );
-	}
-
 	R_ReleaseBuiltinImages();
 
 	for( i = 0, image = r_images; i < MAX_GLIMAGES; i++, image++ ) {
@@ -2823,8 +2790,6 @@ void R_ShutdownImages( void ) {
 	}
 	r_8to24table[0] = r_8to24table[1] = NULL;
 
-	QMutex_Destroy( &r_imagesLock );
-
 	R_FreePool( &r_imagesPool );
 
 	r_screenShotBuffer = NULL;
@@ -2836,244 +2801,4 @@ void R_ShutdownImages( void ) {
 	r_sizeof_imagePathBuf = r_sizeof_imagePathBuf2 = 0;
 
 	R_Imagelib_Shutdown();
-}
-
-// ============================================================================
-
-enum {
-	CMD_LOADER_INIT,
-	CMD_LOADER_SHUTDOWN,
-	CMD_LOADER_LOAD_PIC,
-	CMD_LOADER_DATA_SYNC,
-
-	NUM_LOADER_CMDS
-};
-
-typedef struct {
-	int id;
-	int self;
-} loaderInitCmd_t;
-
-typedef struct {
-	int id;
-	int self;
-	int pic;
-} loaderPicCmd_t;
-
-typedef unsigned (*queueCmdHandler_t)( const void * );
-
-static qbufPipe_t *loader_queue[NUM_LOADER_THREADS] = { NULL };
-static qthread_t *loader_thread[NUM_LOADER_THREADS] = { NULL };
-
-static void *loader_gl_context[NUM_LOADER_THREADS] = { NULL };
-static void *loader_gl_surface[NUM_LOADER_THREADS] = { NULL };
-
-static void *R_ImageLoaderThreadProc( void *param );
-
-/*
-* R_IssueInitLoaderCmd
-*/
-static void R_IssueInitLoaderCmd( int id ) {
-	loaderInitCmd_t cmd;
-	cmd.id = CMD_LOADER_INIT;
-	cmd.self = id;
-	QBufPipe_WriteCmd( loader_queue[id], &cmd, sizeof( cmd ) );
-}
-
-/*
-* R_IssueShutdownLoaderCmd
-*/
-static void R_IssueShutdownLoaderCmd( int id ) {
-	int cmd;
-	cmd = CMD_LOADER_SHUTDOWN;
-	QBufPipe_WriteCmd( loader_queue[id], &cmd, sizeof( cmd ) );
-}
-
-/*
-* R_IssueLoadPicLoaderCmd
-*/
-static void R_IssueLoadPicLoaderCmd( int id, int pic ) {
-	loaderPicCmd_t cmd;
-	cmd.id = CMD_LOADER_LOAD_PIC;
-	cmd.self = id;
-	cmd.pic = pic;
-	QBufPipe_WriteCmd( loader_queue[id], &cmd, sizeof( cmd ) );
-}
-
-/*
-* R_IssueDataSyncLoaderCmd
-*/
-static void R_IssueDataSyncLoaderCmd( int id ) {
-	int cmd;
-	cmd = CMD_LOADER_DATA_SYNC;
-	QBufPipe_WriteCmd( loader_queue[id], &cmd, sizeof( cmd ) );
-}
-
-/*
-* R_InitImageLoader
-*/
-static void R_InitImageLoader( int id ) {
-	loader_gl_context[id] = NULL;
-	loader_gl_surface[id] = NULL;
-}
-
-/*
-* R_FinishLoadingImages
-*/
-void R_FinishLoadingImages( void ) {
-	int i;
-
-	for( i = 0; i < NUM_LOADER_THREADS; i++ ) {
-		if( loader_gl_context[i] ) {
-			R_IssueDataSyncLoaderCmd( i );
-		}
-	}
-
-	for( i = 0; i < NUM_LOADER_THREADS; i++ ) {
-		if( loader_gl_context[i] ) {
-			QBufPipe_Finish( loader_queue[i] );
-		}
-	}
-}
-
-/*
-* R_LoadAsyncImageFromDisk
-*/
-static bool R_LoadAsyncImageFromDisk( image_t *image ) {
-	int pic;
-	int id;
-
-	if( loader_gl_context[0] == NULL ) {
-		return false;
-	}
-
-	pic = image - r_images;
-	id = pic % NUM_LOADER_THREADS;
-	if( loader_gl_context[id] == NULL ) {
-		id = 0;
-	}
-
-	image->loaded = false;
-	image->missing = false;
-
-	// Unbind and finish so that the image resource becomes available in the loader's context.
-	// Not doing finish (or only doing flush instead) causes missing textures on Nvidia and possibly other GPUs,
-	// since the loader thread is woken up pretty much instantly, and the GL calls that initialize the texture
-	// may still be processed or only queued in the main thread while the loader is trying to load the image.
-	R_UnbindImage( image );
-	qglFinish();
-
-	R_IssueLoadPicLoaderCmd( id, pic );
-	return true;
-}
-
-/*
-* R_ShutdownImageLoader
-*/
-static void R_ShutdownImageLoader( int id ) {
-	void *context = loader_gl_context[id];
-	void *surface = loader_gl_surface[id];
-
-	loader_gl_context[id] = NULL;
-	loader_gl_surface[id] = NULL;
-	if( !context ) {
-		return;
-	}
-
-	R_IssueShutdownLoaderCmd( id );
-
-	QBufPipe_Finish( loader_queue[id] );
-
-	QThread_Join( loader_thread[id] );
-	loader_thread[id] = NULL;
-
-	QBufPipe_Destroy( &loader_queue[id] );
-
-	GLimp_SharedContext_Destroy( context, surface );
-}
-
-//
-
-/*
-* R_HandleInitLoaderCmd
-*/
-static unsigned R_HandleInitLoaderCmd( void *pcmd ) {
-	auto *cmd = (loaderInitCmd_t *)pcmd;
-
-	GLimp_MakeCurrent( loader_gl_context[cmd->self], loader_gl_surface[cmd->self] );
-	r_unpackAlignment[QGL_CONTEXT_LOADER + cmd->self] = 4;
-
-	return sizeof( *cmd );
-}
-
-/*
-* R_HandleShutdownLoaderCmd
-*/
-static unsigned R_HandleShutdownLoaderCmd( void *pcmd ) {
-	GLimp_MakeCurrent( NULL, NULL );
-
-	return 0;
-}
-
-/*
-* R_HandleLoadPicLoaderCmd
-*/
-static unsigned R_HandleLoadPicLoaderCmd( void *pcmd ) {
-	auto *cmd = (loaderPicCmd_t *)pcmd;
-	image_t *image = r_images + cmd->pic;
-	bool loaded;
-
-	loaded = R_LoadImageFromDisk( QGL_CONTEXT_LOADER + cmd->self, image );
-	R_UnbindImage( image );
-
-	if( !loaded ) {
-		image->missing = true;
-	} else {
-		// Make sure:
-		// - The GL calls are submitted, otherwise they may stay in the queue until some other textures are loaded.
-		// - image->loaded is set when the image is actually uploaded, so the renderer doesn't try to use it while
-		//   it's still being uploaded, causing transient or even permanent glitches.
-		if( !rsh.registrationOpen ) {
-			qglFinish();
-		}
-		image->loaded = true;
-	}
-
-	return sizeof( *cmd );
-}
-
-/*
-* R_HandleDataSyncLoaderCmd
-*/
-static unsigned R_HandleDataSyncLoaderCmd( void *pcmd ) {
-	auto *cmd = (int *)pcmd;
-
-	qglFinish();
-
-	return sizeof( *cmd );
-}
-
-/*
-*R_ImageLoaderCmdsWaiter
-*/
-static int R_ImageLoaderCmdsWaiter( qbufPipe_t *queue, queueCmdHandler_t *cmdHandlers, bool timeout ) {
-	return QBufPipe_ReadCmds( queue, cmdHandlers );
-}
-
-/*
-* R_ImageLoaderThreadProc
-*/
-static void *R_ImageLoaderThreadProc( void *param ) {
-	auto *cmdQueue = (qbufPipe_t *)param;
-	queueCmdHandler_t cmdHandlers[NUM_LOADER_CMDS] =
-	{
-		(queueCmdHandler_t)R_HandleInitLoaderCmd,
-		(queueCmdHandler_t)R_HandleShutdownLoaderCmd,
-		(queueCmdHandler_t)R_HandleLoadPicLoaderCmd,
-		(queueCmdHandler_t)R_HandleDataSyncLoaderCmd,
-	};
-
-	QBufPipe_Wait( cmdQueue, R_ImageLoaderCmdsWaiter, cmdHandlers, Q_THREADS_WAIT_INFINITE );
-
-	return NULL;
 }
