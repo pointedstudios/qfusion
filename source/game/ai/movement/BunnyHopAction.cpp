@@ -230,7 +230,7 @@ bool BunnyHopAction::SetupBunnyHopping( const Vec3 &intendedLookVec, Context *co
 		context->predictionStepMillis = context->DefaultFrameTime();
 	}
 
-	TrySetWalljump( context );
+	TrySetWalljump( context, velocityDir2D, toTargetDir2D );
 	return true;
 }
 
@@ -244,8 +244,8 @@ bool BunnyHopAction::CanFlyAboveGroundRelaxed( const Context *context ) const {
 	return entityPhysicsState.HeightOverGround() >= desiredHeightOverGround;
 }
 
-void BunnyHopAction::TrySetWalljump( Context *context ) {
-	if( !CanSetWalljump( context ) ) {
+void BunnyHopAction::TrySetWalljump( Context *context, const Vec3 &velocity2DDir, const Vec3 &intendedLookDir2D ) {
+	if( !CanSetWalljump( context, velocity2DDir, intendedLookDir2D ) ) {
 		return;
 	}
 
@@ -256,17 +256,7 @@ void BunnyHopAction::TrySetWalljump( Context *context ) {
 	context->predictionStepMillis = context->DefaultFrameTime();
 }
 
-#define TEST_TRACE_RESULT_NORMAL( traceResult )                                   \
-	do {                                                                          \
-		if( traceResult.trace.fraction != 1.0f ) {                                \
-			if( velocity2DDir.Dot( traceResult.trace.plane.normal ) < -0.3f ) {   \
-				return false;                                                     \
-			}                                                                     \
-			hasGoodWalljumpNormal = true;                                         \
-		}                                                                         \
-	} while( 0 )
-
-bool BunnyHopAction::CanSetWalljump( Context *context ) const {
+bool BunnyHopAction::CanSetWalljump( Context *context, const Vec3 &velocity2DDir, const Vec3 &intended2DLookDir ) const {
 	const short *pmoveStats = context->currPlayerState->pmove.stats;
 	if( !( pmoveStats[PM_STAT_FEATURES] & PMFEAT_WALLJUMP ) ) {
 		return false;
@@ -289,47 +279,13 @@ bool BunnyHopAction::CanSetWalljump( Context *context ) const {
 		return false;
 	}
 
-	float speed2D = entityPhysicsState.Speed2D();
 	// The 2D speed is too low for walljumping
-	if( speed2D < 400 ) {
+	if( entityPhysicsState.Speed2D() < 400 ) {
 		return false;
 	}
 
-	Vec3 velocity2DDir( entityPhysicsState.Velocity()[0], entityPhysicsState.Velocity()[1], 0 );
-	velocity2DDir *= 1.0f / speed2D;
-
-	auto &traceCache = context->TraceCache();
-	auto query( EnvironmentTraceCache::Query::front() );
-	traceCache.testForQuery( context, query );
-	const auto &frontResult = traceCache.resultForQuery( query );
-	if( velocity2DDir.Dot( frontResult.traceDir ) < 0.7f ) {
-		return false;
-	}
-
-	bool hasGoodWalljumpNormal = false;
-	TEST_TRACE_RESULT_NORMAL( frontResult );
-
-	// Do not force full-height traces for sides to be computed.
-	// Walljump height rules are complicated, and full simulation of these rules seems to be excessive.
-	// In worst case a potential walljump might be skipped.
-
-	const auto leftQuery( EnvironmentTraceCache::Query::left().jumpableHeight() );
-	const auto rightQuery( EnvironmentTraceCache::Query::right().jumpableHeight() );
-	const auto frontLeftQuery( EnvironmentTraceCache::Query::frontLeft().jumpableHeight() );
-	const auto frontRightQuery( EnvironmentTraceCache::Query::frontRight().jumpableHeight() );
-
-	const unsigned mask = leftQuery.mask | rightQuery.mask | frontLeftQuery.mask | frontRightQuery.mask;
-	traceCache.testForResultsMask( context, mask );
-
-	TEST_TRACE_RESULT_NORMAL( traceCache.resultForQuery( leftQuery ) );
-	TEST_TRACE_RESULT_NORMAL( traceCache.resultForQuery( rightQuery ) );
-	TEST_TRACE_RESULT_NORMAL( traceCache.resultForQuery( frontLeftQuery ) );
-	TEST_TRACE_RESULT_NORMAL( traceCache.resultForQuery( frontRightQuery ) );
-
-	return hasGoodWalljumpNormal;
+	return velocity2DDir.Dot( entityPhysicsState.ForwardDir() ) > 0.7f && velocity2DDir.Dot( intended2DLookDir ) > 0.7f;
 }
-
-#undef TEST_TRACE_RESULT_NORMAL
 
 bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 	const auto *oldPMove = &context->oldPlayerState->pmove;

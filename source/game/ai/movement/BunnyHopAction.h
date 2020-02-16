@@ -53,8 +53,12 @@ protected:
 	bool CheckCommonBunnyHopPreconditions( MovementPredictionContext *context );
 	bool SetupBunnyHopping( const Vec3 &intendedLookVec, MovementPredictionContext *context );
 	bool CanFlyAboveGroundRelaxed( const MovementPredictionContext *context ) const;
-	bool CanSetWalljump( MovementPredictionContext *context ) const;
-	void TrySetWalljump( MovementPredictionContext *context );
+	bool CanSetWalljump( MovementPredictionContext *context,
+						 const Vec3 &velocity2DDir,
+						 const Vec3 &intended2DLookDir ) const;
+	void TrySetWalljump( MovementPredictionContext *context,
+						 const Vec3 &velocity2DDir,
+						 const Vec3 &intended2DLookDir );
 
 	// Can be overridden for finer control over tests
 	virtual bool CheckStepSpeedGainOrLoss( MovementPredictionContext *context );
