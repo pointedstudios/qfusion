@@ -247,7 +247,7 @@ public:
 	}
 
 	virtual ~ConsoleLogStream() {
-		delete lineBuffer;
+		delete[] lineBuffer;
 	}
 
 	static void printProxy( void *, const char *, ... );

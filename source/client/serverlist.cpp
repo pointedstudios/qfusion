@@ -125,7 +125,7 @@ void *ServerList::resolverThreadFunc( void *param ) {
 		Com_Printf( "Failed to resolve master server address: %s\n", string );
 	}
 
-	delete string;
+	delete[] string;
 	return nullptr;
 }
 
