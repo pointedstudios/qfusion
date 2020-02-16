@@ -419,7 +419,7 @@ void G_Damage( edict_t *targ, edict_t *inflictor, edict_t *attacker, const vec3_
 				take = 0;
 				save = damage;
 			} else {
-				take = ( damage * 0.25f );
+				take = damage * ( 1.0f / QUAD_DAMAGE_SCALE );
 				save = damage - take;
 			}
 

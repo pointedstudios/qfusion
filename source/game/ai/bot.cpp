@@ -454,10 +454,10 @@ int Bot::GetWeaponsForWeaponJumping( int *weaponNumsBuffer ) {
 		weaponsList = &gbPriorityWeapons;
 		float damageToKill = DamageToKill( self, g_armor_protection->value, g_armor_degradation->value );
 		if( HasQuad( self ) ) {
-			damageToKill /= 4.0f;
+			damageToKill *= 1.0f / QUAD_DAMAGE_SCALE;
 		}
 		if( HasShell( self ) ) {
-			damageToKill *= 4.0f;
+			damageToKill *= QUAD_DAMAGE_SCALE;
 			weaponsList = &rlPriorityWeapons;
 		}
 

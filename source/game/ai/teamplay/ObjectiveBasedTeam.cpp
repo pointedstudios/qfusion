@@ -568,11 +568,12 @@ void AiObjectiveBasedTeam::OffenseSpot::ComputeRawScores( Candidates &candidates
 		const auto *const bot = botAndScore.bot;
 		const auto *const botEnt = gameEdicts + bot->EntNum();
 		float score = DamageToKill( botEnt, armorProtection, armorDegradation );
+		// Consider quad and shell equally valuable
 		if( ::HasShell( botEnt ) ) {
-			score *= 4.0f;
+			score *= QUAD_DAMAGE_SCALE;
 		}
 		if( ::HasQuad( botEnt ) ) {
-			score *= 4.0f;
+			score *= QUAD_DAMAGE_SCALE;
 		}
 		score *= bot->PlayerOffenciveAbilitiesRating();
 		botAndScore.rawScore = score;

@@ -117,7 +117,7 @@ void PathBlockingTracker::Update() {
 
 	float damageToKillBot = DamageToKill( self, g_armor_protection->value, g_armor_degradation->value );
 	if( HasShell( self ) ) {
-		damageToKillBot *= 4.0f;
+		damageToKillBot *= QUAD_DAMAGE_SCALE;
 	}
 
 	// We modify "damage to kill" in order to take quad bearing into account
@@ -174,7 +174,7 @@ bool PathBlockingTracker::IsAPotentialBlocker( const TrackedEnemy *enemy,
 	float damageToKillEnemy = DamageToKill( enemy->ent, g_armor_protection->value, g_armor_degradation->value );
 
 	if( HasShell( enemy->ent ) ) {
-		damageToKillEnemy *= 4.0f;
+		damageToKillEnemy *= QUAD_DAMAGE_SCALE;
 	}
 
 	// We modify "damage to kill" in order to take quad bearing into account

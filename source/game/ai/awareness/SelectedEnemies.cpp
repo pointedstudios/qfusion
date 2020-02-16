@@ -87,7 +87,7 @@ float SelectedEnemies::DamageToKill() const {
 	for( const auto *enemy: enemies ) {
 		float damageToKill = ::DamageToKill( enemy->ent, g_armor_protection->value, g_armor_degradation->value );
 		if( enemy->HasShell() ) {
-			damageToKill *= 4.0f;
+			damageToKill *= QUAD_DAMAGE_SCALE;
 		}
 		result += damageToKill;
 	}

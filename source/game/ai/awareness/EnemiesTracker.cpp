@@ -499,7 +499,7 @@ void AiEnemiesTracker::EnqueueTarget( const edict_t *target ) {
 	for( unsigned i = 0; i < targets.size(); ++i ) {
 		float timeFactor = ( level.time - targets[i].LastActivityAt() ) / (float)TARGET_TIMEOUT;
 		// Do not evict enemies that bot hit hard
-		float damageScale = this->HasQuad() ? 4.0f : 1.0f;
+		float damageScale = this->HasQuad() ? QUAD_DAMAGE_SCALE : 1.0f;
 		float damageFactor = 1.0f - BoundedFraction( targets[i].totalDamage, 300.0f * damageScale );
 		// Always > 0, so we always evict some target
 		float evictionScore = 0.1f + timeFactor * damageFactor;

@@ -717,10 +717,10 @@ public:
 	float DamageToBeKilled() const {
 		float damageToBeKilled = ::DamageToKill( HealthVar(), ArmorVar() );
 		if( HasShellVar() ) {
-			damageToBeKilled *= 4.0f;
+			damageToBeKilled *= QUAD_DAMAGE_SCALE;
 		}
 		if( EnemyHasQuadVar() ) {
-			damageToBeKilled /= 4.0f;
+			damageToBeKilled *= 1.0f / QUAD_DAMAGE_SCALE;
 		}
 		return damageToBeKilled;
 	}
@@ -728,7 +728,7 @@ public:
 	float DamageToKill() const {
 		float damageToKill = RawDamageToKillVar();
 		if( HasQuadVar() ) {
-			damageToKill /= 4.0f;
+			damageToKill *= 1.0f / QUAD_DAMAGE_SCALE;
 		}
 		return damageToKill;
 	}
