@@ -148,32 +148,27 @@ bool BunnyHopAction::SetupBunnyHopping( const Vec3 &intendedLookVec, Context *co
 		velocityDir2D *= 1.0f / entityPhysicsState.Speed2D();
 
 		if( toTargetDir2DSqLen > 0.1f ) {
-			const auto &oldPMove = context->oldPlayerState->pmove;
-			const auto &newPMove = context->currPlayerState->pmove;
-			// If not skimming
-			if( !( newPMove.skim_time && newPMove.skim_time != oldPMove.skim_time ) ) {
-				toTargetDir2D *= Q_RSqrt( toTargetDir2DSqLen );
-				float velocityDir2DDotToTargetDir2D = velocityDir2D.Dot( toTargetDir2D );
-				if( velocityDir2DDotToTargetDir2D > 0.0f ) {
-					// Apply a full acceleration at the initial trajectory part.
-					// A reached dot threshold is the only extra condition.
-					// The action activation rate is still relatively low
-					// and the resulting velocity gain accumulated over real game frames is moderate.
-					// Make sure we use the maximal acceleration possible for first frames
-					// switching to the default fraction to simulate an actual resulting trajectory.
-					if( velocityDir2DDotToTargetDir2D > 0.7f && context->totalMillisAhead <= 64 ) {
-						context->CheatingAccelerate( 1.0f );
-					} else {
-						context->CheatingAccelerate( velocityDir2DDotToTargetDir2D );
-					}
+			toTargetDir2D *= Q_RSqrt( toTargetDir2DSqLen );
+			float velocityDir2DDotToTargetDir2D = velocityDir2D.Dot( toTargetDir2D );
+			if( velocityDir2DDotToTargetDir2D > 0.0f ) {
+				// Apply a full acceleration at the initial trajectory part.
+				// A reached dot threshold is the only extra condition.
+				// The action activation rate is still relatively low
+				// and the resulting velocity gain accumulated over real game frames is moderate.
+				// Make sure we use the maximal acceleration possible for first frames
+				// switching to the default fraction to simulate an actual resulting trajectory.
+				if( velocityDir2DDotToTargetDir2D > 0.7f && context->totalMillisAhead <= 64 ) {
+					context->CheatingAccelerate( 1.0f );
+				} else {
+					context->CheatingAccelerate( velocityDir2DDotToTargetDir2D );
 				}
-				if( velocityDir2DDotToTargetDir2D < STRAIGHT_MOVEMENT_DOT_THRESHOLD ) {
-					// Apply a path penalty for aircontrol abuse
-					if( velocityDir2DDotToTargetDir2D < 0 ) {
-						EnsurePathPenalty( 1000 );
-					}
-					context->CheatingCorrectVelocity( velocityDir2DDotToTargetDir2D, toTargetDir2D );
+			}
+			if( velocityDir2DDotToTargetDir2D < STRAIGHT_MOVEMENT_DOT_THRESHOLD ) {
+				// Apply a path penalty for aircontrol abuse
+				if( velocityDir2DDotToTargetDir2D < 0 ) {
+					EnsurePathPenalty( 1000 );
 				}
+				context->CheatingCorrectVelocity( velocityDir2DDotToTargetDir2D, toTargetDir2D );
 			}
 		}
 	}
@@ -288,11 +283,6 @@ bool BunnyHopAction::CanSetWalljump( Context *context, const Vec3 &velocity2DDir
 }
 
 bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
-	const auto *oldPMove = &context->oldPlayerState->pmove;
-	const auto *newPMove = &context->currPlayerState->pmove;
-	// Make sure this test is skipped along with other ones while skimming
-	Assert( !( newPMove->skim_time && newPMove->skim_time != oldPMove->skim_time ) );
-
 	const auto &newEntityPhysicsState = context->movementState->entityPhysicsState;
 	const auto &oldEntityPhysicsState = context->PhysicsStateBeforeStep();
 
@@ -509,65 +499,6 @@ bool BunnyHopAction::TryHandlingUnreachableTarget( Context *context ) {
 	return false;
 }
 
-inline bool BunnyHopAction::IsSkimmingInAGivenState( const Context *context ) const {
-	const auto &newPMove = context->currPlayerState->pmove;
-	if( !newPMove.skim_time ) {
-		return true;
-	}
-
-	const auto &oldPMove = context->oldPlayerState->pmove;
-	return newPMove.skim_time != oldPMove.skim_time;
-}
-
-bool BunnyHopAction::TryHandlingSkimmingState( Context *context ) {
-	Assert( IsSkimmingInAGivenState( context ) );
-
-	const auto topOfStackIndex = context->topOfStackIndex;
-	constexpr auto limit = MovementPredictionContext::MAX_PREDICTED_STATES;
-
-	// Skip most tests while skimming
-	// The only exception is testing covered distance to prevent
-	// jumping in front of wall contacting it forever updating skim timer
-
-	const float *origin = context->movementState->entityPhysicsState.Origin();
-	const float squareDistance = originAtSequenceStart.SquareDistance2DTo( origin );
-	constexpr const char *format = "Looks like the bot is stuck and is resetting the skim timer forever by jumping\n";
-	// If the bot has not covered a sufficient distance
-	if( squareDistance < SQUARE( 72 ) ) {
-		if( topOfStackIndex < limit / 3 ) {
-			context->SaveSuggestedActionForNextFrame( this );
-			return true;
-		}
-		Debug( format );
-		return false;
-	}
-
-	// Allow prediction termination in skimming state but apply a huge penalty.
-	// This is the only way to terminate prediction in the skimming state.
-	// If this is missing, many legit trajectories get rejected.
-	if( WasOnGroundThisFrame( context ) ) {
-		// The bot must be at the best reached position currently
-		if( minTravelTimeToNavTargetSoFar && context->TravelTimeToNavTarget() == minTravelTimeToNavTargetSoFar ) {
-			if( travelTimeAtSequenceStart > minTravelTimeToNavTargetSoFar ) {
-				// Apply a penalty that varies with covered distance
-				float distanceFrac = BoundedFraction( Q_Sqrt( squareDistance ), 192.0f );
-				CompleteOrSaveGoodEnoughPath( context, (unsigned)( 5000 - 3000 * distanceFrac ) );
-				return true;
-			}
-		}
-	}
-
-	// Prevent overflow. We have to perform this as the generic code path does not handle the skimming state.
-	// Otherwise an action is going to be disabled for planning entirely instead of testing another dir (if any).
-	if( topOfStackIndex < ( 3 * limit ) / 4 ) {
-		context->SaveSuggestedActionForNextFrame( this );
-		return true;
-	}
-
-	Debug( format );
-	return false;
-}
-
 bool BunnyHopAction::CheckNavTargetAreaTransition( Context *context ) {
 	if( !context->IsInNavTargetArea() ) {
 		// If the bot has left the nav target area
@@ -610,14 +541,6 @@ bool BunnyHopAction::CheckNavTargetAreaTransition( Context *context ) {
 void BunnyHopAction::CheckPredictionStepResults( Context *context ) {
 	BaseMovementAction::CheckPredictionStepResults( context );
 	if( context->cannotApplyAction || context->isCompleted ) {
-		return;
-	}
-
-	if( IsSkimmingInAGivenState( context ) ) {
-		if( !TryHandlingSkimmingState( context ) ) {
-			context->SetPendingRollback();
-		}
-		// Note: the call above may now terminate prediction as well
 		return;
 	}
 

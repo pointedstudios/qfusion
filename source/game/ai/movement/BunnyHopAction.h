@@ -65,10 +65,6 @@ protected:
 
 	bool CheckNavTargetAreaTransition( MovementPredictionContext *context );
 
-	inline bool IsSkimmingInAGivenState( const MovementPredictionContext *context ) const;
-
-	bool TryHandlingSkimmingState( MovementPredictionContext *context );
-
 	bool TryHandlingUnreachableTarget( MovementPredictionContext *context );
 
 	bool TryHandlingWorseTravelTimeToTarget( MovementPredictionContext *context,
