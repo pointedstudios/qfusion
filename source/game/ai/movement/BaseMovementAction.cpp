@@ -195,6 +195,7 @@ void BaseMovementAction::BeforePlanning() {
 	isDisabledForPlanning = false;
 	sequenceStartFrameIndex = std::numeric_limits<unsigned>::max();
 	sequenceEndFrameIndex = std::numeric_limits<unsigned>::max();
+	thisFrameCMShapeList = nullptr;
 }
 
 void BaseMovementAction::OnApplicationSequenceStarted( Context *context ) {
@@ -205,6 +206,7 @@ void BaseMovementAction::OnApplicationSequenceStarted( Context *context ) {
 	sequenceEndFrameIndex = invalidValue;
 	sequenceStartFrameIndex = context->topOfStackIndex;
 	originAtSequenceStart.Set( context->movementState->entityPhysicsState.Origin() );
+	thisFrameCMShapeList = nullptr;
 }
 
 void BaseMovementAction::OnApplicationSequenceStopped( Context *context,

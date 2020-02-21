@@ -17,6 +17,11 @@ protected:
 	BotMovementModule *const module;
 	const char *name;
 
+	// An action could set this field in PlanPredictionStep()
+	// to avoid further redundant list lookup in MovementPredictionContext::NextMovementStep().
+	// The latter method gets and resets this field.
+	const CMShapeList *thisFrameCMShapeList { nullptr };
+
 	int debugColor;
 
 	// Used to establish a direct mapping between integers and actions.

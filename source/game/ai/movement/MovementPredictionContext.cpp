@@ -1044,7 +1044,16 @@ void MovementPredictionContext::NextMovementStep() {
 
 	this->frameEvents.Clear();
 
-	pmoveShapeList = TraceCache().getShapeListForPMoveCollision( this );
+	// Try using an already retrieved list if possible
+	// (this saves some excessive bounds comparison)
+	if( auto *shapeList = activeAction->thisFrameCMShapeList ) {
+		pmoveShapeList = shapeList;
+		// Prevent further reuse
+		activeAction->thisFrameCMShapeList = nullptr;
+	} else {
+		pmoveShapeList = TraceCache().getShapeListForPMoveCollision( this );
+	}
+
 	// The naive solution of supplying a dummy trace function
 	// (that yields a zeroed output with fraction = 1) does not work.
 	// An actual logic tied to this flag has to be added in Pmove() for each module_Trace() call.
