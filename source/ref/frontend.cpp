@@ -265,17 +265,8 @@ void RF_DrawRotatedStretchPic( int x, int y, int w, int h, float s1, float t1, f
 	R_DrawRotatedStretchPic( x, y, w, h, s1, t1, s2, t2, angle, color, shader );
 }
 
-void RF_DrawStretchRaw( int x, int y, int w, int h, int cols, int rows,
-						float s1, float t1, float s2, float t2, uint8_t *data ) {
-	if( !cols || !rows ) {
-		return;
-	}
-
-	if( data ) {
-		R_UploadRawPic( rsh.rawTexture, cols, rows, data );
-	}
-
-	R_DrawStretchRaw( x, y, w, h, s1, t1, s2, t2 );
+void RF_DrawExternalTextureOverlay( GLuint externalTexNum ) {
+	R_DrawExternalTextureOverlay( externalTexNum );
 }
 
 void RF_DrawStretchPoly( const poly_t *poly, float x_offset, float y_offset ) {

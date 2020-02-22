@@ -34,6 +34,7 @@ end of unit intermissions
 
 #include "client.h"
 #include "../ref/frontend.h"
+#include "../ui/uisystem.h"
 
 float scr_con_current;    // aproaches scr_conlines at scr_conspeed
 float scr_con_previous;
@@ -513,14 +514,16 @@ void SCR_ShutdownScreen( void ) {
 */
 void SCR_EnableQuickMenu( bool enable ) {
 	cls.quickmenu = enable;
-	CL_UIModule_ShowQuickMenu( cls.quickmenu );
+	if( auto maybeInstance = UISystem::maybeInstance() ) {
+		( *maybeInstance )->showRespectMenu( cls.quickmenu );
+	}
 }
 
 /*
 * SCR_IsQuickMenuShown
 */
 bool SCR_IsQuickMenuShown( void ) {
-	return cls.quickmenu && CL_UIModule_HaveQuickMenu();
+	return cls.quickmenu && UISystem::instance()->hasRespectMenu();
 }
 
 /*
@@ -581,7 +584,7 @@ static void SCR_DrawNotify( void ) {
 * SCR_BeginLoadingPlaque
 */
 void SCR_BeginLoadingPlaque( void ) {
-	CL_UIModule_ForceMenuOff();
+	UISystem::instance()->forceMenuOff();
 
 	SoundSystem::Instance()->StopAllSounds( SoundSystem::StopAndClear | SoundSystem::StopMusic );
 
@@ -667,44 +670,73 @@ void SCR_UpdateScreen( void ) {
 
 	SCR_CheckSystemFontsModified();
 
-	// TODO: Pass as flags
-	const bool forcevsync = ( cls.state == CA_DISCONNECTED && scr_con_current );
-	const bool forceclear = forcevsync;
-	const bool timedemo = cl_timedemo->integer != 0 && cls.demo.playing;
+	bool canRenderView = false;
+	bool canDrawConsole = false;
+	bool canDrawDebugGraph = false;
+	bool canDrawConsoleNotify = false;
 
-	RF_BeginFrame( forceclear, forcevsync, timedemo );
-
+	// TODO: Add more meaningful UI state flags
+	unsigned uiRefreshFlags = 0;
 	if( scr_draw_loading == 2 ) {
 		// loading plaque over APP_STARTUP_COLOR screen
 		scr_draw_loading = 0;
-		CL_UIModule_UpdateConnectScreen( true );
 	} else if( cls.state == CA_DISCONNECTED ) {
-		CL_UIModule_Refresh( true, true );
-		SCR_DrawConsole();
-	} else if( cls.state == CA_GETTING_TICKET || cls.state == CA_CONNECTING  || cls.state == CA_HANDSHAKE ) {
-		CL_UIModule_UpdateConnectScreen( true );
+		uiRefreshFlags = UISystem::UseOwnBackground | UISystem::ShowCursor;
+		canDrawConsole = true;
 	} else if( cls.state == CA_CONNECTED ) {
 		if( cls.cgameActive ) {
-			CL_UIModule_UpdateConnectScreen( false );
-			SCR_RenderView( timedemo );
-		} else {
-			CL_UIModule_UpdateConnectScreen( true );
+			canRenderView = true;
 		}
 	} else if( cls.state == CA_ACTIVE ) {
-		SCR_RenderView( timedemo );
+		uiRefreshFlags = UISystem::ShowCursor;
 
-		CL_UIModule_Refresh( false, true );
+		canRenderView = true;
 
 		if( scr_timegraph->integer ) {
 			SCR_DebugGraph( cls.frametime * 0.3f, 1, 1, 1 );
 		}
 
 		if( scr_debuggraph->integer || scr_timegraph->integer || scr_netgraph->integer ) {
-			SCR_DrawDebugGraph();
+			canDrawDebugGraph = true;
 		}
 
-		SCR_DrawConsole();
+		canDrawConsole = true;
+		canDrawConsoleNotify = true;
+	}
+
+	// Perform UI refresh (that may include binding UI GL context and unbinding it) first
+	auto *const uiSystem = UISystem::instance();
+	uiSystem->refresh( uiRefreshFlags );
+
+	// TODO: Pass as flags
+	const bool forcevsync = ( cls.state == CA_DISCONNECTED && scr_con_current );
+	const bool forceclear = true;
+	const bool timedemo = cl_timedemo->integer != 0 && cls.demo.playing;
+
+	RF_BeginFrame( forceclear, forcevsync, timedemo );
+
+	if( canRenderView ) {
+		SCR_RenderView( timedemo );
+	}
+
+	if( canDrawConsoleNotify ) {
 		SCR_DrawNotify();
+	}
+
+	// Blit the UI texture that could contain recent UI updates.
+	// It contains a static UI image from previous frames in case of no updates.
+	if( auto maybeTexNum = uiSystem->getUITexNum() ) {
+		R_Set2DMode( true );
+		R_DrawExternalTextureOverlay( *maybeTexNum );
+		R_Set2DMode( false );
+	}
+
+	if( canDrawDebugGraph ) {
+		SCR_DrawDebugGraph();
+	}
+
+	if( canDrawConsole ) {
+		SCR_DrawConsole();
 	}
 
 	RF_EndFrame();

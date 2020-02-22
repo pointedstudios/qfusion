@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "client.h"
 #include "xpm.h"
 #include "../ref/frontend.h"
+#include "../ui/uisystem.h"
 
 cvar_t *vid_ref;
 cvar_t *vid_width, *vid_height;
@@ -494,10 +495,12 @@ load_refresh:
 		if( cgameActive ) {
 			CL_GameModule_Init();
 			Con_Close();
-			CL_UIModule_ForceMenuOff();
+			UISystem::instance()->forceMenuOff();
 			CL_SetKeyDest( key_game );
 		} else {
-			CL_UIModule_ForceMenuOn();
+			if( auto maybeInstance = UISystem::maybeInstance() ) {
+				( *maybeInstance )->forceMenuOn();
+			}
 			CL_SetKeyDest( key_menu );
 		}
 

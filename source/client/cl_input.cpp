@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // cl.input.c  -- builds an intended movement command to send to the server
 
 #include "client.h"
+#include "../ui/uisystem.h"
 
 static bool in_initialized = false;
 
@@ -59,7 +60,7 @@ static void CL_UpdateGameInput( int frameTime ) {
 	CL_GameModule_InputFrame( frameTime );
 
 	if( cls.key_dest == key_menu ) {
-		CL_UIModule_MouseMove( frameTime, mx, my );
+		UISystem::instance()->handleMouseMove( frameTime, mx, my );
 	} else {
 		CL_GameModule_MouseMove( mx, my );
 	}

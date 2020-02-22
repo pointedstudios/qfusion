@@ -247,8 +247,6 @@ typedef struct {
 
 	vec3_t wallColor, floorColor;
 
-	image_t         *rawTexture;                // cinematic texture (RGB)
-	image_t         *rawYUVTextures[3];         // 8bit cinematic textures (YCbCr)
 	image_t         *noTexture;                 // use for bad textures
 	image_t         *whiteTexture;
 	image_t         *whiteCubemapTexture;
@@ -258,6 +256,9 @@ typedef struct {
 	image_t         *particleTexture;           // little dot for particles
 	image_t         *coronaTexture;
 	image_t         *portalTextures[MAX_PORTAL_TEXTURES + 1];
+
+	// A wrapper for an externally provided texture handle
+	image_t         *externalTexture;
 
 	refScreenTexSet_t st, stf;
 
@@ -729,13 +730,10 @@ void        R_DrawStretchPic( int x, int y, int w, int h, float s1, float t1, fl
 							  const vec4_t color, const shader_t *shader );
 void        R_DrawRotatedStretchPic( int x, int y, int w, int h, float s1, float t1, float s2, float t2,
 									 float angle, const vec4_t color, const shader_t *shader );
-void        R_UploadRawPic( image_t *texture, int cols, int rows, uint8_t *data );
-void        R_DrawStretchRawYUVBuiltin( int x, int y, int w, int h, float s1, float t1, float s2, float t2,
-										image_t **yuvTextures, int flip );
-void        R_DrawStretchRaw( int x, int y, int w, int h, float s1, float t1, float s2, float t2 );
-void        R_DrawStretchRawYUV( int x, int y, int w, int h, float s1, float t1, float s2, float t2 );
 void        R_DrawStretchQuick( int x, int y, int w, int h, float s1, float t1, float s2, float t2,
 								const vec4_t color, int program_type, image_t *image, int blendMask );
+
+void        R_DrawExternalTextureOverlay( GLuint externalTexNum );
 
 void        R_InitCustomColors( void );
 void        R_SetCustomColor( int num, int r, int g, int b );

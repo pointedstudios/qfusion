@@ -4,6 +4,7 @@ source/build*/
 source/*/Debug
 source/*/Release
 source/ipch
+source/client/qfusion_autogen/
 *.sdf
 *.opensdf
 *.vcxproj.user

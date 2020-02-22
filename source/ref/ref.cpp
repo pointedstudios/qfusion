@@ -608,31 +608,14 @@ void R_DrawStretchPic( int x, int y, int w, int h, float s1, float t1, float s2,
 	R_DrawRotatedStretchPic( x, y, w, h, s1, t1, s2, t2, 0, color, shader );
 }
 
-/*
-* R_UploadRawPic
-*/
-void R_UploadRawPic( image_t *texture, int cols, int rows, uint8_t *data ) {
-	if( texture->width != cols || texture->height != rows ) {
-		uint8_t *nodata[1] = { NULL };
-		R_ReplaceImage( texture, nodata, cols, rows, texture->flags, 1, 3 );
-	}
-	R_ReplaceSubImage( texture, 0, 0, 0, &data, cols, rows );
-}
+void R_DrawExternalTextureOverlay( GLuint externalTexNum ) {
+	rsh.externalTexture->texnum = externalTexNum;
 
-/*
-* R_DrawStretchRaw
-*/
-void R_DrawStretchRaw( int x, int y, int w, int h, float s1, float t1, float s2, float t2 ) {
-	float h_scale, v_scale;
+	R_DrawStretchQuick( 0, 0, rf.width2D, rf.height2D, 0.0f, 1.0f, 1.0f, 0.0f, colorWhite,
+		GLSL_PROGRAM_TYPE_NONE, rsh.externalTexture, GLSTATE_SRCBLEND_SRC_ALPHA | GLSTATE_DSTBLEND_ONE_MINUS_SRC_ALPHA );
 
-	h_scale = (float)rsh.rawTexture->width / rsh.rawTexture->upload_width;
-	v_scale = (float)rsh.rawTexture->height / rsh.rawTexture->upload_height;
-	s1 *= h_scale;
-	s2 *= h_scale;
-	t1 *= v_scale;
-	t2 *= v_scale;
-
-	R_DrawStretchQuick( x, y, w, h, s1, t1, s2, t2, colorWhite, GLSL_PROGRAM_TYPE_NONE, rsh.rawTexture, 0 );
+	// Prevent reusing this num
+	rsh.externalTexture->texnum = 0;
 }
 
 static const wsw::HashedStringView kBuiltinImage( "$builtinimage" );

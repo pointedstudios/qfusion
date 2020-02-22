@@ -249,6 +249,9 @@ bool    GLimp_GetGammaRamp( size_t stride, unsigned short *psize, unsigned short
 void    GLimp_SetGammaRamp( size_t stride, unsigned short size, unsigned short *ramp );
 void    GLimp_SetSwapInterval( int swapInterval );
 
+bool    GLimp_BeginUIRenderingHacks();
+bool    GLimp_EndUIRenderingHacks();
+
 bool    GLimp_MakeCurrent( void *context, void *surface );
 
 void    GLimp_EnableMultithreadedRendering( bool enable );

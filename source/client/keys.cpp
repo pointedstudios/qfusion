@@ -18,6 +18,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 #include "client.h"
+#include "../ui/uisystem.h"
 
 /*
 
@@ -502,7 +503,7 @@ void Key_CharEvent( int key, wchar_t charkey ) {
 			Con_MessageCharEvent( charkey );
 			break;
 		case key_menu:
-			CL_UIModule_CharEvent( charkey );
+			UISystem::instance()->handleCharEvent( charkey );
 			break;
 		case key_game:
 		case key_console:
@@ -655,7 +656,7 @@ void Key_Event( int key, bool down, int64_t time ) {
 				if( cls.state != CA_DISCONNECTED ) {
 					Cbuf_AddText( "disconnect\n" );
 				} else if( cls.key_dest == key_menu ) {
-					CL_UIModule_Keydown( key );
+					UISystem::instance()->handleKeyEvent( key, true, UISystem::MainContext );
 				}
 				return;
 			}
@@ -666,7 +667,7 @@ void Key_Event( int key, bool down, int64_t time ) {
 				Con_MessageKeyDown( key );
 				break;
 			case key_menu:
-				CL_UIModule_Keydown( key );
+				UISystem::instance()->handleKeyEvent( key, true, UISystem::MainContext );
 				break;
 			case key_game:
 				CL_GameModule_EscapeKey();
@@ -727,11 +728,7 @@ void Key_Event( int key, bool down, int64_t time ) {
 	}
 
 	if( cls.key_dest == key_menu ) {
-		if( down ) {
-			CL_UIModule_Keydown( key );
-		} else {
-			CL_UIModule_Keyup( key );
-		}
+		UISystem::instance()->handleKeyEvent( key, down, UISystem::MainContext );
 		return;
 	}
 
@@ -745,11 +742,7 @@ void Key_Event( int key, bool down, int64_t time ) {
 			break;
 		case key_game:
 			if( have_quickmenu && numeric ) {
-				if( down ) {
-					CL_UIModule_KeydownQuick( numkey );
-				} else {
-					CL_UIModule_KeyupQuick( numkey );
-				}
+				UISystem::instance()->handleKeyEvent( numkey, down, UISystem::RespectContext );
 				break;
 			}
 		case key_console:

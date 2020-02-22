@@ -18,9 +18,14 @@
 
  */
 
+#include <QVariant>
+#include <QtPlatformHeaders/QGLXNativeContext>
+
 #include <SDL.h>
+#include <SDL_syswm.h>
 #include "../client/client.h"
 #include "../ref/frontend.h"
+#include "sdl_glw.h"
 
 SDL_Window *sdl_window;
 
@@ -147,4 +152,64 @@ float VID_GetPixelRatio( void ) {
 #endif
 
 	return 1.0f; // TODO: check if retina?
+}
+
+QVariant VID_GetMainContextHandle() {
+	SDL_SysWMinfo info;
+	SDL_GetVersion( &info.version );
+	if( !SDL_GetWindowWMInfo( sdl_window, &info ) ) {
+		return QVariant();
+	}
+
+	Display *display = info.info.x11.display;
+	Window window = info.info.x11.window;
+	auto context = (GLXContext)glw_state.sdl_glcontext;
+	QGLXNativeContext result( context, display, window );
+	return QVariant::fromValue( result );
+}
+
+typedef Drawable (*GlxGetCurrentDrawbleFn)();
+typedef int (*GlxMakeContextCurrentFn)( Display *, GLXDrawable, GLXDrawable, GLXContext );
+
+static GlxGetCurrentDrawbleFn qglXGetCurrentDrawable;
+static GlxGetCurrentDrawbleFn qglXGetCurrentReadDrawable;
+static GlxMakeContextCurrentFn qglXMakeContextCurrent;
+
+static Drawable savedDrawable;
+static Drawable savedReadDrawable;
+
+#define LOAD_GLX_PROC( name )                                               \
+do {                                                                        \
+	q ## name = ( decltype( q ## name ) )SDL_GL_GetProcAddress( #name );    \
+	if( !q ## name ) {                                                      \
+		Com_Error( ERR_FATAL, "Failed to load an address %s\n", #name );    \
+	}																		\
+} while( 0 )
+
+static void loadGlxStuff() {
+	LOAD_GLX_PROC( glXGetCurrentDrawable );
+	LOAD_GLX_PROC( glXGetCurrentReadDrawable );
+	LOAD_GLX_PROC( glXMakeContextCurrent );
+}
+
+bool GLimp_BeginUIRenderingHacks() {
+	loadGlxStuff();
+
+	savedDrawable = qglXGetCurrentDrawable();
+	savedReadDrawable = qglXGetCurrentReadDrawable();
+	return true;
+}
+
+bool GLimp_EndUIRenderingHacks() {
+	loadGlxStuff();
+
+	SDL_SysWMinfo info;
+	SDL_GetVersion( &info.version );
+	SDL_GetWindowWMInfo( glw_state.sdl_window, &info );
+	auto display = info.info.x11.display;
+
+	assert( savedDrawable && savedReadDrawable );
+	auto res = qglXMakeContextCurrent( display, savedDrawable, savedReadDrawable, (GLXContext)glw_state.sdl_glcontext );
+	savedDrawable = savedReadDrawable = 0;
+	return res;
 }

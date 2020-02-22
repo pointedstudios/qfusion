@@ -34,6 +34,9 @@
 #include "../qcommon/qcommon.h"
 #include "win_glw.h"
 
+#include <QVariant>
+#include <QtPlatformHeaders/QWGLNativeContext>
+
 // It's better to load all this stuff locally here
 
 #define WGL_CONTEXT_MAJOR_VERSION_ARB           0x2091
@@ -549,6 +552,8 @@ static bool GLimp_InitGL( bool isInitialDummyContext ) {
 			goto fail;
 		}
 	} else {
+		// Enforcing core contexts is temporarily disabled
+#if 0
 		assert( qwglCreateContextAttribsARB );
 
 		int attribs[] = {
@@ -559,6 +564,11 @@ static bool GLimp_InitGL( bool isInitialDummyContext ) {
 		};
 
 		if( !( glw_state.hGLRC = qwglCreateContextAttribsARB( glw_state.hDC, nullptr, attribs ) ) ) {
+			Com_Printf( "GLimp_Init() - qwglCreateContextAttribsARB failed\n" );
+			goto fail;
+		}
+#endif
+		if( !( glw_state.hGLRC = qwglCreateContext( glw_state.hDC ) ) ) {
 			Com_Printf( "GLimp_Init() - qwglCreateContextAttribsARB failed\n" );
 			goto fail;
 		}
@@ -762,4 +772,16 @@ void GLimp_SharedContext_Destroy( void *context, void *surface ) {
 	if( qwglDeleteContext ) {
 		qwglDeleteContext( (HGLRC)context );
 	}
+}
+
+QVariant VID_GetMainContextHandle() {
+	return QVariant::fromValue( QWGLNativeContext( glw_state.hGLRC, glw_state.hWnd ) );
+}
+
+bool GLimp_BeginUIRenderingHacks() {
+	return true;
+}
+
+bool GLimp_EndUIRenderingHacks() {
+	return GLimp_MakeCurrent( glw_state.hGLRC, nullptr );
 }

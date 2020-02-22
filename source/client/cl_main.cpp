@@ -25,6 +25,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../qcommon/asyncstream.h"
 #include "../qcommon/hash.h"
 #include "../ref/frontend.h"
+#include "../ui/uisystem.h"
+
 #include "serverlist.h"
 
 #include <random>
@@ -688,7 +690,6 @@ static void CL_EndRegistration( void ) {
 	cls.registrationOpen = false;
 
 	FTLIB_TouchAllFonts();
-	CL_UIModule_TouchAllAssets();
 	RF_EndRegistration();
 	SoundSystem::Instance()->EndRegistration();
 }
@@ -1730,11 +1731,12 @@ void CL_SetClientState( int state ) {
 		Steam_AdvertiseGame( NULL, 0 );
 	}
 
+	auto *uiSystem = UISystem::instance();
 	switch( state ) {
 		case CA_DISCONNECTED:
 			Con_Close();
-			CL_UIModule_Refresh( true, true );
-			CL_UIModule_ForceMenuOn();
+			uiSystem->refresh( UISystem::ShowCursor | UISystem::UseOwnBackground );
+			uiSystem->forceMenuOn();
 			//CL_UIModule_MenuMain ();
 			CL_SetKeyDest( key_menu );
 			//SCR_UpdateScreen();
@@ -1743,7 +1745,7 @@ void CL_SetClientState( int state ) {
 		case CA_CONNECTING:
 			cls.cgameActive = false;
 			Con_Close();
-			CL_UIModule_ForceMenuOff();
+			uiSystem->forceMenuOff();
 			SoundSystem::Instance()->StopBackgroundTrack();
 			SoundSystem::Instance()->Clear();
 			CL_SetKeyDest( key_game );
@@ -1759,8 +1761,8 @@ void CL_SetClientState( int state ) {
 			cl_connectChain[0] = '\0';
 			CL_EndRegistration();
 			Con_Close();
-			CL_UIModule_Refresh( false, false );
-			CL_UIModule_ForceMenuOff();
+			uiSystem->refresh( 0 );
+			uiSystem->forceMenuOff();
 			CL_SetKeyDest( key_game );
 			//SCR_UpdateScreen();
 			CL_AddReliableCommand( "svmotd 1" );
@@ -1808,7 +1810,7 @@ void CL_InitMedia( void ) {
 	SCR_EnableQuickMenu( false );
 
 	// load user interface
-	CL_UIModule_Init();
+	UISystem::init( VID_GetWindowWidth(), VID_GetWindowHeight() );
 
 	// check memory integrity
 	Mem_DebugCheckSentinelsGlobal();
@@ -1833,7 +1835,7 @@ void CL_ShutdownMedia( void ) {
 	CL_GameModule_Shutdown();
 
 	// shutdown user interface
-	CL_UIModule_Shutdown();
+	UISystem::shutdown();
 
 	SCR_ShutDownConsoleMedia();
 }
@@ -1868,9 +1870,7 @@ void CL_RestartMedia( void ) {
 	// register console font and background
 	SCR_RegisterConsoleMedia();
 
-	CL_UIModule_ForceMenuOff();
-
-	CL_UIModule_TouchAllAssets();
+	UISystem::instance()->forceMenuOff();
 
 	// check memory integrity
 	Mem_DebugCheckSentinelsGlobal();
@@ -2908,7 +2908,7 @@ void CL_Init( void ) {
 
 	CL_InitMedia();
 
-	CL_UIModule_ForceMenuOn();
+	UISystem::instance()->forceMenuOff();
 
 	// check for update
 	CL_CheckForUpdate();
@@ -2944,7 +2944,7 @@ void CL_Shutdown( void ) {
 		cls.servername = NULL;
 	}
 
-	CL_UIModule_Shutdown();
+	UISystem::shutdown();
 	CL_GameModule_Shutdown();
 	CL_SoundModule_Shutdown( true );
 	CL_ShutdownInput();

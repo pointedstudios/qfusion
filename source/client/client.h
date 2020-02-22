@@ -407,25 +407,6 @@ void CL_SoundModule_Init( bool verbose );
 void CL_SoundModule_Shutdown( bool verbose );
 
 //
-// cl_ui.c
-//
-void CL_UIModule_Init( void );
-void CL_UIModule_Shutdown( void );
-void CL_UIModule_TouchAllAssets( void );
-void CL_UIModule_Keydown( int key );
-void CL_UIModule_Keyup( int key );
-void CL_UIModule_KeydownQuick( int key );
-void CL_UIModule_KeyupQuick( int key );
-void CL_UIModule_CharEvent( wchar_t key );
-void CL_UIModule_Refresh( bool backGround, bool showCursor );
-void CL_UIModule_UpdateConnectScreen( bool backGround );
-void CL_UIModule_ForceMenuOn( void );
-void CL_UIModule_ForceMenuOff( void );
-void CL_UIModule_ShowQuickMenu( bool show );
-bool CL_UIModule_HaveQuickMenu( void );
-void CL_UIModule_MouseMove( int frameTime, int dx, int dy );
-
-//
 // cl_input.c
 //
 void CL_InitInput( void );

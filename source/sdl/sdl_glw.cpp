@@ -19,6 +19,7 @@
  */
 
 #include <SDL.h>
+#include <SDL_syswm.h>
 
 #include "../ref/local.h"
 #include "sdl_glw.h"
@@ -172,6 +173,7 @@ bool GLimp_Init( const char *applicationName, void *hinstance, void *wndproc, vo
 
 	return true;
 }
+
 
 static bool GLimp_InitGL( int stencilbits ) {
 	int colorBits, depthBits, stencilBits;

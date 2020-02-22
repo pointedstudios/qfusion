@@ -190,6 +190,7 @@ if (NOT GAME_MODULES_ONLY)
         find_package(JPEG REQUIRED)
         find_package(PNG REQUIRED)
         find_package(OpenAL)
+        find_package(Qt5 COMPONENTS Core Quick Gui REQUIRED)
 
         # We need SDL only on non-Windows platforms or when with SDL2-backend
         if (USE_SDL2 OR (${CMAKE_SYSTEM_NAME} MATCHES "Linux"))
