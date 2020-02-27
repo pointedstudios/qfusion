@@ -276,7 +276,6 @@ typedef struct {
 	cgs_media_handle_t *shaderEnergyMark;
 	cgs_media_handle_t *shaderLaser;
 	cgs_media_handle_t *shaderNet;
-	cgs_media_handle_t *shaderBackTile;
 	cgs_media_handle_t *shaderSelect;
 	cgs_media_handle_t *shaderChatBalloon;
 	cgs_media_handle_t *shaderDownArrow;
@@ -745,7 +744,6 @@ void CG_ScreenShutdown( void );
 void CG_Draw2D( void );
 void CG_DrawHUD();
 void CG_CalcVrect( void );
-void CG_TileClear( void );
 void CG_CenterPrint( const char *str );
 
 void CG_LoadStatusBar( void );

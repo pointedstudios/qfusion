@@ -1183,60 +1183,6 @@ bool CG_LoadingItemName( const char *str ) {
 }
 
 /*
-* CG_TileClearRect
-*
-* This repeats tile graphic to fill the screen around a sized down
-* refresh window.
-*/
-static void CG_TileClearRect( int x, int y, int w, int h, struct shader_s *shader ) {
-	float iw, ih;
-
-	iw = 1.0f / 64.0;
-	ih = 1.0f / 64.0;
-
-	RF_DrawStretchPic( x, y, w, h, x * iw, y * ih, ( x + w ) * iw, ( y + h ) * ih, colorWhite, shader );
-}
-
-/*
-* CG_TileClear
-*
-* Clear any parts of the tiled background that were drawn on last frame
-*/
-void CG_TileClear( void ) {
-	int w, h;
-	int top, bottom, left, right;
-	struct shader_s *backTile;
-
-	if( cg_viewSize->integer == 100 ) {
-		return; // full screen rendering
-
-	}
-	w = cgs.vidWidth;
-	h = cgs.vidHeight;
-
-	top = scr_vrect.y;
-	bottom = top + scr_vrect.height - 1;
-	left = scr_vrect.x;
-	right = left + scr_vrect.width - 1;
-
-	backTile = CG_MediaShader( cgs.media.shaderBackTile );
-
-	// clear above view screen
-	CG_TileClearRect( 0, 0, w, top, backTile );
-
-	// clear below view screen
-	CG_TileClearRect( 0, bottom, w, h - bottom, backTile );
-
-	// clear left of view screen
-	CG_TileClearRect( 0, top, left, bottom - top + 1, backTile );
-
-	// clear left of view screen
-	CG_TileClearRect( right, top, w - right, bottom - top + 1, backTile );
-}
-
-//===============================================================
-
-/*
 * CG_AddBlend - wsw
 */
 static void CG_AddBlend( float r, float g, float b, float a, float *v_blend ) {

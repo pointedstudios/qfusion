@@ -274,7 +274,6 @@ void CG_RegisterMediaShaders( void ) {
 	cgs.media.shaderParticle = CG_RegisterMediaShader( "particle", true );
 
 	cgs.media.shaderNet = CG_RegisterMediaShader( "gfx/hud/net", true );
-	cgs.media.shaderBackTile = CG_RegisterMediaShader( "gfx/ui/backtile", true );
 	cgs.media.shaderSelect = CG_RegisterMediaShader( "gfx/hud/select", true );
 	cgs.media.shaderChatBalloon = CG_RegisterMediaShader( PATH_BALLONCHAT_ICON, true );
 	cgs.media.shaderDownArrow = CG_RegisterMediaShader( "gfx/2d/arrow_down", true );
