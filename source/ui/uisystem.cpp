@@ -1,6 +1,7 @@
 #include "uisystem.h"
 #include "../qcommon/singletonholder.h"
 #include "../qcommon/qcommon.h"
+#include "../client/client.h"
 
 #include <QGuiApplication>
 #include <QOpenGLContext>
@@ -11,6 +12,7 @@
 #include <QOpenGLFunctions>
 #include <QQmlEngine>
 #include <QQmlComponent>
+#include <QQmlContext>
 #include <QQuickItem>
 #include <QUrl>
 
@@ -18,6 +20,25 @@ QVariant VID_GetMainContextHandle();
 
 bool GLimp_BeginUIRenderingHacks();
 bool GLimp_EndUIRenderingHacks();
+
+/**
+ * Just to provide a nice prefix in Qml scope.
+ * There could be multiple connections and multiple states.
+ * This makes the state meaning clear.
+ */
+class QuakeClient : public QObject {
+	Q_OBJECT
+
+public:
+	enum State {
+		Disconnected,
+		MMValidating,
+		Connecting,
+		Loading,
+		Active
+	};
+	Q_ENUM( State );
+};
 
 class QWswUISystem : public QObject, public UISystem {
 	Q_OBJECT
@@ -42,11 +63,28 @@ public:
 	virtual void forceMenuOff() override {};
 
 	[[nodiscard]]
-	virtual bool hasRespectMenu() const override { return false; };
-	virtual void showRespectMenu( bool show ) override {};
+	bool hasRespectMenu() const override { return isShowingRespectMenu; };
+
+	void showRespectMenu( bool show ) override {
+		if( show == isShowingRespectMenu ) {
+			return;
+		}
+		isShowingRespectMenu = show;
+		Q_EMIT isShowingRespectMenuChanged( isShowingRespectMenu );
+	};
 
 	void enterUIRenderingMode();
 	void leaveUIRenderingMode();
+
+	Q_PROPERTY( QuakeClient::State quakeClientState READ getQuakeClientState NOTIFY quakeClientStateChanged );
+	Q_PROPERTY( bool isPlayingADemo READ isPlayingADemo NOTIFY isPlayingADemoChanged );
+	Q_PROPERTY( bool isShowingInGameMenu READ isShowingInGameMenuGetter NOTIFY isShowingInGameMenuChanged );
+	Q_PROPERTY( bool isShowingRespectMenu READ isShowingRespectMenuGetter NOTIFY isShowingRespectMenuChanged );
+signals:
+	Q_SIGNAL void quakeClientStateChanged( QuakeClient::State state );
+	Q_SIGNAL void isPlayingADemoChanged( bool isPlayingADemo );
+	Q_SIGNAL void isShowingInGameMenuChanged( bool isShowingInGameMenu );
+	Q_SIGNAL void isShowingRespectMenuChanged( bool isShowingRespectMenu );
 public slots:
 	Q_SLOT void onSceneGraphInitialized();
 	Q_SLOT void onRenderRequested();
@@ -68,7 +106,31 @@ private:
 	bool isInUIRenderingMode { false };
 	bool isValidAndReady { false };
 
+	// A copy of last frame client properties for state change detection without intrusive changes to client code.
+	// Use a separate scope for clarity and for avoiding name conflicts.
+	struct {
+		bool isPlayingADemo { false };
+		QuakeClient::State quakeClientState { QuakeClient::Disconnected };
+	} lastFrameState;
+
+	bool isShowingInGameMenu { false };
+	bool isShowingRespectMenu { false };
+
+	[[nodiscard]]
+	auto getQuakeClientState() const { return lastFrameState.quakeClientState; }
+
+	[[nodiscard]]
+	bool isPlayingADemo() const { return lastFrameState.isPlayingADemo; }
+
+	[[nodiscard]]
+	bool isShowingInGameMenuGetter() const { return isShowingInGameMenu; };
+
+	[[nodiscard]]
+	bool isShowingRespectMenuGetter() const { return isShowingRespectMenu; };
+
 	explicit QWswUISystem( int width, int height );
+
+	void updateProps();
 	void render();
 };
 
@@ -147,6 +209,8 @@ void QWswUISystem::refresh( unsigned refreshFlags ) {
 	QGuiApplication::processEvents( QEventLoop::ExcludeUserInputEvents );
 #endif
 
+	updateProps();
+
 	if( !isValidAndReady ) {
 		return;
 	}
@@ -221,8 +285,15 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 		return;
 	}
 
+	const QString reason( "This type is a native code bridge and cannot be instantiated" );
+	qmlRegisterUncreatableType<QWswUISystem>( "net.warsow", 2, 6, "Wsw", reason );
+	qmlRegisterUncreatableType<QuakeClient>( "net.warsow", 2, 6, "QuakeClient", reason );
+
 	engine = new QQmlEngine;
+	engine->rootContext()->setContextProperty( "wsw", this );
+
 	component = new QQmlComponent( engine );
+
 	connect( component, &QQmlComponent::statusChanged, this, &QWswUISystem::onComponentStatusChanged );
 	component->loadUrl( QUrl( "qrc:/RootItem.qml" ) );
 }
@@ -278,6 +349,35 @@ auto QWswUISystem::getUITexNum() const -> std::optional<unsigned> {
 		return framebufferObject->texture();
 	}
 	return std::nullopt;
+}
+
+void QWswUISystem::updateProps() {
+	auto *currClientState = &lastFrameState.quakeClientState;
+	const auto formerClientState = *currClientState;
+
+	if( cls.state == CA_UNINITIALIZED || cls.state == CA_DISCONNECTED ) {
+		*currClientState = QuakeClient::Disconnected;
+	} else if( cls.state == CA_GETTING_TICKET ) {
+		*currClientState = QuakeClient::MMValidating;
+	} else if( cls.state == CA_LOADING ) {
+		*currClientState = QuakeClient::Loading;
+	} else if( cls.state == CA_ACTIVE ) {
+		*currClientState = QuakeClient::Active;
+	} else {
+		*currClientState = QuakeClient::Connecting;
+	}
+
+	if( *currClientState != formerClientState ) {
+		Q_EMIT quakeClientStateChanged( *currClientState );
+	}
+
+	auto *isPlayingADemo = &lastFrameState.isPlayingADemo;
+	const auto wasPlayingADemo = *isPlayingADemo;
+
+	*isPlayingADemo = cls.demo.playing;
+	if( *isPlayingADemo != wasPlayingADemo ) {
+		Q_EMIT isPlayingADemoChanged( *isPlayingADemo );
+	}
 }
 
 #include "uisystem.moc"

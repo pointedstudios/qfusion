@@ -1,6 +1,12 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource>
+        <file>CentralMenuGroup.qml</file>
+        <file>DemoPlaybackMenu.qml</file>
+        <file>InGameMenu.qml</file>
+        <file>MainMenu.qml</file>
+        <file>RespectTokensMenu.qml</file>
         <file>RootItem.qml</file>
+        <file>logo.webp</file>
         <file>qtquickcontrols2.conf</file>
     </qresource>
 </RCC>
