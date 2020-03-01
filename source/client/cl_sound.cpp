@@ -20,7 +20,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "client.h"
 
-static mempool_t *cl_soundmodulepool = nullptr;
 static cvar_t *s_module = nullptr;
 
 SoundSystem *SoundSystem::instance = nullptr;
@@ -64,14 +63,9 @@ void CL_SoundModule_Init( bool verbose ) {
 		Cvar_ForceSet( "s_module", s_module->dvalue );
 	}
 
-	cl_soundmodulepool = Mem_AllocPool( NULL, "Client Sound Module" );
-
 	if( !SoundSystem::Init( &cl, VID_GetWindowHandle(), verbose ) ) {
 		Cvar_ForceSet( s_module->name, "0" );
 	}
-
-	// check memory integrity
-	Mem_DebugCheckSentinelsGlobal();
 
 	if( verbose ) {
 		Com_Printf( "------------------------------------\n" );
@@ -82,13 +76,7 @@ void CL_SoundModule_Init( bool verbose ) {
 * CL_SoundModule_Shutdown
 */
 void CL_SoundModule_Shutdown( bool verbose ) {
-	if( !cl_soundmodulepool ) {
-		return;
-	}
-
 	SoundSystem::Shutdown( verbose );
-	Mem_FreePool( &cl_soundmodulepool );
-	cl_soundmodulepool = nullptr;
 }
 
 void SoundSystem::Shutdown( bool verbose ) {

@@ -266,7 +266,7 @@ class AiSquadBasedTeam : public AiBaseTeam {
 		explicit PlayerAssistanceTracker( const AiSquadBasedTeam *parent_ );
 
 		~PlayerAssistanceTracker() {
-			G_Free( influenceScores );
+			Q_free( influenceScores );
 		}
 
 		void Think() {

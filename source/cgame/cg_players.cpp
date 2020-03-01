@@ -82,8 +82,8 @@ static struct sfx_s *CG_RegisterPmodelSexedSound( pmodelinfo_t *pmodelinfo, cons
 		Q_strncpyz( model, DEFAULT_PLAYERMODEL, sizeof( model ) );
 	}
 
-	sexedSfx = ( cg_sexedSfx_t * )CG_Malloc( sizeof( cg_sexedSfx_t ) );
-	sexedSfx->name = CG_CopyString( oname );
+	sexedSfx = ( cg_sexedSfx_t * )Q_malloc( sizeof( cg_sexedSfx_t ) );
+	sexedSfx->name = Q_strdup( oname );
 	sexedSfx->next = pmodelinfo->sexedSfx;
 	pmodelinfo->sexedSfx = sexedSfx;
 
@@ -122,7 +122,7 @@ void CG_UpdateSexedSoundsRegistration( pmodelinfo_t *pmodelinfo ) {
 	// free loaded sounds
 	for( sexedSfx = pmodelinfo->sexedSfx; sexedSfx; sexedSfx = next ) {
 		next = sexedSfx->next;
-		CG_Free( sexedSfx );
+		Q_free(   sexedSfx );
 	}
 	pmodelinfo->sexedSfx = NULL;
 

@@ -77,10 +77,10 @@ static void R_ReserveDrawSurfaces( drawList_t *list, int minMeshes ) {
 	oldSize = maxMeshes;
 	newSize = std::max( minMeshes, oldSize * 2 );
 
-	newDs = (sortedDrawSurf_t *)R_Malloc( newSize * sizeof( sortedDrawSurf_t ) );
+	newDs = (sortedDrawSurf_t *)Q_malloc( newSize * sizeof( sortedDrawSurf_t ) );
 	if( ds ) {
 		memcpy( newDs, ds, oldSize * sizeof( sortedDrawSurf_t ) );
-		R_Free( ds );
+		Q_free( ds );
 	}
 
 	list->drawSurfs = newDs;
@@ -287,10 +287,10 @@ static void R_ReserveVBOSlices( drawList_t *list, unsigned int minSlices ) {
 	newSize = std::max( minSlices, oldSize * 2 );
 
 	slices = list->vboSlices;
-	newSlices = (vboSlice_t *)R_Malloc( newSize * sizeof( vboSlice_t ) );
+	newSlices = (vboSlice_t *)Q_malloc( newSize * sizeof( vboSlice_t ) );
 	if( slices ) {
 		memcpy( newSlices, slices, oldSize * sizeof( vboSlice_t ) );
-		R_Free( slices );
+		Q_free( slices );
 	}
 
 	list->vboSlices = newSlices;
@@ -674,7 +674,7 @@ void R_BuildTangentVectors( int numVertexes, vec4_t *xyzArray, vec4_t *normalsAr
 	vec3_t *tVectorsArray;
 
 	if( numVertexes > sizeof( stackTVectorsArray ) / sizeof( stackTVectorsArray[0] ) ) {
-		tVectorsArray = (vec3_t *)R_Malloc( sizeof( vec3_t ) * numVertexes );
+		tVectorsArray = (vec3_t *)Q_malloc( sizeof( vec3_t ) * numVertexes );
 	} else {
 		tVectorsArray = stackTVectorsArray;
 	}
@@ -736,6 +736,6 @@ void R_BuildTangentVectors( int numVertexes, vec4_t *xyzArray, vec4_t *normalsAr
 	}
 
 	if( tVectorsArray != stackTVectorsArray ) {
-		R_Free( tVectorsArray );
+		Q_free( tVectorsArray );
 	}
 }

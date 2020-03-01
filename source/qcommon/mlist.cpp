@@ -81,7 +81,7 @@ static void ML_AddMap( const char *filename, const char *fullname ) {
 	}
 
 	ml_flush = true;    // tell everyone that maplist has changed
-	buffer = ( char* )Mem_ZoneMalloc( sizeof( mapinfo_t ) + strlen( filename ) + 1 + strlen( fullname ) + 1 );
+	buffer = ( char* )Q_malloc( sizeof( mapinfo_t ) + strlen( filename ) + 1 + strlen( fullname ) + 1 );
 
 	map = ( mapinfo_t * )buffer;
 	buffer += sizeof( mapinfo_t );
@@ -156,7 +156,7 @@ static void ML_InitFromCache( void ) {
 	}
 
 	// load maps from directory reading into a list
-	maps = temp = ( char* )Mem_TempMalloc( size + sizeof( mapdir_t ) * total );
+	maps = temp = ( char* )Q_malloc( size + sizeof( mapdir_t ) * total );
 	temp += size;
 	FS_GetFileList( "maps", ".bsp", maps, size, 0, 0 );
 	len = 0;
@@ -184,7 +184,7 @@ static void ML_InitFromCache( void ) {
 
 	FS_LoadCacheFile( MLIST_CACHE, (void **)&buffer, NULL, 0 );
 	if( !buffer ) {
-		Mem_TempFree( maps );
+		Q_free( maps );
 		return;
 	}
 
@@ -241,7 +241,7 @@ static void ML_InitFromCache( void ) {
 	for( curmap = dir; curmap; curmap = curmap->next )
 		ML_AddMap( curmap->filename, NULL );
 
-	Mem_TempFree( maps );
+	Q_free( maps );
 	FS_FreeFile( buffer );
 }
 
@@ -356,7 +356,7 @@ char **ML_CompleteBuildList( const char *partial ) {
 	assert( partial );
 
 	Trie_Dump( mlist_filenames_trie, partial, TRIE_DUMP_VALUES, &dump );
-	buf = (char **) Mem_TempMalloc( sizeof( char * ) * ( dump->size + 1 ) );
+	buf = (char **) Q_malloc( sizeof( char * ) * ( dump->size + 1 ) );
 	for( i = 0; i < dump->size; ++i )
 		buf[i] = ( (mapinfo_t *) ( dump->key_value_vector[i].value ) )->filename;
 	buf[dump->size] = NULL;
@@ -413,7 +413,7 @@ void ML_Shutdown( void ) {
 	while( maplist ) {
 		map = maplist;
 		maplist = map->next;
-		Mem_ZoneFree( map );
+		Q_free( map );
 	}
 
 	ml_flush = true;
@@ -450,7 +450,7 @@ bool ML_Update( void ) {
 
 	total = FS_GetFileListExt( "maps", ".bsp", NULL, &size, 0, 0 );
 	if( size ) {
-		maps = ( char* )Mem_TempMalloc( size );
+		maps = ( char* )Q_malloc( size );
 		FS_GetFileList( "maps", ".bsp", maps, size, 0, 0 );
 		for( i = 0, len = 0; i < total; i++ ) {
 			map = maps + len;
@@ -464,7 +464,7 @@ bool ML_Update( void ) {
 				ML_AddMap( filename, MLIST_UNKNOWN_MAPNAME );
 			}
 		}
-		Mem_TempFree( maps );
+		Q_free( maps );
 	}
 
 	return true;
@@ -487,12 +487,12 @@ const char *ML_GetFilenameExt( const char *fullname, bool recursive ) {
 		return MLIST_NULL;
 	}
 
-	fullname2 = ( char* )Mem_TempMalloc( strlen( fullname ) + 1 );
+	fullname2 = ( char* )Q_malloc( strlen( fullname ) + 1 );
 	strcpy( fullname2, fullname );
 	Q_strlwr( fullname2 );
 
 	err = Trie_Find( mlist_fullnames_trie, fullname2, TRIE_EXACT_MATCH, (void **)&map );
-	Mem_Free( fullname2 );
+	Q_free( fullname2 );
 
 	if( err == TRIE_OK ) {
 		return map->filename;

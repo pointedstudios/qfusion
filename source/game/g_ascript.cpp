@@ -2755,7 +2755,7 @@ static asstring_t *asFunc_LoadFile( asstring_t *path ) {
 
 	filelen = trap_FS_FOpenFile( path->buffer, &filehandle, FS_READ );
 	if( filehandle && filelen > 0 ) {
-		buf = ( uint8_t * )G_Malloc( filelen + 1 );
+		buf = ( uint8_t * )Q_malloc( filelen + 1 );
 		filelen = trap_FS_Read( buf, filelen, filehandle );
 	}
 
@@ -2766,7 +2766,7 @@ static asstring_t *asFunc_LoadFile( asstring_t *path ) {
 	}
 
 	data = qasStringFactoryBuffer( (char *)buf, filelen );
-	G_Free( buf );
+	Q_free( buf );
 
 	return data;
 }
@@ -3737,10 +3737,10 @@ static void G_asDumpAPIToFile( const char *path ) {
 			name = cDescr->name;
 			if( strlen( path ) + strlen( name ) + 2 >= filename_size ) {
 				if( filename_size ) {
-					G_Free( filename );
+					Q_free( filename );
 				}
 				filename_size = ( strlen( path ) + strlen( name ) + 2 ) * 2 + 1;
-				filename = (char *) G_Malloc( filename_size );
+				filename = (char *) Q_malloc( filename_size );
 			}
 
 			Q_snprintfz( filename, filename_size, "%s%s.h", path, name );
@@ -3842,10 +3842,10 @@ static void G_asDumpAPIToFile( const char *path ) {
 	name = "globals";
 	if( strlen( path ) + strlen( name ) + 2 >= filename_size ) {
 		if( filename_size ) {
-			G_Free( filename );
+			Q_free( filename );
 		}
 		filename_size = ( strlen( path ) + strlen( name ) + 2 ) * 2 + 1;
-		filename = ( char * )G_Malloc( filename_size );
+		filename = ( char * )Q_malloc( filename_size );
 	}
 
 	Q_snprintfz( filename, filename_size, "%s%s.h", path, name );

@@ -282,7 +282,7 @@ static void Con_Dump_f( void ) {
 	}
 
 	name_size = sizeof( char ) * ( strlen( Cmd_Argv( 1 ) ) + strlen( ".txt" ) + 1 );
-	name = (char *)Mem_TempMalloc( name_size );
+	name = (char *)Q_malloc( name_size );
 
 	Q_strncpyz( name, Cmd_Argv( 1 ), name_size );
 	COM_DefaultExtension( name, ".txt", name_size );
@@ -290,20 +290,20 @@ static void Con_Dump_f( void ) {
 
 	if( !COM_ValidateRelativeFilename( name ) ) {
 		Com_Printf( "Invalid filename.\n" );
-		Mem_TempFree( name );
+		Q_free( name );
 		return;
 	}
 
 	if( FS_FOpenFile( name, &file, FS_WRITE ) == -1 ) {
 		Com_Printf( "Couldn't open: %s\n", name );
-		Mem_TempFree( name );
+		Q_free( name );
 		return;
 	}
 
 	QMutex_Lock( con.mutex );
 
 	buffer_size = Con_BufferText( NULL, newline ) + 1;
-	buffer = (char *)Mem_TempMalloc( buffer_size );
+	buffer = (char *)Q_malloc( buffer_size );
 
 	Con_BufferText( buffer, newline );
 	buffer_size = Con_RemoveBufferColorTokens( buffer, buffer_size, buffer );
@@ -314,10 +314,10 @@ static void Con_Dump_f( void ) {
 
 	FS_FCloseFile( file );
 
-	Mem_TempFree( buffer );
+	Q_free( buffer );
 
 	Com_Printf( "Dumped console text: %s\n", name );
-	Mem_TempFree( name );
+	Q_free( name );
 }
 
 /*
@@ -1190,7 +1190,7 @@ static void Con_CompleteCommandLine() {
 		if( !ca ) {
 			// the list is empty, although non-NULL list pointer suggests that the command
 			// exists, so clean up and exit without printing anything
-			Mem_TempFree( list[4] );
+			Q_free( list[4] );
 			return;
 		}
 	}
@@ -1277,7 +1277,7 @@ static void Con_CompleteCommandLine() {
 			size_t temp_size;
 
 			temp_size = sizeof( key_lines[edit_line] );
-			cmd_temp = (char *)Mem_TempMalloc( temp_size );
+			cmd_temp = (char *)Q_malloc( temp_size );
 
 			Q_strncpyz( cmd_temp, key_lines[edit_line] + skip, temp_size );
 			p = strstr( cmd_temp, " " );
@@ -1301,13 +1301,13 @@ static void Con_CompleteCommandLine() {
 		key_lines[edit_line][key_linepos] = 0;
 
 		if( cmd == cmd_temp ) {
-			Mem_TempFree( cmd );
+			Q_free( cmd );
 		}
 	}
 
 	for( i = 0; i < 5; ++i ) {
 		if( list[i] ) {
-			Mem_TempFree( list[i] );
+			Q_free( list[i] );
 		}
 	}
 }
@@ -1340,7 +1340,7 @@ static void Con_Key_Copy( void ) {
 	QMutex_Lock( con.mutex );
 
 	buffer_size = Con_BufferText( NULL, newline ) + 1;
-	buffer = (char *)Mem_TempMalloc( buffer_size );
+	buffer = (char *)Q_malloc( buffer_size );
 
 	Con_BufferText( buffer, newline );
 
@@ -1348,7 +1348,7 @@ static void Con_Key_Copy( void ) {
 
 	CL_SetClipboardData( buffer );
 
-	Mem_TempFree( buffer );
+	Q_free( buffer );
 }
 
 /*
@@ -1997,7 +1997,7 @@ static void Con_MessageCompletion( const char *partial, bool teamonly ) {
 			comp[pos] = '\0';
 		}
 
-		Mem_Free( args );
+		Q_free( args );
 	}
 
 	comp_len = 0;
@@ -2067,7 +2067,7 @@ static void Con_MessageCompletion( const char *partial, bool teamonly ) {
 
 			for( i = 0; i < 4; ++i ) {
 				if( list[i] ) {
-					Mem_TempFree( list[i] );
+					Q_free( list[i] );
 				}
 			}
 

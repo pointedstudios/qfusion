@@ -716,10 +716,10 @@ vattribmask_t R_UploadVBOVertexData( mesh_vbo_t *vbo, int vertsOffset, vattribma
 static elem_t *R_VBOElemBuffer( unsigned numElems ) {
 	if( numElems > r_vbo_numtempelems ) {
 		if( r_vbo_numtempelems ) {
-			R_Free( r_vbo_tempelems );
+			Q_free( r_vbo_tempelems );
 		}
 		r_vbo_numtempelems = numElems;
-		r_vbo_tempelems = ( elem_t * )R_Malloc( sizeof( *r_vbo_tempelems ) * numElems );
+		r_vbo_tempelems = ( elem_t * )Q_malloc( sizeof( *r_vbo_tempelems ) * numElems );
 	}
 
 	return r_vbo_tempelems;
@@ -732,10 +732,10 @@ static void *R_VBOVertBuffer( unsigned numVerts, size_t vertSize ) {
 	size_t size = numVerts * vertSize;
 	if( size > r_vbo_tempvsoupsize ) {
 		if( r_vbo_tempvsoup ) {
-			R_Free( r_vbo_tempvsoup );
+			Q_free( r_vbo_tempvsoup );
 		}
 		r_vbo_tempvsoupsize = size;
-		r_vbo_tempvsoup = ( float * )R_Malloc( size );
+		r_vbo_tempvsoup = ( float * )Q_malloc( size );
 	}
 	return r_vbo_tempvsoup;
 }
@@ -875,7 +875,7 @@ void R_ShutdownVBO( void ) {
 	}
 
 	if( r_vbo_tempelems ) {
-		R_Free( r_vbo_tempelems );
+		Q_free( r_vbo_tempelems );
 	}
 	r_vbo_numtempelems = 0;
 

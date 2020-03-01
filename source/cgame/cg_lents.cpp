@@ -158,7 +158,7 @@ static lentity_t *CG_AllocLocalEntity( letype_t type, float r, float g, float b,
 */
 static void CG_FreeLocalEntity( lentity_t *le ) {
 	if( le->static_boneposes ) {
-		CG_Free( le->static_boneposes );
+		Q_free(   le->static_boneposes );
 		le->static_boneposes = NULL;
 	}
 
@@ -1172,7 +1172,7 @@ void CG_PModel_SpawnTeleportEffect( centity_t *cent ) {
 			if( cent->skel ) {
 				// use static bone pose, no animation
 				le->skel = cent->skel;
-				le->static_boneposes = ( bonepose_t * )CG_Malloc( sizeof( bonepose_t ) * le->skel->numBones );
+				le->static_boneposes = ( bonepose_t * )Q_malloc( sizeof( bonepose_t ) * le->skel->numBones );
 				memcpy( le->static_boneposes, cent->ent.boneposes, sizeof( bonepose_t ) * le->skel->numBones );
 				le->ent.boneposes = le->static_boneposes;
 				le->ent.oldboneposes = le->ent.boneposes;

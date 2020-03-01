@@ -39,7 +39,7 @@ static SingletonHolder<StatsowFacade> statsHolder;
 //====================================================
 
 static clientRating_t *g_ratingAlloc( const char *gametype, float rating, float deviation, mm_uuid_t uuid ) {
-	auto *cr = (clientRating_t*)G_Malloc( sizeof( clientRating_t ) );
+	auto *cr = (clientRating_t*)Q_malloc( sizeof( clientRating_t ) );
 	if( !cr ) {
 		return nullptr;
 	}
@@ -63,7 +63,7 @@ static void g_ratingsFree( clientRating_t *list ) {
 
 	while( list ) {
 		next = list->next;
-		G_Free( list );
+		Q_free( list );
 		list = next;
 	}
 }
@@ -223,7 +223,7 @@ void StatsowFacade::RemoveRating( edict_t *ent ) {
 	// first from the game
 	cr = Rating_DetachId( &ratingsHead, client->mm_session );
 	if( cr ) {
-		G_Free( cr );
+		Q_free( cr );
 	}
 
 	// then the clients own list
@@ -268,12 +268,12 @@ RaceRun *StatsowFacade::NewRaceRun( const edict_t *ent, int numSectors ) {
 		}
 		run->~RaceRun();
 		if( !mem ) {
-			G_Free( run );
+			Q_free( run );
 		}
 	}
 
 	if( !mem ) {
-		mem = (uint8_t *)G_Malloc( sizeof( RaceRun ) + ( numSectors + 1 ) * sizeof( uint32_t ) );
+		mem = (uint8_t *)Q_malloc( sizeof( RaceRun ) + ( numSectors + 1 ) * sizeof( uint32_t ) );
 	}
 
 	static_assert( alignof( RaceRun ) == 8, "Make sure we do not need to align the times array separately" );
@@ -474,7 +474,7 @@ RunStatusQuery *StatsowFacade::AddRunStatusQuery( const mm_uuid_t &runId ) {
 		return nullptr;
 	}
 
-	void *mem = G_Malloc( sizeof( RunStatusQuery ) );
+	void *mem = Q_malloc( sizeof( RunStatusQuery ) );
 	auto *statusQuery = new( mem )RunStatusQuery( this, underlyingQuery, runId );
 	return ::Link( statusQuery, &runQueriesHead );
 }
@@ -482,7 +482,7 @@ RunStatusQuery *StatsowFacade::AddRunStatusQuery( const mm_uuid_t &runId ) {
 void StatsowFacade::DeleteRunStatusQuery( RunStatusQuery *query ) {
 	::Unlink( query, &runQueriesHead );
 	query->~RunStatusQuery();
-	G_Free( query );
+	Q_free( query );
 }
 
 void StatsowFacade::AddToRacePlayTime( const gclient_t *client, int64_t timeToAdd ) {
@@ -571,7 +571,7 @@ void StatsowFacade::ClearEntries() {
 	for( ClientEntry *e = clientEntriesHead; e; e = next ) {
 		next = e->next;
 		e->~ClientEntry();
-		G_Free( e );
+		Q_free( e );
 	}
 
 	clientEntriesHead = nullptr;
@@ -860,7 +860,7 @@ StatsowFacade::RespectStats *StatsowFacade::FindRespectStatsById( const mm_uuid_
 StatsowFacade::ClientEntry *StatsowFacade::NewPlayerEntry( edict_t *ent, bool final ) {
 	auto *cl = ent->r.client;
 
-	auto *const e = new( G_Malloc( sizeof( ClientEntry ) ) )ClientEntry;
+	auto *const e = new( Q_malloc( sizeof( ClientEntry ) ) )ClientEntry;
 
 	// fill in the data
 	Q_strncpyz( e->netname, cl->netname, sizeof( e->netname ) );
@@ -1224,7 +1224,7 @@ StatsowFacade::~StatsowFacade() {
 	for( RunStatusQuery *query = runQueriesHead; query; query = nextQuery ) {
 		nextQuery = query;
 		query->~RunStatusQuery();
-		G_Free( query );
+		Q_free( query );
 	}
 
 	FlushRacePlayTimes();
@@ -1280,14 +1280,14 @@ RunStatusQuery *StatsowFacade::SendRaceRunReport( RaceRun *raceRun, const char *
 
 	if( !IsValid() ) {
 		raceRun->~RaceRun();
-		G_Free( raceRun );
+		Q_free( raceRun );
 		return nullptr;
 	}
 
 	QueryObject *query = trap_MM_NewPostQuery( "server/race/runReport" );
 	if( !query ) {
 		raceRun->~RaceRun();
-		G_Free( raceRun );
+		Q_free( raceRun );
 		return nullptr;
 	}
 
@@ -1332,7 +1332,7 @@ RunStatusQuery *StatsowFacade::SendRaceRunReport( RaceRun *raceRun, const char *
 	// TODO: We can recycle the memory chunk by putting in a free list here
 
 	raceRun->~RaceRun();
-	G_Free( raceRun );
+	Q_free( raceRun );
 
 	trap_MM_EnqueueReport( query );
 

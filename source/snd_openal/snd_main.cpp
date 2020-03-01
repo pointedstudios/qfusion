@@ -66,8 +66,6 @@ void NullSoundSystem::DeleteSelf( bool ) {
 	::nullSoundSystemHolder.Shutdown();
 }
 
-struct mempool_s *soundpool;
-
 cvar_t *s_volume;
 cvar_t *s_musicvolume;
 cvar_t *s_openAL_device;
@@ -165,8 +163,6 @@ bool SoundSystem::Init( client_state_t *client, void *hWnd, bool verbose ) {
 }
 
 ALSoundSystem *ALSoundSystem::TryCreate( client_state_s *client, void *hWnd, bool verbose ) {
-	soundpool = S_MemAllocPool( "OpenAL sound module" );
-
 	s_num_ent_spats = 0;
 
 #ifdef OPENAL_RUNTIME
@@ -230,10 +226,6 @@ void ALSoundSystem::DeleteSelf( bool verbose ) {
 }
 
 ALSoundSystem::~ALSoundSystem() {
-	if( !soundpool ) {
-		return;
-	}
-
 	StopAllSounds( StopAndClear | StopMusic );
 
 	// wake up the mixer
@@ -269,8 +261,6 @@ ALSoundSystem::~ALSoundSystem() {
 	Cmd_RemoveCommand( "s_devices" );
 
 	QAL_Shutdown();
-
-	S_MemFreePool( &soundpool );
 }
 
 void ALSoundSystem::PostInit() {

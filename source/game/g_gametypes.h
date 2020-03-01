@@ -262,6 +262,11 @@ template <typename T, size_t N> inline void MoveArray( T ( &dest )[N], T ( &src 
 	memset( src, 0, N );
 }
 
+void *Q_malloc( size_t size );
+void *Q_realloc( void *buf, size_t newsize );
+void Q_free( void *buf );
+char *Q_strdup( const char *str );
+
 template <typename T>
 class StatsSequence {
 	struct Chunk {
@@ -305,7 +310,7 @@ class StatsSequence {
 		size_t memSize = sizeof( Chunk );
 		memSize += ( sizeof( T ) + 8 ) & 7;
 		memSize += elemsPerChunk * sizeof( T );
-		auto *mem = (uint8_t *)trap_MemAlloc( memSize, __FILE__, __LINE__ );
+		auto *mem = (uint8_t *)Q_malloc( memSize );
 		auto *result = new( mem )Chunk;
 		result->itemsLeft = elemsPerChunk;
 		result->data = mem;
@@ -352,7 +357,7 @@ public:
 		for( Chunk *chunk = headChunk; chunk; chunk = nextChunk ) {
 			nextChunk = chunk->next;
 			chunk->~Chunk();
-			trap_MemFree( chunk, __FILE__, __LINE__ );
+			Q_free( chunk );
 		}
 		headChunk = nullptr;
 		tailChunk = nullptr;

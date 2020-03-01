@@ -31,7 +31,7 @@ static const unsigned char base64_table[65] =
  * nul terminated to make it easier to use as a C string. The nul terminator is
  * not included in out_len.
  *
- * ch : free the output buffer with Mem_TempFree
+ * ch : free the output buffer with Q_free
  * ch : modified the encoding to not include '\n' characters (URL encoding)
  */
 unsigned char * base64_encode( const unsigned char *src, size_t len,

@@ -904,9 +904,6 @@ extern cvar_t *cg_flashWindowCount;
 
 extern cvar_t *cg_autoRespectMenu;
 
-#define CG_Malloc( size ) CG_MemAlloc( size, __FILE__, __LINE__ )
-#define CG_Free( data ) CG_MemFree( data, __FILE__, __LINE__ )
-
 void CG_ValidateItemDef( int tag, char *name );
 
 #ifndef _MSC_VER
@@ -918,8 +915,6 @@ void CG_LocalPrint( _Printf_format_string_ const char *format, ... );
 #endif
 
 void CG_Precache( void );
-char *_CG_CopyString( const char *in, const char *filename, int fileline );
-#define CG_CopyString( in ) _CG_CopyString( in, __FILE__, __LINE__ )
 
 void CG_UseItem( const char *name );
 void CG_RegisterCGameCommands( void );
@@ -1163,5 +1158,5 @@ int CG_TransformedPointContents( const vec3_t p, const cmodel_s *cmodel, const v
 void CG_InlineModelBounds( const cmodel_s *cmodel, vec3_t mins, vec3_t maxs );
 bool CG_InPVS( const vec3_t p1, const vec3_t p2 );
 
-void *CG_MemAlloc( size_t size, const char *filename, int fileline );
+void *Q_malloc( size_t size, const char *filename, int fileline );
 void CG_MemFree( void *data, const char *filename, int fileline );

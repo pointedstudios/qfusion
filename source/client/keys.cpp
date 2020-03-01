@@ -231,7 +231,7 @@ void Key_SetBinding( int keynum, const char *binding ) {
 			consolebinded--;
 		}
 
-		Mem_ZoneFree( keybindings[keynum] );
+		Q_free( keybindings[keynum] );
 		keybindings[keynum] = NULL;
 	}
 
@@ -240,7 +240,7 @@ void Key_SetBinding( int keynum, const char *binding ) {
 	}
 
 	// allocate memory for new binding
-	keybindings[keynum] = ZoneCopyString( binding );
+	keybindings[keynum] = Q_strdup( binding );
 
 	if( !Q_stricmp( keybindings[keynum], "toggleconsole" ) ) {
 		consolebinded++;

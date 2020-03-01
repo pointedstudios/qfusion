@@ -198,10 +198,10 @@ void Com_UnloadGameLibrary( void **handle ) {
 			}
 		}
 
-		Mem_ZoneFree( gamelib->fullname );
+		Q_free( gamelib->fullname );
 	}
 
-	Mem_ZoneFree( gamelib );
+	Q_free( gamelib );
 
 	*handle = NULL;
 }
@@ -268,40 +268,40 @@ void *Com_LoadGameLibrary( const char *basename, const char *apifuncname, void *
 		randomizer = brandom( 1, 9999 );
 	}
 
-	gamelib = ( gamelib_t* )Mem_ZoneMalloc( sizeof( gamelib_t ) );
+	gamelib = ( gamelib_t* )Q_malloc( sizeof( gamelib_t ) );
 	gamelib->lib = NULL;
 	gamelib->fullname = NULL;
 
 	libname_size = strlen( LIB_PREFIX ) + strlen( basename ) + 1 + strlen( ARCH ) + strlen( LIB_SUFFIX ) + 1;
-	libname = ( char* )Mem_TempMalloc( libname_size );
+	libname = ( char* )Q_malloc( libname_size );
 	Q_snprintfz( libname, libname_size, LIB_PREFIX "%s_" ARCH LIB_SUFFIX, basename );
 
 	// it exists?
 	if( FS_FOpenFile( libname, NULL, FS_READ ) == -1 ) {
 		Com_Printf( "LoadLibrary (%s):(File not found)\n", libname );
-		Mem_TempFree( libname );
-		Mem_ZoneFree( gamelib );
+		Q_free( libname );
+		Q_free( gamelib );
 		return NULL;
 	}
 
 	// pure check
 	if( pure && !FS_IsPureFile( libname ) ) {
 		Com_Printf( "LoadLibrary (%s):(Unpure file)\n", libname );
-		Mem_TempFree( libname );
-		Mem_ZoneFree( gamelib );
+		Q_free( libname );
+		Q_free( gamelib );
 		return NULL;
 	}
 
 	temppath = Sys_Library_GetGameLibPath( libname, randomizer_time, randomizer );
-	tempname = ( char * )Mem_ZoneMalloc( strlen( temppath ) + 1 );
+	tempname = ( char * )Q_malloc( strlen( temppath ) + 1 );
 	strcpy( tempname, temppath );
 
 	if( FS_FOpenFile( tempname, NULL, FS_READ ) == -1 ) {
 		if( !FS_ExtractFile( libname, tempname ) ) {
 			Com_Printf( "LoadLibrary (%s):(FS_ExtractFile failed)\n", libname );
-			Mem_TempFree( libname );
-			Mem_ZoneFree( tempname );
-			Mem_ZoneFree( gamelib );
+			Q_free( libname );
+			Q_free( tempname );
+			Q_free( gamelib );
 			return NULL;
 		}
 	}
@@ -313,7 +313,7 @@ void *Com_LoadGameLibrary( const char *basename, const char *apifuncname, void *
 
 	if( !( gamelib->lib ) ) {
 		Com_Printf( "LoadLibrary (%s):(%s)\n", tempname, Sys_Library_ErrorString() );
-		Mem_TempFree( libname );
+		Q_free( libname );
 		Com_UnloadGameLibrary( (void **)&gamelib );
 		return NULL;
 	}
@@ -321,7 +321,7 @@ void *Com_LoadGameLibrary( const char *basename, const char *apifuncname, void *
 	APIfunc = ( void* ( * )( void* ) )Sys_Library_ProcAddress( gamelib->lib, apifuncname );
 	if( !APIfunc ) {
 		Com_Printf( "LoadLibrary (%s):(%s)\n", tempname, Sys_Library_ErrorString() );
-		Mem_TempFree( libname );
+		Q_free( libname );
 		Com_UnloadGameLibrary( (void **)&gamelib );
 		return NULL;
 	}
@@ -332,7 +332,7 @@ void *Com_LoadGameLibrary( const char *basename, const char *apifuncname, void *
 		Com_LoadGameLibraryManifest( libname, manifest );
 	}
 
-	Mem_TempFree( libname );
+	Q_free( libname );
 
 	return APIfunc( parms );
 }

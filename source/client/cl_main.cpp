@@ -247,9 +247,9 @@ static void CL_CheckForResend( void ) {
 	if( cls.state == CA_DISCONNECTED && Com_ServerState() ) {
 		CL_SetClientState( CA_CONNECTING );
 		if( cls.servername ) {
-			Mem_ZoneFree( cls.servername );
+			Q_free( cls.servername );
 		}
-		cls.servername = ZoneCopyString( "localhost" );
+		cls.servername = Q_strdup( "localhost" );
 		cls.servertype = SOCKET_LOOPBACK;
 		NET_InitAddress( &cls.serveraddress, NA_LOOPBACK );
 		if( !NET_OpenSocket( &cls.socket_loopback, cls.servertype, &cls.serveraddress, false ) ) {
@@ -374,9 +374,9 @@ static void CL_Connect( const char *servername, socket_type_t type, netadr_t *ad
 	}
 
 	if( cls.servername ) {
-		Mem_ZoneFree( cls.servername );
+		Q_free( cls.servername );
 	}
-	cls.servername = ZoneCopyString( servername );
+	cls.servername = Q_strdup( servername );
 
 	memset( cl.configstrings, 0, sizeof( cl.configstrings ) );
 
@@ -417,7 +417,7 @@ static void CL_Connect_Cmd_f( socket_type_t socket ) {
 		return;
 	}
 
-	connectstring_base = TempCopyString( Cmd_Argv( 1 ) );
+	connectstring_base = Q_strdup( Cmd_Argv( 1 ) );
 	connectstring = connectstring_base;
 	serverchain = Cmd_Argc() >= 3 ? Cmd_Argv( 2 ) : "";
 
@@ -438,13 +438,13 @@ static void CL_Connect_Cmd_f( socket_type_t socket ) {
 		}
 
 		temp_size = strlen( "demo " ) + strlen( http_scheme ) + strlen( connectstring ) + 1;
-		temp = (char *)Mem_TempMalloc( temp_size );
+		temp = (char *)Q_malloc( temp_size );
 		Q_snprintfz( temp, temp_size, "demo %s%s", http_scheme, connectstring );
 
 		Cbuf_ExecuteText( EXEC_NOW, temp );
 
-		Mem_TempFree( temp );
-		Mem_TempFree( connectstring_base );
+		Q_free( temp );
+		Q_free( connectstring_base );
 		return;
 	}
 
@@ -467,7 +467,7 @@ static void CL_Connect_Cmd_f( socket_type_t socket ) {
 	Cvar_ForceSet( "autowatch", autowatch );
 
 	if( !NET_StringToAddress( connectstring, &serveraddress ) ) {
-		Mem_TempFree( connectstring_base );
+		Q_free( connectstring_base );
 		Com_Printf( "Bad server address\n" );
 		return;
 	}
@@ -476,12 +476,12 @@ static void CL_Connect_Cmd_f( socket_type_t socket ) {
 	// (not in a middle of login process or anything)
 	CLStatsowFacade::Instance()->WaitUntilConnectionAllowed();
 
-	servername = TempCopyString( connectstring );
+	servername = Q_strdup( connectstring );
 	CL_Connect( servername, ( serveraddress.type == NA_LOOPBACK ? SOCKET_LOOPBACK : socket ),
 				&serveraddress, serverchain );
 
-	Mem_TempFree( servername );
-	Mem_TempFree( connectstring_base );
+	Q_free( servername );
+	Q_free( connectstring_base );
 }
 
 /*
@@ -704,22 +704,22 @@ void CL_ClearState( void ) {
 	}
 
 	if( cl.frames_areabits ) {
-		Mem_Free( cl.frames_areabits );
+		Q_free( cl.frames_areabits );
 		cl.frames_areabits = NULL;
 	}
 
 	if( cl.cmds ) {
-		Mem_Free( cl.cmds );
+		Q_free( cl.cmds );
 		cl.cmds = NULL;
 	}
 
 	if( cl.cmd_time ) {
-		Mem_Free( cl.cmd_time );
+		Q_free( cl.cmd_time );
 		cl.cmd_time = NULL;
 	}
 
 	if( cl.snapShots ) {
-		Mem_Free( cl.snapShots );
+		Q_free( cl.snapShots );
 		cl.snapShots = NULL;
 	}
 
@@ -727,9 +727,9 @@ void CL_ClearState( void ) {
 	memset( &cl, 0, sizeof( client_state_t ) );
 	memset( cl_baselines, 0, sizeof( cl_baselines ) );
 
-	cl.cmds = (usercmd_t *)Mem_ZoneMalloc( sizeof( *cl.cmds ) * CMD_BACKUP );
-	cl.cmd_time = (int *)Mem_ZoneMalloc( sizeof( *cl.cmd_time ) * CMD_BACKUP );
-	cl.snapShots = (snapshot_t *)Mem_ZoneMalloc( sizeof( *cl.snapShots ) * CMD_BACKUP );
+	cl.cmds = (usercmd_t *)Q_malloc( sizeof( *cl.cmds ) * CMD_BACKUP );
+	cl.cmd_time = (int *)Q_malloc( sizeof( *cl.cmd_time ) * CMD_BACKUP );
+	cl.snapShots = (snapshot_t *)Q_malloc( sizeof( *cl.snapShots ) * CMD_BACKUP );
 
 	//userinfo_modified = true;
 	cls.lastExecutedServerCommand = 0;
@@ -887,7 +887,7 @@ void CL_Disconnect( const char *message ) {
 	cls.mv = false;
 
 	if( cls.httpbaseurl ) {
-		Mem_Free( cls.httpbaseurl );
+		Q_free( cls.httpbaseurl );
 		cls.httpbaseurl = NULL;
 	}
 
@@ -1034,12 +1034,12 @@ void CL_Reconnect_f( void ) {
 	cl_connectChain[0] = '\0';
 	cl_nextString[0] = '\0';
 
-	servername = TempCopyString( cls.servername );
+	servername = Q_strdup( cls.servername );
 	servertype = cls.servertype;
 	serveraddress = cls.serveraddress;
 	CL_Disconnect( NULL );
 	CL_Connect( servername, servertype, &serveraddress, "" );
-	Mem_TempFree( servername );
+	Q_free( servername );
 }
 
 /*
@@ -1403,7 +1403,7 @@ static unsigned int CL_LoadMap( const char *name ) {
 	if( Com_ServerState() ) {
 		cl.cms = Com_ServerCM( &map_checksum );
 	} else {
-		cl.cms = CM_New( NULL );
+		cl.cms = CM_New();
 		CM_LoadMap( cl.cms, name, true, &map_checksum );
 	}
 
@@ -1415,14 +1415,11 @@ static unsigned int CL_LoadMap( const char *name ) {
 	areas = CM_NumAreas( cl.cms );
 	areas *= CM_AreaRowSize( cl.cms );
 
-	cl.frames_areabits = (uint8_t *)Mem_ZoneMalloc( UPDATE_BACKUP * areas );
+	cl.frames_areabits = (uint8_t *)Q_malloc( UPDATE_BACKUP * areas );
 	for( i = 0; i < UPDATE_BACKUP; i++ ) {
 		cl.snapShots[i].areabytes = areas;
 		cl.snapShots[i].areabits = cl.frames_areabits + i * areas;
 	}
-
-	// check memory integrity
-	Mem_DebugCheckSentinelsGlobal();
 
 	return map_checksum;
 }
@@ -1691,13 +1688,13 @@ static void CL_WriteConfig_f( void ) {
 	}
 
 	name_size = sizeof( char ) * ( strlen( Cmd_Argv( 1 ) ) + strlen( ".cfg" ) + 1 );
-	name = (char *)Mem_TempMalloc( name_size );
+	name = (char *)Q_malloc( name_size );
 	Q_strncpyz( name, Cmd_Argv( 1 ), name_size );
 	COM_SanitizeFilePath( name );
 
 	if( !COM_ValidateRelativeFilename( name ) ) {
 		Com_Printf( "Invalid filename" );
-		Mem_TempFree( name );
+		Q_free( name );
 		return;
 	}
 
@@ -1706,7 +1703,7 @@ static void CL_WriteConfig_f( void ) {
 	Com_Printf( "Writing: %s\n", name );
 	CL_WriteConfiguration( name, false );
 
-	Mem_TempFree( name );
+	Q_free( name );
 }
 
 static void CL_Help_f() {
@@ -1811,9 +1808,6 @@ void CL_InitMedia( void ) {
 
 	// load user interface
 	UISystem::init( VID_GetWindowWidth(), VID_GetWindowHeight() );
-
-	// check memory integrity
-	Mem_DebugCheckSentinelsGlobal();
 }
 
 /*
@@ -1871,9 +1865,6 @@ void CL_RestartMedia( void ) {
 	SCR_RegisterConsoleMedia();
 
 	UISystem::instance()->forceMenuOff();
-
-	// check memory integrity
-	Mem_DebugCheckSentinelsGlobal();
 }
 
 /*
@@ -2606,7 +2597,7 @@ static void CL_CheckForUpdateDoneCb( int status, const char *contentType, void *
 
 done:
 	if( updateRemoteData ) {
-		Mem_Free( updateRemoteData );
+		Q_free( updateRemoteData );
 		updateRemoteData = NULL;
 		updateRemoteDataSize = 0;
 	}
@@ -2623,12 +2614,12 @@ static size_t CL_CheckForUpdateReadCb( const void *buf, size_t numb, float perce
 		return 0;
 	}
 
-	newbuf = (char *)Mem_ZoneMalloc( updateRemoteDataSize + numb + 1 );
+	newbuf = (char *)Q_malloc( updateRemoteDataSize + numb + 1 );
 	memcpy( newbuf, updateRemoteData, updateRemoteDataSize - 1 );
 	memcpy( newbuf + updateRemoteDataSize - 1, buf, numb );
 	newbuf[numb] = '\0'; // EOF
 
-	Mem_Free( updateRemoteData );
+	Q_free( updateRemoteData );
 	updateRemoteData = newbuf;
 	updateRemoteDataSize = updateRemoteDataSize + numb + 1;
 
@@ -2719,11 +2710,11 @@ static void CL_CheckForUpdate( void ) {
 	Q_snprintfz( url, sizeof( url ), "%s%s", APP_UPDATE_URL, APP_CLIENT_UPDATE_FILE );
 
 	updateRemoteDataSize = 1;
-	updateRemoteData = (char *)Mem_ZoneMalloc( 1 );
+	updateRemoteData = (char *)Q_malloc( 1 );
 	*updateRemoteData = '\0';
 
 	// send screen resolution in UA-pixels header
-	resolution = (char *)Mem_TempMalloc( HTTP_HEADER_SIZE );
+	resolution = (char *)Q_malloc( HTTP_HEADER_SIZE );
 	Q_snprintfz( resolution, HTTP_HEADER_SIZE, "%ix%i", viddef.width, viddef.height );
 	headers[headerNum++] = "UA-pixels";
 	headers[headerNum++] = resolution;
@@ -2753,7 +2744,7 @@ static void CL_CheckForUpdate( void ) {
 	CL_AsyncStreamRequest( url, headers, 15, 0, CL_CheckForUpdateReadCb, CL_CheckForUpdateDoneCb,
 						   CL_CheckForUpdateHeaderCb, NULL, false );
 
-	Mem_TempFree( resolution );
+	Q_free( resolution );
 
 	if( campaign ) {
 		FS_FreeBaseFile( campaign );
@@ -2770,14 +2761,14 @@ static void CL_CheckForUpdate( void ) {
 * CL_AsyncStream_Alloc
 */
 static void *CL_AsyncStream_Alloc( size_t size, const char *filename, int fileline ) {
-	return _Mem_Alloc( zoneMemPool, size, 0, 0, filename, fileline );
+	return Q_malloc( size );
 }
 
 /*
 * CL_AsyncStream_Free
 */
 static void CL_AsyncStream_Free( void *data, const char *filename, int fileline ) {
-	_Mem_Free( data, 0, 0, filename, fileline );
+	Q_free( data );
 }
 
 /*
@@ -2832,7 +2823,7 @@ void CL_AsyncStreamRequest( const char *url, const char **headers, int timeout, 
 	if( urlencodeUnsafe ) {
 		// urlencode unsafe characters
 		size_t allocSize = strlen( url ) * 3 + 1;
-		tmpUrl = ( char * )Mem_TempMalloc( allocSize );
+		tmpUrl = ( char * )Q_malloc( allocSize );
 		AsyncStream_UrlEncodeUnsafeChars( url, tmpUrl, allocSize );
 
 		safeUrl = tmpUrl;
@@ -2844,7 +2835,7 @@ void CL_AsyncStreamRequest( const char *url, const char **headers, int timeout, 
 								   resumeFrom, read_cb, done_cb, (async_stream_header_cb_t)header_cb, NULL );
 
 	if( urlencodeUnsafe ) {
-		Mem_TempFree( tmpUrl );
+		Q_free( tmpUrl );
 	}
 }
 
@@ -2940,7 +2931,7 @@ void CL_Shutdown( void ) {
 	NET_CloseSocket( &cls.socket_udp6 );
 	// TOCHECK: Shouldn't we close the TCP socket too?
 	if( cls.servername ) {
-		Mem_ZoneFree( cls.servername );
+		Q_free( cls.servername );
 		cls.servername = NULL;
 	}
 

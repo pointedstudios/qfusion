@@ -55,16 +55,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define MAX_SRC 128
 #endif
 
-extern struct mempool_s *soundpool;
-
-#define S_MemAlloc( pool, size ) _Mem_Alloc( pool, size, MEMPOOL_SOUND, 0, __FILE__, __LINE__ )
-#define S_MemFree( mem ) _Mem_Free( mem, MEMPOOL_SOUND, 0, __FILE__, __LINE__ )
-#define S_MemAllocPool( name ) _Mem_AllocPool( NULL, name, MEMPOOL_SOUND, __FILE__, __LINE__ )
-#define S_MemFreePool( pool ) _Mem_FreePool( pool, MEMPOOL_SOUND, 0, __FILE__, __LINE__ )
-
-#define S_Malloc( size ) S_MemAlloc( soundpool, size )
-#define S_Free( data ) S_MemFree( data )
-
 typedef struct sfx_s {
 	char filename[MAX_QPATH];
 	int64_t used;           // Time last used

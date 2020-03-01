@@ -51,7 +51,7 @@ void CG_PModelsShutdown() {
 	pmodelinfo_t *nextInfo;
 	for( pmodelinfo_t *info = cg_PModelInfos; info; info = nextInfo ) {
 		nextInfo = info->next;
-		CG_Free( info );
+		Q_free(   info );
 	}
 
 	cg_PModelInfos = nullptr;
@@ -130,7 +130,7 @@ static void CG_ParseTagMask( struct model_s *model, int bonenum, char *name, flo
 	//fixme: check the name isn't already in use, or it isn't the same as a bone name
 
 	//now store it
-	tagmask = ( cg_tagmask_t * )CG_Malloc( sizeof( cg_tagmask_t ) );
+	tagmask = ( cg_tagmask_t * )Q_malloc( sizeof( cg_tagmask_t ) );
 	Q_snprintfz( tagmask->tagname, sizeof( tagmask->tagname ), "%s", name );
 	Q_snprintfz( tagmask->bonename, sizeof( tagmask->bonename ), "%s", skel->bones[bonenum].name );
 	tagmask->bonenum = bonenum;
@@ -189,11 +189,11 @@ static bool CG_ParseAnimationScript( pmodelinfo_t *pmodelinfo, char *filename ) 
 		return false;
 	}
 
-	buf = ( uint8_t * )CG_Malloc( length + 1 );
+	buf = ( uint8_t * )Q_malloc( length + 1 );
 	length = FS_Read( buf, length, filenum );
 	FS_FCloseFile( filenum );
 	if( !length ) {
-		CG_Free( buf );
+		Q_free(   buf );
 		Com_Printf( "Couldn't load animation script: %s\n", filename );
 		return false;
 	}
@@ -348,7 +348,7 @@ static bool CG_ParseAnimationScript( pmodelinfo_t *pmodelinfo, char *filename ) 
 		}
 	}
 
-	CG_Free( buf );
+	Q_free(   buf );
 
 	//it must contain at least as many animations as a Q3 script to be valid
 	if( counter < PMODEL_TOTAL_ANIMATIONS ) {
@@ -425,7 +425,7 @@ static bool CG_LoadPlayerModel( pmodelinfo_t *pmodelinfo, const char *filename )
 		return false;
 	}
 
-	pmodelinfo->name = CG_CopyString( filename );
+	pmodelinfo->name = Q_strdup( filename );
 
 	// load sexed sounds for this model
 	CG_UpdateSexedSoundsRegistration( pmodelinfo );
@@ -446,9 +446,9 @@ struct pmodelinfo_s *CG_RegisterPlayerModel( const char *filename ) {
 		}
 	}
 
-	pmodelinfo = ( pmodelinfo_t * )CG_Malloc( sizeof( pmodelinfo_t ) );
+	pmodelinfo = ( pmodelinfo_t * )Q_malloc( sizeof( pmodelinfo_t ) );
 	if( !CG_LoadPlayerModel( pmodelinfo, filename ) ) {
-		CG_Free( pmodelinfo );
+		Q_free(   pmodelinfo );
 		return NULL;
 	}
 

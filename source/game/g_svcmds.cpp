@@ -520,13 +520,13 @@ GIPFilter::GIPFilter() {
 
 GIPFilter::~GIPFilter() {
 	if( entries ) {
-		G_Free( entries );
+		Q_free( entries );
 	}
 }
 
 GIPFilter::Entry *GIPFilter::AllocEntry() {
 	if( !entries ) {
-		entries = ( Entry *)G_Malloc( sizeof( Entry ) * MAX_IPFILTERS );
+		entries = ( Entry *)Q_malloc( sizeof( Entry ) * MAX_IPFILTERS );
 		Clear();
 	}
 
@@ -1037,12 +1037,12 @@ bool SV_FilterPacket( const char *from ) {
 }
 
 void GIPFilter::Init() {
-	instance = new( G_Malloc( sizeof( GIPFilter ) ) )GIPFilter;
+	instance = new( Q_malloc( sizeof( GIPFilter ) ) )GIPFilter;
 }
 
 void GIPFilter::Shutdown() {
 	instance->~GIPFilter();
-	G_Free( instance );
+	Q_free( instance );
 	instance = nullptr;
 }
 

@@ -359,7 +359,7 @@ void G_FreeAI( edict_t *ent ) {
 	// Perform virtual destructor call
 	ent->ai->aiRef->~Ai();
 
-	G_Free( ent->ai );
+	Q_free( ent->ai );
 	ent->ai = nullptr;
 }
 

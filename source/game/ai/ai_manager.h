@@ -115,14 +115,14 @@ public:
 
 		ActionProps( const char *name_, void *factoryObject_ ) {
 			auto nameLen = strlen( name_ );
-			name = (char *)G_Malloc( nameLen + 1 );
+			name = (char *)Q_malloc( nameLen + 1 );
 			memcpy( name, name_, nameLen + 1 );
 			factoryObject = factoryObject_;
 		}
 
 		~ActionProps() {
 			if( name ) {
-				G_Free( name );
+				Q_free( name );
 			}
 		}
 
@@ -154,7 +154,7 @@ public:
 
 		GoalProps( const char *name_, void *factoryObject_, unsigned updatePeriod_ ) {
 			auto nameLen = strlen( name_ );
-			name = (char *)G_Malloc( nameLen + 1 );
+			name = (char *)Q_malloc( nameLen + 1 );
 			memcpy( name, name_, nameLen + 1 );
 			factoryObject = factoryObject_;
 			updatePeriod = updatePeriod_;
@@ -184,7 +184,7 @@ public:
 
 		~GoalProps() {
 			if( name ) {
-				G_Free( name );
+				Q_free( name );
 			}
 		}
 	};

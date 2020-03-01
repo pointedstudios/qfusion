@@ -42,11 +42,11 @@ static inline void CopySwappingYZ( const float *from, float *to ) {
 }
 
 static inline void *CustomAlloc( size_t size, int actualHint, int tmpAllocHint ) {
-	return G_Malloc( size );
+	return Q_malloc( size );
 }
 
 static inline void CustomFree( void *ptr, int tmpAllocHint ) {
-	G_Free( ptr );
+	Q_free( ptr );
 }
 
 static void *CustomRecastAlloc( size_t size, rcAllocHint hint ) {
@@ -140,11 +140,11 @@ AiNavMeshManager::~AiNavMeshManager() {
 	}
 
 	if( polyCenters ) {
-		G_Free( polyCenters );
+		Q_free( polyCenters );
 	}
 
 	if( polyBounds ) {
-		G_Free( polyBounds );
+		Q_free( polyBounds );
 	}
 }
 
@@ -434,13 +434,13 @@ struct NavMeshInputTris {
 void NavMeshInputTris::ForceClear() {
 	numVertices = 0;
 	if( vertices ) {
-		G_Free( vertices );
+		Q_free( vertices );
 		vertices = nullptr;
 	}
 
 	numTris = 0;
 	if( tris ) {
-		G_Free( tris );
+		Q_free( tris );
 		tris = nullptr;
 	}
 
@@ -508,7 +508,7 @@ public:
 
 void NavMeshBuilder::ForceClear() {
 	if( trisAreaFlags ) {
-		G_Free( trisAreaFlags );
+		Q_free( trisAreaFlags );
 		trisAreaFlags = nullptr;
 	}
 	if( heightField ) {
@@ -568,7 +568,7 @@ bool AasNavMeshInputTrisSource::BuildTris( NavMeshInputTris *tris ) {
 	// To prepare vertices input, just copy AAS vertices (they are already indexed) swapping Z and Y components
 
 	// We think there is no need to check the result for nullity as it fails with game error on allocation failure.
-	float *const trisVertices = ( float * )G_Malloc( sizeof( float ) * 3 * aasWorld->NumVertexes() );
+	float *const trisVertices = ( float * )Q_malloc( sizeof( float ) * 3 * aasWorld->NumVertexes() );
 	for( int i = 0, j = 0; i < numAasVertices; ++i, j += 3 ) {
 		trisVertices[j + 0] = aasVertices[i][0];
 		trisVertices[j + 1] = aasVertices[i][2];
@@ -748,7 +748,7 @@ bool NavMeshBuilder::PrepareHeightField( NavMeshInputTris *tris ) {
 
 	// Allocate an array holding marked walkable tris
 	// Should not return on failure?
-	trisAreaFlags = (unsigned char *)G_Malloc( (size_t)tris->numTris );
+	trisAreaFlags = (unsigned char *)Q_malloc( (size_t)tris->numTris );
 
 	// Mark and rasterize walkable tris
 	memset( trisAreaFlags, 0, (size_t)tris->numTris );
@@ -764,7 +764,7 @@ bool NavMeshBuilder::PrepareHeightField( NavMeshInputTris *tris ) {
 	}
 
 	// Release trisAreaFlags immediately as they are no longer needed
-	G_Free( trisAreaFlags );
+	Q_free( trisAreaFlags );
 	trisAreaFlags = nullptr;
 
 	// Filter walkable surfaces.
@@ -970,8 +970,8 @@ bool AiNavMeshManager::InitNavMeshFromData( unsigned char *data, int dataSize ) 
 	const float *vertices = tile->verts;
 	const dtPoly *polys = tile->polys;
 	// Never returns on failure
-	polyCenters = (float *)G_Malloc( 3 * sizeof( float ) * numPolys );
-	polyBounds = (float *)G_Malloc( 6 * sizeof( float ) * numPolys );
+	polyCenters = (float *)Q_malloc( 3 * sizeof( float ) * numPolys );
+	polyBounds = (float *)Q_malloc( 6 * sizeof( float ) * numPolys );
 
 	for( unsigned i = 0; i < numPolys; ++i ) {
 		float *mins = polyBounds + i * 6;

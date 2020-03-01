@@ -36,7 +36,7 @@ SingleThreadSharingAllocator *SingleThreadSharingAllocator::Instance() {
 }
 
 void *SoundMalloc::Alloc( size_t size, const char *logTag ) {
-	void *result = S_Malloc( size );
+	void *result = Q_malloc( size );
 	const char *format = "SoundMalloc@%p allocated %p (%u bytes) for `%s`\n";
 	AllocatorDebugPrintf( format, this, result, (unsigned)size, PrintableTag( logTag ) );
 	return result;
@@ -50,7 +50,7 @@ void *SoundMalloc::Realloc( void *p, size_t size, const char *logTag ) {
 
 void SoundMalloc::Free( void *p, const char *logTag ) {
 	AllocatorDebugPrintf( "SoundMalloc@%p has to free %p for `%s`\n", this, p, PrintableTag( logTag ) );
-	return S_Free( p );
+	return Q_free( p );
 }
 
 void *TaggedAllocator::RawAlloc( size_t size, const char *logTag ) {

@@ -302,8 +302,6 @@ typedef struct {
 extern msg_t tmpMessage;
 extern uint8_t tmpMessageData[MAX_MSGLEN];
 
-extern mempool_t *sv_mempool;
-
 extern server_constant_t svc;              // constant server info (trully persistant since sv_init)
 extern server_static_t svs;                // persistant server info
 extern server_t sv;                 // local server

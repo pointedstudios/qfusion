@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 GVariousStats::~GVariousStats() {
 	Clear();
 	if( bins ) {
-		G_Free( bins );
+		Q_free( bins );
 	}
 }
 
@@ -33,7 +33,7 @@ void GVariousStats::Clear() {
 	for( Node *node = listHead; node; node = nextNode ) {
 		// Prevent use-after-free
 		nextNode = node->nextInList;
-		G_Free( node );
+		Q_free( node );
 	}
 
 	// If bins are initialized, clear all node references in bins, but keep the allocated references array
@@ -48,7 +48,7 @@ const GVariousStats::Node *GVariousStats::GetNode( unsigned binIndex, const char
 	// Initialize bins on first access.
 	// This method is called first in all public accessor methods, so this is an appropriate place to put the code.
 	if( !bins ) {
-		bins = (Node **)G_Malloc( sizeof( Node * ) * numHashBins );
+		bins = (Node **)Q_malloc( sizeof( Node * ) * numHashBins );
 		memset( bins, 0, sizeof( Node * ) * numHashBins );
 		return nullptr;
 	}
@@ -66,7 +66,7 @@ const GVariousStats::Node *GVariousStats::GetNode( unsigned binIndex, const char
 }
 
 void GVariousStats::LinkNewNode( unsigned binIndex, const char *key, uint32_t hash, uint32_t length, int64_t value ) {
-	uint8_t *mem = (uint8_t *)G_Malloc( sizeof( Node ) + length + 1 );
+	uint8_t *mem = (uint8_t *)Q_malloc( sizeof( Node ) + length + 1 );
 	Node *node = (Node *)mem;
 	char *keyBuffer = (char *)( mem + sizeof( Node ) );
 	memcpy( keyBuffer, key, length );
@@ -1484,7 +1484,7 @@ void G_Gametype_GenerateGametypesList( void ) {
 	}
 
 	trap_Cvar_ForceSet( "g_gametypes_list", scriptsList );
-	G_Free( scriptsList );
+	Q_free( scriptsList );
 }
 
 /*

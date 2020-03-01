@@ -232,11 +232,11 @@ static void CM_CreatePatch( cmodel_state_t *cms, cface_t *patch, cshaderref_t *s
 		return;
 	}
 
-	patchpoints = (vec3_t *)Mem_TempMalloc( size[0] * size[1] * sizeof( vec3_t ) );
+	patchpoints = (vec3_t *)Q_malloc( size[0] * size[1] * sizeof( vec3_t ) );
 	Patch_Evaluate( vec_t, 3, verts[0], patch_cp, step, patchpoints[0], 0 );
 	Patch_RemoveLinearColumnsRows( patchpoints[0], 3, &size[0], &size[1], 0, NULL, NULL );
 
-	data = (uint8_t *)Mem_Alloc( cms->mempool, size[0] * size[1] * sizeof( vec3_t ) +
+	data = (uint8_t *)Q_malloc( size[0] * size[1] * sizeof( vec3_t ) +
 					  ( size[0] - 1 ) * ( size[1] - 1 ) * 2 * ( sizeof( cbrush_t ) + 32 * sizeof( cplane_t ) ) );
 
 	points = ( vec3_t * )data; data += size[0] * size[1] * sizeof( vec3_t );
@@ -245,7 +245,7 @@ static void CM_CreatePatch( cmodel_state_t *cms, cface_t *patch, cshaderref_t *s
 
 	// fill in
 	memcpy( points, patchpoints, size[0] * size[1] * sizeof( vec3_t ) );
-	Mem_TempFree( patchpoints );
+	Q_free( patchpoints );
 
 	totalsides = 0;
 	patch->numfacets = 0;
@@ -289,7 +289,7 @@ static void CM_CreatePatch( cmodel_state_t *cms, cface_t *patch, cshaderref_t *s
 	if( patch->numfacets ) {
 		uint8_t *fdata;
 
-		fdata = (uint8_t *)Mem_Alloc( cms->mempool, patch->numfacets * sizeof( cbrush_t ) + totalsides * ( sizeof( cbrushside_t ) + sizeof( cplane_t ) ) );
+		fdata = (uint8_t *)Q_malloc( patch->numfacets * sizeof( cbrush_t ) + totalsides * ( sizeof( cbrushside_t ) + sizeof( cplane_t ) ) );
 		cms->map_face_brushdata[patch - cms->map_faces] = fdata;
 
 		patch->facets = ( cbrush_t * )fdata; fdata += patch->numfacets * sizeof( cbrush_t );
@@ -321,7 +321,7 @@ static void CM_CreatePatch( cmodel_state_t *cms, cface_t *patch, cshaderref_t *s
 		patch->radius = CM_AddSphericalBounds( patch->mins, patch->maxs, patch->center );
 	}
 
-	Mem_Free( points );
+	Q_free( points );
 }
 
 /*
@@ -352,7 +352,7 @@ static void CMod_LoadSurfaces( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "CMod_LoadSurfaces: map with no shaders" );
 	}
 
-	out = cms->map_shaderrefs = (cshaderref_t *)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
+	out = cms->map_shaderrefs = (cshaderref_t *)Q_malloc( count * sizeof( *out ) );
 	cms->numshaderrefs = count;
 
 	buffer = NULL;
@@ -363,9 +363,9 @@ static void CMod_LoadSurfaces( cmodel_state_t *cms, lump_t *l ) {
 		if( bufLen + len >= bufSize ) {
 			bufSize = bufLen + len + 128;
 			if( buffer ) {
-				buffer = (char *)Mem_Realloc( buffer, bufSize );
+				buffer = (char *)Q_realloc( buffer, bufSize );
 			} else {
-				buffer = (char *)Mem_Alloc( cms->mempool, bufSize );
+				buffer = (char *)Q_malloc( bufSize );
 			}
 		}
 
@@ -404,7 +404,7 @@ static void CMod_LoadVertexes( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map with no vertexes" );
 	}
 
-	out = cms->map_verts = (vec3_t *)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
+	out = cms->map_verts = (vec3_t *)Q_malloc( count * sizeof( *out ) );
 	cms->numvertexes = count;
 
 	for( i = 0; i < count; i++, in++ ) {
@@ -432,7 +432,7 @@ static void CMod_LoadVertexes_RBSP( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map with no vertexes" );
 	}
 
-	out = cms->map_verts = (vec3_t *)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
+	out = cms->map_verts = (vec3_t *)Q_malloc( count * sizeof( *out ) );
 	cms->numvertexes = count;
 
 	for( i = 0; i < count; i++, in++ ) {
@@ -489,8 +489,8 @@ static void CMod_LoadFaces( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map with no faces" );
 	}
 
-	out = cms->map_faces = (cface_t *)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
-	cms->map_face_brushdata = (uint8_t **)Mem_Alloc( cms->mempool, count * sizeof( *cms->map_face_brushdata ) );
+	out = cms->map_faces = (cface_t *)Q_malloc( count * sizeof( *out ) );
+	cms->map_face_brushdata = (uint8_t **)Q_malloc( count * sizeof( *cms->map_face_brushdata ) );
 	cms->numfaces = count;
 
 	for( i = 0; i < count; i++, in++, out++ ) {
@@ -522,8 +522,8 @@ static void CMod_LoadFaces_RBSP( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map with no faces" );
 	}
 
-	out = cms->map_faces = (cface_t *)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
-	cms->map_face_brushdata = (uint8_t **)Mem_Alloc( cms->mempool, count * sizeof( *cms->map_face_brushdata ) );
+	out = cms->map_faces = (cface_t *)Q_malloc( count * sizeof( *out ) );
+	cms->map_face_brushdata = (uint8_t **)Q_malloc( count * sizeof( *cms->map_face_brushdata ) );
 	cms->numfaces = count;
 
 	for( i = 0; i < count; i++, in++, out++ ) {
@@ -556,14 +556,14 @@ static void CMod_LoadSubmodels( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map with no models" );
 	}
 
-	out = cms->map_cmodels = (cmodel_s *)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
+	out = cms->map_cmodels = (cmodel_s *)Q_malloc( count * sizeof( *out ) );
 	cms->numcmodels = count;
 
 	for( i = 0; i < count; i++, in++, out++ ) {
 		out->numfaces = LittleLong( in->numfaces );
-		out->faces = (cface_t *)Mem_Alloc( cms->mempool, out->numfaces * sizeof( cface_t  ) );
+		out->faces = (cface_t *)Q_malloc( out->numfaces * sizeof( cface_t  ) );
 		out->numbrushes = LittleLong( in->numbrushes );
-		out->brushes = (cbrush_t *)Mem_Alloc( cms->mempool, out->numbrushes * sizeof( cbrush_t ) );
+		out->brushes = (cbrush_t *)Q_malloc( out->numbrushes * sizeof( cbrush_t ) );
 
 		// There is no necessity to copy brush/face data for model-inline brushes/faces
 		// since models are rarely used/accessed anyway.
@@ -602,7 +602,7 @@ static void CMod_LoadNodes( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map has no nodes" );
 	}
 
-	out = cms->map_nodes = (cnode_t *)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
+	out = cms->map_nodes = (cnode_t *)Q_malloc( count * sizeof( *out ) );
 	cms->numnodes = count;
 
 	for( i = 0; i < 3; i++ ) {
@@ -635,7 +635,7 @@ static void CMod_LoadMarkFaces( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map with no leaffaces" );
 	}
 
-	out = cms->map_markfaces = (cface_t **)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
+	out = cms->map_markfaces = (cface_t **)Q_malloc( count * sizeof( *out ) );
 	cms->nummarkfaces = count;
 
 	for( i = 0; i < count; i++ ) {
@@ -665,13 +665,13 @@ static void CMod_LoadLeafs( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map with no leafs" );
 	}
 
-	out = cms->map_leafs = (cleaf_t *)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
+	out = cms->map_leafs = (cleaf_t *)Q_malloc( count * sizeof( *out ) );
 	cms->numleafs = count;
 
-	int *const first_leaf_faces = (int *)Mem_TempMalloc( cms->numleafs * sizeof( int ) );
-	int *const first_leaf_brushes = (int *)Mem_TempMalloc( cms->numleafs * sizeof( int ) );
+	int *const first_leaf_faces = (int *)Q_malloc( cms->numleafs * sizeof( int ) );
+	int *const first_leaf_brushes = (int *)Q_malloc( cms->numleafs * sizeof( int ) );
 
-	cms->leaf_bounds = (vec3_t *)Mem_Alloc( cms->mempool, count * 2 * sizeof( vec3_t ) );
+	cms->leaf_bounds = (vec3_t *)Q_malloc( count * 2 * sizeof( vec3_t ) );
 
 	for( i = 0; i < count; i++, in++, out++ ) {
 
@@ -734,11 +734,11 @@ static void CMod_LoadLeafs( cmodel_state_t *cms, lump_t *l ) {
 	}
 
 	cbrush_t *leaf_brushes = cms->leaf_inline_brushes =
-		(cbrush_t *)Mem_Alloc( cms->mempool, sizeof( cbrush_t ) * num_brushes );
+		(cbrush_t *)Q_malloc( sizeof( cbrush_t ) * num_brushes );
 	cbrushside_t *leaf_sides = cms->leaf_inline_sides =
-		(cbrushside_t *)Mem_Alloc( cms->mempool, sizeof( cbrushside_t ) * num_sides );
+		(cbrushside_t *)Q_malloc( sizeof( cbrushside_t ) * num_sides );
 	cface_t *leaf_faces = cms->leaf_inline_faces =
-		(cface_t *)Mem_Alloc( cms->mempool, sizeof( cface_t ) * num_faces );
+		(cface_t *)Q_malloc( sizeof( cface_t ) * num_faces );
 
 	out = cms->map_leafs;
 	for( i = 0; i < cms->numleafs; ++i, ++out ) {
@@ -760,8 +760,8 @@ static void CMod_LoadLeafs( cmodel_state_t *cms, lump_t *l ) {
 		leaf_faces += out->numfaces;
 	}
 
-	Mem_TempFree( first_leaf_brushes );
-	Mem_TempFree( first_leaf_faces );
+	Q_free( first_leaf_brushes );
+	Q_free( first_leaf_faces );
 }
 
 /*
@@ -782,7 +782,7 @@ static void CMod_LoadPlanes( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map with no planes" );
 	}
 
-	out = cms->map_planes = (cplane_t *)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
+	out = cms->map_planes = (cplane_t *)Q_malloc( count * sizeof( *out ) );
 	cms->numplanes = count;
 
 	for( i = 0; i < count; i++, in++, out++ ) {
@@ -821,7 +821,7 @@ static void CMod_LoadMarkBrushes( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map with no leafbrushes" );
 	}
 
-	out = cms->map_markbrushes = (cbrush_t **)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
+	out = cms->map_markbrushes = (cbrush_t **)Q_malloc( count * sizeof( *out ) );
 	cms->nummarkbrushes = count;
 
 	for( i = 0; i < count; i++, in++ )
@@ -846,7 +846,7 @@ static void CMod_LoadBrushSides( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map with no brushsides" );
 	}
 
-	out = cms->map_brushsides = (cbrushside_t *)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
+	out = cms->map_brushsides = (cbrushside_t *)Q_malloc( count * sizeof( *out ) );
 	cms->numbrushsides = count;
 
 	for( i = 0; i < count; i++, in++, out++ ) {
@@ -877,7 +877,7 @@ static void CMod_LoadBrushSides_RBSP( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map with no brushsides" );
 	}
 
-	out = cms->map_brushsides = (cbrushside_t *)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
+	out = cms->map_brushsides = (cbrushside_t *)Q_malloc( count * sizeof( *out ) );
 	cms->numbrushsides = count;
 
 	for( i = 0; i < count; i++, in++, out++ ) {
@@ -909,7 +909,7 @@ static void CMod_LoadBrushes( cmodel_state_t *cms, lump_t *l ) {
 		Com_Error( ERR_DROP, "Map with no brushes" );
 	}
 
-	out = cms->map_brushes = (cbrush_t *)Mem_Alloc( cms->mempool, count * sizeof( *out ) );
+	out = cms->map_brushes = (cbrush_t *)Q_malloc( count * sizeof( *out ) );
 	cms->numbrushes = count;
 
 	for( i = 0; i < count; i++, out++, in++ ) {
@@ -931,7 +931,7 @@ static void CMod_LoadVisibility( cmodel_state_t *cms, lump_t *l ) {
 		return;
 	}
 
-	cms->map_pvs = (dvis_t *)Mem_Alloc( cms->mempool, cms->map_visdatasize );
+	cms->map_pvs = (dvis_t *)Q_malloc( cms->map_visdatasize );
 	memcpy( cms->map_pvs, cms->cmod_base + l->fileofs, cms->map_visdatasize );
 
 	cms->map_pvs->numclusters = LittleLong( cms->map_pvs->numclusters );
@@ -947,7 +947,7 @@ static void CMod_LoadEntityString( cmodel_state_t *cms, lump_t *l ) {
 		return;
 	}
 
-	cms->map_entitystring = (char *)Mem_Alloc( cms->mempool, cms->numentitychars );
+	cms->map_entitystring = (char *)Q_malloc( cms->numentitychars );
 	memcpy( cms->map_entitystring, cms->cmod_base + l->fileofs, l->filelen );
 }
 
@@ -993,15 +993,15 @@ void CM_LoadQ3BrushModel( cmodel_state_t *cms, void *parent, void *buf, bspForma
 
 	// Free no longer needed data
 	if( cms->map_verts ) {
-		Mem_Free( cms->map_verts );
+		Q_free( cms->map_verts );
 		cms->map_verts = NULL;
 	}
 	if( cms->map_markfaces ) {
-		Mem_Free( cms->map_markfaces );
+		Q_free( cms->map_markfaces );
 		cms->map_markfaces = NULL;
 	}
 	if( cms->map_markbrushes ) {
-		Mem_Free( cms->map_markbrushes );
+		Q_free( cms->map_markbrushes );
 		cms->map_markbrushes = NULL;
 	}
 }

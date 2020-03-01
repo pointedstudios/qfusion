@@ -28,7 +28,7 @@ bool AiAasWorld::Init( const char *mapname ) {
 	if( instance ) {
 		AI_FailWith( "AiAasWorld::Init()", "An instance is already present\n" );
 	}
-	instance = (AiAasWorld *)G_Malloc( sizeof( AiAasWorld ) );
+	instance = (AiAasWorld *)Q_malloc( sizeof( AiAasWorld ) );
 	new(instance) AiAasWorld;
 	// Try to initialize the instance
 	if( !instance->Load( mapname ) ) {
@@ -42,7 +42,7 @@ void AiAasWorld::Shutdown() {
 	// This may be called on first map load when an instance has never been instantiated
 	if( instance ) {
 		instance->~AiAasWorld();
-		G_Free( instance );
+		Q_free( instance );
 		// Allow the pointer to be reused, otherwise an assertion will fail on a next Init() call
 		instance = nullptr;
 	}
@@ -808,7 +808,7 @@ nextArea:;
 }
 
 void AiAasWorld::computeInnerBoundsForAreas() {
-    areaInnerBounds = (int16_t *)G_Malloc( 6 * sizeof( int16_t ) * numareas );
+    areaInnerBounds = (int16_t *)Q_malloc( 6 * sizeof( int16_t ) * numareas );
 
     VectorClear( areaInnerBounds + 0 );
     VectorClear( areaInnerBounds + 3 );
@@ -970,7 +970,7 @@ char *AasFileReader::LoadLump( int lumpNum, int size ) {
 
 	if( !length ) {
 		//just alloc a dummy
-		return (char *) G_Malloc( size + 1 );
+		return (char *) Q_malloc( size + 1 );
 	}
 	//seek to the data
 	if( offset != lastoffset ) {
@@ -981,7 +981,7 @@ char *AasFileReader::LoadLump( int lumpNum, int size ) {
 		}
 	}
 	//allocate memory
-	char *buf = (char *) G_Malloc( length + 1 );
+	char *buf = (char *) Q_malloc( length + 1 );
 	//read the data
 	if( length ) {
 		trap_FS_Read( buf, length, fp );
@@ -996,9 +996,9 @@ bool AasFileReader::ComputeChecksum( char **base64Digest ) {
 	}
 
 	// TODO: Read the entire AAS data at start and then use the read chunk for loading of AAS lumps
-	char *mem = (char *)G_Malloc( (unsigned)fileSize );
+	char *mem = (char *)Q_malloc( (unsigned)fileSize );
 	if( trap_FS_Read( mem, (unsigned)fileSize, fp ) <= 0 ) {
-		G_Free( mem );
+		Q_free( mem );
 		return false;
 	}
 
@@ -1011,10 +1011,10 @@ bool AasFileReader::ComputeChecksum( char **base64Digest ) {
 	char *tmpBase64Chars = ( char * )base64_encode( binaryDigest, 16, &base64Length );
 
 	// Free the level data
-	G_Free( mem );
+	Q_free( mem );
 
 	// Copy the base64-encoded digest to the game memory storage to avoid further confusion
-	*base64Digest = ( char * )G_Malloc( base64Length + 1 );
+	*base64Digest = ( char * )Q_malloc( base64Length + 1 );
 	// Include the last zero byte in copied chars
 	memcpy( *base64Digest, tmpBase64Chars, base64Length + 1 );
 
@@ -1129,112 +1129,112 @@ AiAasWorld::~AiAasWorld() {
 	}
 
 	if( checksum ) {
-		G_Free( checksum );
+		Q_free( checksum );
 	}
 
 	// These items may be absent for some stripped AAS files, so check each one.
 	if( bboxes ) {
-		G_Free( bboxes );
+		Q_free( bboxes );
 	}
 	if( vertexes ) {
-		G_Free( vertexes );
+		Q_free( vertexes );
 	}
 	if( planes ) {
-		G_Free( planes );
+		Q_free( planes );
 	}
 	if( edges ) {
-		G_Free( edges );
+		Q_free( edges );
 	}
 	if( edgeindex ) {
-		G_Free( edgeindex );
+		Q_free( edgeindex );
 	}
 	if( faces ) {
-		G_Free( faces );
+		Q_free( faces );
 	}
 	if( faceindex ) {
-		G_Free( faceindex );
+		Q_free( faceindex );
 	}
 	if( areas ) {
-		G_Free( areas );
+		Q_free( areas );
 	}
 	if( areasettings ) {
-		G_Free( areasettings );
+		Q_free( areasettings );
 	}
 	if( reachability ) {
-		G_Free( reachability );
+		Q_free( reachability );
 	}
 	if( nodes ) {
-		G_Free( nodes );
+		Q_free( nodes );
 	}
 	if( portals ) {
-		G_Free( portals );
+		Q_free( portals );
 	}
 	if( portalindex ) {
-		G_Free( portalindex );
+		Q_free( portalindex );
 	}
 	if( clusters ) {
-		G_Free( clusters );
+		Q_free( clusters );
 	}
 
 	if( areaFloorClusterNums ) {
-		G_Free( areaFloorClusterNums );
+		Q_free( areaFloorClusterNums );
 	}
 	if( areaStairsClusterNums ) {
-		G_Free( areaStairsClusterNums );
+		Q_free( areaStairsClusterNums );
 	}
 	if( floorClusterDataOffsets ) {
-		G_Free( floorClusterDataOffsets );
+		Q_free( floorClusterDataOffsets );
 	}
 	if( stairsClusterDataOffsets ) {
-		G_Free( stairsClusterDataOffsets );
+		Q_free( stairsClusterDataOffsets );
 	}
 	if( floorClusterData ) {
-		G_Free( floorClusterData );
+		Q_free( floorClusterData );
 	}
 	if( stairsClusterData ) {
-		G_Free( stairsClusterData );
+		Q_free( stairsClusterData );
 	}
 
 	if( face2DProjVertexNums ) {
-		G_Free( face2DProjVertexNums );
+		Q_free( face2DProjVertexNums );
 	}
 
 	if( areaMapLeafListOffsets ) {
-		G_Free( areaMapLeafListOffsets );
+		Q_free( areaMapLeafListOffsets );
 	}
 	if( areaMapLeafsData ) {
-		G_Free( areaMapLeafsData );
+		Q_free( areaMapLeafsData );
 	}
 
 	if( areaVisDataOffsets ) {
-		G_Free( areaVisDataOffsets );
+		Q_free( areaVisDataOffsets );
 	}
 	if( areaVisData ) {
-		G_Free( areaVisData );
+		Q_free( areaVisData );
 	}
 
 	if( floorClustersVisTable ) {
-		G_Free( floorClustersVisTable );
+		Q_free( floorClustersVisTable );
 	}
 
 	if( groundedPrincipalRoutingAreas ) {
-		G_Free( groundedPrincipalRoutingAreas );
+		Q_free( groundedPrincipalRoutingAreas );
 	}
 	if( jumppadReachPassThroughAreas ) {
-		G_Free( jumppadReachPassThroughAreas );
+		Q_free( jumppadReachPassThroughAreas );
 	}
 	if( ladderReachPassThroughAreas ) {
-		G_Free( ladderReachPassThroughAreas );
+		Q_free( ladderReachPassThroughAreas );
 	}
 	if( elevatorReachPassThroughAreas ) {
-		G_Free( elevatorReachPassThroughAreas );
+		Q_free( elevatorReachPassThroughAreas );
 	}
 	if( walkOffLedgePassThroughAirAreas ) {
-		G_Free( walkOffLedgePassThroughAirAreas );
+		Q_free( walkOffLedgePassThroughAirAreas );
 	}
 
 	if( areaInnerBounds ) {
-	    G_Free( areaInnerBounds );
+	    Q_free( areaInnerBounds );
 	}
 }
 
@@ -1754,11 +1754,11 @@ bool StairsClusterBuilder::Build( int startAreaNum ) {
 }
 
 void AiAasWorld::ComputeLogicalAreaClusters() {
-	auto floodResultsBuffer = (uint16_t *)G_Malloc( sizeof( uint16_t ) * this->NumAreas() );
+	auto floodResultsBuffer = (uint16_t *)Q_malloc( sizeof( uint16_t ) * this->NumAreas() );
 
 	FloorClusterBuilder floorClusterBuilder( AasElementsMask::AreasMask(), floodResultsBuffer, this );
 
-	this->areaFloorClusterNums = (uint16_t *)G_Malloc( sizeof( uint16_t ) * this->NumAreas() );
+	this->areaFloorClusterNums = (uint16_t *)Q_malloc( sizeof( uint16_t ) * this->NumAreas() );
 	memset( this->areaFloorClusterNums, 0, sizeof( uint16_t ) * this->NumAreas() );
 
 	BufferBuilder<uint16_t> floorData( 256 );
@@ -1803,7 +1803,7 @@ void AiAasWorld::ComputeLogicalAreaClusters() {
 
 	StairsClusterBuilder stairsClusterBuilder( AasElementsMask::AreasMask(), floodResultsBuffer, this );
 
-	this->areaStairsClusterNums = (uint16_t *)G_Malloc( sizeof( uint16_t ) * this->NumAreas() );
+	this->areaStairsClusterNums = (uint16_t *)Q_malloc( sizeof( uint16_t ) * this->NumAreas() );
 	memset( this->areaStairsClusterNums, 0, sizeof( uint16_t ) * this->NumAreas() );
 
 	numStairsClusters = 1;
@@ -1837,7 +1837,7 @@ void AiAasWorld::ComputeLogicalAreaClusters() {
 	}
 
 	// Clear as no longer needed to provide free space for further allocations
-	G_Free( floodResultsBuffer );
+	Q_free( floodResultsBuffer );
 
 	assert( numStairsClusters == (int)stairsDataOffsets.Size() );
 	this->stairsClusterDataOffsets = stairsDataOffsets.FlattenResult();
@@ -1851,7 +1851,7 @@ void AiAasWorld::ComputeLogicalAreaClusters() {
 }
 
 void AiAasWorld::ComputeFace2DProjVertices() {
-	face2DProjVertexNums = (int *)G_Malloc( sizeof( int ) * 2 * this->NumFaces() );
+	face2DProjVertexNums = (int *)Q_malloc( sizeof( int ) * 2 * this->NumFaces() );
 	int *vertexNumsPtr = face2DProjVertexNums;
 
 	// Skip 2 vertices for the dummy zero face
@@ -2227,7 +2227,7 @@ void AiAasWorld::LoadFloorClustersVisibility( const ArrayRange<char> &strippedMa
 				this->floorClustersVisTable = (bool *)data;
 				return;
 			}
-			G_Free( data );
+			Q_free( data );
 		}
 	}
 
@@ -2251,7 +2251,7 @@ uint32_t AiAasWorld::ComputeFloorClustersVisibility() {
 	const int stride = numFloorClusters - 1;
 	// Do not allocate data for the dummy zero cluster
 	const auto dataSizeInBytes = (uint32_t)( stride * stride * sizeof( bool ) );
-	floorClustersVisTable = (bool *)G_Malloc( dataSizeInBytes );
+	floorClustersVisTable = (bool *)Q_malloc( dataSizeInBytes );
 	memset( floorClustersVisTable, 0, dataSizeInBytes );
 
 	// Start loops from 0 even if we skip the zero cluster for table addressing convenience
@@ -2411,15 +2411,15 @@ public:
 		: rowSize( numAreas + elemOffset ) {
 		size_t tableMemSize = sizeof( bool ) * rowSize * rowSize;
 		// Never returns on failure
-		table = (bool *)G_Malloc( tableMemSize );
+		table = (bool *)Q_malloc( tableMemSize );
 		memset( table, 0, tableMemSize );
-		listSizes = (int32_t *)G_Malloc( numAreas * sizeof( int32_t ) );
+		listSizes = (int32_t *)Q_malloc( numAreas * sizeof( int32_t ) );
 		memset( listSizes, 0, numAreas * sizeof( int32_t ) );
 	}
 
 	~SparseVisTable() {
-		G_Free( table );
-		G_Free( listSizes );
+		Q_free( table );
+		Q_free( listSizes );
 	}
 
 	void MarkAsVisible( int area1, int area2 ) {
@@ -2560,7 +2560,7 @@ void AiAasWorld::ComputeAreasVisibility( uint32_t *offsetsDataSize, uint32_t *li
 	}
 
 	*listsDataSize = table.ComputeDataSize();
-	auto *const __restrict listsData = (uint16_t *)G_Malloc( *listsDataSize );
+	auto *const __restrict listsData = (uint16_t *)Q_malloc( *listsDataSize );
 
 	// Let's keep these assertions in release mode for various reasons
 	constexpr const char *tag = "AiAasWorld::ComputeAreasVisibility()";
@@ -2572,7 +2572,7 @@ void AiAasWorld::ComputeAreasVisibility( uint32_t *offsetsDataSize, uint32_t *li
 	}
 
 	*offsetsDataSize = (uint32_t)( numAreas * sizeof( int32_t ) );
-	auto *const listOffsets = (int *)G_Malloc( *offsetsDataSize );
+	auto *const listOffsets = (int *)Q_malloc( *offsetsDataSize );
 
 	ListsBuilder builder( listsData, listOffsets );
 	const auto rowSize = table.rowSize;

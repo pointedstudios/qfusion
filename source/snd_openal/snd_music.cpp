@@ -48,7 +48,7 @@ static struct qthread_s *s_bgOpenThread;
 static bgTrack_t *S_AllocTrack( const char *filename ) {
 	bgTrack_t *track;
 
-	track = (bgTrack_t *)S_Malloc( sizeof( *track ) + strlen( filename ) + 1 );
+	track = (bgTrack_t *)Q_malloc( sizeof( *track ) + strlen( filename ) + 1 );
 	track->stream = NULL;
 	track->ignore = false;
 	track->filename = (char *)( (uint8_t *)track + sizeof( *track ) );
@@ -253,7 +253,7 @@ static bgTrack_t *S_ReadPlaylistFile( const char *filename, bool shuffle, bool l
 	}
 
 	// load the playlist into memory
-	data = (char *)S_Malloc( length + 1 );
+	data = (char *)Q_malloc( length + 1 );
 	FS_Read( data, length, filenum );
 	FS_FCloseFile( filenum );
 
@@ -287,10 +287,10 @@ static bgTrack_t *S_ReadPlaylistFile( const char *filename, bool shuffle, bool l
 			s = strlen( filename ) + 1 + strlen( entry ) + 1;
 			if( s > tmpname_size ) {
 				if( tmpname ) {
-					S_Free( tmpname );
+					Q_free( tmpname );
 				}
 				tmpname_size = s;
-				tmpname = (char *)S_Malloc( tmpname_size );
+				tmpname = (char *)Q_malloc( tmpname_size );
 			}
 
 			Q_strncpyz( tmpname, filename, tmpname_size );
@@ -308,7 +308,7 @@ static bgTrack_t *S_ReadPlaylistFile( const char *filename, bool shuffle, bool l
 	}
 
 	if( tmpname ) {
-		S_Free( tmpname );
+		Q_free( tmpname );
 		tmpname = NULL;
 	}
 
@@ -508,7 +508,7 @@ void S_StopBackgroundTrack( void ) {
 		next = s_bgTrackHead->anext;
 
 		S_CloseMusicTrack( s_bgTrackHead );
-		S_Free( s_bgTrackHead );
+		Q_free( s_bgTrackHead );
 
 		s_bgTrackHead = next;
 	}

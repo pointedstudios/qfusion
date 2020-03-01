@@ -335,9 +335,9 @@ void RP_PrecachePrograms( void ) {
 					}
 
 					if( binaryLength ) {
-						binary = R_Malloc( binaryLength );
+						binary = Q_malloc( binaryLength );
 						if( binary != NULL && FS_Read( binary, binaryLength, handleBin ) != (int)binaryLength ) {
-							R_Free( binary );
+							Q_free( binary );
 							binary = NULL;
 							CLOSE_AND_DROP_BINARY_CACHE();
 						}
@@ -366,7 +366,7 @@ void RP_PrecachePrograms( void ) {
 					program->binaryCachePos = binaryPos;
 				}
 
-				R_Free( binary );
+				Q_free( binary );
 				binary = NULL;
 
 				if( elem ) {
@@ -466,7 +466,7 @@ void RP_StorePrecacheList( void ) {
 			FS_Write( &binaryFormat, sizeof( binaryFormat ), handleBin );
 			FS_Write( &binaryLength, sizeof( binaryLength ), handleBin );
 			FS_Write( binary, binaryLength, handleBin );
-			R_Free( binary );
+			Q_free( binary );
 		}
 	}
 
@@ -503,10 +503,10 @@ static void RF_DeleteProgram( glsl_program_t *program ) {
 	}
 
 	if( program->name ) {
-		R_Free( program->name );
+		Q_free( program->name );
 	}
 	if( program->deformSig.data ) {
-		R_Free( const_cast<int *>(program->deformSig.data ) );
+		Q_free( const_cast<int *>(program->deformSig.data ) );
 	}
 
 	hash_next = program->hash_next;
@@ -1416,14 +1416,14 @@ static bool RF_LoadShaderFromFile_r( glslParser_t *parser, const char *fileName,
 		R_LoadFile( fileName, (void **)&fileContents );
 
 		if( fileContents ) {
-			trieCache = R_CopyString( fileContents );
+			trieCache = Q_strdup( fileContents );
 		} else {
 			trieCache = NULL;
 		}
 		Trie_Insert( glsl_cache_trie, fileName, trieCache );
 	} else {
 		if( trieCache ) {
-			fileContents = R_CopyString( trieCache );
+			fileContents = Q_strdup( trieCache );
 		} else {
 			fileContents = NULL;
 		}
@@ -1540,7 +1540,7 @@ static bool RF_LoadShaderFromFile_r( glslParser_t *parser, const char *fileName,
 			COM_SanitizeFilePath( token );
 
 			tempFilenameSize = strlen( fileName ) + 1 + strlen( token ) + 1;
-			tempFilename = (char *)R_Malloc( tempFilenameSize );
+			tempFilename = (char *)Q_malloc( tempFilenameSize );
 
 			if( *token != '/' ) {
 				Q_strncpyz( tempFilename, fileName, tempFilenameSize );
@@ -1555,7 +1555,7 @@ static bool RF_LoadShaderFromFile_r( glslParser_t *parser, const char *fileName,
 
 			parser->error = RF_LoadShaderFromFile_r( parser, tempFilename, stackDepth + 1, programType, features );
 
-			R_Free( tempFilename );
+			Q_free( tempFilename );
 
 			if( parser->error ) {
 				return true;
@@ -1812,7 +1812,7 @@ static int RP_RegisterProgramBinary( int type, const char *name, const DeformSig
 	program->vertexShader = RF_CompileShader( program->object, fullName, "vertex", GL_VERTEX_SHADER,
 											  shaderStrings, num_init_strings + parser.numStrings );
 	for( i = 0; i < parser.numBuffers; i++ )
-		R_Free( parser.buffers[i] );
+		Q_free( parser.buffers[i] );
 	if( !program->vertexShader ) {
 		error = 1;
 		goto done;
@@ -1838,7 +1838,7 @@ static int RP_RegisterProgramBinary( int type, const char *name, const DeformSig
 	program->fragmentShader = RF_CompileShader( program->object, fullName, "fragment", GL_FRAGMENT_SHADER,
 												shaderStrings, num_init_strings + parser.numStrings );
 	for( i = 0; i < parser.numBuffers; i++ )
-		R_Free( parser.buffers[i] );
+		Q_free( parser.buffers[i] );
 	if( !program->fragmentShader ) {
 		error = 1;
 		goto done;
@@ -1872,9 +1872,9 @@ done:
 
 	program->type = type;
 	program->features = features;
-	program->name = R_CopyString( name );
+	program->name = Q_strdup( name );
 	if( deformSig.data ) {
-		auto *sigData = (int *)R_Malloc( sizeof( int ) * deformSig.len );
+		auto *sigData = (int *)Q_malloc( sizeof( int ) * deformSig.len );
 		std::memcpy( sigData, deformSig.data, sizeof( int ) * deformSig.len );
 		program->deformSig = deformSig;
 		program->deformSig.data = sigData;
@@ -1945,7 +1945,7 @@ static void *RP_GetProgramBinary( int elem, int *format, unsigned *length ) {
 		return NULL;
 	}
 
-	binary = R_Malloc( GLlength );
+	binary = Q_malloc( GLlength );
 	qglGetProgramBinary( program->object, GLlength, nullptr, &GLFormat, binary );
 
 	*format = GLFormat;

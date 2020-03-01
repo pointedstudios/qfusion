@@ -38,8 +38,8 @@ static cgs_media_handle_t *CG_RegisterMediaSfx( const char *name, bool precache 
 		}
 	}
 
-	mediasfx = ( cgs_media_handle_t * )CG_Malloc( sizeof( cgs_media_handle_t ) );
-	mediasfx->name = CG_CopyString( name );
+	mediasfx = ( cgs_media_handle_t * )Q_malloc( sizeof( cgs_media_handle_t ) );
+	mediasfx->name = Q_strdup( name );
 	mediasfx->next = sfx_headnode;
 	sfx_headnode = mediasfx;
 
@@ -171,8 +171,8 @@ static cgs_media_handle_t *CG_RegisterMediaModel( const char *name, bool precach
 		}
 	}
 
-	mediamodel = ( cgs_media_handle_t * )CG_Malloc( sizeof( cgs_media_handle_t ) );
-	mediamodel->name = CG_CopyString( name );
+	mediamodel = ( cgs_media_handle_t * )Q_malloc( sizeof( cgs_media_handle_t ) );
+	mediamodel->name = Q_strdup( name );
 	mediamodel->next = model_headnode;
 	model_headnode = mediamodel;
 
@@ -242,8 +242,8 @@ static cgs_media_handle_t *CG_RegisterMediaShader( const char *name, bool precac
 		}
 	}
 
-	mediashader = ( cgs_media_handle_t * )CG_Malloc( sizeof( cgs_media_handle_t ) );
-	mediashader->name = CG_CopyString( name );
+	mediashader = ( cgs_media_handle_t * )Q_malloc( sizeof( cgs_media_handle_t ) );
+	mediashader->name = Q_strdup( name );
 	mediashader->next = shader_headnode;
 	shader_headnode = mediashader;
 

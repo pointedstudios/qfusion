@@ -146,14 +146,6 @@ inline int trap_CM_FindTopNodeForSphere( const vec3_t center, float radius, unsi
 	return GAME_IMPORT.CM_FindTopNodeForSphere( center, radius, maxValue );
 }
 
-static inline ATTRIBUTE_MALLOC void *trap_MemAlloc( size_t size, const char *filename, int fileline ) {
-	return GAME_IMPORT.Mem_Alloc( size, filename, fileline );
-}
-
-static inline void trap_MemFree( void *data, const char *filename, int fileline ) {
-	GAME_IMPORT.Mem_Free( data, filename, fileline );
-}
-
 // cvars
 static inline cvar_t *trap_Cvar_Get( const char *name, const char *value, int flags ) {
 	return GAME_IMPORT.Cvar_Get( name, value, flags );

@@ -194,7 +194,7 @@ static bool G_GametypeFilterMatch( const char *filter ) {
 	char *tok, *temp;
 	bool match = false;
 
-	temp = G_CopyString( filter );
+	temp = Q_strdup( filter );
 	tok = strtok( temp, list_separators );
 	while( tok ) {
 		if( !Q_stricmp( tok, gs.gametypeName ) ) {
@@ -203,7 +203,7 @@ static bool G_GametypeFilterMatch( const char *filter ) {
 		}
 		tok = strtok( NULL, list_separators );
 	}
-	G_Free( temp );
+	Q_free( temp );
 
 	return match;
 }
@@ -846,13 +846,11 @@ void G_InitLevel( char *mapname, char *entities, int entstrlen, int64_t levelTim
 	}
 
 	// make a copy of the raw entities string so it's not freed with the pool
-	mapString = ( char * )G_Malloc( entstrlen + 1 );
+	mapString = ( char * )Q_malloc( entstrlen + 1 );
 	memcpy( mapString, entities, entstrlen );
 	Q_strncpyz( name, mapname, sizeof( name ) );
 
 	// clear old data
-
-	G_LevelInitPool( strlen( mapname ) + 1 + ( entstrlen + 1 ) * 2 + G_LEVELPOOL_BASE_SIZE );
 
 	G_StringPoolInit();
 
@@ -864,14 +862,14 @@ void G_InitLevel( char *mapname, char *entities, int entstrlen, int64_t levelTim
 
 	// get the strings back
 	Q_strncpyz( level.mapname, name, sizeof( level.mapname ) );
-	level.mapString = ( char * )G_LevelMalloc( entstrlen + 1 );
+	level.mapString = ( char * )Q_malloc( entstrlen + 1 );
 	level.mapStrlen = entstrlen;
 	memcpy( level.mapString, mapString, entstrlen );
-	G_Free( mapString );
+	Q_free( mapString );
 	mapString = NULL;
 
 	// make a copy of the raw entities string for parsing
-	level.map_parsed_ents = ( char * )G_LevelMalloc( entstrlen + 1 );
+	level.map_parsed_ents = ( char * )Q_malloc( entstrlen + 1 );
 	level.map_parsed_ents[0] = 0;
 
 	G_FreeEntities();
@@ -991,7 +989,7 @@ static void SP_worldspawn( edict_t *ent ) {
 	/*
 	message = trap_GetFullnameFromMapList( level.mapname );
 	if( message && message[0] )
-	    ent->message = G_LevelCopyString( message );
+	    ent->message = Q_strdup( message );
 	*/
 
 	if( ent->message && ent->message[0] ) {

@@ -49,8 +49,6 @@ static bool mod_isworldmodel;
 model_t *r_prevworldmodel;
 static mapconfig_t *mod_mapConfigs;
 
-static mempool_t *mod_mempool;
-
 static const modelFormatDescr_t mod_supportedformats[] =
 {
 	// Quake III Arena .md3 models
@@ -122,7 +120,7 @@ static void Mod_CreateVisLeafs( model_t *mod ) {
 	mbrushmodel_t *loadbmodel = ( ( mbrushmodel_t * )mod->extradata );
 
 	count = loadbmodel->numleafs;
-	loadbmodel->visleafs = (mleaf_t **)Mod_Malloc( mod, (count + 1) * sizeof( *loadbmodel->visleafs ) );
+	loadbmodel->visleafs = (mleaf_t **)Q_malloc( (count + 1) * sizeof( *loadbmodel->visleafs ) );
 	memset( loadbmodel->visleafs, 0, (count + 1) * sizeof( *loadbmodel->visleafs ) );
 
 	numVisLeafs = 0;
@@ -354,9 +352,9 @@ static void Mod_SortModelSurfaces( model_t *mod, unsigned int modnum ) {
 		return;
 	}
 
-	map = ( unsigned * )Mod_Malloc( mod, numSurfaces * sizeof( *map ) );
-	sortedSurfaces = ( msortedSurface_t * )Mod_Malloc( mod, numSurfaces * sizeof( *sortedSurfaces ) );
-	backupSurfaces = ( msurface_t * )Mod_Malloc( mod, numSurfaces * sizeof( *backupSurfaces ) );
+	map = ( unsigned * )Q_malloc( numSurfaces * sizeof( *map ) );
+	sortedSurfaces = ( msortedSurface_t * )Q_malloc( numSurfaces * sizeof( *sortedSurfaces ) );
+	backupSurfaces = ( msurface_t * )Q_malloc( numSurfaces * sizeof( *backupSurfaces ) );
 	for( i = 0; i < numSurfaces; i++ ) {
 		sortedSurfaces[i].number = i;
 		sortedSurfaces[i].surf = loadbmodel->surfaces + firstSurface + i;
@@ -403,9 +401,9 @@ static void Mod_SortModelSurfaces( model_t *mod, unsigned int modnum ) {
 		drawSurf->numWorldSurfaces++;
 	}
 
-	R_Free( map );
-	R_Free( sortedSurfaces );
-	R_Free( backupSurfaces );
+	Q_free( map );
+	Q_free( sortedSurfaces );
+	Q_free( backupSurfaces );
 }
 
 /*
@@ -447,13 +445,13 @@ static int Mod_CreateSubmodelBufferObjects( model_t *mod, unsigned int modnum, s
 		return 0;
 	}
 
-	surfmap = ( msurface_t ** )Mod_Malloc( mod, bm->numModelSurfaces * sizeof( *surfmap ) );
-	surfaces = ( msurface_t ** )Mod_Malloc( mod, bm->numModelSurfaces * sizeof( *surfaces ) );
+	surfmap = ( msurface_t ** )Q_malloc( bm->numModelSurfaces * sizeof( *surfmap ) );
+	surfaces = ( msurface_t ** )Q_malloc( bm->numModelSurfaces * sizeof( *surfaces ) );
 	numSurfaces = 0;
 
 	numTempVBOs = 0;
 	maxTempVBOs = 1024;
-	tempVBOs = ( mesh_vbo_t * )Mod_Malloc( mod, maxTempVBOs * sizeof( *tempVBOs ) );
+	tempVBOs = ( mesh_vbo_t * )Q_malloc( maxTempVBOs * sizeof( *tempVBOs ) );
 	startDrawSurface = loadbmodel->numDrawSurfaces;
 
 	bm->numModelDrawSurfaces = 0;
@@ -472,8 +470,8 @@ static int Mod_CreateSubmodelBufferObjects( model_t *mod, unsigned int modnum, s
 
 		// build visibility data for each face, based on what leafs
 		// this face belongs to (visible from)
-		visdata = ( uint8_t * )Mod_Malloc( mod, rowlongs * 4 * loadbmodel->numsurfaces );
-		areadata = ( uint8_t * )Mod_Malloc( mod, areabytes * loadbmodel->numsurfaces );
+		visdata = ( uint8_t * )Q_malloc( rowlongs * 4 * loadbmodel->numsurfaces );
+		areadata = ( uint8_t * )Q_malloc( areabytes * loadbmodel->numsurfaces );
 
 		for( pleaf = loadbmodel->visleafs, leaf = *pleaf; leaf; leaf = *++pleaf ) {
 			for( i = 0; i < leaf->numVisSurfaces; i++ ) {
@@ -637,7 +635,7 @@ merge:
 		// create temp VBO to hold pre-batched info
 		if( numTempVBOs == maxTempVBOs ) {
 			maxTempVBOs += 1024;
-			tempVBOs = (mesh_vbo_s *)Mod_Realloc( tempVBOs, maxTempVBOs * sizeof( *tempVBOs ) );
+			tempVBOs = (mesh_vbo_s *)Q_realloc( tempVBOs, maxTempVBOs * sizeof( *tempVBOs ) );
 		}
 
 		vbo = &tempVBOs[numTempVBOs++];
@@ -818,15 +816,15 @@ merge:
 
 	bm->numModelDrawSurfaces = loadbmodel->numDrawSurfaces - bm->firstModelDrawSurface;
 
-	R_Free( tempVBOs );
-	R_Free( surfmap );
-	R_Free( surfaces );
+	Q_free( tempVBOs );
+	Q_free( surfmap );
+	Q_free( surfaces );
 
 	if( visdata ) {
-		R_Free( visdata );
+		Q_free( visdata );
 	}
 	if( areadata ) {
-		R_Free( areadata );
+		Q_free( areadata );
 	}
 
 	return num_vbos;
@@ -850,7 +848,7 @@ void Mod_CreateVertexBufferObjects( model_t *mod ) {
 
 	// allocate memory for drawsurfs
 	loadbmodel->numDrawSurfaces = 0;
-	loadbmodel->drawSurfaces = (drawSurfaceBSP_t *)Mod_Malloc( mod, sizeof( *loadbmodel->drawSurfaces ) * loadbmodel->numsurfaces );
+	loadbmodel->drawSurfaces = (drawSurfaceBSP_t *)Q_malloc( sizeof( *loadbmodel->drawSurfaces ) * loadbmodel->numsurfaces );
 
 	for( i = 0; i < loadbmodel->numsubmodels; i++ ) {
 		vbos = Mod_CreateSubmodelBufferObjects( mod, i, &size );
@@ -947,40 +945,22 @@ static void Mod_TouchBrushModel( model_t *model ) {
 * Mod_Modellist_f
 */
 void Mod_Modellist_f( void ) {
-	int i;
-	model_t *mod;
-	size_t size, total;
-
-	total = 0;
-	Com_Printf( "Loaded models:\n" );
-	for( i = 0, mod = mod_known; i < mod_numknown; i++, mod++ ) {
-		if( !mod->name ) {
-			continue;
-		}
-		size = Mem_PoolTotalSize( mod->mempool );
-		Com_Printf( "%8" PRIuPTR " : %s\n", (uintptr_t)size, mod->name );
-		total += size;
-	}
-	Com_Printf( "Total: %i\n", mod_numknown );
-	Com_Printf( "Total resident: %" PRIuPTR "\n", (uintptr_t)total );
 }
 
 /*
 * R_InitModels
 */
 void R_InitModels( void ) {
-	mod_mempool = R_AllocPool( r_mempool, "Models" );
 	memset( mod_novis, 0xff, sizeof( mod_novis ) );
 	mod_isworldmodel = false;
 	r_prevworldmodel = NULL;
-	mod_mapConfigs = (decltype( mod_mapConfigs ))R_MallocExt( mod_mempool, sizeof( *mod_mapConfigs ) * MAX_MOD_KNOWN, 0, 1 );
+	mod_mapConfigs = (decltype( mod_mapConfigs ))Q_malloc( sizeof( *mod_mapConfigs ) * MAX_MOD_KNOWN );
 }
 
 /*
 * Mod_Free
 */
 static void Mod_Free( model_t *model ) {
-	R_FreePool( &model->mempool );
 	memset( model, 0, sizeof( *model ) );
 	model->type = mod_free;
 }
@@ -1015,13 +995,7 @@ void R_FreeUnusedModels( void ) {
 * R_ShutdownModels
 */
 void R_ShutdownModels( void ) {
-	int i;
-
-	if( !mod_mempool ) {
-		return;
-	}
-
-	for( i = 0; i < mod_numknown; i++ ) {
+	for( int i = 0; i < mod_numknown; i++ ) {
 		if( mod_known[i].name ) {
 			Mod_Free( &mod_known[i] );
 		}
@@ -1032,8 +1006,6 @@ void R_ShutdownModels( void ) {
 
 	mod_numknown = 0;
 	memset( mod_known, 0, sizeof( mod_known ) );
-
-	R_FreePool( &mod_mempool );
 }
 
 /*
@@ -1156,14 +1128,8 @@ model_t *Mod_ForName( const char *name, bool crash ) {
 		Com_Error( ERR_DROP, "Mod_NumForName: %s not found", name );
 	}
 
-	// free data we may still have from the previous load attempt for this model slot
-	if( mod->mempool ) {
-		R_FreePool( &mod->mempool );
-	}
-
 	mod->type = mod_bad;
-	mod->mempool = R_AllocPool( mod_mempool, name );
-	mod->name = (char *)Mod_Malloc( mod, strlen( name ) + 1 );
+	mod->name = (char *)Q_malloc( strlen( name ) + 1 );
 	strcpy( mod->name, name );
 
 	// return the NULL model
@@ -1224,8 +1190,7 @@ model_t *Mod_ForName( const char *name, bool crash ) {
 
 		lod->type = mod_bad;
 		lod->lodnum = i + 1;
-		lod->mempool = R_AllocPool( mod_mempool, lodname );
-		lod->name = (char *)Mod_Malloc( lod, strlen( lodname ) + 1 );
+		lod->name = (char *)Q_malloc( strlen( lodname ) + 1 );
 		strcpy( lod->name, lodname );
 
 		mod_numknown++;
@@ -1445,9 +1410,9 @@ void R_GetTransformBufferForMesh( mesh_t *mesh, bool positions, bool normals, bo
 	if( bufSize > r_modelTransformBufSize ) {
 		r_modelTransformBufSize = bufSize;
 		if( r_modelTransformBuf ) {
-			R_Free( r_modelTransformBuf );
+			Q_free( r_modelTransformBuf );
 		}
-		r_modelTransformBuf = (vec4_t *)R_Malloc( bufSize );
+		r_modelTransformBuf = (vec4_t *)Q_malloc( bufSize );
 	}
 
 	bufPtr = r_modelTransformBuf;

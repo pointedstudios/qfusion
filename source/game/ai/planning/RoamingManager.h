@@ -51,7 +51,7 @@ public:
 	explicit BotRoamingManager( Bot *bot_ );
 
 	~BotRoamingManager() {
-		G_Free( visitedAt );
+		Q_free( visitedAt );
 	}
 
 	uint64_t MillisSinceVisited( unsigned spotNum ) const {

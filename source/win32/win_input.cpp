@@ -515,7 +515,7 @@ bool IN_RawInput_Init( void ) {
 	}
 
 	// Allocate the array to hold the DeviceList
-	pRawInputDeviceList = (PRAWINPUTDEVICELIST)Mem_ZoneMalloc( sizeof( RAWINPUTDEVICELIST ) * inputdevices );
+	pRawInputDeviceList = (PRAWINPUTDEVICELIST)Q_malloc( sizeof( RAWINPUTDEVICELIST ) * inputdevices );
 
 	// 2nd call to GetRawInputDeviceList: Pass the pointer to our DeviceList and GetRawInputDeviceList() will fill the array
 	if( ( *_GRIDL )( pRawInputDeviceList, &inputdevices, sizeof( RAWINPUTDEVICELIST ) ) == -1 ) {
@@ -549,7 +549,7 @@ bool IN_RawInput_Init( void ) {
 	}
 
 	// Loop again and bind devices
-	rawmice = (rawmouse_t *)Mem_ZoneMalloc( sizeof( rawmouse_t ) * mtemp );
+	rawmice = (rawmouse_t *)Q_malloc( sizeof( rawmouse_t ) * mtemp );
 	for( i = 0; i < inputdevices; i++ ) {
 		if( pRawInputDeviceList[i].dwType == RIM_TYPEMOUSE ) {
 			j = MAX_RI_DEVICE_SIZE;
@@ -582,10 +582,10 @@ bool IN_RawInput_Init( void ) {
 	}
 
 	// free the RAWINPUTDEVICELIST
-	Mem_ZoneFree( pRawInputDeviceList );
+	Q_free( pRawInputDeviceList );
 
 	// alloc raw input buffer
-	raw = (RAWINPUT *)Mem_ZoneMalloc( INIT_RIBUFFER_SIZE );
+	raw = (RAWINPUT *)Q_malloc( INIT_RIBUFFER_SIZE );
 	ribuffersize = INIT_RIBUFFER_SIZE;
 
 	return true;
@@ -601,8 +601,8 @@ static void IN_RawInput_Shutdown( void ) {
 
 	IN_RawInput_DeRegister();
 
-	Mem_ZoneFree( rawmice );
-	Mem_ZoneFree( raw );
+	Q_free( rawmice );
+	Q_free( raw );
 
 	// dealloc mouse structure
 	rawmicecount = 0;
@@ -627,7 +627,7 @@ void IN_RawInput_MouseRead( HANDLE in_device_handle ) {
 
 	if( dwSize > ribuffersize ) {
 		ribuffersize = dwSize;
-		raw = (RAWINPUT *)Mem_Realloc( raw, dwSize );
+		raw = (RAWINPUT *)Q_realloc( raw, dwSize );
 	}
 
 	if( ( *_GRID )( (HRAWINPUT)in_device_handle, RID_INPUT, raw, &dwSize, sizeof( RAWINPUTHEADER ) ) != dwSize ) {

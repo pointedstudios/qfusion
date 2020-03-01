@@ -40,7 +40,7 @@ void * stereo_mono( void *data, snd_info_t *__restrict info ) {
 	int i, interleave, gain;
 	void *outdata;
 
-	outdata = S_Malloc( info->samples * info->width );
+	outdata = Q_malloc( info->samples * info->width );
 	interleave = info->channels * info->width;
 	gain = s_stereo2mono->integer;
 	Q_clamp( gain, -1, 1 );
@@ -60,7 +60,7 @@ void * stereo_mono( void *data, snd_info_t *__restrict info ) {
 			*pout = ( ( 1 - gain ) * pin[0] + ( 1 + gain ) * pin[1] ) / 2;
 		}
 	} else {
-		S_Free( outdata );
+		Q_free( outdata );
 		return NULL;
 	}
 
@@ -231,7 +231,7 @@ bool S_LoadBuffer( sfx_t *sfx ) {
 	struct CallSFree {
 		void operator()( void *p ) {
 			if( p ) {
-				S_Free( p );
+				Q_free( p );
 			}
 		}
 	};

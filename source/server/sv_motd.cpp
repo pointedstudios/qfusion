@@ -32,15 +32,15 @@ void SV_MOTD_SetMOTD( const char *motd ) {
 
 	if( l == 0 ) {
 		if( svs.motd ) {
-			Mem_Free( svs.motd );
+			Q_free( svs.motd );
 		}
 		svs.motd = NULL;
 	} else {
 		if( svs.motd ) {
-			Mem_Free( svs.motd );
+			Q_free( svs.motd );
 		}
 
-		svs.motd = (char *)Mem_Alloc( sv_mempool, ( l + 1 ) * sizeof( char ) );
+		svs.motd = (char *)Q_malloc( ( l + 1 ) * sizeof( char ) );
 		Q_strncpyz( svs.motd, motd, l + 1 );
 
 		// MOTD may come from a CRLF file so strip off \r's (we waste a few bytes here)

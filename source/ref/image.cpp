@@ -39,7 +39,6 @@ static int r_unpackAlignment;
 
 static unsigned *r_8to24table[2];
 
-static mempool_t *r_imagesPool;
 static char *r_imagePathBuf, *r_imagePathBuf2;
 static size_t r_sizeof_imagePathBuf, r_sizeof_imagePathBuf2;
 
@@ -48,9 +47,9 @@ static size_t r_sizeof_imagePathBuf, r_sizeof_imagePathBuf2;
 	if( r_sizeof_ ## buf < need ) \
 	{ \
 		if( r_ ## buf ) { \
-			R_Free( r_ ## buf );} \
+			Q_free( r_ ## buf );} \
 		r_sizeof_ ## buf += ( ( ( need ) & ( MAX_QPATH - 1 ) ) + 1 ) * MAX_QPATH; \
-		r_ ## buf = (decltype( r_ ## buf ))R_MallocExt( r_imagesPool, r_sizeof_ ## buf, 0, 0 ); \
+		r_ ## buf = (decltype( r_ ## buf ))Q_malloc( r_imagesPool, r_sizeof_ ## buf, 0, 0 ); \
 	}
 
 static int gl_filter_min = GL_LINEAR_MIPMAP_NEAREST;
@@ -325,9 +324,9 @@ static uint8_t *_R_PrepareImageBuffer( int buffer, size_t size,
 	if( r_imageBufSize[buffer] < size ) {
 		r_imageBufSize[buffer] = size;
 		if( r_imageBuffers[buffer] ) {
-			R_Free( r_imageBuffers[buffer] );
+			Q_free( r_imageBuffers[buffer] );
 		}
-		r_imageBuffers[buffer] = (uint8_t *)R_MallocExt( r_imagesPool, size, 0, 1 );
+		r_imageBuffers[buffer] = (uint8_t *)Q_malloc( size );
 	}
 
 	memset( r_imageBuffers[buffer], 255, size );
@@ -341,7 +340,7 @@ static uint8_t *_R_PrepareImageBuffer( int buffer, size_t size,
 void R_FreeImageBuffers( void ) {
 	for( int i = 0; i < NUM_IMAGE_BUFFERS; i++ ) {
 		if( r_imageBuffers[i] ) {
-			R_Free( r_imageBuffers[i] );
+			Q_free( r_imageBuffers[i] );
 			r_imageBuffers[i] = NULL;
 		}
 		r_imageBufSize[i] = 0;
@@ -1743,7 +1742,7 @@ static image_t *R_CreateImage( const char *name, int width, int height, int laye
 		return NULL;
 	}
 
-	image->name = (char *)R_MallocExt( r_imagesPool, name_len + 1, 0, 1 );
+	image->name = (char *)Q_malloc( name_len + 1 );
 	strcpy( image->name, name );
 	image->width = width;
 	image->height = height;
@@ -1848,7 +1847,7 @@ static void R_FreeImage( image_t *image ) {
 
 	R_FreeTextureNum( image );
 
-	R_Free( image->name );
+	Q_free( image->name );
 
 	image->name = NULL;
 	image->texnum = 0;
@@ -2053,9 +2052,9 @@ void R_ScreenShot( const char *filename, int x, int y, int width, int height, in
 	buf_size = width * height * 4;
 	if( buf_size > r_screenShotBufferSize ) {
 		if( r_screenShotBuffer ) {
-			R_Free( r_screenShotBuffer );
+			Q_free( r_screenShotBuffer );
 		}
-		r_screenShotBuffer = (uint8_t *)R_MallocExt( r_imagesPool, buf_size, 0, 1 );
+		r_screenShotBuffer = (uint8_t *)Q_malloc( buf_size );
 		r_screenShotBufferSize = buf_size;
 	}
 
@@ -2658,13 +2657,7 @@ static void R_ReleaseBuiltinImages( void ) {
 void R_InitImages( void ) {
 	int i;
 
-	if( r_imagesPool ) {
-		return;
-	}
-
 	R_Imagelib_Init();
-
-	r_imagesPool = R_AllocPool( r_mempool, "Images" );
 
 	r_unpackAlignment = 4;
 	qglPixelStorei( GL_PACK_ALIGNMENT, 1 );
@@ -2754,10 +2747,6 @@ void R_ShutdownImages( void ) {
 	int i;
 	image_t *image;
 
-	if( !r_imagesPool ) {
-		return;
-	}
-
 	R_ReleaseBuiltinImages();
 
 	for( i = 0, image = r_images; i < MAX_GLIMAGES; i++, image++ ) {
@@ -2771,21 +2760,19 @@ void R_ShutdownImages( void ) {
 	R_FreeImageBuffers();
 
 	if( r_imagePathBuf ) {
-		R_Free( r_imagePathBuf );
+		Q_free( r_imagePathBuf );
 	}
 	if( r_imagePathBuf2 ) {
-		R_Free( r_imagePathBuf2 );
+		Q_free( r_imagePathBuf2 );
 	}
 
 	if( r_8to24table[0] ) {
-		R_Free( r_8to24table[0] );
+		Q_free( r_8to24table[0] );
 	}
 	if( r_8to24table[1] ) {
-		R_Free( r_8to24table[1] );
+		Q_free( r_8to24table[1] );
 	}
 	r_8to24table[0] = r_8to24table[1] = NULL;
-
-	R_FreePool( &r_imagesPool );
 
 	r_screenShotBuffer = NULL;
 	r_screenShotBufferSize = 0;

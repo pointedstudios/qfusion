@@ -92,12 +92,12 @@ static bool CG_vWeap_ParseAnimationScript( weaponinfo_t *weaponinfo, const char 
 		FS_FCloseFile( filenum );
 		return false;
 	}
-	buf = ( uint8_t * )CG_Malloc( length + 1 );
+	buf = ( uint8_t * )Q_malloc( length + 1 );
 	FS_Read( buf, length, filenum );
 	FS_FCloseFile( filenum );
 
 	if( !buf ) {
-		CG_Free( buf );
+		Q_free(   buf );
 		return false;
 	}
 
@@ -256,7 +256,7 @@ static bool CG_vWeap_ParseAnimationScript( weaponinfo_t *weaponinfo, const char 
 		}
 	}
 
-	CG_Free( buf );
+	Q_free(   buf );
 
 	if( counter < VWEAP_MAXANIMS ) {
 		Com_Printf( "%sERROR: incomplete WEAPON script: %s - Using default%s\n", S_COLOR_YELLOW, filename, S_COLOR_WHITE );

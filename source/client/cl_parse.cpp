@@ -103,7 +103,7 @@ bool CL_DownloadRequest( const char *filename, bool requestpak ) {
 	Com_Printf( "Asking to download: %s\n", filename );
 
 	cls.download.requestpak = requestpak;
-	cls.download.requestname = (char *)Mem_ZoneMalloc( sizeof( char ) * ( strlen( filename ) + 1 ) );
+	cls.download.requestname = (char *)Q_malloc( sizeof( char ) * ( strlen( filename ) + 1 ) );
 	Q_strncpyz( cls.download.requestname, filename, sizeof( char ) * ( strlen( filename ) + 1 ) );
 	cls.download.timeout = Sys_Milliseconds() + 5000;
 	CL_AddReliableCommand( va( "download %i \"%s\"", requestpak, filename ) );
@@ -209,8 +209,8 @@ void CL_FreeDownloadList( void ) {
 
 	while( cls.download.list ) {
 		next = cls.download.list->next;
-		Mem_ZoneFree( cls.download.list->filename );
-		Mem_ZoneFree( cls.download.list );
+		Q_free( cls.download.list->filename );
+		Q_free( cls.download.list );
 		cls.download.list = next;
 	}
 }
@@ -225,7 +225,7 @@ void CL_DownloadDone( void ) {
 		CL_StopServerDownload();
 	}
 
-	Mem_ZoneFree( cls.download.requestname );
+	Q_free( cls.download.requestname );
 	cls.download.requestname = NULL;
 
 	requestnext = cls.download.requestnext;
@@ -279,17 +279,17 @@ static void CL_WebDownloadDoneCb( int status, const char *contentType, void *pri
 	// try a non-official mirror (the builtin HTTP server or a remote mirror)
 	if( !success && !cancelled && try_non_official ) {
 		int size = download.size;
-		char *filename = ZoneCopyString( download.origname );
+		char *filename = Q_strdup( download.origname );
 		unsigned checksum = download.checksum;
-		char *url = ZoneCopyString( download.web_url );
+		char *url = Q_strdup( download.web_url );
 		bool allow_localhttp = download.web_local_http;
 
 		cls.download.cancelled = true; // remove the temp file
 		CL_StopServerDownload();
 		CL_InitServerDownload( filename, size, checksum, allow_localhttp, url, false );
 
-		Mem_Free( filename );
-		Mem_Free( url );
+		Q_free( filename );
+		Q_free( url );
 		return;
 	}
 
@@ -454,7 +454,7 @@ static void CL_InitServerDownload( const char *filename, size_t size, unsigned c
 	official_web_download = force_web_official || official_web_only;
 
 	alloc_size = strlen( "downloads" ) + 1 /* '/' */ + strlen( filename ) + 1;
-	cls.download.name = (char *)Mem_ZoneMalloc( alloc_size );
+	cls.download.name = (char *)Q_malloc( alloc_size );
 	if( official_web_download || !cls.download.requestpak ) {
 		// it's an official pak, otherwise
 		// if we're not downloading a pak, this must be a demo so drop it into the gamedir
@@ -469,14 +469,14 @@ static void CL_InitServerDownload( const char *filename, size_t size, unsigned c
 	}
 
 	alloc_size = strlen( cls.download.name ) + strlen( ".tmp" ) + 1;
-	cls.download.tempname = (char *)Mem_ZoneMalloc( alloc_size );
+	cls.download.tempname = (char *)Q_malloc( alloc_size );
 	Q_snprintfz( cls.download.tempname, alloc_size, "%s.tmp", cls.download.name );
 
-	cls.download.origname = ZoneCopyString( filename );
+	cls.download.origname = Q_strdup( filename );
 	cls.download.web = false;
 	cls.download.web_official = official_web_download;
 	cls.download.web_official_only = official_web_only;
-	cls.download.web_url = ZoneCopyString( url );
+	cls.download.web_url = Q_strdup( url );
 	cls.download.web_local_http = allow_localhttpdownload;
 	cls.download.cancelled = false;
 	cls.download.disconnect = false;
@@ -495,8 +495,8 @@ static void CL_InitServerDownload( const char *filename, size_t size, unsigned c
 
 	if( initial ) {
 		if( cls.download.requestnext ) {
-			dl = (download_list_t *)Mem_ZoneMalloc( sizeof( download_list_t ) );
-			dl->filename = ZoneCopyString( filename );
+			dl = (download_list_t *)Q_malloc( sizeof( download_list_t ) );
+			dl->filename = Q_strdup( filename );
 			dl->next = cls.download.list;
 			cls.download.list = dl;
 		}
@@ -616,16 +616,16 @@ void CL_StopServerDownload( void ) {
 		FS_RemoveBaseFile( cls.download.tempname );
 	}
 
-	Mem_ZoneFree( cls.download.name );
+	Q_free( cls.download.name );
 	cls.download.name = NULL;
 
-	Mem_ZoneFree( cls.download.tempname );
+	Q_free( cls.download.tempname );
 	cls.download.tempname = NULL;
 
-	Mem_ZoneFree( cls.download.origname );
+	Q_free( cls.download.origname );
 	cls.download.origname = NULL;
 
-	Mem_ZoneFree( cls.download.web_url );
+	Q_free( cls.download.web_url );
 	cls.download.web_url = NULL;
 
 	cls.download.offset = 0;
@@ -884,14 +884,14 @@ static void CL_ParseServerData( msg_t *msg ) {
 
 	// builting HTTP server port
 	if( cls.httpbaseurl ) {
-		Mem_Free( cls.httpbaseurl );
+		Q_free( cls.httpbaseurl );
 		cls.httpbaseurl = NULL;
 	}
 
 	if( ( sv_bitflags & SV_BITFLAGS_HTTP ) != 0 ) {
 		if( ( sv_bitflags & SV_BITFLAGS_HTTP_BASEURL ) != 0 ) {
 			// read base upstream url
-			cls.httpbaseurl = ZoneCopyString( MSG_ReadString( msg ) );
+			cls.httpbaseurl = Q_strdup( MSG_ReadString( msg ) );
 		} else {
 			http_portnum = MSG_ReadInt16( msg ) & 0xffff;
 			cls.httpaddress = cls.serveraddress;
@@ -902,9 +902,9 @@ static void CL_ParseServerData( msg_t *msg ) {
 			}
 			if( http_portnum ) {
 				if( cls.httpaddress.type == NA_LOOPBACK ) {
-					cls.httpbaseurl = ZoneCopyString( va( "http://localhost:%hu/", (unsigned short)http_portnum ) );
+					cls.httpbaseurl = Q_strdup( va( "http://localhost:%hu/", (unsigned short)http_portnum ) );
 				} else {
-					cls.httpbaseurl = ZoneCopyString( va( "http://%s/", NET_AddressToString( &cls.httpaddress ) ) );
+					cls.httpbaseurl = Q_strdup( va( "http://%s/", NET_AddressToString( &cls.httpaddress ) ) );
 				}
 			}
 		}
@@ -921,7 +921,7 @@ static void CL_ParseServerData( msg_t *msg ) {
 		const char *pakname = MSG_ReadString( msg );
 		const unsigned checksum = MSG_ReadInt32( msg );
 
-		Com_AddPakToPureList( &cls.purelist, pakname, checksum, NULL );
+		Com_AddPakToPureList( &cls.purelist, pakname, checksum );
 
 		numpure--;
 	}

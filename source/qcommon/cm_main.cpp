@@ -25,8 +25,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 static bool cm_initialized = false;
 
-static mempool_t *cmap_mempool;
-
 static cvar_t *cm_noAreas;
 
 void CM_LoadQ3BrushModel( cmodel_state_t *cms, void *parent, void *buffer, bspFormatDesc_t *format );
@@ -57,13 +55,13 @@ static void CM_Clear( cmodel_state_t *cms ) {
 	// Release instance-local (non-shared data) first
 
 	if( cms->map_brushes ) {
-		Mem_Free( cms->map_brushes );
+		Q_free( cms->map_brushes );
 		cms->map_brushes = NULL;
 		cms->numbrushes = 0;
 	}
 
 	if( cms->map_faces ) {
-		Mem_Free( cms->map_faces );
+		Q_free( cms->map_faces );
 		cms->map_faces = NULL;
 		numfaces = cms->numfaces;
 		cms->numfaces = 0;
@@ -71,28 +69,28 @@ static void CM_Clear( cmodel_state_t *cms ) {
 
 	if( cms->map_cmodels != &cms->map_cmodel_empty ) {
 		for( i = 0; i < cms->numcmodels; i++ ) {
-			Mem_Free( cms->map_cmodels[i].faces );
-			Mem_Free( cms->map_cmodels[i].brushes );
+			Q_free( cms->map_cmodels[i].faces );
+			Q_free( cms->map_cmodels[i].brushes );
 		}
-		Mem_Free( cms->map_cmodels );
+		Q_free( cms->map_cmodels );
 		cms->map_cmodels = &cms->map_cmodel_empty;
 		cms->numcmodels = 0;
 	}
 
 	if( cms->map_markbrushes ) {
-		Mem_Free( cms->map_markbrushes );
+		Q_free( cms->map_markbrushes );
 		cms->map_markbrushes = NULL;
 		cms->nummarkbrushes = 0;
 	}
 
 	if( cms->map_markfaces ) {
-		Mem_Free( cms->map_markfaces );
+		Q_free( cms->map_markfaces );
 		cms->map_markfaces = NULL;
 		cms->nummarkfaces = 0;
 	}
 
 	if( cms->map_leafs != &cms->map_leaf_empty ) {
-		Mem_Free( cms->map_leafs );
+		Q_free( cms->map_leafs );
 		cms->map_leafs = &cms->map_leaf_empty;
 		cms->numleafs = 0;
 	}
@@ -100,76 +98,76 @@ static void CM_Clear( cmodel_state_t *cms ) {
 	if( cms->map_face_brushdata ) {
 		for( i = 0; i < numfaces; ++i ) {
 			if( cms->map_face_brushdata[i] ) {
-				Mem_Free( cms->map_face_brushdata[i] );
+				Q_free( cms->map_face_brushdata[i] );
 			}
 		}
-		Mem_Free( cms->map_face_brushdata );
+		Q_free( cms->map_face_brushdata );
 		cms->map_face_brushdata = NULL;
 	}
 
 	if( cms->leaf_inline_brushes ) {
-		Mem_Free( cms->leaf_inline_brushes );
+		Q_free( cms->leaf_inline_brushes );
 		cms->leaf_inline_brushes = NULL;
 	}
 
 	if( cms->leaf_inline_sides ) {
-		Mem_Free( cms->leaf_inline_sides );
+		Q_free( cms->leaf_inline_sides );
 		cms->leaf_inline_sides = NULL;
 	}
 
 	if( cms->leaf_inline_faces ) {
-		Mem_Free( cms->leaf_inline_faces );
+		Q_free( cms->leaf_inline_faces );
 		cms->leaf_inline_faces = NULL;
 	}
 
 	if( cms->leaf_bounds ) {
-		Mem_Free( cms->leaf_bounds );
+		Q_free( cms->leaf_bounds );
 		cms->leaf_bounds = NULL;
 	}
 
 	if( cms->map_nodes ) {
-		Mem_Free( cms->map_nodes );
+		Q_free( cms->map_nodes );
 		cms->map_nodes = NULL;
 		cms->numnodes = 0;
 	}
 
 	if( cms->map_shaderrefs ) {
-		Mem_Free( cms->map_shaderrefs[0].name );
-		Mem_Free( cms->map_shaderrefs );
+		Q_free( cms->map_shaderrefs[0].name );
+		Q_free( cms->map_shaderrefs );
 		cms->map_shaderrefs = NULL;
 		cms->numshaderrefs = 0;
 	}
 
 	if( cms->map_areas != &cms->map_area_empty ) {
-		Mem_Free( cms->map_areas );
+		Q_free( cms->map_areas );
 		cms->map_areas = &cms->map_area_empty;
 		cms->numareas = 0;
 	}
 
 	if( cms->map_areaportals ) {
-		Mem_Free( cms->map_areaportals );
+		Q_free( cms->map_areaportals );
 		cms->map_areaportals = NULL;
 	}
 
 	if( cms->map_planes ) {
-		Mem_Free( cms->map_planes );
+		Q_free( cms->map_planes );
 		cms->map_planes = NULL;
 		cms->numplanes = 0;
 	}
 
 	if( cms->map_brushsides ) {
-		Mem_Free( cms->map_brushsides );
+		Q_free( cms->map_brushsides );
 		cms->map_brushsides = NULL;
 		cms->numbrushsides = 0;
 	}
 
 	if( cms->map_pvs ) {
-		Mem_Free( cms->map_pvs );
+		Q_free( cms->map_pvs );
 		cms->map_pvs = NULL;
 	}
 
 	if( cms->map_entitystring != &cms->map_entitystring_empty ) {
-		Mem_Free( cms->map_entitystring );
+		Q_free( cms->map_entitystring );
 		cms->map_entitystring = &cms->map_entitystring_empty;
 	}
 
@@ -246,7 +244,7 @@ cmodel_t *CM_LoadMap( cmodel_state_t *cms, const char *name, bool clientload, un
 	}
 
 	// copy header into temp variable to be saveed in a cvar
-	header = (char *)Mem_TempMalloc( descr->headerLen + 1 );
+	header = (char *)Q_malloc( descr->headerLen + 1 );
 	memcpy( header, buf, descr->headerLen );
 	header[descr->headerLen] = '\0';
 
@@ -254,7 +252,7 @@ cmodel_t *CM_LoadMap( cmodel_state_t *cms, const char *name, bool clientload, un
 	Cvar_ForceSet( "cm_mapHeader", header );
 	Cvar_ForceSet( "cm_mapVersion", va( "%i", LittleLong( *( (int *)( (uint8_t *)buf + descr->headerLen ) ) ) ) );
 
-	Mem_TempFree( header );
+	Q_free( header );
 
 	descr->loader( cms, NULL, buf, bspFormat );
 
@@ -262,8 +260,8 @@ cmodel_t *CM_LoadMap( cmodel_state_t *cms, const char *name, bool clientload, un
 	CM_InitOctagonHull( cms );
 
 	if( cms->numareas ) {
-		cms->map_areas = (carea_t *)Mem_Alloc( cms->mempool, cms->numareas * sizeof( *cms->map_areas ) );
-		cms->map_areaportals = (int *)Mem_Alloc( cms->mempool, cms->numareas * cms->numareas * sizeof( *cms->map_areaportals ) );
+		cms->map_areas = (carea_t *)Q_malloc( cms->numareas * sizeof( *cms->map_areas ) );
+		cms->map_areaportals = (int *)Q_malloc( cms->numareas * cms->numareas * sizeof( *cms->map_areaportals ) );
 
 		memset( cms->map_areaportals, 0, cms->numareas * cms->numareas * sizeof( *cms->map_areaportals ) );
 		CM_FloodAreaConnections( cms );
@@ -321,7 +319,7 @@ char *CM_LoadMapMessage( char *name, char *message, int size ) {
 
 	FS_Seek( file, l.fileofs, FS_SEEK_SET );
 
-	entitystring = (char *)Mem_TempMalloc( l.filelen + 1 );
+	entitystring = (char *)Q_malloc( l.filelen + 1 );
 	FS_Read( entitystring, l.filelen, file );
 	entitystring[l.filelen] = '\0';
 
@@ -370,7 +368,7 @@ char *CM_LoadMapMessage( char *name, char *message, int size ) {
 		}
 	}
 
-	Mem_Free( entitystring );
+	Q_free( entitystring );
 
 	return message;
 }
@@ -893,14 +891,11 @@ const vec3_t *CM_GetLeafBounds( const cmodel_state_t *cms, int leafNum ) {
 /*
 * CM_New
 */
-cmodel_state_t *CM_New( void *mempool ) {
+cmodel_state_t *CM_New() {
 	cmodel_state_t *cms;
-	mempool_t *cms_mempool;
 
-	cms_mempool = ( mempool ? (mempool_t *)mempool : cmap_mempool );
-	cms = (cmodel_state_t *)Mem_Alloc( cms_mempool, sizeof( cmodel_state_t ) );
+	cms = (cmodel_state_t *)Q_malloc( sizeof( cmodel_state_t ) );
 
-	cms->mempool = cms_mempool;
 	cms->map_cmodels = &cms->map_cmodel_empty;
 	cms->map_leafs = &cms->map_leaf_empty;
 	cms->map_areas = &cms->map_area_empty;
@@ -917,7 +912,7 @@ cmodel_state_t *CM_New( void *mempool ) {
 static void CM_Free( cmodel_state_t *cms ) {
 	CM_Clear( cms );
 
-	Mem_Free( cms );
+	Q_free( cms );
 }
 
 /*
@@ -947,8 +942,6 @@ void CM_ReleaseReference( cmodel_state_t *cms ) {
 void CM_Init( void ) {
 	assert( !cm_initialized );
 
-	cmap_mempool = Mem_AllocPool( NULL, "Collision Map" );
-
 	cm_noAreas =        Cvar_Get( "cm_noAreas", "0", CVAR_CHEAT );
 
 	cm_initialized = true;
@@ -961,8 +954,6 @@ void CM_Shutdown( void ) {
 	if( !cm_initialized ) {
 		return;
 	}
-
-	Mem_FreePool( &cmap_mempool );
 
 	cm_initialized = false;
 }

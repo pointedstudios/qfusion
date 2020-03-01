@@ -9,13 +9,13 @@ struct CachedTrace {
 };
 
 AiGroundTraceCache::AiGroundTraceCache() {
-	data = G_Malloc( MAX_EDICTS * sizeof( CachedTrace ) );
+	data = Q_malloc( MAX_EDICTS * sizeof( CachedTrace ) );
 	memset( data, 0, MAX_EDICTS * sizeof( CachedTrace ) );
 }
 
 AiGroundTraceCache::~AiGroundTraceCache() {
 	if( data ) {
-		G_Free( data );
+		Q_free( data );
 	}
 }
 

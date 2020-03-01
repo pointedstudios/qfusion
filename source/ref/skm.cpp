@@ -252,12 +252,12 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 		goto error;
 	}
 
-	poutmodel = (mskmodel_t *)Mod_Malloc( mod, sizeof( *poutmodel ) );
+	poutmodel = (mskmodel_t *)Q_malloc( sizeof( *poutmodel ) );
 	mod->extradata = poutmodel;
 
 
 	// load text
-	texts = (char *)Mod_Malloc( mod, header->num_text + 1 );
+	texts = (char *)Q_malloc( header->num_text + 1 );
 	if( header->ofs_text ) {
 		memcpy( texts, (const char *)( pbase + header->ofs_text ), header->num_text );
 	}
@@ -360,14 +360,14 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 	// load joints
 	memsize = 0;
 	memsize += sizeof( bonepose_t ) * header->num_joints;
-	pmem = (uint8_t *)Mod_Malloc( mod, memsize );
+	pmem = (uint8_t *)Q_malloc( memsize );
 
 	baseposes = ( bonepose_t * )pmem; pmem += sizeof( *baseposes );
 
 	memsize = 0;
 	memsize += sizeof( mskbone_t ) * header->num_joints;
 	memsize += sizeof( bonepose_t ) * header->num_joints;
-	pmem = (uint8_t *)Mod_Malloc( mod, memsize );
+	pmem = (uint8_t *)Q_malloc( memsize );
 
 	poutmodel->numbones = header->num_joints;
 	poutmodel->bones = (  mskbone_t * )pmem; pmem += sizeof( *poutmodel->bones ) * poutmodel->numbones;
@@ -432,7 +432,7 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 	memsize = 0;
 	memsize += sizeof( mskframe_t ) * header->num_frames;
 	memsize += sizeof( bonepose_t ) * header->num_joints * header->num_frames;
-	pmem = (uint8_t *)Mod_Malloc( mod, memsize );
+	pmem = (uint8_t *)Q_malloc( memsize );
 
 	poutmodel->numframes = header->num_frames;
 	poutmodel->frames = ( mskframe_t * )pmem; pmem += sizeof( mskframe_t ) * poutmodel->numframes;
@@ -507,7 +507,7 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 	// load triangles
 	memsize = 0;
 	memsize += sizeof( *outelems ) * header->num_triangles * 3;
-	pmem = (uint8_t *)Mod_Malloc( mod, memsize );
+	pmem = (uint8_t *)Q_malloc( memsize );
 
 	poutmodel->numtris = header->num_triangles;
 	poutmodel->elems = ( elem_t * )pmem; pmem += sizeof( *outelems ) * header->num_triangles * 3;
@@ -534,7 +534,7 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 	memsize += sizeof( *poutmodel->stArray ) * header->num_vertexes;
 	memsize += sizeof( *poutmodel->blendWeights ) * header->num_vertexes * SKM_MAX_WEIGHTS;
 	memsize += sizeof( *poutmodel->blendIndices ) * header->num_vertexes * SKM_MAX_WEIGHTS;
-	pmem = (uint8_t *)Mod_Malloc( mod, memsize );
+	pmem = (uint8_t *)Q_malloc( memsize );
 
 	poutmodel->numverts = header->num_vertexes;
 
@@ -623,7 +623,7 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 	if( header->num_joints ) {
 		memsize = 0;
 		memsize += poutmodel->numverts * ( sizeof( mskblend_t ) + sizeof( unsigned int ) );
-		pmem = (uint8_t *)Mod_Malloc( mod, memsize );
+		pmem = (uint8_t *)Q_malloc( memsize );
 
 		poutmodel->numblends = 0;
 		poutmodel->blends = ( mskblend_t * )pmem; pmem += sizeof( *poutmodel->blends ) * poutmodel->numverts;
@@ -651,7 +651,7 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 	memsize = 0;
 	memsize += sizeof( mskmesh_t ) * header->num_meshes;
 	memsize += sizeof( drawSurfaceSkeletal_t ) * header->num_meshes;
-	pmem = (uint8_t *)Mod_Malloc( mod, memsize );
+	pmem = (uint8_t *)Q_malloc( memsize );
 
 	poutmodel->nummeshes = header->num_meshes;
 	poutmodel->meshes = ( mskmesh_t * )pmem; pmem += sizeof( *poutmodel->meshes ) * header->num_meshes;
@@ -770,12 +770,12 @@ void Mod_LoadSkeletalModel( model_t *mod, model_t *parent, void *buffer, bspForm
 	mod->registrationSequence = rsh.registrationSequence;
 	mod->touch = &Mod_TouchSkeletalModel;
 
-	R_Free( baseposes );
+	Q_free( baseposes );
 	return;
 
 error:
 	if( baseposes ) {
-		R_Free( baseposes );
+		Q_free( baseposes );
 	}
 	mod->type = mod_bad;
 }
@@ -941,20 +941,16 @@ typedef struct skmcacheentry_s {
 	struct skmcacheentry_s *next;
 } skmcacheentry_t;
 
-mempool_t *r_skmcachepool;
-
 static skmcacheentry_t *r_skmcache_head;    // actual entries are linked to this
 static skmcacheentry_t *r_skmcache_free;    // actual entries are linked to this
 static skmcacheentry_t *r_skmcachekeys[MAX_REF_ENTITIES * ( MOD_MAX_LODS + 1 )];      // entities linked to cache entries
 
-#define R_SKMCacheAlloc( size ) R_MallocExt( r_skmcachepool, ( size ), 16, 1 )
+#define R_SKMCacheAlloc( size ) Q_malloc( r_skmcachepool, ( size ), 16, 1 )
 
 /*
 * R_InitSkeletalCache
 */
 void R_InitSkeletalCache( void ) {
-	r_skmcachepool = R_AllocPool( r_mempool, "SKM Cache" );
-
 	r_skmcache_head = NULL;
 	r_skmcache_free = NULL;
 }
@@ -1018,8 +1014,8 @@ static skmcacheentry_t *R_AllocSkeletalDataCache( int entNum, int lodNum, const 
 
 	// no suitable entries found, allocate
 	if( !best ) {
-		best = (skmcacheentry_t *)R_SKMCacheAlloc( sizeof( *best ) );
-		best->data = (uint8_t *)R_SKMCacheAlloc( size );
+		best = (skmcacheentry_t *)Q_malloc( sizeof( *best ) );
+		best->data = (uint8_t *)Q_malloc( size );
 		best->data_size = size;
 		best_prev = NULL;
 	}
@@ -1074,12 +1070,6 @@ void R_ClearSkeletalCache( void ) {
 * R_ShutdownSkeletalCache
 */
 void R_ShutdownSkeletalCache( void ) {
-	if( !r_skmcachepool ) {
-		return;
-	}
-
-	R_FreePool( &r_skmcachepool );
-
 	r_skmcache_head = NULL;
 	r_skmcache_free = NULL;
 }

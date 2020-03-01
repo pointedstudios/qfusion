@@ -224,7 +224,7 @@ public:
 
 	~NavEntitiesRegistry() {
 		// The storage follows in the same memory block
-		G_Free( entityToNavEntity );
+		Q_free( entityToNavEntity );
 	}
 
 	const NavEntity *Head() const { return activeNavEntsHead; }

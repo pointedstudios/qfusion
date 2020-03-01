@@ -160,7 +160,7 @@ public:
 		Chunk *nextChunk;
 		for( Chunk *chunk = freeChunksHead; chunk; chunk = nextChunk ) {
 			nextChunk = chunk->next;
-			G_Free( chunk );
+			Q_free( chunk );
 		}
 	}
 
@@ -172,7 +172,7 @@ public:
 		}
 
 		const size_t size = sizeof( Chunk ) + DATA_PADDING + chunkDataSize;
-		auto *const mem = (uint8_t *)G_Malloc( size );
+		auto *const mem = (uint8_t *)Q_malloc( size );
 		auto *const chunk = (Chunk *)mem;
 		chunk->data = mem + sizeof( Chunk ) + DATA_PADDING;
 		numUsedChunks++;
@@ -193,7 +193,7 @@ static StaticVector<HazardsSelectorCache, 1> instanceHolder;
 HazardsSelectorCache *HazardsSelectorCache::instance = nullptr;
 
 HazardsSelectorCache::HazardsSelectorCache() {
-	auto *mem = storageMem = (uint8_t *)G_Malloc( 2 * sizeof( CachingAllocator ) );
+	auto *mem = storageMem = (uint8_t *)Q_malloc( 2 * sizeof( CachingAllocator ) );
 	sortedProjectilesAllocator = new( mem )CachingAllocator( sizeof( EntAndLineParam ) * MAX_EDICTS );
 	mem += sizeof( CachingAllocator );
 	plasmaBeamsAllocator = new( mem )CachingAllocator( sizeof( PlasmaBeam ) * MAX_EDICTS );
@@ -202,7 +202,7 @@ HazardsSelectorCache::HazardsSelectorCache() {
 HazardsSelectorCache::~HazardsSelectorCache() {
 	sortedProjectilesAllocator->~CachingAllocator();
 	plasmaBeamsAllocator->~CachingAllocator();
-	G_Free( storageMem );
+	Q_free( storageMem );
 }
 
 void HazardsSelectorCache::Init() {

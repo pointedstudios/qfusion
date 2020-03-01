@@ -163,7 +163,7 @@ static void Mod_LoadLighting( const lump_t *l, const lump_t *faces ) {
 	}
 
 	loadmodel_numlightmaps = l->filelen / size;
-	loadmodel_lightmapRects = (decltype(loadmodel_lightmapRects))Mod_Malloc( loadmodel, loadmodel_numlightmaps * sizeof( *loadmodel_lightmapRects ) );
+	loadmodel_lightmapRects = (decltype(loadmodel_lightmapRects))Q_malloc( loadmodel_numlightmaps * sizeof( *loadmodel_lightmapRects ) );
 
 	Mod_CheckDeluxemaps( faces, mod_base + l->fileofs );
 
@@ -247,7 +247,7 @@ static void Mod_PreloadFaces( const lump_t *l ) {
 		}
 
 		loadmodel_numsurfaces = l->filelen / sizeof( *din );
-		loadmodel_dsurfaces = in = (decltype( loadmodel_dsurfaces ))Mod_Malloc( loadmodel, loadmodel_numsurfaces * sizeof( *in ) );
+		loadmodel_dsurfaces = in = (decltype( loadmodel_dsurfaces ))Q_malloc( loadmodel_numsurfaces * sizeof( *in ) );
 
 		// convert from q3a format to rtcw/qfusion format
 		for( i = 0; i < loadmodel_numsurfaces; i++, din++, in++ ) {
@@ -295,7 +295,7 @@ static void Mod_LoadFaces( const lump_t *l ) {
 
 	in = loadmodel_dsurfaces;
 	count = loadmodel_numsurfaces;
-	out = (msurface_t *)Mod_Malloc( loadmodel, count * sizeof( *out ) );
+	out = (msurface_t *)Q_malloc( count * sizeof( *out ) );
 
 	loadbmodel->surfaces = out;
 	loadbmodel->numsurfaces = count;
@@ -372,7 +372,7 @@ static void Mod_LoadVertexes( const lump_t *l ) {
 
 	bufSize = 0;
 	bufSize += count * ( sizeof( vec3_t ) + sizeof( vec3_t ) + sizeof( vec2_t ) * 2 + sizeof( byte_vec4_t ) );
-	buffer = (uint8_t *)Mod_Malloc( loadmodel, bufSize );
+	buffer = (uint8_t *)Q_malloc( bufSize );
 
 	loadmodel_numverts = count;
 	loadmodel_xyz_array = ( vec3_t * )buffer; buffer += count * sizeof( vec3_t );
@@ -438,7 +438,7 @@ static void Mod_LoadVertexes_RBSP( const lump_t *l ) {
 
 	bufSize = 0;
 	bufSize += count * ( sizeof( vec3_t ) + sizeof( vec3_t ) + sizeof( vec2_t ) + ( sizeof( vec2_t ) + sizeof( byte_vec4_t ) ) * MAX_LIGHTMAPS );
-	buffer = (uint8_t *)Mod_Malloc( loadmodel, bufSize );
+	buffer = (uint8_t *)Q_malloc( bufSize );
 
 	loadmodel_numverts = count;
 	loadmodel_xyz_array = ( vec3_t * )buffer; buffer += count * sizeof( vec3_t );
@@ -504,9 +504,9 @@ static void Mod_LoadSubmodels( const lump_t *l ) {
 		Com_Error( ERR_DROP, "Mod_LoadSubmodels: funny lump size in %s", loadmodel->name );
 	}
 	count = l->filelen / sizeof( *in );
-	out = ( mmodel_t *)Mod_Malloc( loadmodel, count * sizeof( *out ) );
+	out = ( mmodel_t *)Q_malloc( count * sizeof( *out ) );
 
-	mod_inline = (model_t *)Mod_Malloc( loadmodel, count * ( sizeof( *mod_inline ) + sizeof( *bmodel ) ) );
+	mod_inline = (model_t *)Q_malloc( count * ( sizeof( *mod_inline ) + sizeof( *bmodel ) ) );
 	loadmodel->extradata = bmodel = ( mbrushmodel_t * )( ( uint8_t * )mod_inline + count * sizeof( *mod_inline ) );
 
 	loadbmodel = bmodel;
@@ -543,7 +543,7 @@ static void Mod_LoadShaderrefs( const lump_t *l ) {
 		Com_Error( ERR_DROP, "Mod_LoadShaderrefs: funny lump size in %s", loadmodel->name );
 	}
 	count = l->filelen / sizeof( *in );
-	out = (mshaderref_t *)Mod_Malloc( loadmodel, count * sizeof( *out ) );
+	out = (mshaderref_t *)Q_malloc( count * sizeof( *out ) );
 
 	loadmodel_shaderrefs = out;
 	loadmodel_numshaderrefs = count;
@@ -690,7 +690,7 @@ void Mod_CreateMeshForSurface( const rdface_t *in, msurface_t *out, int patchGro
 			for( j = 0; j < MAX_LIGHTMAPS && in->vertexStyles[j] != 255; j++ )
 				bufSize += numVerts * sizeof( byte_vec4_t );
 			bufSize = ALIGN( bufSize, sizeof( elem_t ) ) + numElems * sizeof( elem_t );
-			buffer = ( uint8_t * )Mod_Malloc( loadmodel, bufSize );
+			buffer = ( uint8_t * )Q_malloc( bufSize );
 			bufPos = 0;
 
 			mesh = &out->mesh;
@@ -795,9 +795,9 @@ void Mod_CreateMeshForSurface( const rdface_t *in, msurface_t *out, int patchGro
 				}
 
 				bufSize = ALIGN( bufPos, sizeof( elem_t ) ) + numElems * sizeof( elem_t );
-				buffer = ( uint8_t * )Mod_Malloc( loadmodel, bufSize );
+				buffer = ( uint8_t * )Q_malloc( bufSize );
 				memcpy( buffer, oldBuffer, bufSize );
-				R_Free( oldBuffer );
+				Q_free( oldBuffer );
 
 				mesh = &out->mesh;
 				mesh->xyzArray = ( vec4_t * )( buffer );
@@ -885,7 +885,7 @@ void Mod_CreateMeshForSurface( const rdface_t *in, msurface_t *out, int patchGro
 			bufSize = ALIGN( bufSize, sizeof( elem_t ) ) + numElems * sizeof( elem_t );
 			bufSize = ALIGN( bufSize, 16 ) + numFoliageInstances * sizeof( instancePoint_t );
 
-			buffer = ( uint8_t * )Mod_Malloc( loadmodel, bufSize );
+			buffer = ( uint8_t * )Q_malloc( bufSize );
 			bufPos = 0;
 
 			mesh = &out->mesh;
@@ -984,11 +984,11 @@ static void Mod_LoadPatchGroups( const lump_t *l ) {
 	int facetype;
 
 	count = loadbmodel->numsurfaces;
-	out = (int *)Mod_Malloc( loadmodel, count * sizeof( *out ) );
+	out = (int *)Q_malloc( count * sizeof( *out ) );
 	memset( out, -1, count * sizeof( *out ) );
 
 	patchcount = 0;
-	patches = (int *)Mod_Malloc( loadmodel, count * sizeof( *patches ) );
+	patches = (int *)Q_malloc( count * sizeof( *patches ) );
 	for( i = 0; i < count; i++ ) {
 		facetype = loadbmodel->surfaces[i].facetype;
 		if( facetype != FACETYPE_PATCH ) {
@@ -1003,13 +1003,13 @@ static void Mod_LoadPatchGroups( const lump_t *l ) {
 	loadmodel_patchgrouprefs = out;
 
 	if( !patchcount ) {
-		R_Free( patches );
+		Q_free( patches );
 		return;
 	}
 
 	// allocate patch groups to possibly hold all patches individually
 	loadmodel_maxpatchgroups = patchcount;
-	loadmodel_patchgroups = (decltype( loadmodel_patchgroups ))Mod_Malloc( loadmodel, loadmodel_maxpatchgroups * sizeof( *loadmodel_patchgroups ) );
+	loadmodel_patchgroups = (decltype( loadmodel_patchgroups ) )Q_malloc( loadmodel_maxpatchgroups * sizeof( *loadmodel_patchgroups ) );
 
 	// assign patches to groups based on LOD bounds
 	for( i = 0; i < patchcount; i++ ) {
@@ -1017,7 +1017,7 @@ static void Mod_LoadPatchGroups( const lump_t *l ) {
 		out[j] = Mod_AddUpdatePatchGroup( loadmodel_dsurfaces + j );
 	}
 
-	R_Free( patches );
+	Q_free( patches );
 
 	Com_DPrintf( "Mod_LoadPatchGroups: count (%i), groups(%i)\n", patchcount, loadmodel_numpatchgroups );
 
@@ -1038,7 +1038,7 @@ static void Mod_LoadNodes( const lump_t *l ) {
 		Com_Error( ERR_DROP, "Mod_LoadNodes: funny lump size in %s", loadmodel->name );
 	}
 	count = l->filelen / sizeof( *in );
-	out = (mnode_t *)Mod_Malloc( loadmodel, count * sizeof( *out ) );
+	out = (mnode_t *)Q_malloc( count * sizeof( *out ) );
 
 	loadbmodel->nodes = out;
 	loadbmodel->numnodes = count;
@@ -1086,7 +1086,7 @@ static void Mod_LoadFogs( const lump_t *l, const lump_t *brLump, const lump_t *b
 		Com_Error( ERR_DROP, "Mod_LoadFogs: funny lump size in %s", loadmodel->name );
 	}
 	count = l->filelen / sizeof( *in );
-	out = ( mfog_t *)Mod_Malloc( loadmodel, count * sizeof( *out ) );
+	out = ( mfog_t *)Q_malloc( count * sizeof( *out ) );
 
 	loadbmodel->fogs = out;
 	loadbmodel->numfogs = count;
@@ -1175,7 +1175,7 @@ static void Mod_LoadLeafs( const lump_t *l, const lump_t *msLump ) {
 		Com_Error( ERR_DROP, "Mod_LoadLeafs: funny lump size in %s", loadmodel->name );
 	}
 	count = l->filelen / sizeof( *in );
-	out = (mleaf_t *)Mod_Malloc( loadmodel, count * sizeof( *out ) );
+	out = (mleaf_t *)Q_malloc( count * sizeof( *out ) );
 
 	loadbmodel->leafs = out;
 	loadbmodel->numleafs = count;
@@ -1222,7 +1222,7 @@ static void Mod_LoadLeafs( const lump_t *l, const lump_t *msLump ) {
 		numFragmentSurfaces = numMarkSurfaces;
 
 		size = ( numVisSurfaces + numFragmentSurfaces ) * sizeof( unsigned );
-		buffer = ( uint8_t * )Mod_Malloc( loadmodel, size );
+		buffer = ( uint8_t * )Q_malloc( size );
 
 		out->visSurfaces = ( unsigned * )buffer;
 		buffer += numVisSurfaces * sizeof( unsigned );
@@ -1255,7 +1255,7 @@ static void Mod_LoadElems( const lump_t *l ) {
 		Com_Error( ERR_DROP, "Mod_LoadElems: funny lump size in %s", loadmodel->name );
 	}
 	count = l->filelen / sizeof( *in );
-	out = (elem_t *)Mod_Malloc( loadmodel, count * sizeof( *out ) );
+	out = (elem_t *)Q_malloc( count * sizeof( *out ) );
 
 	loadmodel_surfelems = out;
 	loadmodel_numsurfelems = count;
@@ -1278,7 +1278,7 @@ static void Mod_LoadPlanes( const lump_t *l ) {
 		Com_Error( ERR_DROP, "Mod_LoadPlanes: funny lump size in %s", loadmodel->name );
 	}
 	count = l->filelen / sizeof( *in );
-	out = (cplane_t *)Mod_Malloc( loadmodel, count * sizeof( *out ) );
+	out = (cplane_t *)Q_malloc( count * sizeof( *out ) );
 
 	loadbmodel->planes = out;
 	loadbmodel->numplanes = count;
@@ -1313,7 +1313,7 @@ static void Mod_LoadLightgrid( const lump_t *l ) {
 		Com_Error( ERR_DROP, "Mod_LoadLightgrid: funny lump size in %s", loadmodel->name );
 	}
 	count = l->filelen / sizeof( *in );
-	out = (mgridlight_t *)Mod_Malloc( loadmodel, count * sizeof( *out ) );
+	out = (mgridlight_t *)Q_malloc( count * sizeof( *out ) );
 
 	loadbmodel->lightgrid = out;
 	loadbmodel->numlightgridelems = count;
@@ -1345,7 +1345,7 @@ static void Mod_LoadLightgrid_RBSP( const lump_t *l ) {
 		Com_Error( ERR_DROP, "Mod_LoadLightgrid: funny lump size in %s", loadmodel->name );
 	}
 	count = l->filelen / sizeof( *in );
-	out = (mgridlight_t *)Mod_Malloc( loadmodel, count * sizeof( *out ) );
+	out = (mgridlight_t *)Q_malloc( count * sizeof( *out ) );
 
 	loadbmodel->lightgrid = out;
 	loadbmodel->numlightgridelems = count;
@@ -1362,7 +1362,7 @@ static void Mod_LoadLightArray( void ) {
 	int *out;
 
 	count = loadbmodel->numlightgridelems;
-	out = (int *)Mod_Malloc( loadmodel, sizeof( *out ) * count );
+	out = (int *)Q_malloc( sizeof( *out ) * count );
 
 	loadbmodel->lightarray = out;
 	loadbmodel->numlightarrayelems = count;
@@ -1385,7 +1385,7 @@ static void Mod_LoadLightArray_RBSP( const lump_t *l ) {
 		Com_Error( ERR_DROP, "Mod_LoadLightArray: funny lump size in %s", loadmodel->name );
 	}
 	count = l->filelen / sizeof( *in );
-	out = (int *)Mod_Malloc( loadmodel, count * sizeof( *out ) );
+	out = (int *)Q_malloc( count * sizeof( *out ) );
 
 	loadbmodel->lightarray = out;
 	loadbmodel->numlightarrayelems = count;
@@ -1412,7 +1412,7 @@ static void Mod_LoadVisibility( const lump_t *l ) {
 	}
 
 	in = (dvis_t *)( mod_base + l->fileofs );
-	out = (dvis_t *)Mod_Malloc( loadmodel, l->filelen );
+	out = (dvis_t *)Q_malloc( l->filelen );
 	loadbmodel->pvs = out;
 
 	memcpy( out, mod_base + l->fileofs, l->filelen );
@@ -1624,7 +1624,7 @@ static void Mod_Finish( const lump_t *faces, const lump_t *light, vec3_t gridSiz
 			continue;
 		}
 
-		testFog->visibleplane = (cplane_t *)Mod_Malloc( loadmodel, sizeof( cplane_t ) );
+		testFog->visibleplane = (cplane_t *)Q_malloc( sizeof( cplane_t ) );
 		VectorSet( testFog->visibleplane->normal, 0, 0, 1 );
 		testFog->visibleplane->type = PLANE_Z;
 		testFog->visibleplane->dist = loadbmodel->submodels[0].maxs[0] + 1;
@@ -1671,31 +1671,31 @@ static void Mod_Finish( const lump_t *faces, const lump_t *light, vec3_t gridSiz
 	}
 
 	if( !( mod_bspFormat->flags & BSP_RAVEN ) ) {
-		Mod_MemFree( loadmodel_dsurfaces );
+		Q_free( loadmodel_dsurfaces );
 	}
 	loadmodel_dsurfaces = NULL;
 	loadmodel_numsurfaces = 0;
 
-	Mod_MemFree( loadmodel_xyz_array );
+	Q_free( loadmodel_xyz_array );
 	loadmodel_xyz_array = NULL;
 	loadmodel_numverts = 0;
 
-	Mod_MemFree( loadmodel_surfelems );
+	Q_free( loadmodel_surfelems );
 	loadmodel_surfelems = NULL;
 	loadmodel_numsurfelems = 0;
 
-	Mod_MemFree( loadmodel_lightmapRects );
+	Q_free( loadmodel_lightmapRects );
 	loadmodel_lightmapRects = NULL;
 	loadmodel_numlightmaps = 0;
 
-	Mod_MemFree( loadmodel_shaderrefs );
+	Q_free( loadmodel_shaderrefs );
 	loadmodel_shaderrefs = NULL;
 	loadmodel_numshaderrefs = 0;
 
-	Mod_MemFree( loadmodel_patchgrouprefs );
+	Q_free( loadmodel_patchgrouprefs );
 	loadmodel_patchgrouprefs = NULL;
 
-	Mod_MemFree( loadmodel_patchgroups );
+	Q_free( loadmodel_patchgroups );
 	loadmodel_patchgroups = NULL;
 	loadmodel_numpatchgroups = loadmodel_maxpatchgroups = 0;
 }

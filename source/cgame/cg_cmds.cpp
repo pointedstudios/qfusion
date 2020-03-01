@@ -607,17 +607,17 @@ static void CG_CS_UpdateTeamInfo( void ) {
 	ti = Cmd_Argv( 1 );
 	if( !ti[0] ) {
 		cg.teaminfo_size = 0;
-		CG_Free( cg.teaminfo );
+		Q_free(   cg.teaminfo );
 		cg.teaminfo = NULL;
 		return;
 	}
 
 	if( strlen( ti ) + 1 > cg.teaminfo_size ) {
 		if( cg.teaminfo ) {
-			CG_Free( cg.teaminfo );
+			Q_free(   cg.teaminfo );
 		}
 		cg.teaminfo_size = strlen( ti ) + 1;
-		cg.teaminfo = ( char * )CG_Malloc( cg.teaminfo_size );
+		cg.teaminfo = ( char * )Q_malloc( cg.teaminfo_size );
 	}
 
 	Q_strncpyz( cg.teaminfo, ti, cg.teaminfo_size );
@@ -686,7 +686,7 @@ static void CG_SC_MOTD( void ) {
 	char *motd;
 
 	if( cg.motd ) {
-		CG_Free( cg.motd );
+		Q_free(   cg.motd );
 	}
 	cg.motd = NULL;
 
@@ -696,7 +696,7 @@ static void CG_SC_MOTD( void ) {
 	}
 
 	if( !strcmp( Cmd_Argv( 1 ), "1" ) ) {
-		cg.motd = CG_CopyString( motd );
+		cg.motd = Q_strdup( motd );
 		cg.motd_time = cg.time + 50 * strlen( motd );
 		if( cg.motd_time < cg.time + 5000 ) {
 			cg.motd_time = cg.time + 5000;
@@ -1162,7 +1162,7 @@ static char **CG_PlayerNamesCompletionExt_f( const char *partial, bool teamOnly 
 	if( partial ) {
 		size_t partial_len = strlen( partial );
 
-		matches = (char **) CG_Malloc( sizeof( char * ) * ( gs.maxclients + 1 ) );
+		matches = (char **) Q_malloc( sizeof( char * ) * ( gs.maxclients + 1 ) );
 		for( i = 0; i < gs.maxclients; i++ ) {
 			cg_clientInfo_t *info = cgs.clientInfo + i;
 			if( !info->cleanname[0] ) {

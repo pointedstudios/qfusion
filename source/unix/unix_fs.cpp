@@ -122,7 +122,7 @@ const char *Sys_FS_FindFirst( const char *path, unsigned musthave, unsigned canh
 	assert( findbase_size );
 	findbase_size += 1;
 
-	findbase = (char *)Mem_TempMalloc( sizeof( char ) * findbase_size );
+	findbase = (char *)Q_malloc( sizeof( char ) * findbase_size );
 	Q_strncpyz( findbase, path, sizeof( char ) * findbase_size );
 
 	if( ( p = strrchr( findbase, '/' ) ) ) {
@@ -176,10 +176,10 @@ const char *Sys_FS_FindNext( unsigned musthave, unsigned canhave ) {
 			size_t size = sizeof( char ) * ( findbase_size + dname_len + 1 + 1 );
 			if( findpath_size < size ) {
 				if( findpath ) {
-					Mem_TempFree( findpath );
+					Q_free( findpath );
 				}
 				findpath_size = size * 2; // extra size to reduce reallocs
-				findpath = (char *)Mem_TempMalloc( findpath_size );
+				findpath = (char *)Q_malloc( findpath_size );
 			}
 
 			Q_snprintfz( findpath, findpath_size, "%s/%s%s", findbase, dname,
@@ -203,13 +203,13 @@ void Sys_FS_FindClose( void ) {
 
 	fdots = 0;
 
-	Mem_TempFree( findbase );
+	Q_free( findbase );
 	findbase = NULL;
 	findbase_size = 0;
 	findpattern = NULL;
 
 	if( findpath ) {
-		Mem_TempFree( findpath );
+		Q_free( findpath );
 		findpath = NULL;
 		findpath_size = 0;
 	}

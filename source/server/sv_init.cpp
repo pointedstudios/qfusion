@@ -130,7 +130,7 @@ void SV_PureList_f( void ) {
 */
 static void SV_AddPurePak( const char *pakname ) {
 	if( !Com_FindPakInPureList( svs.purelist, pakname ) ) {
-		Com_AddPakToPureList( &svs.purelist, pakname, FS_ChecksumBaseFile( pakname, false ), NULL );
+		Com_AddPakToPureList( &svs.purelist, pakname, FS_ChecksumBaseFile( pakname, false ) );
 	}
 }
 
@@ -177,7 +177,7 @@ static void SV_ReloadPureList( void ) {
 		int libname_size;
 
 		libname_size = strlen( LIB_PREFIX ) + 5 + strlen( ARCH ) + strlen( LIB_SUFFIX ) + 1;
-		libname = (char *)Mem_TempMalloc( libname_size );
+		libname = (char *)Q_malloc( libname_size );
 		Q_snprintfz( libname, libname_size, LIB_PREFIX "game_" ARCH LIB_SUFFIX );
 
 		if( !FS_PakNameForFile( libname ) ) {
@@ -190,7 +190,7 @@ static void SV_ReloadPureList( void ) {
 			SV_AddPureFile( libname );
 		}
 
-		Mem_TempFree( libname );
+		Q_free( libname );
 		libname = NULL;
 	}
 
@@ -200,9 +200,9 @@ static void SV_ReloadPureList( void ) {
 	if( numpaks ) {
 		for( i = 0; i < numpaks; i++ ) {
 			SV_AddPurePak( paks[i] );
-			Mem_ZoneFree( paks[i] );
+			Q_free( paks[i] );
 		}
-		Mem_ZoneFree( paks );
+		Q_free( paks );
 	}
 }
 
@@ -340,9 +340,9 @@ void SV_InitGame( void ) {
 	}
 
 	svs.spawncount = rand();
-	svs.clients = (client_t *)Mem_Alloc( sv_mempool, sizeof( client_t ) * sv_maxclients->integer );
+	svs.clients = (client_t *)Q_malloc( sizeof( client_t ) * sv_maxclients->integer );
 	svs.client_entities.num_entities = sv_maxclients->integer * UPDATE_BACKUP * MAX_SNAP_ENTITIES;
-	svs.client_entities.entities = (entity_state_t *)Mem_Alloc( sv_mempool, sizeof( entity_state_t ) * svs.client_entities.num_entities );
+	svs.client_entities.entities = (entity_state_t *)Q_malloc( sizeof( entity_state_t ) * svs.client_entities.num_entities );
 
 	// init network stuff
 
@@ -435,7 +435,7 @@ void SV_InitGame( void ) {
 
 	// load the map
 	assert( !svs.cms );
-	svs.cms = CM_New( NULL );
+	svs.cms = CM_New();
 	CM_AddReference( svs.cms );
 
 	// keep CPU awake
@@ -514,12 +514,12 @@ void SV_ShutdownGame( const char *finalmsg, bool reconnect ) {
 	Cvar_GetLatchedVars( CVAR_LATCH );
 
 	if( svs.clients ) {
-		Mem_Free( svs.clients );
+		Q_free( svs.clients );
 		svs.clients = NULL;
 	}
 
 	if( svs.client_entities.entities ) {
-		Mem_Free( svs.client_entities.entities );
+		Q_free( svs.client_entities.entities );
 		memset( &svs.client_entities, 0, sizeof( svs.client_entities ) );
 	}
 
@@ -538,12 +538,8 @@ void SV_ShutdownGame( const char *finalmsg, bool reconnect ) {
 	Com_FreePureList( &svs.purelist );
 
 	if( svs.motd ) {
-		Mem_Free( svs.motd );
+		Q_free( svs.motd );
 		svs.motd = NULL;
-	}
-
-	if( sv_mempool ) {
-		Mem_EmptyPool( sv_mempool );
 	}
 
 	if( svs.wakelock ) {

@@ -80,7 +80,7 @@ protected:
 	template <typename T>
 	void FreeIfNeeded( T **p ) {
 		if( *p ) {
-			S_Free( *p );
+			Q_free( *p );
 			*p = nullptr;
 		}
 	}
@@ -165,7 +165,7 @@ public:
 
 	~CachedComputationReader() override {
 		if( fileData ) {
-			S_Free( fileData );
+			Q_free( fileData );
 		}
 	}
 };

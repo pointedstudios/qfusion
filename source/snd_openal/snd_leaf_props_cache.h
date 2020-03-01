@@ -60,10 +60,10 @@ public:
 
 	~LeafPropsCache() override {
 		if( leafProps ) {
-			S_Free( leafProps );
+			Q_free( leafProps );
 		}
 		if( leafPresets ) {
-			S_Free( leafPresets );
+			Q_free( leafPresets );
 		}
 	}
 

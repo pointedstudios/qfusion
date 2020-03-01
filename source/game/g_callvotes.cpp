@@ -94,7 +94,7 @@ static void G_AppendString( char **pdst, const char *src, size_t *pdst_len, size
 	if( !dst ) {
 		dst_size = 0x1000;
 		dst_len = 0;
-		dst = ( char * )G_Malloc( dst_size );
+		dst = ( char * )Q_malloc( dst_size );
 	}
 
 	src_len = strlen( src );
@@ -102,11 +102,11 @@ static void G_AppendString( char **pdst, const char *src, size_t *pdst_len, size
 		char *old_dst = dst;
 
 		dst_size = ( dst_len + src_len ) * 2;
-		dst = ( char * )G_Malloc( dst_size );
+		dst = ( char * )Q_malloc( dst_size );
 		memcpy( dst, old_dst, dst_len );
 		dst[dst_len] = '\0';
 
-		G_Free( old_dst );
+		Q_free( old_dst );
 	}
 
 	memcpy( dst + dst_len, src, src_len );
@@ -273,17 +273,17 @@ static bool G_VoteMapValidate( callvotedata_t *data, bool first ) {
 				return true;
 			}
 
-			s = G_CopyString( g_map_pool->string );
+			s = Q_strdup( g_map_pool->string );
 			tok = strtok( s, MAPLIST_SEPS );
 			while( tok != NULL ) {
 				if( !Q_stricmp( tok, mapname ) ) {
-					G_Free( s );
+					Q_free( s );
 					goto valid_map;
 				} else {
 					tok = strtok( NULL, MAPLIST_SEPS );
 				}
 			}
-			G_Free( s );
+			Q_free( s );
 			G_PrintMsg( data->caller, "%sMap is not in map pool.\n", S_COLOR_RED );
 			return false;
 		}
@@ -296,9 +296,9 @@ valid_map:
 		}
 
 		if( data->string ) {
-			G_Free( data->string );
+			Q_free( data->string );
 		}
-		data->string = G_CopyString( msg );
+		data->string = Q_strdup( msg );
 		return true;
 	}
 
@@ -333,7 +333,7 @@ static http_response_code_t G_VoteMapWebRequest( http_query_method_t method, con
 	if( g_enforce_map_pool->integer && strlen( g_map_pool->string ) > 2 ) {
 		char *s, *tok;
 
-		s = G_CopyString( g_map_pool->string );
+		s = Q_strdup( g_map_pool->string );
 		tok = strtok( s, MAPLIST_SEPS );
 		while( tok != NULL ) {
 			const char *fullname = trap_ML_GetFullname( tok );
@@ -350,7 +350,7 @@ static http_response_code_t G_VoteMapWebRequest( http_query_method_t method, con
 			tok = strtok( NULL, MAPLIST_SEPS );
 		}
 
-		G_Free( s );
+		Q_free( s );
 	} else {
 		for( i = 0; trap_ML_GetMapByNum( i, buffer, sizeof( buffer ) ); i++ ) {
 			G_AppendString( &msg, va(
@@ -873,7 +873,7 @@ static bool G_VoteRemoveValidate( callvotedata_t *vote, bool first ) {
 			return false;
 		} else {
 			// we save the player id to be removed, so we don't later get confused by new ids or players changing names
-			vote->data = G_Malloc( sizeof( int ) );
+			vote->data = Q_malloc( sizeof( int ) );
 			memcpy( vote->data, &who, sizeof( int ) );
 		}
 	} else {
@@ -885,9 +885,9 @@ static bool G_VoteRemoveValidate( callvotedata_t *vote, bool first ) {
 	} else {
 		if( !vote->string || Q_stricmp( vote->string, game.edicts[who + 1].r.client->netname ) ) {
 			if( vote->string ) {
-				G_Free( vote->string );
+				Q_free( vote->string );
 			}
-			vote->string = G_CopyString( game.edicts[who + 1].r.client->netname );
+			vote->string = Q_strdup( game.edicts[who + 1].r.client->netname );
 		}
 
 		return true;
@@ -964,7 +964,7 @@ static bool G_SetOrValidateKickLikeCmdTarget( callvotedata_t *vote, bool first )
 			// we save the player id to be kicked, so we don't later get
 			//confused by new ids or players changing names
 
-			vote->data = G_Malloc( sizeof( int ) );
+			vote->data = Q_malloc( sizeof( int ) );
 			memcpy( vote->data, &who, sizeof( int ) );
 		} else {
 			G_PrintMsg( vote->caller, S_COLOR_RED "%s: No such player\n", vote->argv[0] );
@@ -978,9 +978,9 @@ static bool G_SetOrValidateKickLikeCmdTarget( callvotedata_t *vote, bool first )
 	if( ent->r.inuse && ent->r.client ) {
 		if( !vote->string || Q_stricmp( vote->string, ent->r.client->netname ) ) {
 			if( vote->string ) {
-				G_Free( vote->string );
+				Q_free( vote->string );
 			}
-			vote->string = G_CopyString( ent->r.client->netname );
+			vote->string = Q_strdup( ent->r.client->netname );
 		}
 		return true;
 	}
@@ -1705,12 +1705,12 @@ callvotetype_t *G_RegisterCallvote( const char *name ) {
 	}
 
 	// create a new callvote
-	callvote = ( callvotetype_t * )G_LevelMalloc( sizeof( callvotetype_t ) );
+	callvote = ( callvotetype_t * )Q_malloc( sizeof( callvotetype_t ) );
 	memset( callvote, 0, sizeof( callvotetype_t ) );
 	callvote->next = callvotesHeadNode;
 	callvotesHeadNode = callvote;
 
-	callvote->name = G_LevelCopyString( name );
+	callvote->name = Q_strdup( name );
 	return callvote;
 }
 
@@ -1721,16 +1721,16 @@ void G_FreeCallvotes( void ) {
 		callvote = callvotesHeadNode->next;
 
 		if( callvotesHeadNode->name ) {
-			G_LevelFree( callvotesHeadNode->name );
+			Q_free( callvotesHeadNode->name );
 		}
 		if( callvotesHeadNode->argument_format ) {
-			G_LevelFree( callvotesHeadNode->argument_format );
+			Q_free( callvotesHeadNode->argument_format );
 		}
 		if( callvotesHeadNode->help ) {
-			G_LevelFree( callvotesHeadNode->help );
+			Q_free( callvotesHeadNode->help );
 		}
 
-		G_LevelFree( callvotesHeadNode );
+		Q_free( callvotesHeadNode );
 		callvotesHeadNode = callvote;
 	}
 
@@ -1769,14 +1769,14 @@ void G_CallVotes_Reset( void ) {
 
 	callvoteState.vote.caller = NULL;
 	if( callvoteState.vote.string ) {
-		G_Free( callvoteState.vote.string );
+		Q_free( callvoteState.vote.string );
 	}
 	if( callvoteState.vote.data ) {
-		G_Free( callvoteState.vote.data );
+		Q_free( callvoteState.vote.data );
 	}
 	for( i = 0; i < callvoteState.vote.argc; i++ ) {
 		if( callvoteState.vote.argv[i] ) {
-			G_Free( callvoteState.vote.argv[i] );
+			Q_free( callvoteState.vote.argv[i] );
 		}
 	}
 
@@ -2158,7 +2158,7 @@ static void G_CallVote( edict_t *ent, bool isopcall ) {
 
 	callvoteState.vote.argc = trap_Cmd_Argc() - 2;
 	for( i = 0; i < callvoteState.vote.argc; i++ )
-		callvoteState.vote.argv[i] = G_CopyString( trap_Cmd_Argv( i + 2 ) );
+		callvoteState.vote.argv[i] = Q_strdup( trap_Cmd_Argv( i + 2 ) );
 
 	callvoteState.vote.callvote = callvote;
 	callvoteState.vote.caller = ent;
@@ -2364,9 +2364,9 @@ void G_RegisterGametypeScriptCallvote( const char *name, const char *usage, cons
 	vote->execute = G_VoteFromScriptPassed;
 	vote->current = NULL;
 	vote->extraHelp = NULL;
-	vote->argument_format = usage ? G_LevelCopyString( usage ) : NULL;
-	vote->argument_type = type ? G_LevelCopyString( type ) : NULL;
-	vote->help = help ? G_LevelCopyString( va( "%s", help ) ) : NULL;
+	vote->argument_format = usage ? Q_strdup( usage ) : NULL;
+	vote->argument_type = type ? Q_strdup( type ) : NULL;
+	vote->help = help ? Q_strdup( va( "%s", help ) ) : NULL;
 }
 
 /*
@@ -2389,10 +2389,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteMapPassed;
 	callvote->current = G_VoteMapCurrent;
 	callvote->extraHelp = G_VoteMapExtraHelp;
-	callvote->argument_format = G_LevelCopyString( "<name>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<name>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_VoteMapWebRequest;
-	callvote->help = G_LevelCopyString( "Changes map" );
+	callvote->help = Q_strdup( "Changes map" );
 
 	callvote = G_RegisterCallvote( "restart" );
 	callvote->expectedargs = 0;
@@ -2402,7 +2402,7 @@ void G_CallVotes_Init( void ) {
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
 	callvote->argument_type = NULL;
-	callvote->help = G_LevelCopyString( "Restarts current map" );
+	callvote->help = Q_strdup( "Restarts current map" );
 
 	callvote = G_RegisterCallvote( "nextmap" );
 	callvote->expectedargs = 0;
@@ -2412,7 +2412,7 @@ void G_CallVotes_Init( void ) {
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
 	callvote->argument_type = NULL;
-	callvote->help = G_LevelCopyString( "Jumps to the next map" );
+	callvote->help = Q_strdup( "Jumps to the next map" );
 
 	callvote = G_RegisterCallvote( "scorelimit" );
 	callvote->expectedargs = 1;
@@ -2420,9 +2420,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteScorelimitPassed;
 	callvote->current = G_VoteScorelimitCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<number>" );
-	callvote->argument_type = G_LevelCopyString( "integer" );
-	callvote->help = G_LevelCopyString( "Sets the number of frags or caps needed to win the match\nSpecify 0 to disable" );
+	callvote->argument_format = Q_strdup( "<number>" );
+	callvote->argument_type = Q_strdup( "integer" );
+	callvote->help = Q_strdup( "Sets the number of frags or caps needed to win the match\nSpecify 0 to disable" );
 
 	callvote = G_RegisterCallvote( "timelimit" );
 	callvote->expectedargs = 1;
@@ -2430,9 +2430,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteTimelimitPassed;
 	callvote->current = G_VoteTimelimitCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<minutes>" );
-	callvote->argument_type = G_LevelCopyString( "integer" );
-	callvote->help = G_LevelCopyString( "Sets number of minutes after which the match ends\nSpecify 0 to disable" );
+	callvote->argument_format = Q_strdup( "<minutes>" );
+	callvote->argument_type = Q_strdup( "integer" );
+	callvote->help = Q_strdup( "Sets number of minutes after which the match ends\nSpecify 0 to disable" );
 
 	callvote = G_RegisterCallvote( "gametype" );
 	callvote->expectedargs = 1;
@@ -2440,10 +2440,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteGametypePassed;
 	callvote->current = G_VoteGametypeCurrent;
 	callvote->extraHelp = G_VoteGametypeExtraHelp;
-	callvote->argument_format = G_LevelCopyString( "<name>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<name>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_VoteGametypeWebRequest;
-	callvote->help = G_LevelCopyString( "Changes the gametype" );
+	callvote->help = Q_strdup( "Changes the gametype" );
 
 	callvote = G_RegisterCallvote( "warmup_timelimit" );
 	callvote->expectedargs = 1;
@@ -2451,9 +2451,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteWarmupTimelimitPassed;
 	callvote->current = G_VoteWarmupTimelimitCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<minutes>" );
-	callvote->argument_type = G_LevelCopyString( "integer" );
-	callvote->help = G_LevelCopyString( "Sets the number of minutes after which the warmup ends\nSpecify 0 to disable" );
+	callvote->argument_format = Q_strdup( "<minutes>" );
+	callvote->argument_type = Q_strdup( "integer" );
+	callvote->help = Q_strdup( "Sets the number of minutes after which the warmup ends\nSpecify 0 to disable" );
 
 	callvote = G_RegisterCallvote( "extended_time" );
 	callvote->expectedargs = 1;
@@ -2461,9 +2461,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteExtendedTimePassed;
 	callvote->current = G_VoteExtendedTimeCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<minutes>" );
-	callvote->argument_type = G_LevelCopyString( "integer" );
-	callvote->help = G_LevelCopyString( "Sets the length of the overtime\nSpecify 0 to enable sudden death mode" );
+	callvote->argument_format = Q_strdup( "<minutes>" );
+	callvote->argument_type = Q_strdup( "integer" );
+	callvote->help = Q_strdup( "Sets the length of the overtime\nSpecify 0 to enable sudden death mode" );
 
 	callvote = G_RegisterCallvote( "maxteamplayers" );
 	callvote->expectedargs = 1;
@@ -2471,9 +2471,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteMaxTeamplayersPassed;
 	callvote->current = G_VoteMaxTeamplayersCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<number>" );
-	callvote->argument_type = G_LevelCopyString( "integer" );
-	callvote->help = G_LevelCopyString( "Sets the maximum number of players in one team" );
+	callvote->argument_format = Q_strdup( "<number>" );
+	callvote->argument_type = Q_strdup( "integer" );
+	callvote->help = Q_strdup( "Sets the maximum number of players in one team" );
 
 	callvote = G_RegisterCallvote( "lock" );
 	callvote->expectedargs = 0;
@@ -2483,7 +2483,7 @@ void G_CallVotes_Init( void ) {
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
 	callvote->argument_type = NULL;
-	callvote->help = G_LevelCopyString( "Locks teams to disallow players joining in mid-game" );
+	callvote->help = Q_strdup( "Locks teams to disallow players joining in mid-game" );
 
 	callvote = G_RegisterCallvote( "unlock" );
 	callvote->expectedargs = 0;
@@ -2493,7 +2493,7 @@ void G_CallVotes_Init( void ) {
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
 	callvote->argument_type = NULL;
-	callvote->help = G_LevelCopyString( "Unlocks teams to allow players joining in mid-game" );
+	callvote->help = Q_strdup( "Unlocks teams to allow players joining in mid-game" );
 
 	callvote = G_RegisterCallvote( "allready" );
 	callvote->expectedargs = 0;
@@ -2503,7 +2503,7 @@ void G_CallVotes_Init( void ) {
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
 	callvote->argument_type = NULL;
-	callvote->help = G_LevelCopyString( "Sets all players as ready so the match can start" );
+	callvote->help = Q_strdup( "Sets all players as ready so the match can start" );
 
 	callvote = G_RegisterCallvote( "remove" );
 	callvote->expectedargs = 1;
@@ -2511,10 +2511,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteRemovePassed;
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteRemoveExtraHelp;
-	callvote->argument_format = G_LevelCopyString( "<player>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_PlayerlistWebRequest;
-	callvote->help = G_LevelCopyString( "Forces player back to spectator mode" );
+	callvote->help = Q_strdup( "Forces player back to spectator mode" );
 
 	callvote = G_RegisterCallvote( "kick" );
 	callvote->expectedargs = 1;
@@ -2522,10 +2522,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteKickPassed;
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersList;
-	callvote->argument_format = G_LevelCopyString( "<player>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_PlayerlistWebRequest;
-	callvote->help = G_LevelCopyString( "Removes player from the server" );
+	callvote->help = Q_strdup( "Removes player from the server" );
 
 	callvote = G_RegisterCallvote( "kickban" );
 	callvote->expectedargs = 1;
@@ -2533,10 +2533,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteKickBanPassed;
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersList;
-	callvote->argument_format = G_LevelCopyString( "<player>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_PlayerlistWebRequest;
-	callvote->help = G_LevelCopyString( "Removes player from the server and bans his IP-address for 15 minutes" );
+	callvote->help = Q_strdup( "Removes player from the server and bans his IP-address for 15 minutes" );
 
 	callvote = G_RegisterCallvote( "mute" );
 	callvote->expectedargs = 1;
@@ -2544,10 +2544,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteMutePassed;
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersList;
-	callvote->argument_format = G_LevelCopyString( "<player>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_PlayerlistWebRequest;
-	callvote->help = G_LevelCopyString( "Disallows chat messages from the muted player" );
+	callvote->help = Q_strdup( "Disallows chat messages from the muted player" );
 
 	callvote = G_RegisterCallvote( "unmute" );
 	callvote->expectedargs = 1;
@@ -2555,10 +2555,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteUnmutePassed;
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersList;
-	callvote->argument_format = G_LevelCopyString( "<player>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_PlayerlistWebRequest;
-	callvote->help = G_LevelCopyString( "Reallows chat messages from the unmuted player" );
+	callvote->help = Q_strdup( "Reallows chat messages from the unmuted player" );
 
 	callvote = G_RegisterCallvote( "set_antiwallhack_for" );
 	callvote->expectedargs = 1;
@@ -2566,10 +2566,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteSetAntiWallhackPassed;
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersListWithSnapFlags;
-	callvote->argument_format = G_LevelCopyString( "<player>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_PlayerlistWebRequest;
-	callvote->help = G_LevelCopyString( "Sends less information that can be used for a wall hack "
+	callvote->help = Q_strdup( "Sends less information that can be used for a wall hack "
 										"(but might be important for gameplay) to the player" );
 
 	callvote = G_RegisterCallvote( "reset_antiwallhack_for" );
@@ -2578,10 +2578,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteResetAntiWallhackPassed;
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersListWithSnapFlags;
-	callvote->argument_format = G_LevelCopyString( "<player>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_PlayerlistWebRequest;
-	callvote->help = G_LevelCopyString( "Restores default wallhack-prone information sent to a player" );
+	callvote->help = Q_strdup( "Restores default wallhack-prone information sent to a player" );
 
 	callvote = G_RegisterCallvote( "set_antiradar_for" );
 	callvote->expectedargs = 1;
@@ -2589,10 +2589,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteSetAntiRadarPassed;
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersListWithSnapFlags;
-	callvote->argument_format = G_LevelCopyString( "<player>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_PlayerlistWebRequest;
-	callvote->help = G_LevelCopyString( "Sends less information that can be used for a radar hack "
+	callvote->help = Q_strdup( "Sends less information that can be used for a radar hack "
 										"(but might be important for gameplay) to the player" );
 
 	callvote = G_RegisterCallvote( "reset_antiradar_for" );
@@ -2601,10 +2601,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteResetAntiRadarPassed;
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersListWithSnapFlags;
-	callvote->argument_format = G_LevelCopyString( "<player>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_PlayerlistWebRequest;
-	callvote->help = G_LevelCopyString( "Restores default radar-prone information sent to a player" );
+	callvote->help = Q_strdup( "Restores default radar-prone information sent to a player" );
 
 	callvote = G_RegisterCallvote( "set_anticheat_for" );
 	callvote->expectedargs = 1;
@@ -2612,10 +2612,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteSetAntiCheatPassed;
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersListWithSnapFlags;
-	callvote->argument_format = G_LevelCopyString( "<player>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_PlayerlistWebRequest;
-	callvote->help = G_LevelCopyString( "Turns ON all currently implemented anticheat methods "
+	callvote->help = Q_strdup( "Turns ON all currently implemented anticheat methods "
 										"(that might affect gameplay) for a player" );
 
 	callvote = G_RegisterCallvote( "reset_anticheat_for" );
@@ -2624,10 +2624,10 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteResetAntiCheatPassed;
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersListWithSnapFlags;
-	callvote->argument_format = G_LevelCopyString( "<player>" );
-	callvote->argument_type = G_LevelCopyString( "option" );
+	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->argument_type = Q_strdup( "option" );
 	callvote->webRequest = G_PlayerlistWebRequest;
-	callvote->help = G_LevelCopyString( "Turns OFF all currently implemented anticheat methods "
+	callvote->help = Q_strdup( "Turns OFF all currently implemented anticheat methods "
 										"(that might affect gameplay) for a player" );
 
 	callvote = G_RegisterCallvote( "enable_global_antiwallhack" );
@@ -2636,9 +2636,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteEnableGlobalAntiWallhackPassed;
 	callvote->current = G_VoteEnableGlobalAntiWallhackCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<number>" );
-	callvote->argument_type = G_LevelCopyString( "integer" );
-	callvote->help = G_LevelCopyString( "Toggles sending less information that can be used for a wall hack "
+	callvote->argument_format = Q_strdup( "<number>" );
+	callvote->argument_type = Q_strdup( "integer" );
+	callvote->help = Q_strdup( "Toggles sending less information that can be used for a wall hack "
 										"(but might be important for gameplay) for every player" );
 
 	callvote = G_RegisterCallvote( "enable_global_antiradar" );
@@ -2647,9 +2647,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteEnableGlobalAntiRadarPassed;
 	callvote->current = G_VoteEnableGlobalAntiRadarCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<number>" );
-	callvote->argument_type = G_LevelCopyString( "integer " );
-	callvote->help = G_LevelCopyString( "Toggles sending less information that can be used for a radar hack "
+	callvote->argument_format = Q_strdup( "<number>" );
+	callvote->argument_type = Q_strdup( "integer " );
+	callvote->help = Q_strdup( "Toggles sending less information that can be used for a radar hack "
 										"(but might be important for gameplay) for every player" );
 
 	callvote = G_RegisterCallvote( "enable_global_anticheat" );
@@ -2658,9 +2658,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteEnableGlobalAntiCheatPassed;
 	callvote->current = G_VoteEnableGlobalAntiCheatCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<number>" );
-	callvote->argument_type = G_LevelCopyString( "integer " );
-	callvote->help = G_LevelCopyString( "Toggles using all implemented anticheat methods "
+	callvote->argument_format = Q_strdup( "<number>" );
+	callvote->argument_type = Q_strdup( "integer " );
+	callvote->help = Q_strdup( "Toggles using all implemented anticheat methods "
 										"(that might affect gameplay) for every player" );
 
 	callvote = G_RegisterCallvote( "numbots" );
@@ -2669,9 +2669,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteNumBotsPassed;
 	callvote->current = G_VoteNumBotsCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<number>" );
-	callvote->argument_type = G_LevelCopyString( "integer" );
-	callvote->help = G_LevelCopyString( "Sets the number of bots to play on the server" );
+	callvote->argument_format = Q_strdup( "<number>" );
+	callvote->argument_type = Q_strdup( "integer" );
+	callvote->help = Q_strdup( "Sets the number of bots to play on the server" );
 
 	callvote = G_RegisterCallvote( "allow_teamdamage" );
 	callvote->expectedargs = 1;
@@ -2679,9 +2679,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteAllowTeamDamagePassed;
 	callvote->current = G_VoteAllowTeamDamageCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<1 or 0>" );
-	callvote->argument_type = G_LevelCopyString( "bool" );
-	callvote->help = G_LevelCopyString( "Toggles whether shooting teammates will do damage to them" );
+	callvote->argument_format = Q_strdup( "<1 or 0>" );
+	callvote->argument_type = Q_strdup( "bool" );
+	callvote->help = Q_strdup( "Toggles whether shooting teammates will do damage to them" );
 
 	callvote = G_RegisterCallvote( "instajump" );
 	callvote->expectedargs = 1;
@@ -2689,9 +2689,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteAllowInstajumpPassed;
 	callvote->current = G_VoteAllowInstajumpCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<1 or 0>" );
-	callvote->argument_type = G_LevelCopyString( "bool" );
-	callvote->help = G_LevelCopyString( "Toggles whether instagun can be used for weapon jumping" );
+	callvote->argument_format = Q_strdup( "<1 or 0>" );
+	callvote->argument_type = Q_strdup( "bool" );
+	callvote->help = Q_strdup( "Toggles whether instagun can be used for weapon jumping" );
 
 	callvote = G_RegisterCallvote( "instashield" );
 	callvote->expectedargs = 1;
@@ -2699,9 +2699,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteAllowInstashieldPassed;
 	callvote->current = G_VoteAllowInstashieldCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<1 or 0>" );
-	callvote->argument_type = G_LevelCopyString( "bool" );
-	callvote->help = G_LevelCopyString( "Toggles the availability of instashield in instagib" );
+	callvote->argument_format = Q_strdup( "<1 or 0>" );
+	callvote->argument_type = Q_strdup( "bool" );
+	callvote->help = Q_strdup( "Toggles the availability of instashield in instagib" );
 
 	callvote = G_RegisterCallvote( "allow_falldamage" );
 	callvote->expectedargs = 1;
@@ -2709,9 +2709,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteAllowFallDamagePassed;
 	callvote->current = G_VoteAllowFallDamageCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<1 or 0>" );
-	callvote->argument_type = G_LevelCopyString( "bool" );
-	callvote->help = G_LevelCopyString( "Toggles whether falling long distances deals damage" );
+	callvote->argument_format = Q_strdup( "<1 or 0>" );
+	callvote->argument_type = Q_strdup( "bool" );
+	callvote->help = Q_strdup( "Toggles whether falling long distances deals damage" );
 
 	callvote = G_RegisterCallvote( "allow_selfdamage" );
 	callvote->expectedargs = 1;
@@ -2719,9 +2719,9 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteAllowSelfDamagePassed;
 	callvote->current = G_VoteAllowSelfDamageCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<1 or 0>" );
-	callvote->argument_type = G_LevelCopyString( "bool" );
-	callvote->help = G_LevelCopyString( "Toggles whether weapon splashes can damage self" );
+	callvote->argument_format = Q_strdup( "<1 or 0>" );
+	callvote->argument_type = Q_strdup( "bool" );
+	callvote->help = Q_strdup( "Toggles whether weapon splashes can damage self" );
 
 	callvote = G_RegisterCallvote( "timeout" );
 	callvote->expectedargs = 0;
@@ -2731,7 +2731,7 @@ void G_CallVotes_Init( void ) {
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
 	callvote->argument_type = NULL;
-	callvote->help = G_LevelCopyString( "Pauses the game" );
+	callvote->help = Q_strdup( "Pauses the game" );
 
 	callvote = G_RegisterCallvote( "timein" );
 	callvote->expectedargs = 0;
@@ -2741,7 +2741,7 @@ void G_CallVotes_Init( void ) {
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
 	callvote->argument_type = NULL;
-	callvote->help = G_LevelCopyString( "Resumes the game if in timeout" );
+	callvote->help = Q_strdup( "Resumes the game if in timeout" );
 
 	callvote = G_RegisterCallvote( "allow_uneven" );
 	callvote->expectedargs = 1;
@@ -2749,8 +2749,8 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteAllowUnevenPassed;
 	callvote->current = G_VoteAllowUnevenCurrent;
 	callvote->extraHelp = NULL;
-	callvote->argument_format = G_LevelCopyString( "<1 or 0>" );
-	callvote->argument_type = G_LevelCopyString( "bool" );
+	callvote->argument_format = Q_strdup( "<1 or 0>" );
+	callvote->argument_type = Q_strdup( "bool" );
 
 	callvote = G_RegisterCallvote( "shuffle" );
 	callvote->expectedargs = 0;
@@ -2760,7 +2760,7 @@ void G_CallVotes_Init( void ) {
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
 	callvote->argument_type = NULL;
-	callvote->help = G_LevelCopyString( "Shuffles teams" );
+	callvote->help = Q_strdup( "Shuffles teams" );
 
 	callvote = G_RegisterCallvote( "rebalance" );
 	callvote->expectedargs = 0;
@@ -2770,7 +2770,7 @@ void G_CallVotes_Init( void ) {
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
 	callvote->argument_type = NULL;
-	callvote->help = G_LevelCopyString( "Rebalances teams" );
+	callvote->help = Q_strdup( "Rebalances teams" );
 
 	// wsw : pb : server admin can now disable a specific callvote command (g_disable_vote_<callvote name>)
 	for( callvote = callvotesHeadNode; callvote != NULL; callvote = callvote->next ) {

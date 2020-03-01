@@ -440,9 +440,9 @@ static int R_PackLightmaps( int num, int w, int h, int dataSize, int stride, int
 	rectSize = rectW * rectH * samples * sizeof( *r_lightmapBuffer );
 	if( rectSize > r_lightmapBufferSize ) {
 		if( r_lightmapBuffer ) {
-			R_Free( r_lightmapBuffer );
+			Q_free( r_lightmapBuffer );
 		}
-		r_lightmapBuffer = (uint8_t *)R_MallocExt( r_mempool, rectSize, 0, 0 );
+		r_lightmapBuffer = (uint8_t *)Q_malloc( rectSize );
 		memset( r_lightmapBuffer, 255, rectSize );
 		r_lightmapBufferSize = rectSize;
 	}
@@ -532,7 +532,7 @@ void R_BuildLightmaps( model_t *mod, int numLightmaps, int w, int h, const uint8
 	}
 
 	r_lightmapBufferSize = size * samples;
-	r_lightmapBuffer = (uint8_t *)R_MallocExt( r_mempool, r_lightmapBufferSize, 0, 0 );
+	r_lightmapBuffer = (uint8_t *)Q_malloc( r_lightmapBufferSize );
 	r_numUploadedLightmaps = 0;
 
 	if( mapConfig.lightmapArrays ) {
@@ -609,10 +609,10 @@ void R_BuildLightmaps( model_t *mod, int numLightmaps, int w, int h, const uint8
 	}
 
 	if( r_lightmapBuffer ) {
-		R_Free( r_lightmapBuffer );
+		Q_free( r_lightmapBuffer );
 	}
 
-	loadbmodel->lightmapImages = (image_t **)Mod_Malloc( mod, sizeof( *loadbmodel->lightmapImages ) * r_numUploadedLightmaps );
+	loadbmodel->lightmapImages = (image_t **)Q_malloc( sizeof( *loadbmodel->lightmapImages ) * r_numUploadedLightmaps );
 	memcpy( loadbmodel->lightmapImages, r_lightmapTextures,
 			sizeof( *loadbmodel->lightmapImages ) * r_numUploadedLightmaps );
 	loadbmodel->numLightmapImages = r_numUploadedLightmaps;
@@ -654,7 +654,7 @@ void R_InitLightStyles( model_t *mod ) {
 	assert( mod );
 
 	loadbmodel = ( ( mbrushmodel_t * )mod->extradata );
-	loadbmodel->superLightStyles = (superLightStyle_t *)Mod_Malloc( mod, sizeof( *loadbmodel->superLightStyles ) * MAX_LIGHTSTYLES );
+	loadbmodel->superLightStyles = (superLightStyle_t *)Q_malloc( sizeof( *loadbmodel->superLightStyles ) * MAX_LIGHTSTYLES );
 	loadbmodel->numSuperLightStyles = 0;
 
 	for( i = 0; i < MAX_LIGHTSTYLES; i++ ) {

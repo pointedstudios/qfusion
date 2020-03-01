@@ -48,7 +48,7 @@ void AiAasRouteCache::Init( const AiAasWorld &aasWorld ) {
 	InitDefaultBlockedAreasDigest( aasWorld );
 
 	// AiAasRouteCache is quite large, so it should be allocated on heap
-	shared = (AiAasRouteCache *)G_Malloc( sizeof( AiAasRouteCache ) );
+	shared = (AiAasRouteCache *)Q_malloc( sizeof( AiAasRouteCache ) );
 	new( shared )AiAasRouteCache( *AiAasWorld::Instance() );
 
 	instancesHead = shared;
@@ -63,14 +63,14 @@ void AiAasRouteCache::Shutdown() {
 	}
 
 	shared->~AiAasRouteCache();
-	G_Free( shared );
+	Q_free( shared );
 	// Allow the pointer to be reused, otherwise an assertion will fail on a next Init() call
 	shared = nullptr;
 	instancesHead = nullptr;
 }
 
 AiAasRouteCache *AiAasRouteCache::NewInstance( const int *travelFlags_ ) {
-	auto *instance = new( G_Malloc( sizeof( AiAasRouteCache ) ) )AiAasRouteCache( Shared(), travelFlags_ );
+	auto *instance = new( Q_malloc( sizeof( AiAasRouteCache ) ) )AiAasRouteCache( Shared(), travelFlags_ );
 	::Link( instance, &AiAasRouteCache::instancesHead );
 	return instance;
 }
@@ -82,7 +82,7 @@ void AiAasRouteCache::ReleaseInstance( AiAasRouteCache *instance ) {
 
 	::Unlink( instance, &AiAasRouteCache::instancesHead );
 	instance->~AiAasRouteCache();
-	G_Free( instance );
+	Q_free( instance );
 }
 
 static const int DEFAULT_TRAVEL_FLAGS[] = { Bot::PREFERRED_TRAVEL_FLAGS, Bot::ALLOWED_TRAVEL_FLAGS };
@@ -645,14 +645,14 @@ public:
 
 	~AreaAndPortalCacheAllocatorBin() {
 		if( usedSingleBlock ) {
-			G_Free( usedSingleBlock );
+			Q_free( usedSingleBlock );
 		}
 		if( freeSingleBlock ) {
-			G_Free( freeSingleBlock );
+			Q_free( freeSingleBlock );
 		}
 		if( freelistPool ) {
 			freelistPool->~FreelistPool();
-			G_Free( freelistPool );
+			Q_free( freelistPool );
 		}
 	}
 
@@ -787,7 +787,7 @@ void *AreaAndPortalCacheAllocatorBin::Alloc( size_t size ) {
 		} else {
 			// The pool capacity has been exhausted. Fall back to using G_Malloc()
 			// This is not a desired behavior but we should not crash in these extreme cases.
-			return SetSelfAsTag( G_Malloc( (size_t)( size + TAG_SIZE ) ) );
+			return SetSelfAsTag( Q_malloc( (size_t)( size + TAG_SIZE ) ) );
 		}
 	}
 
@@ -800,7 +800,7 @@ void *AreaAndPortalCacheAllocatorBin::Alloc( size_t size ) {
 		return SetSelfAsTag( usedSingleBlock );
 	} else if( !usedSingleBlock ) {
 		// Allocate 8 extra bytes for the tag
-		usedSingleBlock = G_Malloc( (size_t)( size + TAG_SIZE ) );
+		usedSingleBlock = Q_malloc( (size_t)( size + TAG_SIZE ) );
 		return SetSelfAsTag( usedSingleBlock );
 	}
 
@@ -821,7 +821,7 @@ void *AreaAndPortalCacheAllocatorBin::Alloc( size_t size ) {
 	}
 
 	size_t memSize = sizeof( FreelistPool ) + bufferAlignmentBytes + bufferSize;
-	uint8_t *memBlock = (uint8_t *)G_Malloc( memSize );
+	uint8_t *memBlock = (uint8_t *)Q_malloc( memSize );
 	memset( memBlock, 0, memSize );
 	uint8_t *poolBuffer = memBlock + sizeof( FreelistPool ) + bufferAlignmentBytes;
 	// Note: It is important to tell the pool about the extra space occupied by block tags
@@ -836,7 +836,7 @@ void AreaAndPortalCacheAllocatorBin::Free( void *ptr ) {
 		if( freelistPool->MayOwn( ptr ) ) {
 			freelistPool->Free( ptr );
 		} else {
-			G_Free( ptr );
+			Q_free( ptr );
 		}
 		return;
 	}
@@ -849,7 +849,7 @@ void AreaAndPortalCacheAllocatorBin::Free( void *ptr ) {
 		freeSingleBlock = usedSingleBlock;
 	} else {
 		// Free the single block, as further allocations are handled by the freelist pool.
-		G_Free( usedSingleBlock );
+		Q_free( usedSingleBlock );
 	}
 
 	usedSingleBlock = nullptr;
@@ -930,13 +930,13 @@ AiAasRouteCache::ResultCache::AllocAndRegisterForKey( uint16_t binIndex, uint64_
 }
 
 void *AiAasRouteCache::GetClearedMemory( size_t size ) {
-	void *mem = G_Malloc( size );
+	void *mem = Q_malloc( size );
 	::memset( mem, 0, size );
 	return mem;
 }
 
 void AiAasRouteCache::FreeMemory( void *ptr ) {
-	G_Free( ptr );
+	Q_free( ptr );
 }
 
 void *AiAasRouteCache::AllocAreaAndPortalCacheMemory( size_t size ) {
@@ -952,7 +952,7 @@ void *AiAasRouteCache::AllocAreaAndPortalCacheMemory( size_t size ) {
 		}
 
 		// Create a new bin for the size
-		void *mem = G_Malloc( sizeof( AreaAndPortalCacheAllocatorBin ) );
+		void *mem = Q_malloc( sizeof( AreaAndPortalCacheAllocatorBin ) );
 		memset( mem, 0, sizeof( AreaAndPortalCacheAllocatorBin ) );
 		auto *newBin = new( mem )AreaAndPortalCacheAllocatorBin( size );
 		areaAndPortalSmallBinsTable[size] = newBin;
@@ -970,7 +970,7 @@ void *AiAasRouteCache::AllocAreaAndPortalCacheMemory( size_t size ) {
 	}
 
 	// Create a new bin for the size
-	void *mem = G_Malloc( sizeof( AreaAndPortalCacheAllocatorBin ) );
+	void *mem = Q_malloc( sizeof( AreaAndPortalCacheAllocatorBin ) );
 	memset( mem, 0, sizeof( AreaAndPortalCacheAllocatorBin ) );
 	auto *newBin = new( mem )AreaAndPortalCacheAllocatorBin( size );
 
@@ -991,14 +991,14 @@ void AiAasRouteCache::FreeAreaAndPortalMemoryPools() {
 	while( bin ) {
 		// Don't trigger "use after free"
 		auto *nextBin = bin->next;
-		G_Free( bin );
+		Q_free( bin );
 		bin = nextBin;
 	}
 
 	int binsTableCapacity = sizeof( areaAndPortalSmallBinsTable ) / sizeof( areaAndPortalSmallBinsTable[0] );
 	for( int i = 0; i < binsTableCapacity; ++i ) {
 		if( areaAndPortalSmallBinsTable[i] ) {
-			G_Free( areaAndPortalSmallBinsTable[i] );
+			Q_free( areaAndPortalSmallBinsTable[i] );
 		}
 	}
 }

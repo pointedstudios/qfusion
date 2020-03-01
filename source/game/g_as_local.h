@@ -118,4 +118,4 @@ static void asnullfunc( void ) {}
 #define ASLIB_PROPERTY_NULL                     { NULL, 0 }
 
 #define ASLIB_Malloc( s )                         ( aslib_import.Mem_Alloc( s,__FILE__,__LINE__ ) )
-#define ASLIB_Free( x )                           ( aslib_import.Mem_Free( x,__FILE__,__LINE__ ) )
+#define ASLIB_Free( x )                           ( aslib_import.Q_free( x,__FILE__,__LINE__ ) )

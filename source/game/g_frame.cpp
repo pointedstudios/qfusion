@@ -201,7 +201,7 @@ static void G_UpdateServerInfo( void ) {
 			}
 
 			len++;
-			votable = ( char * )G_Malloc( len );
+			votable = ( char * )Q_malloc( len );
 			votable[0] = 0;
 
 			for( count = 0; ( name = COM_ListNameForPosition( g_gametypes_list->string, count, CHAR_GAMETYPE_SEPARATOR ) ) != NULL; count++ ) {
@@ -213,7 +213,7 @@ static void G_UpdateServerInfo( void ) {
 
 			//votable[ strlen( votable )-2 ] = 0; // remove the last space
 			trap_Cvar_ForceSet( "g_gametypes_available", votable );
-			G_Free( votable );
+			Q_free( votable );
 		}
 
 		g_votable_gametypes->modified = false;
@@ -745,7 +745,6 @@ void G_RunFrame( unsigned int msec, int64_t serverTime ) {
 
 		G_RunClients();
 		G_RunGametype();
-		G_LevelGarbageCollect();
 		return;
 	}
 
@@ -768,6 +767,4 @@ void G_RunFrame( unsigned int msec, int64_t serverTime ) {
 	G_RunGametype();
 	G_asCallMapPostThink();
 	GClip_BackUpCollisionFrame();
-
-	G_LevelGarbageCollect();
 }

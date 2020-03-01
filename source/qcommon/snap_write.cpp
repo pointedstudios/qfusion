@@ -836,8 +836,7 @@ static void SNAP_BuildSnapEntitiesList( cmodel_state_t *cms, ginfo_t *gi,
 */
 void SNAP_BuildClientFrameSnap( cmodel_state_t *cms, ginfo_t *gi, int64_t frameNum, int64_t timeStamp,
 								fatvis_t *fatvis, client_t *client,
-								game_state_t *gameState, client_entities_t *client_entities,
-								mempool_t *mempool, int snapHintFlags ) {
+								game_state_t *gameState, client_entities_t *client_entities, int snapHintFlags ) {
 	assert( gameState );
 
 	edict_t *clent = client->edict;
@@ -874,10 +873,10 @@ void SNAP_BuildClientFrameSnap( cmodel_state_t *cms, ginfo_t *gi, int64_t frameN
 
 		numareas *= CM_AreaRowSize( cms );
 		if( frame->areabits ) {
-			Mem_Free( frame->areabits );
+			Q_free( frame->areabits );
 			frame->areabits = nullptr;
 		}
-		frame->areabits = (uint8_t*)Mem_Alloc( mempool, numareas );
+		frame->areabits = (uint8_t*)Q_malloc( numareas );
 	}
 
 	// grab the current player_state_t
@@ -895,11 +894,11 @@ void SNAP_BuildClientFrameSnap( cmodel_state_t *cms, ginfo_t *gi, int64_t frameN
 
 	if( frame->ps_size < frame->numplayers ) {
 		if( frame->ps ) {
-			Mem_Free( frame->ps );
+			Q_free( frame->ps );
 			frame->ps = nullptr;
 		}
 
-		frame->ps = ( player_state_t* )Mem_Alloc( mempool, sizeof( player_state_t ) * frame->numplayers );
+		frame->ps = ( player_state_t* )Q_malloc( sizeof( player_state_t ) * frame->numplayers );
 		frame->ps_size = frame->numplayers;
 	}
 
@@ -966,7 +965,7 @@ void SNAP_BuildClientFrameSnap( cmodel_state_t *cms, ginfo_t *gi, int64_t frameN
 template <typename T>
 static inline void FreeAndNullify( T **p, int *size ) {
 	if( *p ) {
-		Mem_Free( *p );
+		Q_free( *p );
 		*p = nullptr;
 	}
 	*size = 0;

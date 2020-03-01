@@ -16,7 +16,7 @@ inline void AiWeightConfigVarGroup::LinkItem( T *item, T **linkedItemsHead, T **
 	}
 
 	auto memSize = NUM_HASH_BINS * sizeof( T * );
-	( *hashBins ) = (T **)G_Malloc( memSize );
+	( *hashBins ) = (T **)Q_malloc( memSize );
 	memset( ( *hashBins ), 0, memSize );
 
 	for( auto linkedItem = *linkedItemsHead; linkedItem; linkedItem = linkedItem->nextSibling )
@@ -45,7 +45,7 @@ AiWeightConfigVarGroup::~AiWeightConfigVarGroup() {
 	while( scriptVar ) {
 		auto *nextVar = scriptVar->nextAllocated;
 		scriptVar->~AiScriptWeightConfigVar();
-		G_Free( scriptVar );
+		Q_free( scriptVar );
 		scriptVar = nextVar;
 	}
 
@@ -53,23 +53,23 @@ AiWeightConfigVarGroup::~AiWeightConfigVarGroup() {
 	while( scriptGroup ) {
 		auto *nextGroup = scriptGroup->nextAllocated;
 		scriptGroup->~AiScriptWeightConfigVarGroup();
-		G_Free( scriptGroup );
+		Q_free( scriptGroup );
 		scriptGroup = nextGroup;
 	}
 
 	// If hash bins were allocated
 	if( varsHashBins != &childVarsHead ) {
-		G_Free( varsHashBins );
+		Q_free( varsHashBins );
 	}
 
 	if( groupsHashBins != &childGroupsHead ) {
-		G_Free( groupsHashBins );
+		Q_free( groupsHashBins );
 	}
 }
 
 template <typename T>
 inline void AiWeightConfigVarGroup::AddScriptItem( const char *name_, void *scriptObject, T **allocatedItemsHead ) {
-	T *scriptItem = new( G_Malloc( sizeof( T ) ) )T( this, name_, scriptObject );
+	T *scriptItem = new( Q_malloc( sizeof( T ) ) )T( this, name_, scriptObject );
 	scriptItem->nextAllocated = ( *allocatedItemsHead );
 	( *allocatedItemsHead ) = scriptItem;
 }
@@ -472,12 +472,12 @@ bool AiWeightConfig::Load( const char *filename ) {
 	}
 
 	// Ensure that the buffer is zero-terminated
-	char *buffer = (char *)G_Malloc( (unsigned)fileSize + 1 );
+	char *buffer = (char *)Q_malloc( (unsigned)fileSize + 1 );
 	buffer[fileSize] = 0;
 
 	int bytesRead = trap_FS_Read( buffer, (unsigned)fileSize, fileHandle );
 	if( bytesRead != fileSize ) {
-		G_Free( buffer );
+		Q_free( buffer );
 		trap_FS_FCloseFile( fileHandle );
 		const char *format = S_COLOR_RED "AIWeightConfig()::Load(): only %d/%d bytes of file %s can be read\n";
 		G_Printf( format, bytesRead, fileSize, filename );
@@ -485,7 +485,7 @@ bool AiWeightConfig::Load( const char *filename ) {
 	}
 
 	bool result = LoadFromData( buffer );
-	G_Free( buffer );
+	Q_free( buffer );
 	trap_FS_FCloseFile( fileHandle );
 	return result;
 }

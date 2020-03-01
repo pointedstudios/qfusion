@@ -148,9 +148,9 @@ cvar_t *Cvar_Get( const char *var_name, const char *var_value, cvar_flag_t flags
 
 		if( !var->dvalue || strcmp( var->dvalue, var_value ) ) {
 			if( var->dvalue ) {
-				Mem_ZoneFree( var->dvalue ); // free the old default value string
+				Q_free( var->dvalue ); // free the old default value string
 			}
-			var->dvalue = ZoneCopyString( (char *) var_value );
+			var->dvalue = Q_strdup( (char *) var_value );
 		}
 
 		if( Cvar_FlagIsSet( flags, CVAR_USERINFO ) || Cvar_FlagIsSet( flags, CVAR_SERVERINFO ) ) {
@@ -167,9 +167,9 @@ cvar_t *Cvar_Get( const char *var_name, const char *var_value, cvar_flag_t flags
 		if( reset ) {
 			if( !var->string || strcmp( var->string, var_value ) ) {
 				if( var->string ) {
-					Mem_ZoneFree( var->string );
+					Q_free( var->string );
 				}
-				var->string = ZoneCopyString( (char *) var_value );
+				var->string = Q_strdup( (char *) var_value );
 				var->value = atof( var->string );
 				var->integer = Q_rint( var->value );
 			}
@@ -191,11 +191,11 @@ cvar_t *Cvar_Get( const char *var_name, const char *var_value, cvar_flag_t flags
 		}
 	}
 
-	var = (cvar_t *)Mem_ZoneMalloc( (int)( sizeof( *var ) + strlen( var_name ) + 1 ) );
+	var = (cvar_t *)Q_malloc( (int)( sizeof( *var ) + strlen( var_name ) + 1 ) );
 	var->name = (char *)( (uint8_t *)var + sizeof( *var ) );
 	strcpy( var->name, var_name );
-	var->dvalue = ZoneCopyString( (char *) var_value );
-	var->string = ZoneCopyString( (char *) var_value );
+	var->dvalue = Q_strdup( (char *) var_value );
+	var->string = Q_strdup( (char *) var_value );
 	var->value = atof( var->string );
 	var->integer = Q_rint( var->value );
 	var->flags = flags;
@@ -249,7 +249,7 @@ static cvar_t *Cvar_Set2( const char *var_name, const char *value, bool force ) 
 				if( !strcmp( value, var->latched_string ) ) {
 					return var;
 				}
-				Mem_ZoneFree( var->latched_string );
+				Q_free( var->latched_string );
 			} else {
 				if( !strcmp( value, var->string ) ) {
 					return var;
@@ -258,23 +258,23 @@ static cvar_t *Cvar_Set2( const char *var_name, const char *value, bool force ) 
 
 			if( Com_ServerState() ) {
 				Com_Printf( "%s will be changed upon restarting.\n", var->name );
-				var->latched_string = ZoneCopyString( (char *) value );
+				var->latched_string = Q_strdup( (char *) value );
 			} else {
 				if( Cvar_FlagIsSet( var->flags, CVAR_LATCH_VIDEO ) ) {
 					Com_Printf( "%s will be changed upon restarting video.\n", var->name );
-					var->latched_string = ZoneCopyString( (char *) value );
+					var->latched_string = Q_strdup( (char *) value );
 				} else if( Cvar_FlagIsSet( var->flags, CVAR_LATCH_SOUND ) ) {
 					Com_Printf( "%s will be changed upon restarting sound.\n", var->name );
-					var->latched_string = ZoneCopyString( (char *) value );
+					var->latched_string = Q_strdup( (char *) value );
 				} else {
 					if( !strcmp( var->name, "fs_game" ) ) {
-						char *new_dir = ZoneCopyString( value );
+						char *new_dir = Q_strdup( value );
 						FS_SetGameDirectory( new_dir, false );
-						Mem_ZoneFree( new_dir );
+						Q_free( new_dir );
 						return var;
 					}
-					Mem_ZoneFree( var->string ); // free the old value string
-					var->string = ZoneCopyString( value );
+					Q_free( var->string ); // free the old value string
+					var->string = Q_strdup( value );
 					var->value = atof( var->string );
 					var->integer = Q_rint( var->value );
 					Cvar_SetModified( var );
@@ -284,7 +284,7 @@ static cvar_t *Cvar_Set2( const char *var_name, const char *value, bool force ) 
 		}
 	} else {
 		if( var->latched_string ) {
-			Mem_ZoneFree( var->latched_string );
+			Q_free( var->latched_string );
 			var->latched_string = NULL;
 		}
 	}
@@ -297,9 +297,9 @@ static cvar_t *Cvar_Set2( const char *var_name, const char *value, bool force ) 
 		userinfo_modified = true; // transmit at next oportunity
 
 	}
-	Mem_ZoneFree( var->string ); // free the old value string
+	Q_free( var->string ); // free the old value string
 
-	var->string = ZoneCopyString( (char *) value );
+	var->string = Q_strdup( (char *) value );
 	var->value = atof( var->string );
 	var->integer = Q_rint( var->value );
 	Cvar_SetModified( var );
@@ -387,7 +387,7 @@ void Cvar_GetLatchedVars( cvar_flag_t flags ) {
 		if( !strcmp( var->name, "fs_game" ) ) {
 			changedGameDir = var;
 		}
-		Mem_ZoneFree( var->string );
+		Q_free( var->string );
 		var->string = var->latched_string;
 		var->latched_string = NULL;
 		var->value = atof( var->string );
@@ -420,8 +420,8 @@ void Cvar_FixCheatVars( void ) {
 	QMutex_Unlock( cvar_mutex );
 	for( i = 0; i < dump->size; ++i ) {
 		cvar_t *const var = (cvar_t *) dump->key_value_vector[i].value;
-		Mem_ZoneFree( var->string );
-		var->string = ZoneCopyString( var->dvalue );
+		Q_free( var->string );
+		var->string = Q_strdup( var->dvalue );
 		var->value = atof( var->string );
 		var->integer = Q_rint( var->value );
 	}
@@ -772,7 +772,7 @@ char **Cvar_CompleteBuildList( const char *partial ) {
 	Trie_Dump( cvar_trie, partial, TRIE_DUMP_VALUES, &dump );
 #endif
 	QMutex_Unlock( cvar_mutex );
-	buf = (char **) Mem_TempMalloc( sizeof( char * ) * ( dump->size + 1 ) );
+	buf = (char **) Q_malloc( sizeof( char * ) * ( dump->size + 1 ) );
 	for( i = 0; i < dump->size; ++i )
 		buf[i] = ( (cvar_t *) ( dump->key_value_vector[i].value ) )->name;
 	buf[dump->size] = NULL;
@@ -792,7 +792,7 @@ char **Cvar_CompleteBuildListWithFlag( const char *partial, cvar_flag_t flag ) {
 	QMutex_Lock( cvar_mutex );
 	Trie_DumpIf( cvar_trie, partial, TRIE_DUMP_VALUES, Cvar_HasFlags, &flag, &dump );
 	QMutex_Unlock( cvar_mutex );
-	buf = (char **) Mem_TempMalloc( sizeof( char * ) * ( dump->size + 1 ) );
+	buf = (char **) Q_malloc( sizeof( char * ) * ( dump->size + 1 ) );
 	for( i = 0; i < dump->size; ++i )
 		buf[i] = ( (cvar_t *) ( dump->key_value_vector[i].value ) )->name;
 	buf[dump->size] = NULL;
@@ -876,7 +876,7 @@ void Cvar_Shutdown( void ) {
 	if( cvar_initialized ) {
 		unsigned int i;
 		struct trie_dump_s *dump;
-		extern cvar_t *developer, *developer_memory;
+		extern cvar_t *developer;
 #ifndef DEDICATED_ONLY
 		extern cvar_t *con_printText;
 #endif
@@ -887,7 +887,6 @@ void Cvar_Shutdown( void ) {
 		// the memory pointers after the data has already been freed but before we
 		// reset the pointers to NULL
 		developer = NULL;
-		developer_memory = NULL;
 		dedicated = NULL;
 #ifndef DEDICATED_ONLY
 		con_printText = NULL;
@@ -913,12 +912,12 @@ void Cvar_Shutdown( void ) {
 			cvar_t *const var = (cvar_t *)dump->key_value_vector[i].value;
 
 			if( var->string ) {
-				Mem_ZoneFree( var->string );
+				Q_free( var->string );
 			}
 			if( var->dvalue ) {
-				Mem_ZoneFree( var->dvalue );
+				Q_free( var->dvalue );
 			}
-			Mem_ZoneFree( var );
+			Q_free( var );
 		}
 		Trie_FreeDump( dump );
 

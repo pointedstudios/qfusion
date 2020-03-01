@@ -735,11 +735,11 @@ class UpdatesHeap {
 	int capacity { 1024 + 512 };
 public:
 	UpdatesHeap() {
-		buffer = (HeapEntry<DistanceType> *)S_Malloc( sizeof( HeapEntry<DistanceType> ) * capacity );
+		buffer = (HeapEntry<DistanceType> *)Q_malloc( sizeof( HeapEntry<DistanceType> ) * capacity );
 	}
 
 	~UpdatesHeap() {
-		S_Free( buffer );
+		Q_free( buffer );
 	}
 
 	void Clear() {
@@ -785,9 +785,9 @@ public:
 		}
 		capacity = ( 4 * ( size + atMost ) ) / 3;
 		auto *const oldBuffer = buffer;
-		buffer = (HeapEntry<DistanceType> *)S_Malloc( sizeof( HeapEntry<DistanceType> ) * capacity );
+		buffer = (HeapEntry<DistanceType> *)Q_malloc( sizeof( HeapEntry<DistanceType> ) * capacity );
 		memcpy( buffer, oldBuffer, sizeof( HeapEntry<DistanceType> ) * size );
-		S_Free( oldBuffer );
+		Q_free( oldBuffer );
 	}
 };
 
@@ -857,12 +857,12 @@ class FloodFillPathFinder {
 public:
 	explicit FloodFillPathFinder( PropagationGraphBuilder<DistanceType> *graph_ ) : graph( graph_ ) {
 		size_t memSize = graph_->NumLeafs() * sizeof( VertexUpdateStatus );
-		updateStatus = (VertexUpdateStatus *)::S_Malloc( memSize );
+		updateStatus = (VertexUpdateStatus *)::Q_malloc( memSize );
 	}
 
 	~FloodFillPathFinder() {
 		if( updateStatus ) {
-			S_Free( updateStatus );
+			Q_free( updateStatus );
 		}
 	}
 };
@@ -897,12 +897,12 @@ public:
 		: euclideanDistanceTable( euclideanDistanceTable_ )
 		, graph( graph_ ) {
 		size_t memSize = graph_->NumLeafs() * sizeof( VertexUpdateStatus );
-		updateStatus = (VertexUpdateStatus *)::S_Malloc( memSize );
+		updateStatus = (VertexUpdateStatus *)::Q_malloc( memSize );
 	}
 
 	~BidirectionalPathFinder() {
 		if( updateStatus ) {
-			S_Free( updateStatus );
+			Q_free( updateStatus );
 		}
 	}
 
@@ -1114,10 +1114,10 @@ protected:
 	~PropagationBuilderTask() override {
 		if( graphInstance ) {
 			graphInstance->~GraphType();
-			S_Free( graphInstance );
+			Q_free( graphInstance );
 		}
 		if( tmpLeafNums ) {
-			S_Free( tmpLeafNums );
+			Q_free( tmpLeafNums );
 		}
 	}
 
@@ -1310,7 +1310,7 @@ class FinePropagationBuilder : public PropagationTableBuilder<DistanceType> {
 public:
 	explicit FinePropagationBuilder( int actualNumLeafs_ )
 		: PropagationTableBuilder<DistanceType>( actualNumLeafs_, false ) {
-		euclideanDistanceTable = (float *)S_Malloc( actualNumLeafs_ * actualNumLeafs_ * sizeof( float ) );
+		euclideanDistanceTable = (float *)Q_malloc( actualNumLeafs_ * actualNumLeafs_ * sizeof( float ) );
 		if( euclideanDistanceTable ) {
 			BuildLeafEuclideanDistanceTable( euclideanDistanceTable, actualNumLeafs_ );
 		}
@@ -1318,7 +1318,7 @@ public:
 
 	~FinePropagationBuilder() {
 		if( euclideanDistanceTable ) {
-			S_Free( euclideanDistanceTable );
+			Q_free( euclideanDistanceTable );
 		}
 	}
 };
@@ -1339,7 +1339,7 @@ struct Holder {
 	T *value { nullptr };
 	template <typename... Args>
 	explicit Holder( Args... args ) {
-		if( void *mem = S_Malloc( sizeof( T ) ) ) {
+		if( void *mem = Q_malloc( sizeof( T ) ) ) {
 			value = new( mem )T( args... );
 		}
 	}
@@ -1348,7 +1348,7 @@ struct Holder {
 	~Holder() {
 		if( value ) {
 			value->~T();
-			S_Free( value );
+			Q_free( value );
 		}
 	}
 	T *ReleaseOwnership() {
@@ -1374,7 +1374,7 @@ FinePropagationTask<DistanceType> *FinePropagationBuilder<DistanceType>::NewTask
 	// The "+1" part is not mandatory but we want a range "end"
 	// to always have a valid address in address space.
 	// The task gets an ownership over this chunk of memory
-	taskHolder.value->tmpLeafNums = (int *)S_Malloc( 2 * ( this->graphBuilder.NumLeafs() + 1 ) * sizeof( int ) );
+	taskHolder.value->tmpLeafNums = (int *)Q_malloc( 2 * ( this->graphBuilder.NumLeafs() + 1 ) * sizeof( int ) );
 
 	Holder<PathFinderType> pathFinderHolder( this->euclideanDistanceTable, graphClone );
 	if( !pathFinderHolder ) {
@@ -1401,7 +1401,7 @@ CoarsePropagationTask<DistanceType> *CoarsePropagationBuilder<DistanceType>::New
 	// The "+1" part is not mandatory but we want a range "end"
 	// to always have a valid address in address space.
 	// The task gets an ownership over this chunk of memory
-	taskHolder.value->tmpLeafNums = (int *)S_Malloc( 2 * ( this->graphBuilder.NumLeafs() + 1 ) * sizeof( int ) );
+	taskHolder.value->tmpLeafNums = (int *)Q_malloc( 2 * ( this->graphBuilder.NumLeafs() + 1 ) * sizeof( int ) );
 
 	Holder<PathFinderType> pathFinderHolder( graphClone );
 	if( !pathFinderHolder ) {
@@ -1423,7 +1423,7 @@ typename PropagationTableBuilder<DistanceType>::PropagationProps *PropagationTab
 template <typename DistanceType>
 PropagationTableBuilder<DistanceType>::~PropagationTableBuilder() {
 	if( table ) {
-		S_Free( table );
+		Q_free( table );
 	}
 	if( progressLock ) {
 		QMutex_Destroy( &progressLock );
@@ -1472,8 +1472,8 @@ bool PropagationTableBuilder<DistanceType>::Build() {
 
 	const int numLeafs = graphBuilder.NumLeafs();
 	const size_t tableSizeInBytes = numLeafs * numLeafs * sizeof( PropagationProps );
-	// Use S_Malloc() for that as the table is transferred to PropagationTable itself
-	table = (PropagationProps *)S_Malloc( tableSizeInBytes );
+	// Use Q_malloc() for that as the table is transferred to PropagationTable itself
+	table = (PropagationProps *)Q_malloc( tableSizeInBytes );
 	if( !table ) {
 		return false;
 	}
@@ -1659,7 +1659,7 @@ template <typename DistanceType>
 FinePropagationTask<DistanceType>::~FinePropagationTask() {
 	if( pathFinderInstance ) {
 		pathFinderInstance->~BidirectionalPathFinder<DistanceType>();
-		S_Free( pathFinderInstance );
+		Q_free( pathFinderInstance );
 	}
 }
 
@@ -2125,7 +2125,7 @@ bool PropagationTable::ComputeNewState( bool fastAndCoarse ) {
 
 void PropagationTable::ProvideDummyData() {
 	size_t memSize = sizeof( PropagationProps ) * NumLeafs() * NumLeafs();
-	table = (PropagationProps *)S_Malloc( memSize );
+	table = (PropagationProps *)Q_malloc( memSize );
 	memset( table, 0, memSize );
 }
 
@@ -2175,14 +2175,14 @@ PropagationTableReader::PropagationProps *PropagationTableReader::ReadPropsTable
 	// Just return a view of the file data that is read and is kept in-memory.
 	// An overhead of storing few extra strings at the beginning is insignificant.
 	// Never returns on failure?
-	auto *const result = (PropagationProps *)S_Malloc( expectedSize );
+	auto *const result = (PropagationProps *)Q_malloc( expectedSize );
 	if( Read( result, expectedSize ) ) {
 		if( ValidateTable( result, actualNumLeafs ) ) {
 			return result;
 		}
 	}
 
-	S_Free( result );
+	Q_free( result );
 	fsResult = -1;
 	return nullptr;
 }
@@ -2302,7 +2302,7 @@ bool CachedLeafsGraph::SaveToCache() {
 struct SoundMemDeleter {
 	void operator()( void *p ) {
 		if( p ) {
-			S_Free( p );
+			Q_free( p );
 		}
 	}
 };
@@ -2583,7 +2583,7 @@ bool GraphBuilder<AdjacencyListType, DistanceType>::TryUsingGlobalGraph( TargetT
 template <typename DistanceType>
 CloneableGraphBuilder<DistanceType> *CloneableGraphBuilder<DistanceType>::Clone() {
 	// TODO: Use just malloc() and check results? A caller code must be aware of possible failure
-	void *objectMem = S_Malloc( sizeof( CloneableGraphBuilder<DistanceType> ) );
+	void *objectMem = Q_malloc( sizeof( CloneableGraphBuilder<DistanceType> ) );
 	if( !objectMem ) {
 		return nullptr;
 	}

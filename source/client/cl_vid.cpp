@@ -54,8 +54,6 @@ static bool vid_initialized;
 static bool vid_app_active;
 static bool vid_app_minimized;
 
-static mempool_t *vid_ref_mempool = NULL;
-
 // These are system specific functions
 // wrapper around R_Init
 rserr_t VID_Sys_Init( const char *applicationName, const char *screenshotsPrefix, int startupColor, const int *iconXPM,
@@ -297,7 +295,6 @@ static void VID_UnloadRefresh( void ) {
 
 	RF_Shutdown( false );
 	vid_ref_active = false;
-	Mem_FreePool( &vid_ref_mempool );
 }
 
 /*
@@ -546,7 +543,7 @@ void VID_InitModes( void ) {
 		Sys_Error( "Failed to get video modes" );
 	}
 
-	vid_modes = (vidmode_t *)Mem_ZoneMalloc( numModes * sizeof( vidmode_t ) );
+	vid_modes = (vidmode_t *)Q_malloc( numModes * sizeof( vidmode_t ) );
 	VID_GetSysModes( vid_modes );
 	qsort( vid_modes, numModes, sizeof( vidmode_t ), ( int ( * )( const void *, const void * ) )VID_CompareModes );
 
@@ -624,7 +621,7 @@ void VID_Shutdown( void ) {
 	Cmd_RemoveCommand( "vid_restart" );
 	Cmd_RemoveCommand( "vid_modelist" );
 
-	Mem_ZoneFree( vid_modes );
+	Q_free( vid_modes );
 
 	vid_initialized = false;
 }

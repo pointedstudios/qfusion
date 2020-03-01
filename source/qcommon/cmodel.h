@@ -119,7 +119,7 @@ int CM_NumLeafs( const cmodel_state_t *cms );
 const vec3_t *CM_GetLeafBounds( const cmodel_state_t *cms, int leafNum );
 
 //
-cmodel_state_t *CM_New( void *mempool );
+cmodel_state_t *CM_New();
 
 void CM_AddReference( cmodel_state_t *cms );
 void CM_ReleaseReference( cmodel_state_t *cms );

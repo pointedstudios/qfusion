@@ -1312,7 +1312,7 @@ void CG_Draw2DView( void ) {
 	}
 
 	if( cg.motd && ( cg.time > cg.motd_time ) ) {
-		CG_Free( cg.motd );
+		Q_free(   cg.motd );
 		cg.motd = NULL;
 	}
 

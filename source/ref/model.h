@@ -419,11 +419,6 @@ uint8_t     *Mod_ClusterPVS( int cluster, model_t *model );
 unsigned int Mod_Handle( const model_t *mod );
 model_t     *Mod_ForHandle( unsigned int elem );
 
-// force 16-bytes alignment for all memory chunks allocated for model data
-#define     Mod_Malloc( mod, size ) _Mem_AllocExt( ( mod )->mempool, size, 16, 1, MEMPOOL_REFMODULE, 0, __FILE__, __LINE__ )
-#define     Mod_Realloc( data, size ) _Mem_Realloc( data, size, __FILE__, __LINE__ )
-#define     Mod_MemFree( data ) _Mem_Free( data, MEMPOOL_REFMODULE, 0, __FILE__, __LINE__ )
-
 void        Mod_StripLODSuffix( char *name );
 
 void        Mod_Modellist_f( void );

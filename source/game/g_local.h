@@ -630,21 +630,11 @@ void G_InitEdict( edict_t *e );
 edict_t *G_Spawn( void );
 void G_FreeEdict( edict_t *e );
 
-void G_LevelInitPool( size_t size );
-void G_LevelFreePool( void );
-void *_G_LevelMalloc( size_t size, const char *filename, int fileline );
-void _G_LevelFree( void *data, const char *filename, int fileline );
-char *_G_LevelCopyString( const char *in, const char *filename, int fileline );
-void G_LevelGarbageCollect( void );
-
 void G_StringPoolInit( void );
 const char *_G_RegisterLevelString( const char *string, const char *filename, int fileline );
 #define G_RegisterLevelString( in ) _G_RegisterLevelString( in, __FILE__, __LINE__ )
 
 char *G_AllocCreateNamesList( const char *path, const char *extension, const char separator );
-
-char *_G_CopyString( const char *in, const char *filename, int fileline );
-#define G_CopyString( in ) _G_CopyString( in, __FILE__, __LINE__ )
 
 void G_ProjectSource( vec3_t point, vec3_t distance, vec3_t forward, vec3_t right, vec3_t result );
 
@@ -1018,14 +1008,6 @@ int G_BoxSlideMove( edict_t *ent, int contentmask, float slideBounce, float fric
 //
 // g_main.c
 //
-
-// memory management
-#define G_Malloc( size ) trap_MemAlloc( size, __FILE__, __LINE__ )
-#define G_Free( mem ) trap_MemFree( mem, __FILE__, __LINE__ )
-
-#define G_LevelMalloc( size ) _G_LevelMalloc( ( size ), __FILE__, __LINE__ )
-#define G_LevelFree( data ) _G_LevelFree( ( data ), __FILE__, __LINE__ )
-#define G_LevelCopyString( in ) _G_LevelCopyString( ( in ), __FILE__, __LINE__ )
 
 int G_API( void );
 
@@ -2098,3 +2080,8 @@ inline bool IgnoreFilter::Ignores( const edict_t *target, const edict_t *source 
 	}
 	return e.GetClientBit( PLAYERNUM( source ) );
 }
+
+void *Q_malloc( size_t size );
+void *Q_realloc( void *buf, size_t newsize );
+void Q_free( void *buf );
+char *Q_strdup( const char *str );

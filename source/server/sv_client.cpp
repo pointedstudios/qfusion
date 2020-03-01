@@ -53,7 +53,7 @@ void SV_ClientCloseDownload( client_t *client ) {
 		FS_FCloseFile( client->download.file );
 	}
 	if( client->download.name ) {
-		Mem_ZoneFree( client->download.name );
+		Q_free( client->download.name );
 	}
 	memset( &client->download, 0, sizeof( client->download ) );
 }
@@ -715,7 +715,7 @@ static void SV_BeginDownload_f( client_t *client ) {
 	client->download.timeout = svs.realtime + 1000 * 60 * 60; // this is web download timeout
 
 	alloc_size = sizeof( char ) * ( strlen( uploadname ) + 1 );
-	client->download.name = (char *)Mem_ZoneMalloc( alloc_size );
+	client->download.name = (char *)Q_malloc( alloc_size );
 	Q_strncpyz( client->download.name, uploadname, alloc_size );
 
 	Com_Printf( "Offering %s to %s\n", client->download.name, client->name );
@@ -726,7 +726,7 @@ static void SV_BeginDownload_f( client_t *client ) {
 			goto local_download;
 		} else {
 			alloc_size = sizeof( char ) * ( strlen( sv_uploads_baseurl->string ) + 1 );
-			url = (char *)Mem_TempMalloc( alloc_size );
+			url = (char *)Q_malloc( alloc_size );
 			Q_snprintfz( url, alloc_size, "%s/", sv_uploads_baseurl->string );
 		}
 	} else if( SV_IsDemoDownloadRequest( requestname ) && ( local_http || sv_uploads_demos_baseurl->string[0] != 0 ) ) {
@@ -734,12 +734,12 @@ static void SV_BeginDownload_f( client_t *client ) {
 		if( local_http ) {
 local_download:
 			alloc_size = sizeof( char ) * ( 6 + strlen( uploadname ) * 3 + 1 );
-			url = (char *)Mem_TempMalloc( alloc_size );
+			url = (char *)Q_malloc( alloc_size );
 			Q_snprintfz( url, alloc_size, "files/" );
 			Q_urlencode_unsafechars( uploadname, url + 6, alloc_size - 6 );
 		} else {
 			alloc_size = sizeof( char ) * ( strlen( sv_uploads_demos_baseurl->string ) + 1 );
-			url = (char *)Mem_TempMalloc( alloc_size );
+			url = (char *)Q_malloc( alloc_size );
 			Q_snprintfz( url, alloc_size, "%s/", sv_uploads_demos_baseurl->string );
 		}
 	} else {
@@ -754,7 +754,7 @@ local_download:
 	SV_SendMessageToClient( client, &tmpMessage );
 
 	if( url ) {
-		Mem_TempFree( url );
+		Q_free( url );
 		url = NULL;
 	}
 }

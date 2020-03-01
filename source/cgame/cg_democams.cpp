@@ -144,7 +144,7 @@ static cg_democam_t *CG_Democam_RegisterCam( int type ) {
 	}
 
 	if( cam == NULL ) {
-		cam = ( cg_democam_t * )CG_Malloc( sizeof( cg_democam_t ) );
+		cam = ( cg_democam_t * )Q_malloc( sizeof( cg_democam_t ) );
 		cam->next = cg_cams_headnode;
 		cg_cams_headnode = cam;
 	}
@@ -178,7 +178,7 @@ static void CG_Democam_UnregisterCam( cg_democam_t *cam ) {
 	// headnode shortcut
 	if( cg_cams_headnode == cam ) {
 		cg_cams_headnode = cg_cams_headnode->next;
-		CG_Free( cam );
+		Q_free(   cam );
 		return;
 	}
 
@@ -188,7 +188,7 @@ static void CG_Democam_UnregisterCam( cg_democam_t *cam ) {
 		if( tcam->next == cam ) {
 			tcam->next = cam->next;
 
-			CG_Free( cam );
+			Q_free(   cam );
 			break;
 		}
 		tcam = tcam->next;
@@ -255,7 +255,7 @@ static cg_subtitle_t *CG_Democam_RegisterSubtitle( void ) {
 	}
 
 	if( sub == NULL ) {
-		sub = ( cg_subtitle_t * )CG_Malloc( sizeof( cg_subtitle_t ) );
+		sub = ( cg_subtitle_t * )Q_malloc( sizeof( cg_subtitle_t ) );
 		sub->next = cg_subs_headnode;
 		cg_subs_headnode = sub;
 	}
@@ -280,9 +280,9 @@ static void CG_Democam_UnregisterSubtitle( cg_subtitle_t *sub ) {
 	if( cg_subs_headnode == sub ) {
 		cg_subs_headnode = cg_subs_headnode->next;
 		if( sub->text ) {
-			CG_Free( sub->text );
+			Q_free(   sub->text );
 		}
-		CG_Free( sub );
+		Q_free(   sub );
 		return;
 	}
 
@@ -293,9 +293,9 @@ static void CG_Democam_UnregisterSubtitle( cg_subtitle_t *sub ) {
 			tsub->next = sub->next;
 
 			if( sub->text ) {
-				CG_Free( sub->text );
+				Q_free(   sub->text );
 			}
-			CG_Free( sub );
+			Q_free(   sub );
 			break;
 		}
 		tsub = tsub->next;
@@ -469,7 +469,7 @@ bool CG_LoadRecamScriptFile( char *filename ) {
 	if( !filehandle || filelen < 1 ) {
 		FS_FCloseFile( filehandle );
 	} else {
-		buf = ( uint8_t * )CG_Malloc( filelen + 1 );
+		buf = ( uint8_t * )Q_malloc( filelen + 1 );
 		filelen = FS_Read( buf, filelen, filehandle );
 		FS_FCloseFile( filehandle );
 	}
@@ -503,7 +503,7 @@ bool CG_LoadRecamScriptFile( char *filename ) {
 				break;
 			}
 			sub->maxDuration = (unsigned int)atoi( token );
-			sub->text = CG_CopyString( COM_ParseExt( &ptr, true ) );
+			sub->text = Q_strdup( COM_ParseExt( &ptr, true ) );
 
 			linecount = 0;
 		} else {
@@ -549,7 +549,7 @@ bool CG_LoadRecamScriptFile( char *filename ) {
 		}
 	}
 
-	CG_Free( buf );
+	Q_free(   buf );
 	if( linecount != 0 ) {
 		Com_Printf( "CG_LoadRecamScriptFile: Invalid script. Ignored\n" );
 		CG_Democam_FreeCams();
@@ -1306,9 +1306,9 @@ static void CG_AddSub_Cmd_f( void ) {
 			}
 		}
 
-		sub->text = CG_CopyString( str );
+		sub->text = Q_strdup( str );
 	} else {
-		sub->text = CG_CopyString( "" );
+		sub->text = Q_strdup( "" );
 	}
 }
 
@@ -1336,9 +1336,9 @@ static void CG_AddPrint_Cmd_f( void ) {
 			}
 		}
 
-		sub->text = CG_CopyString( str );
+		sub->text = Q_strdup( str );
 	} else {
-		sub->text = CG_CopyString( "" );
+		sub->text = Q_strdup( "" );
 	}
 
 	sub->highprint = true;
@@ -1550,11 +1550,11 @@ void CG_SaveCam_Cmd_f( void ) {
 		int custom_name_size;
 
 		custom_name_size = sizeof( char ) * ( strlen( "demos/" ) + strlen( Cmd_Argv( 1 ) ) + strlen( ".cam" ) + 1 );
-		customName = ( char * )CG_Malloc( custom_name_size );
+		customName = ( char * )Q_malloc( custom_name_size );
 		Q_snprintfz( customName, custom_name_size, "demos/%s", Cmd_Argv( 1 ) );
 		COM_ReplaceExtension( customName, ".cam", custom_name_size );
 		CG_SaveRecamScriptFile( customName );
-		CG_Free( customName );
+		Q_free(   customName );
 		return;
 	}
 
@@ -1575,7 +1575,7 @@ void CG_Democam_ImportCams_f( void ) {
 
 	// see if there is any script for this demo, and load it
 	name_size = sizeof( char ) * ( strlen( "demos/" ) + strlen( Cmd_Argv( 1 ) ) + strlen( ".cam" ) + 1 );
-	customName = ( char * )CG_Malloc( name_size );
+	customName = ( char * )Q_malloc( name_size );
 	Q_snprintfz( customName, name_size, "demos/%s", Cmd_Argv( 1 ) );
 	COM_ReplaceExtension( customName, ".cam", name_size );
 	if( CG_LoadRecamScriptFile( customName ) ) {
@@ -1653,7 +1653,7 @@ void CG_DemocamInit( void ) {
 
 	// see if there is any script for this demo, and load it
 	name_size = sizeof( char ) * ( strlen( cgs.demoName ) + strlen( ".cam" ) + 1 );
-	demoscriptname = ( char * )CG_Malloc( name_size );
+	demoscriptname = ( char * )Q_malloc( name_size );
 	Q_snprintfz( demoscriptname, name_size, "%s", cgs.demoName );
 	COM_ReplaceExtension( demoscriptname, ".cam", name_size );
 
@@ -1669,7 +1669,7 @@ void CG_DemocamInit( void ) {
 	}
 
 	// check for a sound stream file
-	cgs.demoAudioStream = ( char * )CG_Malloc( name_size );
+	cgs.demoAudioStream = ( char * )Q_malloc( name_size );
 	Q_snprintfz( cgs.demoAudioStream, name_size, "%s", cgs.demoName );
 	COM_ReplaceExtension( cgs.demoAudioStream, ".wav", name_size );
 	if( FS_FOpenFile( cgs.demoAudioStream, NULL, FS_READ ) != -1 ) {
@@ -1682,7 +1682,7 @@ void CG_DemocamInit( void ) {
 	}
 
 	if( !hassoundstream ) {
-		CG_Free( cgs.demoAudioStream );
+		Q_free(   cgs.demoAudioStream );
 		cgs.demoAudioStream = NULL;
 	}
 }
@@ -1705,7 +1705,7 @@ void CG_DemocamShutdown( void ) {
 
 	CG_Democam_FreeCams();
 	CG_Democam_FreeSubtitles();
-	CG_Free( demoscriptname );
+	Q_free(   demoscriptname );
 	demoscriptname = NULL;
 }
 

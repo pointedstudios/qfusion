@@ -102,8 +102,8 @@ void CL_Stop_f( void ) {
 	}
 
 	cls.demo.file = 0; // file id
-	Mem_ZoneFree( cls.demo.filename );
-	Mem_ZoneFree( cls.demo.name );
+	Q_free( cls.demo.filename );
+	Q_free( cls.demo.name );
 	cls.demo.filename = NULL;
 	cls.demo.name = NULL;
 	cls.demo.recording = false;
@@ -157,7 +157,7 @@ void CL_Record_f( void ) {
 	//
 	demoname = Cmd_Argv( 1 );
 	name_size = sizeof( char ) * ( strlen( "demos/" ) + strlen( demoname ) + strlen( APP_DEMO_EXTENSION_STR ) + 1 );
-	name = (char *)Mem_ZoneMalloc( name_size );
+	name = (char *)Q_malloc( name_size );
 
 	Q_snprintfz( name, name_size, "demos/%s", demoname );
 	COM_SanitizeFilePath( name );
@@ -167,13 +167,13 @@ void CL_Record_f( void ) {
 		if( !silent ) {
 			Com_Printf( "Invalid filename.\n" );
 		}
-		Mem_ZoneFree( name );
+		Q_free( name );
 		return;
 	}
 
 	if( FS_FOpenFile( name, &cls.demo.file, FS_WRITE | SNAP_DEMO_GZ ) == -1 ) {
 		Com_Printf( "Error: Couldn't create the demo file.\n" );
-		Mem_ZoneFree( name );
+		Q_free( name );
 		return;
 	}
 
@@ -185,7 +185,7 @@ void CL_Record_f( void ) {
 	cls.demo.filename = name;
 	cls.demo.recording = true;
 	cls.demo.basetime = cls.demo.duration = cls.demo.time = 0;
-	cls.demo.name = ZoneCopyString( demoname );
+	cls.demo.name = Q_strdup( demoname );
 
 	// don't start saving messages until a non-delta compressed message is received
 	CL_AddReliableCommand( "nodelta" ); // request non delta compressed frame from server
@@ -265,9 +265,9 @@ void CL_DemoCompleted( void ) {
 
 	cls.demo.playing = false;
 	cls.demo.basetime = cls.demo.duration = cls.demo.time = 0;
-	Mem_ZoneFree( cls.demo.filename );
+	Q_free( cls.demo.filename );
 	cls.demo.filename = NULL;
-	Mem_ZoneFree( cls.demo.name );
+	Q_free( cls.demo.name );
 	cls.demo.name = NULL;
 
 	Com_SetDemoPlaying( false );
@@ -372,11 +372,11 @@ static void CL_StartDemo( const char *demoname, bool pause_on_stop ) {
 	int tempdemofilehandle = 0, tempdemofilelen = -1;
 
 	// have to copy the argument now, since next actions will lose it
-	servername = TempCopyString( demoname );
+	servername = Q_strdup( demoname );
 	COM_SanitizeFilePath( servername );
 
 	name_size = sizeof( char ) * ( strlen( "demos/" ) + strlen( servername ) + strlen( APP_DEMO_EXTENSION_STR ) + 1 );
-	name = (char *)Mem_TempMalloc( name_size );
+	name = (char *)Q_malloc( name_size );
 
 	Q_snprintfz( name, name_size, "demos/%s", servername );
 	COM_DefaultExtension( name, APP_DEMO_EXTENSION_STR, name_size );
@@ -399,8 +399,8 @@ static void CL_StartDemo( const char *demoname, bool pause_on_stop ) {
 	if( !tempdemofilehandle ) {
 		Com_Printf( "No valid demo file found\n" );
 		FS_FCloseFile( tempdemofilehandle );
-		Mem_TempFree( name );
-		Mem_TempFree( servername );
+		Q_free( name );
+		Q_free( servername );
 		return;
 	}
 
@@ -416,7 +416,7 @@ static void CL_StartDemo( const char *demoname, bool pause_on_stop ) {
 	demofilelentotal = tempdemofilelen;
 	demofilelen = demofilelentotal;
 
-	cls.servername = ZoneCopyString( COM_FileBase( servername ) );
+	cls.servername = Q_strdup( COM_FileBase( servername ) );
 	COM_StripExtension( cls.servername );
 
 	CL_SetClientState( CA_HANDSHAKE );
@@ -427,16 +427,16 @@ static void CL_StartDemo( const char *demoname, bool pause_on_stop ) {
 	cls.demo.pause_on_stop = pause_on_stop;
 	cls.demo.play_ignore_next_frametime = false;
 	cls.demo.play_jump = false;
-	cls.demo.filename = ZoneCopyString( name );
-	cls.demo.name = ZoneCopyString( servername );
+	cls.demo.filename = Q_strdup( name );
+	cls.demo.name = Q_strdup( servername );
 
 	CL_PauseDemo( false );
 
 	// set up for timedemo settings
 	memset( &cl.timedemo, 0, sizeof( cl.timedemo ) );
 
-	Mem_TempFree( name );
-	Mem_TempFree( servername );
+	Q_free( name );
+	Q_free( servername );
 }
 
 /*
@@ -547,7 +547,7 @@ void CL_PlayDemoToAvi_f( void ) {
 			CL_StopDemoAviDump();
 		}
 	} else if( Cmd_Argc() == 2 ) {
-		char *tempname = TempCopyString( Cmd_Argv( 1 ) );
+		char *tempname = Q_strdup( Cmd_Argv( 1 ) );
 
 		CL_StartDemo( tempname, false );
 
@@ -555,7 +555,7 @@ void CL_PlayDemoToAvi_f( void ) {
 			cls.demo.pending_avi = true;
 		}
 
-		Mem_TempFree( tempname );
+		Q_free( tempname );
 	} else {
 		Com_Printf( "Usage: %sdemoavi <demoname>%s or %sdemoavi%s while playing a demo\n",
 					S_COLOR_YELLOW, S_COLOR_WHITE, S_COLOR_YELLOW, S_COLOR_WHITE );
@@ -574,7 +574,7 @@ size_t CL_ReadDemoMetaData( const char *demopath, char *meta_data, size_t meta_d
 	}
 
 	// have to copy the argument now, since next actions will lose it
-	servername = TempCopyString( demopath );
+	servername = Q_strdup( demopath );
 	COM_SanitizeFilePath( servername );
 
 	// hack:
@@ -590,7 +590,7 @@ size_t CL_ReadDemoMetaData( const char *demopath, char *meta_data, size_t meta_d
 		int demofile, demolength;
 
 		name_size = sizeof( char ) * ( strlen( "demos/" ) + strlen( servername ) + strlen( APP_DEMO_EXTENSION_STR ) + 1 );
-		name = (char *)Mem_TempMalloc( name_size );
+		name = (char *)Q_malloc( name_size );
 
 		Q_snprintfz( name, name_size, "demos/%s", servername );
 		COM_DefaultExtension( name, APP_DEMO_EXTENSION_STR, name_size );
@@ -609,10 +609,10 @@ size_t CL_ReadDemoMetaData( const char *demopath, char *meta_data, size_t meta_d
 		}
 		FS_FCloseFile( demofile );
 
-		Mem_TempFree( name );
+		Q_free( name );
 	}
 
-	Mem_TempFree( servername );
+	Q_free( servername );
 
 	return meta_data_realsize;
 }

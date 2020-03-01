@@ -178,7 +178,7 @@ static void Com_ReopenConsoleLog( void ) {
 		char *name;
 
 		name_size = strlen( logconsole->string ) + strlen( ".log" ) + 1;
-		name = ( char* )Mem_TempMalloc( name_size );
+		name = ( char* )Q_malloc( name_size );
 		Q_strncpyz( name, logconsole->string, name_size );
 		COM_DefaultExtension( name, ".log", name_size );
 
@@ -187,7 +187,7 @@ static void Com_ReopenConsoleLog( void ) {
 			Q_snprintfz( errmsg, MAX_PRINTMSG, "Couldn't open: %s\n", name );
 		}
 
-		Mem_TempFree( name );
+		Q_free( name );
 	}
 
 	QMutex_Unlock( com_print_mutex );
@@ -754,14 +754,6 @@ int Com_GlobMatch( const char *pattern, const char *text, const bool casecmp ) {
 	return glob_match( pattern, text, casecmp );
 }
 
-char *_ZoneCopyString( const char *str, const char *filename, int fileline ) {
-	return _Mem_CopyString( zoneMemPool, str, filename, fileline );
-}
-
-char *_TempCopyString( const char *str, const char *filename, int fileline ) {
-	return _Mem_CopyString( tempMemPool, str, filename, fileline );
-}
-
 void Info_Print( char *s ) {
 	char key[512];
 	char value[512];
@@ -808,11 +800,11 @@ void Info_Print( char *s ) {
 /*
 * Com_AddPurePakFile
 */
-void Com_AddPakToPureList( purelist_t **purelist, const char *pakname, const unsigned checksum, mempool_t *mempool ) {
+void Com_AddPakToPureList( purelist_t **purelist, const char *pakname, const unsigned checksum ) {
 	purelist_t *purefile;
 	const size_t len = strlen( pakname ) + 1;
 
-	purefile = ( purelist_t* )Mem_Alloc( mempool ? mempool : zoneMemPool, sizeof( purelist_t ) + len );
+	purefile = ( purelist_t* )Q_malloc( sizeof( purelist_t ) + len );
 	purefile->filename = ( char * )( ( uint8_t * )purefile + sizeof( *purefile ) );
 	memcpy( purefile->filename, pakname, len );
 	purefile->checksum = checksum;
@@ -861,7 +853,7 @@ void Com_FreePureList( purelist_t **purelist ) {
 
 	while( purefile ) {
 		purelist_t *next = purefile->next;
-		Mem_Free( purefile );
+		Q_free( purefile );
 		purefile = next;
 	}
 
@@ -940,41 +932,39 @@ static void Com_Lag_f( void ) {
 }
 #endif
 
-/*
-* Q_malloc
-*
-* Just like malloc(), but die if allocation fails
-*/
 void *Q_malloc( size_t size ) {
-	void *buf = malloc( size );
+	// TODO: Ensure 16-byte alignment
+	// Zero memory as lots of old stuff rely on the old mempool behaviour
+	void *buf = std::calloc( size, 1 );
 
 	if( !buf ) {
-		Sys_Error( "Q_malloc: failed on allocation of %" PRIuPTR " bytes.\n", (uintptr_t)size );
+		throw std::bad_alloc();
 	}
 
 	return buf;
 }
 
-/*
-* Q_realloc
-*
-* Just like realloc(), but die if reallocation fails
-*/
 void *Q_realloc( void *buf, size_t newsize ) {
 	void *newbuf = realloc( buf, newsize );
 
 	if( !newbuf && newsize ) {
-		Sys_Error( "Q_realloc: failed on allocation of %" PRIuPTR " bytes.\n", (uintptr_t)newsize );
+		throw std::bad_alloc();
 	}
+
+	// TODO: Zero memory too? There's no portable way of doing that
 
 	return newbuf;
 }
 
-/*
-* Q_free
-*/
 void Q_free( void *buf ) {
-	free( buf );
+	std::free( buf );
+}
+
+char *Q_strdup( const char *str ) {
+	auto len = std::strlen( str );
+	auto *result = (char *)Q_malloc( len + 1 );
+	std::memcpy( result, str, len + 1 );
+	return result;
 }
 
 /*
@@ -1036,9 +1026,6 @@ void Qcommon_Init( int argc, char **argv ) {
 	// Required being able to call Com_Printf().
 	systemFeaturesHolder.EnsureInitialized();
 
-	// initialize memory manager
-	Memory_Init();
-
 	// prepare enough of the subsystems to handle
 	// cvar and command buffer management
 	COM_InitArgv( argc, argv );
@@ -1099,8 +1086,6 @@ void Qcommon_Init( int argc, char **argv ) {
 	//
 	// init commands and vars
 	//
-	Memory_InitCommands();
-
 	Qcommon_InitCommands();
 
 	host_speeds =       Cvar_Get( "host_speeds", "0", 0 );
@@ -1281,7 +1266,6 @@ void Qcommon_Shutdown( void ) {
 	Com_Autoupdate_Shutdown();
 
 	Qcommon_ShutdownCommands();
-	Memory_ShutdownCommands();
 
 	Com_CloseConsoleLog( true, true );
 
@@ -1294,7 +1278,6 @@ void Qcommon_Shutdown( void ) {
 	Cvar_Shutdown();
 	Cmd_Shutdown();
 	Cbuf_Shutdown();
-	Memory_Shutdown();
 
 	QMutex_Destroy( &com_failure_mutex );
 	QMutex_Destroy( &com_logline_mutex );

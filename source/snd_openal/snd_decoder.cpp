@@ -137,11 +137,11 @@ snd_stream_t *decoder_stream_init( snd_decoder_t *decoder ) {
 	snd_stream_t *stream;
 
 	// Allocate a stream
-	stream = (snd_stream_t *)S_Malloc( sizeof( snd_stream_t ) );
+	stream = (snd_stream_t *)Q_malloc( sizeof( snd_stream_t ) );
 	stream->decoder = decoder;
 	return stream;
 }
 
 void decoder_stream_shutdown( snd_stream_t *stream ) {
-	S_Free( stream );
+	Q_free( stream );
 }

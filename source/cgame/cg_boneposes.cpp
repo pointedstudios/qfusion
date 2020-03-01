@@ -62,7 +62,7 @@ static bonenode_t *CG_CreateBonesTreeNode( cgs_skeleton_t *skel, int bone ) {
 	int children[SKM_MAX_BONES];
 	bonenode_t *bonenode;
 
-	bonenode = (bonenode_t *)CG_Malloc( sizeof( bonenode_t ) );
+	bonenode = (bonenode_t *)Q_malloc( sizeof( bonenode_t ) );
 	bonenode->bonenum = bone;
 	if( bone != -1 ) {
 		skel->bones[bone].node = bonenode; // store a pointer in the linear array for fast first access.
@@ -80,7 +80,7 @@ static bonenode_t *CG_CreateBonesTreeNode( cgs_skeleton_t *skel, int bone ) {
 
 	bonenode->numbonechildren = count;
 	if( bonenode->numbonechildren ) {
-		bonenode->bonechildren = ( bonenode_t ** )CG_Malloc( sizeof( bonenode_t * ) * bonenode->numbonechildren );
+		bonenode->bonechildren = ( bonenode_t ** )Q_malloc( sizeof( bonenode_t * ) * bonenode->numbonechildren );
 		for( i = 0; i < bonenode->numbonechildren; i++ ) {
 			bonenode->bonechildren[i] = CG_CreateBonesTreeNode( skel, children[i] );
 		}
@@ -116,7 +116,7 @@ cgs_skeleton_t *CG_SkeletonForModel( struct model_s *model ) {
 	}
 
 	// allocate one huge array to hold our data
-	buffer = (uint8_t *)CG_Malloc( sizeof( cgs_skeleton_t ) + numBones * sizeof( cgs_bone_t ) +
+	buffer = (uint8_t *)Q_malloc( sizeof( cgs_skeleton_t ) + numBones * sizeof( cgs_bone_t ) +
 								   numFrames * ( sizeof( bonepose_t * ) + numBones * sizeof( bonepose_t ) ) );
 
 	skel = ( cgs_skeleton_t * )buffer; buffer += sizeof( cgs_skeleton_t );
@@ -406,7 +406,7 @@ static int TBC_Count;
 */
 void CG_InitTemporaryBoneposesCache( void ) {
 	TBC_Size = TBC_Block_Size;
-	TBC = ( bonepose_t * )CG_Malloc( sizeof( bonepose_t ) * TBC_Size );
+	TBC = ( bonepose_t * )Q_malloc( sizeof( bonepose_t ) * TBC_Size );
 	TBC_Count = 0;
 }
 
@@ -418,11 +418,11 @@ static void CG_ExpandTemporaryBoneposesCache( int num ) {
 
 	temp = TBC;
 
-	TBC = ( bonepose_t * )CG_Malloc( sizeof( bonepose_t ) * ( TBC_Size + std::max( num, TBC_Block_Size ) ) );
+	TBC = ( bonepose_t * )Q_malloc( sizeof( bonepose_t ) * ( TBC_Size + std::max( num, TBC_Block_Size ) ) );
 	memcpy( TBC, temp, sizeof( bonepose_t ) * TBC_Size );
 	TBC_Size += std::max( num, TBC_Block_Size );
 
-	CG_Free( temp );
+	Q_free(   temp );
 }
 
 /*
@@ -472,14 +472,14 @@ cgs_skeleton_t *CG_SetBoneposesForTemporaryEntity( entity_t *ent ) {
 * CG_FreeTemporaryBoneposesCache
 */
 void CG_FreeTemporaryBoneposesCache( void ) {
-	CG_Free( TBC );
+	Q_free(   TBC );
 	TBC_Size = 0;
 	TBC_Count = 0;
 
 	cgs_skeleton_t * nextSkel;
 	for( cgs_skeleton_t *skel = skel_headnode; skel; skel = nextSkel ) {
 		nextSkel = skel->next;
-		CG_Free( skel );
+		Q_free(   skel );
 	}
 
 	skel_headnode = nullptr;

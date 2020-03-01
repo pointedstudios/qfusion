@@ -131,7 +131,7 @@ bool ParallelComputationHost::AreAllTasksCompleted( const PartialTask *thisThrea
 inline void ParallelComputationHost::DestroyTask( PartialTask *task ) {
 	assert( task );
 	task->~PartialTask();
-	S_Free( task );
+	Q_free( task );
 }
 
 void ParallelComputationHost::DestroyHeldTasks() {

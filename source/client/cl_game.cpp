@@ -24,8 +24,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 static void *cge = nullptr;
 
-static mempool_t *cl_gamemodulepool;
-
 static void *module_handle;
 
 static int cg_load_seq = 1;
@@ -99,14 +97,6 @@ void NET_GetCurrentState( int64_t *incomingAcknowledged, int64_t *outgoingSequen
 	}
 }
 
-void *CG_MemAlloc( size_t size, const char *filename, int fileline ) {
-	return _Mem_Alloc( cl_gamemodulepool, size, MEMPOOL_CLIENTGAME, 0, filename, fileline );
-}
-
-void CG_MemFree( void *data, const char *filename, int fileline ) {
-	_Mem_Free( data, MEMPOOL_CLIENTGAME, 0, filename, fileline );
-}
-
 /*
 * CL_GameModule_Init
 */
@@ -117,8 +107,6 @@ void CL_GameModule_Init( void ) {
 	SoundSystem::Instance()->StopAllSounds( SoundSystem::StopAndClear | SoundSystem::StopMusic );
 
 	CL_GameModule_Shutdown();
-
-	cl_gamemodulepool = _Mem_AllocPool( NULL, "Client Game Progs", MEMPOOL_CLIENTGAME, __FILE__, __LINE__ );
 
 	SCR_EnableQuickMenu( false );
 
@@ -158,7 +146,6 @@ void CL_GameModule_Shutdown( void ) {
 	cls.cgameActive = false;
 
 	CG_Shutdown();
-	Mem_FreePool( &cl_gamemodulepool );
 	Com_UnloadGameLibrary( &module_handle );
 	cge = NULL;
 }

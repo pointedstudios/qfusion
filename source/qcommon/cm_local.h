@@ -124,7 +124,6 @@ typedef struct {
 
 struct cmodel_state_s {
 	int instance_refcount;      // how much users does this cmodel_state_t instance have
-	struct mempool_s *mempool;
 
 	const bspFormatDesc_t *cmap_bspFormat;
 

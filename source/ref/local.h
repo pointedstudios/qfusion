@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../qcommon/qfiles.h"
 #include "../qcommon/bsp.h"
 #include "../qcommon/patch.h"
+#include "../qcommon/qcommon.h"
 
 #ifdef ALIGN
 #undef ALIGN
@@ -649,33 +650,6 @@ void        R_BatchCoronaSurf(  const entity_t *e, const shader_t *shader, const
 // r_main.c
 //
 #define R_FASTSKY() ( r_fastsky->integer || rf.viewcluster == -1 || mapConfig.skipSky )
-
-extern mempool_t *r_mempool;
-
-#ifndef MEMPOOL_REFMODULE
-#define MEMPOOL_REFMODULE ( 256 )
-#endif
-
-ATTRIBUTE_MALLOC void *_Mem_AllocExt( mempool_t *pool, size_t size, size_t aligment, int z, int musthave, int canthave, const char *filename, int fileline );
-ATTRIBUTE_MALLOC void *_Mem_Alloc( mempool_t *pool, size_t size, int musthave, int canthave, const char *filename, int fileline );
-void *_Mem_Realloc( void *data, size_t size, const char *filename, int fileline );
-void _Mem_Free( void *data, int musthave, int canthave, const char *filename, int fileline );
-mempool_t *_Mem_AllocPool( mempool_t *parent, const char *name, int flags, const char *filename, int fileline );
-mempool_t *_Mem_AllocTempPool( const char *name, const char *filename, int fileline );
-void _Mem_FreePool( mempool_t **pool, int musthave, int canthave, const char *filename, int fileline );
-void _Mem_EmptyPool( mempool_t *pool, int musthave, int canthave, const char *filename, int fileline );
-char *_Mem_CopyString( mempool_t *pool, const char *in, const char *filename, int fileline );
-
-#define R_Malloc( size ) R_Malloc_( size, __FILE__, __LINE__ )
-#define R_Realloc( data, size ) _Mem_Realloc( data, size, __FILE__, __LINE__ )
-#define R_Free( data ) _Mem_Free( data, MEMPOOL_REFMODULE, 0, __FILE__, __LINE__ )
-#define R_AllocPool( parent, name ) _Mem_AllocPool( parent, name, MEMPOOL_REFMODULE, __FILE__, __LINE__ )
-#define R_FreePool( pool ) _Mem_FreePool( pool, MEMPOOL_REFMODULE, 0, __FILE__, __LINE__ )
-#define R_MallocExt( pool,size,align,z ) _Mem_AllocExt( pool,size,align,z,MEMPOOL_REFMODULE,0,__FILE__,__LINE__ )
-
-ATTRIBUTE_MALLOC void * R_Malloc_( size_t size, const char *filename, int fileline );
-char        *R_CopyString_( const char *in, const char *filename, int fileline );
-#define     R_CopyString( in ) R_CopyString_( in,__FILE__,__LINE__ )
 
 int         R_LoadFile_( const char *path, int flags, void **buffer, const char *filename, int fileline );
 void        R_FreeFile_( void *buffer, const char *filename, int fileline );

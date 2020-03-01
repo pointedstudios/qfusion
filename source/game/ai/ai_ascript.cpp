@@ -425,7 +425,7 @@ static void objectAiDefenceSpot_setAlertMessage( AiDefenceSpot *spot, asstring_t
         return;
     }
 
-    spot->alertMessage = G_LevelCopyString( message->buffer );
+    spot->alertMessage = G_RegisterLevelString( message->buffer );
 }
 
 static const asBehavior_t asAiDefenceSpot_ObjectBehaviors[] =

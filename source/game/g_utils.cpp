@@ -22,254 +22,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "g_local.h"
 
-/*
-==============================================================================
-
-ZONE MEMORY ALLOCATION
-
-There is never any space between memblocks, and there will never be two
-contiguous free memblocks.
-
-The rover can be left pointing at a non-empty block.
-
-Ported over from Quake 1 and Quake 3.
-==============================================================================
-*/
-
-#define TAG_FREE    0
-#define TAG_LEVEL   1
-
-#define ZONEID      0x1d4a11
-#define MINFRAGMENT 64
-
-typedef struct alignas( 16 )memblock_s
-{
-	struct memblock_s       *next, *prev;
-	int size;               // including the header and possibly tiny fragments
-	int tag;                // a tag of 0 is a free block
-	int id;                 // should be ZONEID
-} memblock_t;
-
-typedef struct
-{
-	int size;           // total bytes malloced, including header
-	int count, used;
-	memblock_t blocklist;       // start / end cap for linked list
-	memblock_t  *rover;
-} memzone_t;
-
-static memzone_t *levelzone;
-
-/*
-* G_Z_ClearZone
-*/
-static void G_Z_ClearZone( memzone_t *zone, int size ) {
-	memblock_t  *block;
-
-	// set the entire zone to one free block
-	zone->blocklist.next = zone->blocklist.prev = block =
-													  (memblock_t *)( (uint8_t *)zone + sizeof( memzone_t ) );
-	zone->blocklist.tag = 1;    // in use block
-	zone->blocklist.id = 0;
-	zone->blocklist.size = 0;
-	zone->size = size;
-	zone->rover = block;
-	zone->used = 0;
-	zone->count = 0;
-
-	block->prev = block->next = &zone->blocklist;
-	block->tag = 0;         // free block
-	block->id = ZONEID;
-	block->size = size - sizeof( memzone_t );
-}
-
-/*
-* G_Z_Free
-*/
-static void G_Z_Free( void *ptr, const char *filename, int fileline ) {
-	memblock_t *block, *other;
-	memzone_t *zone;
-
-	if( !ptr ) {
-		G_Error( "G_Z_Free: NULL pointer" );
-	}
-
-	block = (memblock_t *) ( (uint8_t *)ptr - sizeof( memblock_t ) );
-	if( block->id != ZONEID ) {
-		G_Error( "G_Z_Free: freed a pointer without ZONEID (file %s at line %i)", filename, fileline );
-	}
-	if( block->tag == 0 ) {
-		G_Error( "G_Z_Free: freed a freed pointer (file %s at line %i)", filename, fileline );
-	}
-
-	// check the memory trash tester
-	if( *(int *)( (uint8_t *)block + block->size - 4 ) != ZONEID ) {
-		G_Error( "G_Z_Free: memory block wrote past end" );
-	}
-
-	zone = levelzone;
-	zone->used -= block->size;
-	zone->count--;
-
-	block->tag = 0;     // mark as free
-
-	other = block->prev;
-	if( !other->tag ) {
-		// merge with previous free block
-		other->size += block->size;
-		other->next = block->next;
-		other->next->prev = other;
-		if( block == zone->rover ) {
-			zone->rover = other;
-		}
-		block = other;
-	}
-
-	other = block->next;
-	if( !other->tag ) {
-		// merge the next free block onto the end
-		block->size += other->size;
-		block->next = other->next;
-		block->next->prev = block;
-		if( other == zone->rover ) {
-			zone->rover = block;
-		}
-	}
-}
-
-/*
-* G_Z_TagMalloc
-*/
-static void *G_Z_TagMalloc( int size, int tag, const char *filename, int fileline ) {
-	int extra;
-	memblock_t *start, *rover, *newb, *base;
-	memzone_t *zone;
-
-	if( !tag ) {
-		G_Error( "G_Z_TagMalloc: tried to use a 0 tag (file %s at line %i)", filename, fileline );
-	}
-
-	//
-	// scan through the block list looking for the first free block
-	// of sufficient size
-	//
-	size += sizeof( memblock_t ); // account for size of block header
-	size += 4;                  // space for memory trash tester
-	size = ( size + 15 ) & ~15;     // align to 16-byte boundary
-
-	zone = levelzone;
-	base = rover = zone->rover;
-	start = base->prev;
-
-	do {
-		if( rover == start ) {  // scaned all the way around the list
-			return NULL;
-		}
-		if( rover->tag ) {
-			base = rover = rover->next;
-		} else {
-			rover = rover->next;
-		}
-	} while( base->tag || base->size < size );
-
-	//
-	// found a block big enough
-	//
-	extra = base->size - size;
-	if( extra > MINFRAGMENT ) {
-		// there will be a free fragment after the allocated block
-		newb = (memblock_t *) ( (uint8_t *)base + size );
-		newb->size = extra;
-		newb->tag = 0;          // free block
-		newb->prev = base;
-		newb->id = ZONEID;
-		newb->next = base->next;
-		newb->next->prev = newb;
-		base->next = newb;
-		base->size = size;
-	}
-
-	base->tag = tag;                // no longer a free block
-	zone->rover = base->next;   // next allocation will start looking here
-	zone->used += base->size;
-	zone->count++;
-	base->id = ZONEID;
-
-	// marker for memory trash testing
-	*(int *)( (uint8_t *)base + base->size - 4 ) = ZONEID;
-
-	return (void *) ( (uint8_t *)base + sizeof( memblock_t ) );
-}
-
-/*
-* G_Z_Malloc
-*/
-static void *G_Z_Malloc( int size, const char *filename, int fileline ) {
-	void    *buf;
-
-	buf = G_Z_TagMalloc( size, TAG_LEVEL, filename, fileline );
-	if( !buf ) {
-		G_Error( "G_Z_Malloc: failed on allocation of %i bytes", size );
-	}
-	memset( buf, 0, size );
-
-	return buf;
-}
-
-//==============================================================================
-
-/*
-* G_LevelInitPool
-*/
-void G_LevelInitPool( size_t size ) {
-	G_LevelFreePool();
-
-	levelzone = ( memzone_t * )G_Malloc( size );
-	G_Z_ClearZone( levelzone, size );
-}
-
-/*
-* G_LevelFreePool
-*/
-void G_LevelFreePool( void ) {
-	if( levelzone ) {
-		G_Free( levelzone );
-		levelzone = NULL;
-	}
-}
-
-/*
-* G_LevelMalloc
-*/
-void *_G_LevelMalloc( size_t size, const char *filename, int fileline ) {
-	return G_Z_Malloc( size, filename, fileline );
-}
-
-/*
-* G_LevelFree
-*/
-void _G_LevelFree( void *data, const char *filename, int fileline ) {
-	G_Z_Free( data, filename, fileline );
-}
-
-/*
-* G_LevelCopyString
-*/
-char *_G_LevelCopyString( const char *in, const char *filename, int fileline ) {
-	char *out;
-
-	out = ( char * )_G_LevelMalloc( strlen( in ) + 1, filename, fileline );
-	strcpy( out, in );
-	return out;
-}
-
-/*
-* G_LevelGarbageCollect
-*/
-void G_LevelGarbageCollect( void ) {
-	//G_Z_Print( levelzone );
-}
-
 //==============================================================================
 
 #define STRINGPOOL_SIZE         1024 * 1024
@@ -292,7 +44,7 @@ static g_poolstring_t *g_stringpool_hash[STRINGPOOL_HASH_SIZE];
 void G_StringPoolInit( void ) {
 	memset( g_stringpool_hash, 0, sizeof( g_stringpool_hash ) );
 
-	g_stringpool = ( uint8_t * )G_LevelMalloc( STRINGPOOL_SIZE );
+	g_stringpool = ( uint8_t * )Q_malloc( STRINGPOOL_SIZE );
 	g_stringpool_offset = 0;
 }
 
@@ -425,7 +177,7 @@ char *G_AllocCreateNamesList( const char *path, const char *extension, const cha
 	//
 
 	fulllength += 1;
-	list = ( char * )G_Malloc( fulllength );
+	list = ( char * )Q_malloc( fulllength );
 
 	i = 0;
 	length = 0;
@@ -682,15 +434,6 @@ float vectoyaw( vec3_t vec ) {
 	}
 
 	return yaw;
-}
-
-
-char *_G_CopyString( const char *in, const char *filename, int fileline ) {
-	char *out;
-
-	out = ( char * )trap_MemAlloc( strlen( in ) + 1, filename, fileline );
-	strcpy( out, in );
-	return out;
 }
 
 /*
@@ -2217,24 +1960,24 @@ static bool G_LoadFiredefFromFile( int weapon, firedef_t *firedef ) {
 	}
 
 	//load the script data into memory
-	data = G_Malloc( length + 1 );
+	data = Q_malloc( length + 1 );
 	trap_FS_Read( data, length, filenum );
 	trap_FS_FCloseFile( filenum );
 
 	if( !data[0] ) {
 		G_Printf( "Found empty script: %s.\n", filename );
-		G_Free( data );
+		Q_free( data );
 		return false;
 	}
 
 	//parse the file updating the firedef
 	if( !G_ParseFiredefFile( data, weapon, firedef ) ) {
 		G_Printf( "'InitWeapons': Error in definition file %s\n", filename );
-		G_Free( data );
+		Q_free( data );
 		return false;
 	}
 
-	G_Free( data );
+	Q_free( data );
 	return true;
 }
 #endif // WEAPONDEFS_FROM_DISK

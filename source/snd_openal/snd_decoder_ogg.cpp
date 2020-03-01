@@ -125,7 +125,7 @@ static bool read_ogg_header( OggVorbis_File *vorbisfile, snd_info_t *info ) {
 }
 
 static void decoder_ogg_stream_shutdown( snd_stream_t *stream ) {
-	S_Free( stream->ptr );
+	Q_free( stream->ptr );
 	decoder_stream_shutdown( stream );
 }
 
@@ -238,7 +238,7 @@ void *decoder_ogg_load( const char *filename, snd_info_t *info ) {
 		return NULL;
 	}
 
-	buffer = (char *)S_Malloc( info->size );
+	buffer = (char *)Q_malloc( info->size );
 
 	bytes_read_total = 0;
 	do {
@@ -255,7 +255,7 @@ void *decoder_ogg_load( const char *filename, snd_info_t *info ) {
 	qov_clear( &vorbisfile ); // Does FS_FCloseFile
 	if( !bytes_read_total ) {
 		Com_Printf( "Error reading .ogg file: %s\n", filename );
-		S_Free( buffer );
+		Q_free( buffer );
 		return NULL;
 	}
 
@@ -274,7 +274,7 @@ snd_stream_t *decoder_ogg_open( const char *filename, bool *delay ) {
 	}
 
 	stream->isUrl = FS_IsUrl( filename );
-	stream->ptr = S_Malloc( sizeof( snd_ogg_stream_t ) );
+	stream->ptr = Q_malloc( sizeof( snd_ogg_stream_t ) );
 
 	ogg_stream = (snd_ogg_stream_t *)stream->ptr;
 	ogg_stream->vorbisfile = NULL;
@@ -307,7 +307,7 @@ bool decoder_ogg_cont_open( snd_stream_t *stream ) {
 	ov_callbacks callbacks = { ovcb_read, ovcb_seek, ovcb_close, ovcb_tell };
 
 	ogg_stream = (snd_ogg_stream_t *)stream->ptr;
-	ogg_stream->vorbisfile = (OggVorbis_File *)S_Malloc( sizeof( *ogg_stream->vorbisfile ) );
+	ogg_stream->vorbisfile = (OggVorbis_File *)Q_malloc( sizeof( *ogg_stream->vorbisfile ) );
 
 	if( stream->isUrl ) {
 		callbacks.seek_func = NULL;
@@ -368,7 +368,7 @@ void decoder_ogg_close( snd_stream_t *stream ) {
 
 	if( ogg_stream->vorbisfile ) {
 		qov_clear( ogg_stream->vorbisfile ); // Does FS_FCloseFile
-		S_Free( ogg_stream->vorbisfile );
+		Q_free( ogg_stream->vorbisfile );
 	} else if( ogg_stream->filenum ) {
 		FS_FCloseFile( ogg_stream->filenum );
 	}

@@ -164,7 +164,7 @@ static void SV_Web_ResetStream( sv_http_stream_t *stream ) {
 	if( stream->content &&
 		( stream->content < stream->header_buf
 		  || stream->content >= stream->header_buf + sizeof( stream->header_buf ) ) ) {
-		Mem_Free( stream->content );
+		Q_free( stream->content );
 	}
 
 	stream->content_range.begin = stream->content_range.end = 0;
@@ -179,20 +179,20 @@ static void SV_Web_ResetStream( sv_http_stream_t *stream ) {
 */
 static void SV_Web_ResetRequest( sv_http_request_t *request ) {
 	if( request->method_str ) {
-		Mem_Free( request->method_str );
+		Q_free( request->method_str );
 		request->method_str = NULL;
 	}
 	if( request->resource ) {
-		Mem_Free( request->resource );
+		Q_free( request->resource );
 		request->resource = NULL;
 	}
 	if( request->http_ver ) {
-		Mem_Free( request->http_ver );
+		Q_free( request->http_ver );
 		request->http_ver = NULL;
 	}
 
 	if( request->clientSession ) {
-		Mem_Free( request->clientSession );
+		Q_free( request->clientSession );
 		request->clientSession = NULL;
 	}
 
@@ -221,7 +221,7 @@ static uint64_t SV_Web_GetNewRequestId( void ) {
 */
 static void SV_Web_ResetResponse( sv_http_response_t *response ) {
 	if( response->filename ) {
-		Mem_Free( response->filename );
+		Q_free( response->filename );
 		response->filename = NULL;
 	}
 	if( response->file ) {
@@ -234,7 +234,7 @@ static void SV_Web_ResetResponse( sv_http_response_t *response ) {
 
 	response->content_state = CONTENT_STATE_DEFAULT;
 	if( response->content ) {
-		Mem_Free( response->content );
+		Q_free( response->content );
 		response->content = NULL;
 	}
 	response->content_length = 0;
@@ -332,7 +332,7 @@ bool SV_Web_AddGameClient( const char *session, int clientNum, const netadr_t *n
 		return false;
 	}
 
-	client = (http_game_client_t *)Mem_ZoneMalloc( sizeof( *client ) );
+	client = (http_game_client_t *)Q_malloc( sizeof( *client ) );
 	if( !client ) {
 		return false;
 	}
@@ -346,7 +346,7 @@ bool SV_Web_AddGameClient( const char *session, int clientNum, const netadr_t *n
 	QMutex_Unlock( sv_http_clients_mutex );
 
 	if( trie_error != TRIE_OK ) {
-		Mem_ZoneFree( client );
+		Q_free( client );
 		return false;
 	}
 
@@ -372,7 +372,7 @@ void SV_Web_RemoveGameClient( const char *session ) {
 		return;
 	}
 
-	Mem_ZoneFree( client );
+	Q_free( client );
 }
 
 /*
@@ -590,13 +590,13 @@ unsigned SV_Web_HandleOutQueryCmd( void *pcmd ) {
 	sv_http_response_t *response = (sv_http_response_t *)cmd->response;
 
 	if( !response ) {
-		Mem_Free( cmd->content );
+		Q_free( cmd->content );
 		return sizeof( *cmd );
 	}
 
 	if( response->content_state != CONTENT_STATE_AWAITING || response->request_id != cmd->request_id ) {
 		// outdated?
-		Mem_Free( cmd->content );
+		Q_free( cmd->content );
 		return sizeof( *cmd );
 	}
 
@@ -688,7 +688,7 @@ static void SV_Web_ParseStartLine( sv_http_request_t *request, char *line ) {
 		request->error = HTTP_RESP_BAD_REQUEST;
 	}
 
-	request->method_str = ZoneCopyString( token );
+	request->method_str = Q_strdup( token );
 
 	token = ptr + 1;
 	while( *token <= ' ' || *token == '/' ) {
@@ -701,7 +701,7 @@ static void SV_Web_ParseStartLine( sv_http_request_t *request, char *line ) {
 	}
 	*ptr = '\0';
 
-	request->resource = ZoneCopyString( *token ? token : "/" );
+	request->resource = Q_strdup( *token ? token : "/" );
 	Q_urldecode( request->resource, request->resource, strlen( request->resource ) + 1 );
 
 	// split resource into filepath and query string
@@ -715,7 +715,7 @@ static void SV_Web_ParseStartLine( sv_http_request_t *request, char *line ) {
 	while( *token <= ' ' ) {
 		token++;
 	}
-	request->http_ver = ZoneCopyString( token );
+	request->http_ver = Q_strdup( token );
 
 	// check for HTTP/1.1 and greater
 	if( strncmp( request->http_ver, "HTTP/", 5 ) ) {
@@ -801,7 +801,7 @@ static void SV_Web_AnalyzeHeader( sv_http_request_t *request, const char *key, c
 	} else if( !Q_stricmp( key, "X-Client" ) ) {
 		request->clientNum = atoi( value );
 	} else if( !Q_stricmp( key, "X-Session" ) ) {
-		request->clientSession = ZoneCopyString( value );
+		request->clientSession = Q_strdup( value );
 	} else if( !Q_stricmp( key, sv_http_upstream_realip_header->string ) ) {
 		NET_StringToAddress( value, &request->realAddr );
 	}
@@ -946,7 +946,7 @@ static void SV_Web_ReceiveRequest( socket_t *socket, sv_http_connection_t *con )
 					request->stream.content = request->stream.header_buf;
 					request->stream.content_p = request->stream.header_buf_p;
 				} else {
-					request->stream.content = (char *)Mem_ZoneMallocExt( request->stream.content_length + 1, 0 );
+					request->stream.content = (char *)Q_malloc( request->stream.content_length + 1 );
 					request->stream.content[request->stream.content_length] = 0;
 					memcpy( request->stream.content, request->stream.header_buf, request->stream.header_buf_p );
 					request->stream.content_p = request->stream.header_buf_p;
@@ -1039,7 +1039,7 @@ static void SV_Web_RouteRequest( const sv_http_request_t *request, sv_http_respo
 		const char *filename, *extension;
 
 		filename = resource + 6;
-		response->filename = ZoneCopyString( filename );
+		response->filename = Q_strdup( filename );
 
 		if( request->method == HTTP_METHOD_GET || request->method == HTTP_METHOD_HEAD ) {
 			// check for malicious URL's
@@ -1193,7 +1193,7 @@ static void SV_Web_RespondToQuery( sv_http_connection_t *con ) {
 		if( content_length + header_length < sizeof( resp_stream->header_buf ) ) {
 			resp_stream->content = resp_stream->header_buf + header_length;
 		} else {
-			resp_stream->content = (char *)Mem_ZoneMallocExt( content_length, 0 );
+			resp_stream->content = (char *)Q_malloc( content_length );
 		}
 		memcpy( resp_stream->content, content, content_length );
 	}

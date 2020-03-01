@@ -145,14 +145,14 @@ void SV_Demo_Start_f( void ) {
 	// real name
 	demofilename_size =
 		sizeof( char ) * ( strlen( SV_DEMO_DIR ) + 1 + strlen( Cmd_Args() ) + strlen( APP_DEMO_EXTENSION_STR ) + 1 );
-	svs.demo.filename = (char *)Mem_ZoneMalloc( demofilename_size );
+	svs.demo.filename = (char *)Q_malloc( demofilename_size );
 
 	Q_snprintfz( svs.demo.filename, demofilename_size, "%s/%s", SV_DEMO_DIR, Cmd_Args() );
 
 	COM_SanitizeFilePath( svs.demo.filename );
 
 	if( !COM_ValidateRelativeFilename( svs.demo.filename ) ) {
-		Mem_ZoneFree( svs.demo.filename );
+		Q_free( svs.demo.filename );
 		svs.demo.filename = NULL;
 		Com_Printf( "Invalid filename.\n" );
 		return;
@@ -162,15 +162,15 @@ void SV_Demo_Start_f( void ) {
 
 	// temp name
 	demofilename_size = sizeof( char ) * ( strlen( svs.demo.filename ) + strlen( ".rec" ) + 1 );
-	svs.demo.tempname = (char *)Mem_ZoneMalloc( demofilename_size );
+	svs.demo.tempname = (char *)Q_malloc( demofilename_size );
 	Q_snprintfz( svs.demo.tempname, demofilename_size, "%s.rec", svs.demo.filename );
 
 	// open it
 	if( FS_FOpenFile( svs.demo.tempname, &svs.demo.file, FS_WRITE | SNAP_DEMO_GZ ) == -1 ) {
 		Com_Printf( "Error: Couldn't open file: %s\n", svs.demo.tempname );
-		Mem_ZoneFree( svs.demo.filename );
+		Q_free( svs.demo.filename );
 		svs.demo.filename = NULL;
-		Mem_ZoneFree( svs.demo.tempname );
+		Q_free( svs.demo.tempname );
 		svs.demo.tempname = NULL;
 		return;
 	}
@@ -246,9 +246,9 @@ static void SV_Demo_Stop( bool cancel, bool silent ) {
 
 	SNAP_FreeClientFrames( &svs.demo.client );
 
-	Mem_ZoneFree( svs.demo.filename );
+	Q_free( svs.demo.filename );
 	svs.demo.filename = NULL;
-	Mem_ZoneFree( svs.demo.tempname );
+	Q_free( svs.demo.tempname );
 	svs.demo.tempname = NULL;
 }
 
@@ -298,7 +298,7 @@ void SV_Demo_Purge_f( void ) {
 	}
 
 	extlen = strlen( APP_DEMO_EXTENSION_STR );
-	buffer = (char *)Mem_TempMalloc( bufSize );
+	buffer = (char *)Q_malloc( bufSize );
 	FS_GetFileList( SV_DEMO_DIR, APP_DEMO_EXTENSION_STR, buffer, bufSize, 0, 0 );
 
 	numautodemos = 0;
@@ -324,7 +324,7 @@ void SV_Demo_Purge_f( void ) {
 	}
 
 	if( numautodemos <= maxautodemos ) {
-		Mem_TempFree( buffer );
+		Q_free( buffer );
 		return;
 	}
 
@@ -358,7 +358,7 @@ void SV_Demo_Purge_f( void ) {
 		}
 	}
 
-	Mem_TempFree( buffer );
+	Q_free( buffer );
 }
 
 /*

@@ -803,8 +803,8 @@ static int G_SanitizeUserString( char *string, size_t size ) {
 	if( colorless_size < strlen( string ) + 1 ) {
 		colorless_size = strlen( string ) + 1;
 
-		G_Free( colorless );
-		colorless = ( char * )G_Malloc( colorless_size );
+		Q_free( colorless );
+		colorless = ( char * )Q_malloc( colorless_size );
 	}
 
 	Q_strncpyz( colorless, COM_RemoveColorTokens( string ), colorless_size );

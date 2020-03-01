@@ -165,7 +165,7 @@ static bool read_wav_header( int filenum, snd_info_t *info ) {
 }
 
 static void decoder_wav_stream_shutdown( snd_stream_t *stream ) {
-	S_Free( stream->ptr );
+	Q_free( stream->ptr );
 	decoder_stream_shutdown( stream );
 }
 
@@ -207,10 +207,10 @@ void *decoder_wav_load( const char *filename, snd_info_t *info ) {
 		return NULL;
 	}
 
-	buffer = S_Malloc( info->size );
+	buffer = Q_malloc( info->size );
 	read = FS_Read( buffer, info->size, filenum );
 	if( read != info->size ) {
-		S_Free( buffer );
+		Q_free( buffer );
 		FS_FCloseFile( filenum );
 		Com_Printf( "Error reading .wav file: %s\n", filename );
 		return NULL;
@@ -241,7 +241,7 @@ snd_stream_t *decoder_wav_open( const char *filename, bool *delay ) {
 		*delay = false;
 	}
 
-	stream->ptr = S_Malloc( sizeof( snd_wav_stream_t ) );
+	stream->ptr = Q_malloc( sizeof( snd_wav_stream_t ) );
 	wav_stream = (snd_wav_stream_t *)stream->ptr;
 
 	FS_FOpenFile( filename, &wav_stream->filenum, FS_READ | FS_NOSIZE );

@@ -23,9 +23,9 @@
 #include "qcommon.h"
 
 ///////////////////////
-#define WMALLOC( x )      _Mem_Alloc( wswcurl_mempool, x, 0, 0, __FILE__, __LINE__ )
+#define WMALLOC( x )      Q_malloc( x )
 #define WREALLOC( x, y )  ( ( x ) ? Mem_Realloc( ( x ), ( y ) ) : WMALLOC( y ) )
-#define WFREE( x )        Mem_Free( x )
+#define WFREE( x )        Q_free( x )
 
 // Curl setopt wrapper
 #define CURLSETOPT( c,r,o,v ) { if( c ) { r = qcurl_easy_setopt( c,o,v ); if( r ) { printf( "\nCURL ERROR: %d: %s\n", r, qcurl_easy_strerror( r ) ); qcurl_easy_cleanup( c ) ; c = NULL; } } }
@@ -121,7 +121,6 @@ static qmutex_t *http_requests_mutex = NULL;
 static CURLM *curlmulti = NULL;     // Curl MULTI handle
 static int curlmulti_num_handles = 0;
 
-static struct mempool_s *wswcurl_mempool;
 static CURL *curldummy = NULL;
 static qmutex_t *curldummy_mutex = NULL;
 
@@ -509,12 +508,12 @@ static void wswcurl_crypto_lockcallback( int mode, int type, const char *file, i
 }
 #endif
 
+static bool initialized = false;
+
 void wswcurl_init( void ) {
-	if( wswcurl_mempool ) {
+	if( initialized ) {
 		return;
 	}
-
-	wswcurl_mempool = Mem_AllocPool( NULL, "Curl" );
 
 	// HTTP proxy settings
 	http_proxy = Cvar_Get( "http_proxy", "", CVAR_ARCHIVE );
@@ -546,7 +545,7 @@ void wswcurl_init( void ) {
 }
 
 void wswcurl_cleanup( void ) {
-	if( !wswcurl_mempool ) {
+	if( !initialized ) {
 		return;
 	}
 
@@ -587,8 +586,6 @@ void wswcurl_cleanup( void ) {
 	}
 
 	wswcurl_unloadlib();
-
-	Mem_FreePool( &wswcurl_mempool );
 }
 
 int wswcurl_perform() {
@@ -689,12 +686,12 @@ static int wswcurl_debug_callback( CURL *curl, curl_infotype infotype, char *buf
 		return 0;
 	}
 
-	temp = (char *)Mem_TempMalloc( buf_size + 1 );
+	temp = (char *)Q_malloc( buf_size + 1 );
 	memcpy( temp, buf, buf_size );
 
 	Com_Printf( "%s\n", temp );
 
-	Mem_TempFree( temp );
+	Q_free( temp );
 
 	return 0;
 }

@@ -211,14 +211,14 @@ void LeafPropsCache::Shutdown() {
 
 void LeafPropsCache::ResetExistingState() {
 	if( leafProps ) {
-		S_Free( leafProps );
+		Q_free( leafProps );
 	}
 	if( leafPresets ) {
-		S_Free( leafPresets );
+		Q_free( leafPresets );
 	}
 
-	leafProps = (LeafProps *)S_Malloc( sizeof( LeafProps ) * NumLeafs() );
-	leafPresets = (PresetHandle *)S_Malloc( sizeof( PresetHandle ) * NumLeafs() );
+	leafProps = (LeafProps *)Q_malloc( sizeof( LeafProps ) * NumLeafs() );
+	leafPresets = (PresetHandle *)Q_malloc( sizeof( PresetHandle ) * NumLeafs() );
 }
 
 bool LeafPropsCache::TryReadFromFile( int fsFlags ) {
@@ -368,8 +368,8 @@ bool LeafPropsCache::ComputeNewState( bool fastAndCoarse ) {
 	// Do not spawn more tasks than the actual number of leaves. Otherwise it fails for very small maps
 	const int suggestedNumTasks = std::min( actualNumLeafs, std::min( computationHost->SuggestNumberOfTasks(), 64 ) );
 	for( int i = 0; i < suggestedNumTasks; ++i ) {
-		void *taskMem = S_Malloc( sizeof( LeafPropsComputationTask ) );
-		// Never really happens with S_Malloc()... Use just malloc() instead?
+		void *taskMem = Q_malloc( sizeof( LeafPropsComputationTask ) );
+		// Never really happens with Q_malloc()... Use just malloc() instead?
 		if( !taskMem ) {
 			break;
 		}

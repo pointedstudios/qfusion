@@ -87,10 +87,6 @@ static bool cbuf_initialized = false;
 
 static size_t cbuf_text_size, cbuf_text_head, cbuf_text_tail;
 static char *cbuf_text;
-static mempool_t *cbuf_pool;
-
-#define Cbuf_Malloc( size ) Mem_Alloc( cbuf_pool, size )
-#define Cbuf_Free( data ) Mem_Free( data )
 
 /*
 * Cbuf_Init
@@ -98,10 +94,8 @@ static mempool_t *cbuf_pool;
 void Cbuf_Init( void ) {
 	assert( !cbuf_initialized );
 
-	cbuf_pool = Mem_AllocPool( NULL, "Command buffer" );
-
 	cbuf_text_size = MIN_CMD_TEXT_SIZE;
-	cbuf_text = (char *)Cbuf_Malloc( cbuf_text_size );
+	cbuf_text = (char *)Q_malloc( cbuf_text_size );
 	cbuf_text_head = 0;
 	cbuf_text_tail = 0;
 
@@ -116,23 +110,21 @@ void Cbuf_Shutdown( void ) {
 		return;
 	}
 
-	Cbuf_Free( cbuf_text );
+	Q_free( cbuf_text );
 	cbuf_text = NULL;
 	cbuf_text_size = 0;
 	cbuf_text_head = 0;
 	cbuf_text_tail = 0;
 
-	Mem_FreePool( &cbuf_pool );
-
 	cbuf_initialized = false;
 }
 
 /*
-* Cbuf_FreeSpace
+* Q_freeSpace
 *
 * Frees some space, if we have too big buffer in use
 */
-static void Cbuf_FreeSpace( void ) {
+static void Q_freeSpace( void ) {
 	char *old;
 	size_t used, old_size;
 
@@ -147,7 +139,7 @@ static void Cbuf_FreeSpace( void ) {
 		old_size = cbuf_text_size;
 
 		cbuf_text_size = used + MIN_CMD_TEXT_SIZE;
-		cbuf_text = (char *)Cbuf_Malloc( cbuf_text_size );
+		cbuf_text = (char *)Q_malloc( cbuf_text_size );
 
 		if( cbuf_text_head >= cbuf_text_tail ) {
 			memcpy( cbuf_text, old + cbuf_text_tail, used );
@@ -158,7 +150,7 @@ static void Cbuf_FreeSpace( void ) {
 		cbuf_text_tail = 0;
 		cbuf_text_head = used;
 
-		Cbuf_Free( old );
+		Q_free( old );
 	}
 }
 
@@ -181,7 +173,7 @@ static void Cbuf_EnsureSpace( size_t size ) {
 
 	diff = ( size - free ) + MIN_CMD_TEXT_SIZE;
 	cbuf_text_size += diff;
-	cbuf_text = (char *)Mem_Realloc( cbuf_text, cbuf_text_size );
+	cbuf_text = (char *)Q_realloc( cbuf_text, cbuf_text_size );
 
 	if( cbuf_text_head < cbuf_text_tail ) {
 		memmove( cbuf_text + cbuf_text_tail + diff, cbuf_text + cbuf_text_tail, cbuf_text_size - diff - cbuf_text_tail );
@@ -314,7 +306,7 @@ void Cbuf_Execute( void ) {
 		}
 	}
 
-	Cbuf_FreeSpace();
+	Q_freeSpace();
 }
 
 
@@ -390,7 +382,7 @@ bool Cbuf_AddLateCommands( void ) {
 	}
 
 	text_size += 2; // '\n' and '\0' at the end
-	text = (char *)Cbuf_Malloc( (int)text_size );
+	text = (char *)Q_malloc( (int)text_size );
 	text[0] = 0;
 	for( i = 1; i < COM_Argc(); i++ ) {
 		if( COM_Argv( i )[0] == 0 ) {
@@ -407,7 +399,7 @@ bool Cbuf_AddLateCommands( void ) {
 	Q_strncatz( text, "\n", text_size );
 
 	Cbuf_AddText( text );
-	Cbuf_Free( text );
+	Q_free( text );
 
 	return true;
 }
@@ -438,7 +430,7 @@ static void Cmd_Exec_f( void ) {
 	}
 
 	name_size = sizeof( char ) * ( strlen( arg ) + strlen( ".cfg" ) + 1 );
-	name = (char *)Mem_TempMalloc( name_size );
+	name = (char *)Q_malloc( name_size );
 
 	Q_strncpyz( name, arg, name_size );
 	COM_SanitizeFilePath( name );
@@ -447,7 +439,7 @@ static void Cmd_Exec_f( void ) {
 		if( !silent ) {
 			Com_Printf( "Invalid filename\n" );
 		}
-		Mem_TempFree( name );
+		Q_free( name );
 		return;
 	}
 
@@ -462,7 +454,7 @@ static void Cmd_Exec_f( void ) {
 		if( !silent ) {
 			Com_Printf( "Couldn't execute: %s\n", name );
 		}
-		Mem_TempFree( name );
+		Q_free( name );
 		return;
 	}
 
@@ -478,7 +470,7 @@ static void Cmd_Exec_f( void ) {
 	}
 
 	FS_FreeFile( f );
-	Mem_TempFree( name );
+	Q_free( name );
 }
 
 /*
@@ -567,9 +559,9 @@ static void Cmd_Alias_f_( bool archive ) {
 			Com_Printf( "alias \"%s\" is \"%s" S_COLOR_WHITE "\"\n", a->name, a->value );
 			return;
 		}
-		Mem_ZoneFree( a->value );
+		Q_free( a->value );
 	} else {
-		a = (cmd_alias_t *)Mem_ZoneMalloc( (int) ( sizeof( cmd_alias_t ) + len + 1 ) );
+		a = (cmd_alias_t *)Q_malloc( (int) ( sizeof( cmd_alias_t ) + len + 1 ) );
 		a->name = (char *) ( (uint8_t *)a + sizeof( cmd_alias_t ) );
 		strcpy( a->name, s );
 		Trie_Insert( cmd_alias_trie, s, a );
@@ -589,7 +581,7 @@ static void Cmd_Alias_f_( bool archive ) {
 		}
 	}
 
-	a->value = ZoneCopyString( cmd );
+	a->value = Q_strdup( cmd );
 }
 
 /*
@@ -628,8 +620,8 @@ static void Cmd_Unalias_f( void ) {
 
 	assert( cmd_alias_trie );
 	if( Trie_Remove( cmd_alias_trie, s, (void **)&a ) == TRIE_OK ) {
-		Mem_ZoneFree( a->value );
-		Mem_ZoneFree( a );
+		Q_free( a->value );
+		Q_free( a );
 	} else {
 		Com_Printf( "Cmd_Unalias_f: %s not added\n", s );
 	}
@@ -648,8 +640,8 @@ static void Cmd_UnaliasAll_f( void ) {
 	Trie_Dump( cmd_alias_trie, "", TRIE_DUMP_VALUES, &dump );
 	for( i = 0; i < dump->size; ++i ) {
 		cmd_alias_t *const a = (cmd_alias_t *) dump->key_value_vector[i].value;
-		Mem_ZoneFree( a->value );
-		Mem_ZoneFree( a );
+		Q_free( a->value );
+		Q_free( a );
 	}
 	Trie_FreeDump( dump );
 	Trie_Clear( cmd_alias_trie );
@@ -797,9 +789,9 @@ void Cmd_TokenizeString( const char *text ) {
 			if( cmd_argv_sizes[cmd_argc] < size ) {
 				cmd_argv_sizes[cmd_argc] = std::min( size + 64, (size_t)MAX_TOKEN_CHARS );
 				if( cmd_argv[cmd_argc] ) {
-					Mem_ZoneFree( cmd_argv[cmd_argc] );
+					Q_free( cmd_argv[cmd_argc] );
 				}
-				cmd_argv[cmd_argc] = (char *)Mem_ZoneMalloc( cmd_argv_sizes[cmd_argc] );
+				cmd_argv[cmd_argc] = (char *)Q_malloc( cmd_argv_sizes[cmd_argc] );
 			}
 			strcpy( cmd_argv[cmd_argc], com_token );
 			cmd_argc++;
@@ -840,7 +832,7 @@ void Cmd_AddCommand( const char *cmd_name, xcommand_t function ) {
 		return;
 	}
 
-	cmd = (cmd_function_t *)Mem_ZoneMalloc( (int)( sizeof( cmd_function_t ) + strlen( cmd_name ) + 1 ) );
+	cmd = (cmd_function_t *)Q_malloc( (int)( sizeof( cmd_function_t ) + strlen( cmd_name ) + 1 ) );
 	cmd->name = (char *) ( (uint8_t *)cmd + sizeof( cmd_function_t ) );
 	strcpy( cmd->name, cmd_name );
 	cmd->function = function;
@@ -861,7 +853,7 @@ void Cmd_RemoveCommand( const char *cmd_name ) {
 	assert( cmd_function_trie );
 	assert( cmd_name );
 	if( Trie_Remove( cmd_function_trie, cmd_name, (void **)&cmd ) == TRIE_OK ) {
-		Mem_ZoneFree( cmd );
+		Q_free( cmd );
 	} else {
 		Com_Printf( "Cmd_RemoveCommand: %s not added\n", cmd_name );
 	}
@@ -937,7 +929,7 @@ char **Cmd_CompleteBuildList( const char *partial ) {
 	assert( cmd_function_trie );
 	assert( partial );
 	Trie_Dump( cmd_function_trie, partial, TRIE_DUMP_VALUES, &dump );
-	buf = (char **) Mem_TempMalloc( sizeof( char * ) * ( dump->size + 1 ) );
+	buf = (char **) Q_malloc( sizeof( char * ) * ( dump->size + 1 ) );
 	for( i = 0; i < dump->size; ++i )
 		buf[i] = ( (cmd_function_t *) ( dump->key_value_vector[i].value ) )->name;
 	buf[dump->size] = NULL;
@@ -1062,7 +1054,7 @@ char **Cmd_CompleteFileList( const char *partial, const char *basedir, const cha
 	buf_size =  ( total + 1 ) * sizeof( char * )    // resulting pointer list with NULL ending
 			   + total_size                         // actual strings
 			   + total * subdir_length;             // extra space to prepend subdirs
-	buf = ( char ** )Mem_TempMalloc( buf_size );
+	buf = ( char ** )Q_malloc( buf_size );
 	list = ( char * )buf + ( total + 1 ) * sizeof( char * );
 
 	// get all files in the directory
@@ -1170,7 +1162,7 @@ char **Cmd_CompleteAliasBuildList( const char *partial ) {
 	assert( cmd_alias_trie );
 	assert( partial );
 	Trie_Dump( cmd_alias_trie, partial, TRIE_DUMP_VALUES, &dump );
-	buf = (char **) Mem_TempMalloc( sizeof( char * ) * ( dump->size + 1 ) );
+	buf = (char **) Q_malloc( sizeof( char * ) * ( dump->size + 1 ) );
 	for( i = 0; i < dump->size; ++i )
 		buf[i] = ( (cmd_alias_t *) ( dump->key_value_vector[i].value ) )->name;
 	buf[dump->size] = NULL;
@@ -1360,7 +1352,7 @@ void Cmd_Shutdown( void ) {
 
 		// this is somewhat ugly IMO
 		for( i = 0; i < MAX_STRING_TOKENS && cmd_argv_sizes[i]; i++ ) {
-			Mem_ZoneFree( cmd_argv[i] );
+			Q_free( cmd_argv[i] );
 			cmd_argv_sizes[i] = 0;
 		}
 

@@ -248,14 +248,14 @@ AiSquad::AiSquad( AiSquadBasedTeam *parent_ )
 AiSquad::~AiSquad() {
 	if( squadEnemiesTracker ) {
 		squadEnemiesTracker->~SquadEnemiesTracker();
-		G_Free( squadEnemiesTracker );
+		Q_free( squadEnemiesTracker );
 	}
 }
 
 AiSquad::SquadEnemiesTracker *AiSquad::NewEnemiesTracker() {
 	float skillLevel = trap_Cvar_Value( "sv_skilllevel" ); // {0, 1, 2}
 	float skill = std::min( 1.0f, 0.33f * ( 0.1f + skillLevel + random() ) ); // (0..1)
-	void *mem = G_Malloc( sizeof( SquadEnemiesTracker ) );
+	void *mem = Q_malloc( sizeof( SquadEnemiesTracker ) );
 	return new( mem )SquadEnemiesTracker( this, skill );
 }
 
@@ -1436,7 +1436,7 @@ void AiSquadBasedTeam::AddToOrphansList( Bot *bot ) {
 }
 
 AiSquadBasedTeam *AiSquadBasedTeam::InstantiateTeam( int teamNum ) {
-	void *mem = G_Malloc( sizeof( AiSquadBasedTeam ) );
+	void *mem = Q_malloc( sizeof( AiSquadBasedTeam ) );
 	return new( mem )AiSquadBasedTeam( teamNum );
 }
 
@@ -1445,13 +1445,13 @@ AiSquadBasedTeam *AiSquadBasedTeam::InstantiateTeam( int teamNum, const std::typ
 		return InstantiateTeam( teamNum );
 	}
 
-	void *mem = G_Malloc( sizeof( AiObjectiveBasedTeam ) );
+	void *mem = Q_malloc( sizeof( AiObjectiveBasedTeam ) );
 	return new( mem )AiObjectiveBasedTeam( teamNum );
 }
 
 AiSquadBasedTeam::PlayerAssistanceTracker::PlayerAssistanceTracker( const AiSquadBasedTeam *parent_ )
 	: parent( parent_ ) {
-	influenceScores = (int8_t *)G_Malloc( MAX_CLIENTS * MAX_CLIENTS * sizeof( int8_t ) );
+	influenceScores = (int8_t *)Q_malloc( MAX_CLIENTS * MAX_CLIENTS * sizeof( int8_t ) );
 	std::fill( std::begin( assistanceMillisLeft ), std::end( assistanceMillisLeft ), 0 );
 	std::fill( std::begin( assistedClientNum ), std::end( assistedClientNum ), -1 );
 }

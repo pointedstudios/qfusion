@@ -391,7 +391,7 @@ bool S_InitSources( int maxEntities, bool verbose ) {
 		return false;
 	}
 
-	entlist = ( sentity_t * )S_Malloc( sizeof( sentity_t ) * maxEntities );
+	entlist = ( sentity_t * )Q_malloc( sizeof( sentity_t ) * maxEntities );
 	max_ents = maxEntities;
 
 	src_inited = true;
@@ -418,7 +418,7 @@ void S_ShutdownSources( void ) {
 
 	memset( srclist, 0, sizeof( srclist ) );
 
-	S_Free( entlist );
+	Q_free( entlist );
 	entlist = NULL;
 
 	src_inited = false;

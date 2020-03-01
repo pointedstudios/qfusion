@@ -77,7 +77,7 @@ public:
 	 * Tries to add a task for execution.
 	 * The host must not be executing tasks at the moment of this call.
 	 * An ownership over the task lifetime (as an object) is always acquired.
-	 * A destructor and {@code S_Free()} will be called.
+	 * A destructor and {@code Q_free()} will be called.
 	 * @return true if the task has been successfully added.
 	 * @note the task will be destroyed immediately if the call failed.
 	 * This is to avoid managing tasks destruction in the caller code completely.

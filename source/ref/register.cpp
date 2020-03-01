@@ -30,8 +30,6 @@ glconfig_t glConfig;
 
 r_shared_t rsh;
 
-mempool_t *r_mempool;
-
 cvar_t *r_norefresh;
 cvar_t *r_drawentities;
 cvar_t *r_drawworld;
@@ -735,7 +733,7 @@ static unsigned R_GLVersionHash( const char *vendorString,
 			   strlen( versionString ) + strlen( ARCH ) + 1;
 
 	pos = 0;
-	tmp = (uint8_t *)R_Malloc( tmp_size );
+	tmp = (uint8_t *)Q_malloc( tmp_size );
 
 	csize = strlen( vendorString );
 	memcpy( tmp + pos, vendorString, csize );
@@ -756,7 +754,7 @@ static unsigned R_GLVersionHash( const char *vendorString,
 
 	hash = COM_SuperFastHash( tmp, tmp_size, tmp_size );
 
-	R_Free( tmp );
+	Q_free( tmp );
 
 	return hash;
 }
@@ -771,8 +769,6 @@ rserr_t R_Init( const char *applicationName, const char *screenshotPrefix, int s
 	const qgl_driverinfo_t *driver;
 	const char *dllname = "";
 	qgl_initerr_t initerr;
-
-	r_mempool = R_AllocPool( NULL, "Rendering Frontend" );
 
 	r_verbose = verbose;
 
@@ -815,8 +811,8 @@ init_qgl:
 	}
 
 	// FIXME: move this elsewhere?
-	glConfig.applicationName = R_CopyString( applicationName );
-	glConfig.screenshotPrefix = R_CopyString( screenshotPrefix );
+	glConfig.applicationName = Q_strdup( applicationName );
+	glConfig.screenshotPrefix = Q_strdup( screenshotPrefix );
 	glConfig.startupColor = startupColor;
 
 	return rserr_ok;
@@ -1069,6 +1065,4 @@ void R_Shutdown( bool verbose ) {
 
 	// shutdown our QGL subsystem
 	QGL_Shutdown();
-
-	R_FreePool( &r_mempool );
 }

@@ -185,7 +185,7 @@ NavEntitiesRegistry::NavEntitiesRegistry() {
 	const size_t storageSize = STORAGE_STRIDE * MAX_NAVENTS;
 	static_assert( lookupTableSize, "The assumption on alignment of remaining bytes is broken" );
 
-	auto *const mem = (uint8_t *)G_Malloc( storageSize + lookupTableSize );
+	auto *const mem = (uint8_t *)Q_malloc( storageSize + lookupTableSize );
 	entityToNavEntity = (NavEntity **)mem;
 	navEntsStorage = mem + lookupTableSize;
 

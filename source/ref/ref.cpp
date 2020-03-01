@@ -857,25 +857,25 @@ static void R_SetupFrame( void ) {
 			rf.worldModelSequence = rsh.worldModelSequence;
 
 			if( !rf.numWorldSurfVis ) {
-				rf.worldSurfVis = (unsigned char *)R_Malloc( rsh.worldBrushModel->numsurfaces * sizeof( *rf.worldSurfVis ) );
-				rf.worldSurfFullVis = (unsigned char *)R_Malloc( rsh.worldBrushModel->numsurfaces * sizeof( *rf.worldSurfVis ) );
+				rf.worldSurfVis = (unsigned char *)Q_malloc( rsh.worldBrushModel->numsurfaces * sizeof( *rf.worldSurfVis ) );
+				rf.worldSurfFullVis = (unsigned char *)Q_malloc( rsh.worldBrushModel->numsurfaces * sizeof( *rf.worldSurfVis ) );
 			} else if( rf.numWorldSurfVis < rsh.worldBrushModel->numsurfaces ) {
-				rf.worldSurfVis = (unsigned char *)R_Realloc( (void *)rf.worldSurfVis, rsh.worldBrushModel->numsurfaces * sizeof( *rf.worldSurfVis ) );
-				rf.worldSurfFullVis = (unsigned char *)R_Realloc( (void *)rf.worldSurfFullVis, rsh.worldBrushModel->numsurfaces * sizeof( *rf.worldSurfVis ) );
+				rf.worldSurfVis = (unsigned char *)Q_realloc( (void *)rf.worldSurfVis, rsh.worldBrushModel->numsurfaces * sizeof( *rf.worldSurfVis ) );
+				rf.worldSurfFullVis = (unsigned char *)Q_realloc( (void *)rf.worldSurfFullVis, rsh.worldBrushModel->numsurfaces * sizeof( *rf.worldSurfVis ) );
 			}
 			rf.numWorldSurfVis = rsh.worldBrushModel->numsurfaces;
 
 			if( !rf.numWorldLeafVis ) {
-				rf.worldLeafVis = (unsigned char *)R_Malloc( rsh.worldBrushModel->numvisleafs * sizeof( *rf.worldLeafVis ) );
+				rf.worldLeafVis = (unsigned char *)Q_malloc( rsh.worldBrushModel->numvisleafs * sizeof( *rf.worldLeafVis ) );
 			} else if( rf.numWorldLeafVis < rsh.worldBrushModel->numvisleafs ) {
-				rf.worldLeafVis = (unsigned char *)R_Realloc( (void *)rf.worldLeafVis, rsh.worldBrushModel->numvisleafs * sizeof( *rf.worldLeafVis ) );
+				rf.worldLeafVis = (unsigned char *)Q_realloc( (void *)rf.worldLeafVis, rsh.worldBrushModel->numvisleafs * sizeof( *rf.worldLeafVis ) );
 			}
 			rf.numWorldLeafVis = rsh.worldBrushModel->numvisleafs;
 
 			if( !rf.numWorldDrawSurfVis ) {
-				rf.worldDrawSurfVis = (unsigned char *)R_Malloc( rsh.worldBrushModel->numDrawSurfaces * sizeof( *rf.worldDrawSurfVis ) );
+				rf.worldDrawSurfVis = (unsigned char *)Q_malloc( rsh.worldBrushModel->numDrawSurfaces * sizeof( *rf.worldDrawSurfVis ) );
 			} else if( rf.numWorldDrawSurfVis < rsh.worldBrushModel->numDrawSurfaces ) {
-				rf.worldDrawSurfVis = (unsigned char *)R_Realloc( (void *)rf.worldDrawSurfVis, rsh.worldBrushModel->numDrawSurfaces * sizeof( *rf.worldDrawSurfVis ) );
+				rf.worldDrawSurfVis = (unsigned char *)Q_realloc( (void *)rf.worldDrawSurfVis, rsh.worldBrushModel->numDrawSurfaces * sizeof( *rf.worldDrawSurfVis ) );
 			}
 			rf.numWorldDrawSurfVis = rsh.worldBrushModel->numDrawSurfaces;
 
@@ -1596,25 +1596,6 @@ void R_LatLongToNorm( const uint8_t latlong[2], vec3_t out ) {
 }
 
 /*
-* R_CopyString
-*/
-ATTRIBUTE_MALLOC void *R_Malloc_( size_t size, const char *filename, int fileline ) {
-	return _Mem_AllocExt( r_mempool, size, 16, 1, MEMPOOL_REFMODULE, 0, filename, fileline );
-}
-
-/*
-* R_CopyString
-*/
-char *R_CopyString_( const char *in, const char *filename, int fileline ) {
-	char *out;
-
-	out = (char *)_Mem_AllocExt( r_mempool, ( strlen( in ) + 1 ), 0, 1, MEMPOOL_REFMODULE, 0, filename, fileline );
-	strcpy( out, in );
-
-	return out;
-}
-
-/*
 * R_LoadFile
 */
 int R_LoadFile_( const char *path, int flags, void **buffer, const char *filename, int fileline ) {
@@ -1639,7 +1620,7 @@ int R_LoadFile_( const char *path, int flags, void **buffer, const char *filenam
 		return len;
 	}
 
-	buf = ( uint8_t *)_Mem_AllocExt( r_mempool, len + 1, 16, 0, MEMPOOL_REFMODULE, 0, filename, fileline );
+	buf = ( uint8_t *)Q_malloc( len + 1 );
 	buf[len] = 0;
 	*buffer = buf;
 
@@ -1653,5 +1634,5 @@ int R_LoadFile_( const char *path, int flags, void **buffer, const char *filenam
 * R_FreeFile
 */
 void R_FreeFile_( void *buffer, const char *filename, int fileline ) {
-	_Mem_Free( buffer, MEMPOOL_REFMODULE, 0, filename, fileline );
+	Q_free( buffer );
 }

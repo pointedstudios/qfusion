@@ -40,8 +40,6 @@ static void RB_SelectTextureUnit( int tmu );
 void RB_Init( void ) {
 	memset( &rb, 0, sizeof( rb ) );
 
-	rb.mempool = R_AllocPool( NULL, "Rendering Backend" );
-
 	// set default OpenGL state
 	RB_SetGLDefaults();
 	rb.gl.scissor[2] = glConfig.width;
@@ -61,8 +59,6 @@ void RB_Init( void ) {
 */
 void RB_Shutdown( void ) {
 	RP_StorePrecacheList();
-
-	R_FreePool( &rb.mempool );
 }
 
 /*
@@ -658,7 +654,7 @@ void RB_RegisterStreamVBOs( void ) {
 		stream->vbo = R_CreateMeshVBO( &rb,
 									   MAX_STREAM_VBO_VERTS, MAX_STREAM_VBO_ELEMENTS, 0,
 									   vattribs[i], VBO_TAG_STREAM, 0 );
-		stream->vertexData = (uint8_t *)RB_Alloc( MAX_STREAM_VBO_VERTS * stream->vbo->vertexSize );
+		stream->vertexData = (uint8_t *)Q_malloc( MAX_STREAM_VBO_VERTS * stream->vbo->vertexSize );
 	}
 }
 

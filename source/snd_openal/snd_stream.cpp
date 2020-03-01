@@ -49,9 +49,9 @@ static const uint8_t *split_stereo( unsigned samples, int width, const uint8_t *
 	buf_size = samples * width * 2;
 	if( buf_size > splitmixbuf_size ) {
 		if( splitmixbuf ) {
-			S_Free( splitmixbuf );
+			Q_free( splitmixbuf );
 		}
-		splitmixbuf = (uint8_t *)S_Malloc( buf_size );
+		splitmixbuf = (uint8_t *)Q_malloc( buf_size );
 		splitmixbuf_size = buf_size;
 	}
 

@@ -135,7 +135,7 @@ public:
 
 inline char *G_Strdup( const char *str ) {
 	auto len = strlen( str );
-	char *mem = (char *)G_Malloc( len + 1 );
+	char *mem = (char *)Q_malloc( len + 1 );
 	memcpy( mem, str, len + 1 );
 	return mem;
 }
@@ -157,7 +157,7 @@ public:
 	}
 
 	~AiScriptWeightConfigVarGroup() override {
-		G_Free( const_cast<char *>( name ) );
+		Q_free( const_cast<char *>( name ) );
 	}
 
 	AiScriptWeightConfigVarGroup( const AiScriptWeightConfigVarGroup &that ) = delete;
@@ -281,7 +281,7 @@ public:
 		: AiWeightConfigVar( parent, G_Strdup( name_ ) ), scriptObject( scriptObject_ ) {}
 
 	~AiScriptWeightConfigVar() override {
-		G_Free( const_cast<char *>( name ) );
+		Q_free( const_cast<char *>( name ) );
 	}
 
 	AiScriptWeightConfigVar( const AiScriptWeightConfigVar &that ) = delete;

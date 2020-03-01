@@ -2969,7 +2969,7 @@ void Cmd_CG_PrintHudHelp_f( void ) {
 
 	Com_Printf( "- %sHUD scripts CONSTANT names\n-------------------------------%s\n", S_COLOR_YELLOW, S_COLOR_WHITE );
 	for( item = &itemdefs[1]; item->classname; item++ ) {
-		name = Q_strupr( CG_CopyString( item->name ) );
+		name = Q_strupr( Q_strdup( item->name ) );
 		p = name;
 		while( ( p = strchr( p, ' ' ) ) ) {
 			*p = '_';
@@ -3073,11 +3073,11 @@ static cg_layoutnode_t *CG_LayoutParseCommandNode( const char *token ) {
 		return NULL;
 	}
 
-	node = ( cg_layoutnode_t * )CG_Malloc( sizeof( cg_layoutnode_t ) );
+	node = ( cg_layoutnode_t * )Q_malloc( sizeof( cg_layoutnode_t ) );
 	node->type = LNODE_COMMAND;
 	node->integer = command->numparms;
 	node->value = 0.0f;
-	node->string = CG_CopyString( command->name );
+	node->string = Q_strdup( command->name );
 	node->func = command->func;
 	node->ifthread = NULL;
 	node->precache = command->precache;
@@ -3181,11 +3181,11 @@ static cg_layoutnode_t *CG_LayoutParseArgumentNode( const char *token ) {
 	}
 
 	// alloc
-	node = ( cg_layoutnode_t * )CG_Malloc( sizeof( cg_layoutnode_t ) );
+	node = ( cg_layoutnode_t * )Q_malloc( sizeof( cg_layoutnode_t ) );
 	node->type = type;
 	node->integer = atoi( valuetok );
 	node->value = atof( valuetok );
-	node->string = CG_CopyString( token );
+	node->string = Q_strdup( token );
 	node->func = NULL;
 	node->ifthread = NULL;
 	node->precache = false;
@@ -3241,10 +3241,10 @@ static void CG_RecurseFreeLayoutThread( cg_layoutnode_t *rootnode ) {
 		}
 
 		if( node->string ) {
-			CG_Free( node->string );
+			Q_free(   node->string );
 		}
 
-		CG_Free( node );
+		Q_free(   node );
 	}
 }
 
@@ -3625,7 +3625,7 @@ static char *CG_LoadHUDFile( char *path ) {
 	memset( rec_ptr, 0, sizeof( rec_ptr ) );
 
 	// Copy the path of the file to the first recursive level filename :)
-	rec_fn[rec_lvl] = ( char * )CG_Malloc( strlen( path ) + 1 );
+	rec_fn[rec_lvl] = ( char * )Q_malloc( strlen( path ) + 1 );
 	Q_strncpyz( rec_fn[rec_lvl], path, strlen( path ) + 1 );
 	while( 1 ) {
 		if( rec_lvl > rec_plvl ) {
@@ -3633,7 +3633,7 @@ static char *CG_LoadHUDFile( char *path ) {
 			if( !rec_fn[rec_lvl] ) {
 				rec_lvl--;
 			} else if( rec_fn[rec_lvl][0] == '\0' ) {
-				CG_Free( rec_fn[rec_lvl] );
+				Q_free(   rec_fn[rec_lvl] );
 				rec_fn[rec_lvl] = NULL;
 				rec_lvl--;
 			} else {
@@ -3643,7 +3643,7 @@ static char *CG_LoadHUDFile( char *path ) {
 					if( !Q_stricmp( rec_fn[rec_lvl], rec_fn[i] ) ) {
 						// Recursive file loading detected!!
 						Com_Printf( "HUD: WARNING: Detected recursive file inclusion: %s\n", rec_fn[rec_lvl] );
-						CG_Free( rec_fn[rec_lvl] );
+						Q_free(   rec_fn[rec_lvl] );
 						rec_fn[rec_lvl] = NULL;
 					}
 				}
@@ -3654,14 +3654,14 @@ static char *CG_LoadHUDFile( char *path ) {
 				len = FS_FOpenFile( rec_fn[rec_lvl], &f, FS_READ );
 				if( len > 0 ) {
 					rec_plvl = rec_lvl;
-					rec_buf[rec_lvl] = ( char * )CG_Malloc( len + 1 );
+					rec_buf[rec_lvl] = ( char * )Q_malloc( len + 1 );
 					rec_buf[rec_lvl][len] = '\0';
 					rec_ptr[rec_lvl] = rec_buf[rec_lvl];
 
 					// Now read the file
 					if( FS_Read( rec_buf[rec_lvl], len, f ) <= 0 ) {
-						CG_Free( rec_fn[rec_lvl] );
-						CG_Free( rec_buf[rec_lvl] );
+						Q_free(   rec_fn[rec_lvl] );
+						Q_free(   rec_buf[rec_lvl] );
 						rec_fn[rec_lvl] = NULL;
 						rec_buf[rec_lvl] = NULL;
 						if( rec_lvl > 0 ) {
@@ -3677,7 +3677,7 @@ static char *CG_LoadHUDFile( char *path ) {
 					} else if( rec_lvl > 0 ) {
 						Com_Printf( "HUD: WARNING: Could not include file: %s\n", rec_fn[rec_lvl] );
 					}
-					CG_Free( rec_fn[rec_lvl] );
+					Q_free(   rec_fn[rec_lvl] );
 					rec_fn[rec_lvl] = NULL;
 					rec_lvl--;
 				}
@@ -3689,10 +3689,10 @@ static char *CG_LoadHUDFile( char *path ) {
 		} else if( rec_lvl < rec_plvl ) {
 			// Free previous level buffer
 			if( rec_fn[rec_plvl] ) {
-				CG_Free( rec_fn[rec_plvl] );
+				Q_free(   rec_fn[rec_plvl] );
 			}
 			if( rec_buf[rec_plvl] ) {
-				CG_Free( rec_buf[rec_plvl] );
+				Q_free(   rec_buf[rec_plvl] );
 			}
 			rec_buf[rec_plvl] = NULL;
 			rec_ptr[rec_plvl] = NULL;
@@ -3717,18 +3717,18 @@ static char *CG_LoadHUDFile( char *path ) {
 				// Go to next recursive level and prepare it's filename :)
 				rec_lvl++;
 				i = strlen( "huds/" ) + strlen( token ) + strlen( ".hud" ) + 1;
-				rec_fn[rec_lvl] = ( char * )CG_Malloc( i );
+				rec_fn[rec_lvl] = ( char * )Q_malloc( i );
 				Q_snprintfz( rec_fn[rec_lvl], i, "huds/%s", token );
 				COM_DefaultExtension( rec_fn[rec_lvl], ".hud", i );
 				if( FS_FOpenFile( rec_fn[rec_lvl], NULL, FS_READ ) < 0 ) {
 					// File doesn't exist!
-					CG_Free( rec_fn[rec_lvl] );
+					Q_free(   rec_fn[rec_lvl] );
 					i = strlen( "huds/inc/" ) + strlen( token ) + strlen( ".hud" ) + 1;
-					rec_fn[rec_lvl] = ( char * )CG_Malloc( i );
+					rec_fn[rec_lvl] = ( char * )Q_malloc( i );
 					Q_snprintfz( rec_fn[rec_lvl], i, "huds/inc/%s", token );
 					COM_DefaultExtension( rec_fn[rec_lvl], ".hud", i );
 					if( FS_FOpenFile( rec_fn[rec_lvl], NULL, FS_READ ) < 0 ) {
-						CG_Free( rec_fn[rec_lvl] );
+						Q_free(   rec_fn[rec_lvl] );
 						rec_fn[rec_lvl] = NULL;
 						rec_lvl--;
 					}
@@ -3754,10 +3754,10 @@ static char *CG_LoadHUDFile( char *path ) {
 			if( ( retuse + len + 1 ) >= retlen ) {
 				// Enlarge token buffer by 1kb
 				retlen += 1024;
-				tmpbuf = ( char * )CG_Malloc( retlen );
+				tmpbuf = ( char * )Q_malloc( retlen );
 				if( retbuf ) {
 					memcpy( tmpbuf, retbuf, retuse );
-					CG_Free( retbuf );
+					Q_free(   retbuf );
 				}
 				retbuf = tmpbuf;
 				retbuf[retuse] = '\0';
@@ -3807,7 +3807,7 @@ static char *CG_LoadHUDFile( char *path ) {
     }
 
     // alloc a temp buffer according to size
-    temp_buffer = CG_Malloc( length + 1 );
+    temp_buffer = Q_malloc( length + 1 );
 
     // load layout file in memory
     trap_FS_Read( temp_buffer, length, f );
@@ -3830,7 +3830,7 @@ static char *CG_LoadHUDFile( char *path ) {
         //Com_Printf( "included: %s \n", toinclude );
 
         fipath_size = strlen("huds/inc/") + strlen(toinclude) + strlen(".hud") + 1;
-        fipath = CG_Malloc( fipath_size );
+        fipath = Q_malloc( fipath_size );
         Q_snprintfz( fipath, fipath_size, "huds/inc/%s", toinclude );
         COM_DefaultExtension( fipath, ".hud", fipath_size );
         fi_length = trap_FS_FOpenFile( fipath, &fi, FS_READ );
@@ -3849,7 +3849,7 @@ static char *CG_LoadHUDFile( char *path ) {
         }
         trap_FS_FCloseFile( fi );
 
-        CG_Free( fipath );
+        Q_free(   fipath );
         fipath = NULL;
         fipath_size = 0;
     } else {
@@ -3861,7 +3861,7 @@ static char *CG_LoadHUDFile( char *path ) {
 
     // second pass: we now have the needed size
     // alloc optimized buffer
-    opt_buffer = CG_Malloc( optimized_length + included_length + 1 );
+    opt_buffer = Q_malloc( optimized_length + included_length + 1 );
 
     // reparse all file and copy it
     parse=temp_buffer;
@@ -3874,7 +3874,7 @@ static char *CG_LoadHUDFile( char *path ) {
         toinclude=COM_ParseExt2( &parse, true, false );
 
         fipath_size = strlen("huds/inc/") + strlen(toinclude) + strlen(".hud") + 1;
-        fipath = CG_Malloc( fipath_size );
+        fipath = Q_malloc( fipath_size );
         Q_snprintfz( fipath, fipath_size, "huds/inc/%s", toinclude );
         COM_ReplaceExtension( fipath, ".hud", fipath_size );
         fi_length = trap_FS_FOpenFile( fipath, &fi, FS_READ );
@@ -3897,7 +3897,7 @@ static char *CG_LoadHUDFile( char *path ) {
         // reparse all lines from included file to skip include commands
 
         // alloc a temp buffer according to size
-        include_buffer = CG_Malloc( fi_length + 1 );
+        include_buffer = Q_malloc( fi_length + 1 );
 
         // load included layout file in memory
         trap_FS_Read( include_buffer, fi_length, fi );
@@ -3922,13 +3922,13 @@ static char *CG_LoadHUDFile( char *path ) {
         }
 
         // release memory
-        CG_Free( include_buffer );
+        Q_free(   include_buffer );
         }
 
         // close included file
         trap_FS_FCloseFile( fi );
 
-        CG_Free( fipath );
+        Q_free(   fipath );
         fipath = NULL;
         fipath_size = 0;
     } else {
@@ -3939,7 +3939,7 @@ static char *CG_LoadHUDFile( char *path ) {
     }
 
     // free temp buffer
-    CG_Free( temp_buffer );
+    Q_free(   temp_buffer );
 
     return opt_buffer;
    }
@@ -3968,7 +3968,7 @@ static void CG_LoadStatusBarFile( char *path ) {
 	CG_ParseLayoutScript( opt, cg.statusBar );
 
 	// Free the opt buffer!
-	CG_Free( opt );
+	Q_free(   opt );
 
 	// set up layout font as default system font
 	Q_strncpyz( layout_cursor_font_name, DEFAULT_SYSTEM_FONT_FAMILY, sizeof( layout_cursor_font_name ) );

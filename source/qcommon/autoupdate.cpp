@@ -26,7 +26,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #define AU_MemAlloc( s ) _AU_MemAlloc( s,__FILE__,__LINE__ )
 #define AU_MemFree( f ) _AU_MemFree( f,__FILE__,__LINE__ )
-#define AU_CopyString( s ) ZoneCopyString( s )
+#define AU_CopyString( s ) Q_strdup( s )
 
 typedef struct filedownload_s {
 	char *url;
@@ -55,14 +55,14 @@ static void (*au_newfiles_callback)( void );
 * AU_MemAlloc
 */
 static void *_AU_MemAlloc( size_t size, const char *filename, int fileline ) {
-	return _Mem_Alloc( zoneMemPool, size, 0, 0, filename, fileline );
+	return Q_malloc( size );
 }
 
 /*
 * AU_MemFree
 */
 static void _AU_MemFree( void *data, const char *filename, int fileline ) {
-	_Mem_Free( data, 0, 0, filename, fileline );
+	Q_free( data );
 }
 
 // ============================================================================
@@ -243,7 +243,7 @@ static void AU_FinishDownload( filedownload_t *fd_, int status ) {
 				size_t alloc_size;
 
 				alloc_size = strlen( filepath ) + strlen( ".bak" ) + 1;
-				backfile = (char *)Mem_TempMalloc( alloc_size );
+				backfile = (char *)Q_malloc( alloc_size );
 				Q_snprintfz( backfile, alloc_size, "%s.bak", filepath );
 
 				// if there is already a .bak file, destroy it
@@ -268,7 +268,7 @@ static void AU_FinishDownload( filedownload_t *fd_, int status ) {
 					}
 				}
 
-				Mem_TempFree( backfile );
+				Q_free( backfile );
 			}
 
 			if( au_download_errcount ) {
@@ -429,12 +429,12 @@ static size_t AU_ListReadCb( const void *buf, size_t numb, float percentage,
 		return 0;
 	}
 
-	newbuf = (char *)Mem_ZoneMalloc( au_remote_list_size + numb + 1 );
+	newbuf = (char *)Q_malloc( au_remote_list_size + numb + 1 );
 	memcpy( newbuf, au_remote_list, au_remote_list_size - 1 );
 	memcpy( newbuf + au_remote_list_size - 1, buf, numb );
 	newbuf[numb] = '\0'; // EOF
 
-	Mem_Free( au_remote_list );
+	Q_free( au_remote_list );
 	au_remote_list = newbuf;
 	au_remote_list_size = au_remote_list_size + numb + 1;
 
@@ -455,7 +455,7 @@ static void AU_ListDoneCb( int status, const char *contentType, void *privatep )
 
 done:
 	if( au_remote_list ) {
-		Mem_Free( au_remote_list );
+		Q_free( au_remote_list );
 		au_remote_list = NULL;
 		au_remote_list_size = 0;
 	}
@@ -473,7 +473,7 @@ static void AU_FetchUpdateList( bool checkOnly, void ( *newfiles_cb )( void ) ) 
 	}
 
 	au_remote_list_size = 1;
-	au_remote_list = (char *)Mem_ZoneMalloc( 1 );
+	au_remote_list = (char *)Q_malloc( 1 );
 	*au_remote_list = '\0';
 
 	au_check_only = checkOnly;

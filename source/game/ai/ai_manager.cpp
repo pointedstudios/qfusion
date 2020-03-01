@@ -313,7 +313,7 @@ void AiManager::SetupBotForEntity( edict_t *ent ) {
 	}
 	memSize += alignmentBytes;
 
-	auto *handleMem = (uint8_t *)G_Malloc( memSize );
+	auto *handleMem = (uint8_t *)Q_malloc( memSize );
 	ent->ai = (ai_handle_t *)handleMem;
 	ent->ai->type = AI_ISBOT;
 

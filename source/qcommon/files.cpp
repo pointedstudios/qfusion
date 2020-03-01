@@ -174,12 +174,6 @@ static searchpath_t *fs_root_searchpath;        // base path directory
 static searchpath_t *fs_write_searchpath;       // write directory
 static searchpath_t *fs_downloads_searchpath;   // write directory for downloads from game servers
 
-static mempool_t *fs_mempool;
-
-#define FS_Malloc( size ) Mem_Alloc( fs_mempool, size )
-#define FS_Realloc( data, size ) Mem_Realloc( data, size )
-#define FS_Free( data ) Mem_Free( data )
-
 #define FS_MAX_BLOCK_SIZE   0x10000
 #define FS_MAX_HANDLES      1024
 
@@ -259,7 +253,7 @@ static char *FS_CopyString( const char *in ) {
 	char *out;
 
 	size = sizeof( char ) * ( strlen( in ) + 1 );
-	out = ( char* )FS_Malloc( size );
+	out = ( char* )Q_malloc( size );
 	Q_strncpyz( out, in, size );
 
 	return out;
@@ -288,7 +282,7 @@ static char **FS_ListFiles( char *findname, int *numfiles, unsigned musthave, un
 
 	*numfiles = nfiles;
 	nfiles++; // add space for a guard
-	list = ( char** )Mem_ZoneMalloc( sizeof( char * ) * nfiles );
+	list = ( char** )Q_malloc( sizeof( char * ) * nfiles );
 
 	s = Sys_FS_FindFirst( findname, musthave, canthave );
 	nfiles = 0;
@@ -297,7 +291,7 @@ static char **FS_ListFiles( char *findname, int *numfiles, unsigned musthave, un
 			continue;
 		}
 
-		list[nfiles] = ZoneCopyString( s );
+		list[nfiles] = Q_strdup( s );
 
 #ifdef _WIN32
 		Q_strlwr( list[nfiles] );
@@ -600,7 +594,7 @@ int FS_GetExplicitPurePakList( char ***paknames ) {
 	}
 
 	if( numpaks ) {
-		*paknames = ( char** )Mem_ZoneMalloc( sizeof( char * ) * numpaks );
+		*paknames = ( char** )Q_malloc( sizeof( char * ) * numpaks );
 
 		i = 0;
 		for( e = 0; pak_extensions[e]; e++ ) {
@@ -613,7 +607,7 @@ int FS_GetExplicitPurePakList( char ***paknames ) {
 				}
 
 				assert( i < numpaks );
-				( *paknames )[i] = ZoneCopyString( FS_PakNameForPath( search->pack ) );
+				( *paknames )[i] = Q_strdup( FS_PakNameForPath( search->pack ) );
 				i++;
 			}
 		}
@@ -1013,7 +1007,7 @@ static int _FS_FOpenPakFile( packfile_t *pakFile, int *filenum ) {
 	file->pakOffset = pakFile->offset;
 
 	if( pakFile->flags & FS_PACKFILE_DEFLATED ) {
-		file->zipEntry = ( zipEntry_t* )Mem_Alloc( fs_mempool, sizeof( zipEntry_t ) );
+		file->zipEntry = ( zipEntry_t* )Q_malloc( sizeof( zipEntry_t ) );
 		file->zipEntry->compressedSize = pakFile->compressedSize;
 		file->zipEntry->restReadCompressed = pakFile->compressedSize;
 
@@ -1268,7 +1262,7 @@ void FS_FCloseFile( int file ) {
 
 	if( fh->zipEntry ) {
 		qzinflateEnd( &fh->zipEntry->zstream );
-		Mem_Free( fh->zipEntry );
+		Q_free( fh->zipEntry );
 		fh->zipEntry = NULL;
 	}
 	if( fh->fstream ) {
@@ -1554,7 +1548,7 @@ int FS_Seek( int file, int offset, int whence ) {
 
 		newreq = wswcurl_create( NULL, "%s", url );
 		if( !newreq ) {
-			FS_Free( url );
+			Q_free( url );
 			return -1;
 		}
 
@@ -1565,7 +1559,7 @@ int FS_Seek( int file, int offset, int whence ) {
 		wswcurl_stream_callbacks( newreq, NULL, FS_StreamDoneSimpleCb, NULL, fh );
 		wswcurl_start( newreq );
 
-		FS_Free( url );
+		Q_free( url );
 
 		fh->offset = offset;
 		return 0;
@@ -1727,7 +1721,7 @@ static int _FS_LoadFile( int fhandle, unsigned int len, void **buffer, void *sta
 	if( stack && ( stackSize > len ) ) {
 		buf = ( uint8_t* )stack;
 	} else {
-		buf = ( uint8_t* )_Mem_AllocExt( tempMemPool, len + 1, 0, 0, 0, 0, filename, fileline );
+		buf = ( uint8_t* )Q_malloc( len + 1 );
 	}
 	buf[len] = 0;
 	*buffer = buf;
@@ -1807,7 +1801,7 @@ void FS_UnMMapBaseFile( int file, void *data ) {
 * FS_FreeFile
 */
 void FS_FreeFile( void *buffer ) {
-	Mem_TempFree( buffer );
+	Q_free( buffer );
 }
 
 /*
@@ -2250,7 +2244,7 @@ static void FS_ReadPackManifest( pack_t *pack ) {
 
 	size = _FS_FOpenPakFile( pakFile, &file );
 	if( ( size > -1 ) && file ) {
-		pack->manifest = ( char* )FS_Malloc( size + 1 );
+		pack->manifest = ( char* )Q_malloc( size + 1 );
 
 		// read the file into memory
 		FS_Read( ( uint8_t * )pack->manifest, size, file );
@@ -2508,7 +2502,7 @@ static pack_t *FS_LoadZipFile( const char *packfilename, bool silent ) {
 
 	namesLen += 1; // add space for a guard
 
-	pack = ( pack_t* )FS_Malloc( (int)( sizeof( pack_t ) + numFiles * sizeof( packfile_t ) + namesLen ) );
+	pack = ( pack_t* )Q_malloc( (int)( sizeof( pack_t ) + numFiles * sizeof( packfile_t ) + namesLen ) );
 	pack->filename = FS_CopyString( packfilename );
 	pack->files = ( packfile_t * )( ( uint8_t * )pack + sizeof( pack_t ) );
 	pack->fileNames = names = ( char * )( ( uint8_t * )pack->files + numFiles * sizeof( packfile_t ) );
@@ -2520,7 +2514,7 @@ static pack_t *FS_LoadZipFile( const char *packfilename, bool silent ) {
 	Trie_Create( TRIE_CASE_INSENSITIVE, &pack->trie );
 
 	// allocate temp memory for files' checksums
-	checksums = ( int* )Mem_TempMallocExt( ( numFiles + 1 ) * sizeof( *checksums ), 0 );
+	checksums = ( int* )Q_malloc( ( numFiles + 1 ) * sizeof( *checksums ) );
 
 	if( !Q_strnicmp( COM_FileBase( packfilename ), "modules", strlen( "modules" ) ) ) {
 		modulepack = true;
@@ -2597,7 +2591,7 @@ static pack_t *FS_LoadZipFile( const char *packfilename, bool silent ) {
 		goto error;
 	}
 
-	Mem_TempFree( checksums );
+	Q_free( checksums );
 
 	// read manifest file if it's a module pak
 	if( modulepack && manifestFilesize > 0 ) {
@@ -2619,12 +2613,12 @@ error:
 			Trie_Destroy( pack->trie );
 		}
 		if( pack->filename ) {
-			FS_Free( pack->filename );
+			Q_free( pack->filename );
 		}
-		FS_Free( pack );
+		Q_free( pack );
 	}
 	if( checksums ) {
-		Mem_TempFree( checksums );
+		Q_free( checksums );
 	}
 	if( handle != NULL ) {
 		Sys_FS_UnlockFile( handle );
@@ -2677,8 +2671,8 @@ static bool FS_FindPackFilePos( const char *filename, searchpath_t **psearch, se
 	fullname = filename;
 	path_size = sizeof( char ) * ( COM_FilePathLength( fullname ) + 1 );
 
-	search = ( searchpath_t* )FS_Malloc( sizeof( searchpath_t ) );
-	search->path = ( char* )FS_Malloc( path_size );
+	search = ( searchpath_t* )Q_malloc( sizeof( searchpath_t ) );
+	search->path = ( char* )Q_malloc( path_size );
 	Q_strncpyz( search->path, filename, path_size );
 
 	if( psearch ) {
@@ -2727,7 +2721,7 @@ static bool FS_FindPackFilePos( const char *filename, searchpath_t **psearch, se
 	if( psearch ) {
 		*psearch = search;
 	} else {
-		Mem_Free( search );
+		Q_free( search );
 	}
 
 	if( pprev ) {
@@ -2751,8 +2745,8 @@ static void FS_FreePakFile( pack_t *pack ) {
 		Sys_FS_UnlockFile( pack->sysHandle );
 	}
 	Trie_Destroy( pack->trie );
-	FS_Free( pack->filename );
-	FS_Free( pack );
+	Q_free( pack->filename );
+	Q_free( pack );
 }
 
 /*
@@ -2882,27 +2876,27 @@ static int FS_PathGetFileListExt( searchpath_t *search, const char *dir, const c
 
 				if( ( musthave & SFF_SUBDIR ) ) {
 					if( filename[len - 1] != '/' ) {
-						files[found].name = ( char* )Mem_ZoneMalloc( len + 2 );
+						files[found].name = ( char* )Q_malloc( len + 2 );
 						strcpy( files[found].name, filename );
 						files[found].name[len] = '/';
 						files[found].name[len + 1] = 0;
 					} else {
-						files[found].name = ZoneCopyString( filename );
+						files[found].name = Q_strdup( filename );
 					}
 				} else {
 					if( extension && ( len <= extlen ) ) {
-						Mem_ZoneFree( filepath );
+						Q_free( filepath );
 						continue;
 					}
-					files[found].name = ZoneCopyString( filename );
+					files[found].name = Q_strdup( filename );
 				}
 				files[found].searchPath = search;
 				found++;
 			}
 
-			Mem_ZoneFree( filepath );
+			Q_free( filepath );
 		}
-		Mem_ZoneFree( filenames );
+		Q_free( filenames );
 
 		return found;
 	} else {
@@ -3043,10 +3037,10 @@ static int FS_GetFileListExt_( const char *dir, const char *extension, char *buf
 				if( fs_numsearchfiles > FS_MAX_SEARCHFILES ) {
 					fs_numsearchfiles = FS_MAX_SEARCHFILES;
 				}
-				fs_searchfiles = files = ( searchfile_t* )FS_Realloc( fs_searchfiles, sizeof( searchfile_t ) * fs_numsearchfiles );
+				fs_searchfiles = files = ( searchfile_t* )Q_realloc( fs_searchfiles, sizeof( searchfile_t ) * fs_numsearchfiles );
 				if( !search->pack ) {
 					for( i = 0; i < found; i++ )
-						Mem_ZoneFree( files[allfound + i].name );
+						Q_free( files[allfound + i].name );
 				}
 				continue;
 			}
@@ -3067,7 +3061,7 @@ static int FS_GetFileListExt_( const char *dir, const char *extension, char *buf
 			}
 
 			if( !files[i - 1].searchPath->pack ) {
-				Mem_ZoneFree( files[i - 1].name );
+				Q_free( files[i - 1].name );
 			}
 			memmove( &files[i - 1], &files[i], ( allfound - i ) * sizeof( *files ) );
 			allfound--;
@@ -3373,10 +3367,10 @@ int FS_GetGameDirectoryList( char *buf, size_t bufsize ) {
 				strcpy( buf + alllen, basename );
 				alllen += len + 1;
 				buf[alllen] = '\0';
-				Mem_ZoneFree( modnames[i] );
+				Q_free( modnames[i] );
 				nummods_total++;
 			}
-			Mem_ZoneFree( modnames );
+			Q_free( modnames );
 		}
 		basepath = basepath->next;
 	}
@@ -3404,13 +3398,13 @@ static char **FS_GamePathPaks( searchpath_t *basepath, const char *gamedir, int 
 		if( filenames ) {
 			if( numpakfiles ) {
 				if( paknames ) {
-					paknames = ( char** )Mem_Realloc( paknames, sizeof( *paknames ) * ( numpakfiles + numfiles + 1 ) );
+					paknames = ( char** )Q_realloc( paknames, sizeof( *paknames ) * ( numpakfiles + numfiles + 1 ) );
 				} else {
-					paknames = ( char** )Mem_ZoneMalloc( sizeof( *paknames ) * ( numpakfiles + numfiles + 1 ) );
+					paknames = ( char** )Q_malloc( sizeof( *paknames ) * ( numpakfiles + numfiles + 1 ) );
 				}
 
 				if( filenames ) {
-					Mem_Free( filenames );
+					Q_free( filenames );
 				}
 			} else {
 				paknames = filenames;
@@ -3433,7 +3427,7 @@ static char **FS_GamePathPaks( searchpath_t *basepath, const char *gamedir, int 
 			skip = skip || ( FS_IsExplicitPurePak( paknames[i], &wrongpure ) && wrongpure );
 
 			if( skip ) {
-				Mem_Free( paknames[i] );
+				Q_free( paknames[i] );
 				memmove( &paknames[i], &paknames[i + 1], ( numpakfiles-- - i ) * sizeof( *paknames ) );
 				continue;
 			}
@@ -3460,10 +3454,10 @@ static int FS_TouchGamePath( searchpath_t *basepath, const char *gamedir, bool i
 
 	// add directory to the list of search paths so pak files can stack properly
 	if( initial ) {
-		search = ( searchpath_t* )FS_Malloc( sizeof( searchpath_t ) );
+		search = ( searchpath_t* )Q_malloc( sizeof( searchpath_t ) );
 
 		path_size = sizeof( char ) * ( strlen( basepath->path ) + 1 + strlen( gamedir ) + 1 );
-		search->path = ( char* )FS_Malloc( path_size );
+		search->path = ( char* )Q_malloc( path_size );
 		search->base = basepath;
 		Q_snprintfz( search->path, path_size, "%s/%s", basepath->path, gamedir );
 
@@ -3496,7 +3490,7 @@ static int FS_TouchGamePath( searchpath_t *basepath, const char *gamedir, bool i
 			}
 
 			// deferred loading
-			pak = ( pack_t* )FS_Malloc( sizeof( *pak ) );
+			pak = ( pack_t* )Q_malloc( sizeof( *pak ) );
 			pak->filename = FS_CopyString( paknames[i] );
 			pak->deferred_pack = NULL;
 			pak->deferred_load = true;
@@ -3515,9 +3509,9 @@ static int FS_TouchGamePath( searchpath_t *basepath, const char *gamedir, bool i
 				newpaks++;
 			}
 freename:
-			Mem_ZoneFree( paknames[i] );
+			Q_free( paknames[i] );
 		}
-		Mem_ZoneFree( paknames );
+		Q_free( paknames );
 	}
 
 	QMutex_Unlock( fs_searchpaths_mutex );
@@ -3560,7 +3554,7 @@ static void FS_ReplaceDeferredPaks( void ) {
 					prev->next = search->next;
 				}
 				FS_FreePakFile( pak );
-				FS_Free( search );
+				Q_free( search );
 				search = prev;
 			} else {
 				// update prev pointers
@@ -3623,7 +3617,7 @@ static void FS_LoadDeferredPaks( int newpaks ) {
 		return;
 	}
 
-	packs = (pack_t **)Mem_TempMalloc( sizeof( *packs ) * ( newpaks + 1 ) );
+	packs = (pack_t **)Q_malloc( sizeof( *packs ) * ( newpaks + 1 ) );
 	if( !packs ) {
 		return;
 	}
@@ -3638,8 +3632,8 @@ static void FS_LoadDeferredPaks( int newpaks ) {
 		}
 	}
 
-	arg = (deferred_pack_arg_t *)Mem_TempMalloc( sizeof( *arg ) );
-	arg->cnt = (int *)Mem_TempMalloc( sizeof( int ) );
+	arg = (deferred_pack_arg_t *)Q_malloc( sizeof( *arg ) );
+	arg->cnt = (int *)Q_malloc( sizeof( int ) );
 	arg->maxcnt = newpaks;
 	arg->packs = packs;
 	arg->mutex = QMutex_Create();
@@ -3658,10 +3652,10 @@ static void FS_LoadDeferredPaks( int newpaks ) {
 
 	FS_ReplaceDeferredPaks();
 
-	Mem_TempFree( (void *)arg->cnt );
-	Mem_TempFree( arg->packs );
+	Q_free( (void *)arg->cnt );
+	Q_free( arg->packs );
 	QMutex_Destroy( &arg->mutex );
-	Mem_TempFree( arg );
+	Q_free( arg );
 }
 
 /*
@@ -3684,7 +3678,7 @@ static void FS_RemoveExtraPaks( searchpath_t *old ) {
 					Com_Printf( "Removed a duplicate zip pak file %s\n", search->pack->filename );
 					prev->next = search->next;
 					FS_FreePakFile( search->pack );
-					FS_Free( search );
+					Q_free( search );
 					search = prev;
 				}
 
@@ -3796,9 +3790,9 @@ bool FS_SetGameDirectory( const char *dir, bool force ) {
 		if( fs_searchpaths->pack ) {
 			FS_FreePakFile( fs_searchpaths->pack );
 		}
-		FS_Free( fs_searchpaths->path );
+		Q_free( fs_searchpaths->path );
 		next = fs_searchpaths->next;
-		FS_Free( fs_searchpaths );
+		Q_free( fs_searchpaths );
 		fs_searchpaths = next;
 	}
 	QMutex_Unlock( fs_searchpaths_mutex );
@@ -3836,7 +3830,7 @@ bool FS_SetGameDirectory( const char *dir, bool force ) {
 static void FS_AddBasePath( const char *path ) {
 	searchpath_t *newpath;
 
-	newpath = ( searchpath_t* )FS_Malloc( sizeof( searchpath_t ) );
+	newpath = ( searchpath_t* )Q_malloc( sizeof( searchpath_t ) );
 	newpath->path = FS_CopyString( path );
 	newpath->next = fs_basepaths;
 	fs_basepaths = newpath;
@@ -3852,7 +3846,7 @@ static void FS_FreeSearchFiles( void ) {
 	// free temp memory
 	for( i = 0; i < fs_cursearchfiles; i++ ) {
 		if( !fs_searchfiles[i].searchPath->pack ) {
-			Mem_ZoneFree( fs_searchfiles[i].name );
+			Q_free( fs_searchfiles[i].name );
 		}
 	}
 	fs_cursearchfiles = 0;
@@ -4045,8 +4039,6 @@ void FS_Init( void ) {
 	fs_fh_mutex = QMutex_Create();
 	fs_searchpaths_mutex = QMutex_Create();
 
-	fs_mempool = Mem_AllocPool( NULL, "Filesystem" );
-
 	Cmd_AddCommand( "fs_path", FS_Path_f );
 	Cmd_AddCommand( "fs_pakfile", Cmd_PakFile_f );
 	Cmd_AddCommand( "fs_search", Cmd_FS_Search_f );
@@ -4055,7 +4047,7 @@ void FS_Init( void ) {
 	Cmd_AddCommand( "fs_untoched", Cmd_FS_Untouched_f );
 
 	fs_numsearchfiles = FS_MIN_SEARCHFILES;
-	fs_searchfiles = ( searchfile_t* )FS_Malloc( sizeof( searchfile_t ) * fs_numsearchfiles );
+	fs_searchfiles = ( searchfile_t* )Q_malloc( sizeof( searchfile_t ) * fs_numsearchfiles );
 
 	memset( fs_filehandles, 0, sizeof( fs_filehandles ) );
 
@@ -4186,7 +4178,7 @@ void FS_Shutdown( void ) {
 	Cmd_RemoveCommand( "fs_untoched" );
 
 	FS_FreeSearchFiles();
-	FS_Free( fs_searchfiles );
+	Q_free( fs_searchfiles );
 	fs_numsearchfiles = 0;
 
 	QMutex_Lock( fs_searchpaths_mutex );
@@ -4198,8 +4190,8 @@ void FS_Shutdown( void ) {
 		if( search->pack ) {
 			FS_FreePakFile( search->pack );
 		}
-		FS_Free( search->path );
-		FS_Free( search );
+		Q_free( search->path );
+		Q_free( search );
 	}
 
 	QMutex_Unlock( fs_searchpaths_mutex );
@@ -4208,11 +4200,9 @@ void FS_Shutdown( void ) {
 		search = fs_basepaths;
 		fs_basepaths = search->next;
 
-		FS_Free( search->path );
-		FS_Free( search );
+		Q_free( search->path );
+		Q_free( search );
 	}
-
-	Mem_FreePool( &fs_mempool );
 
 	QMutex_Destroy( &fs_fh_mutex );
 	QMutex_Destroy( &fs_searchpaths_mutex );

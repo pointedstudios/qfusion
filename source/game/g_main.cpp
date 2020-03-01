@@ -159,14 +159,14 @@ void G_Printf( const char *format, ... ) {
 * G_GS_Malloc - Used only for gameshared linking
 */
 static void *G_GS_Malloc( size_t size ) {
-	return G_Malloc( size );
+	return Q_malloc( size );
 }
 
 /*
 * G_GS_Free - Used only for gameshared linking
 */
 static void G_GS_Free( void *data ) {
-	G_Free( data );
+	Q_free( data );
 }
 
 /*
@@ -342,10 +342,10 @@ void G_Init( unsigned int seed, unsigned int framemsec, int protocol, const char
 	// initialize all entities for this game
 	g_maxentities = trap_Cvar_Get( "sv_maxentities", "1024", CVAR_LATCH );
 	game.maxentities = g_maxentities->integer;
-	game.edicts = ( edict_t * )G_Malloc( game.maxentities * sizeof( game.edicts[0] ) );
+	game.edicts = ( edict_t * )Q_malloc( game.maxentities * sizeof( game.edicts[0] ) );
 
 	// initialize all clients for this game
-	game.clients = ( gclient_t * )G_Malloc( gs.maxclients * sizeof( game.clients[0] ) );
+	game.clients = ( gclient_t * )Q_malloc( gs.maxclients * sizeof( game.clients[0] ) );
 	// call clients constructors since this is no longer a POD type
 	for( int i = 0; i < gs.maxclients; ++i ) {
 		new( game.clients + i )gclient_s;
@@ -408,17 +408,15 @@ void G_Shutdown( void ) {
 		}
 	}
 
-	G_Free( game.edicts );
+	Q_free( game.edicts );
 	game.edicts = nullptr;
 
 	for( i = 0; i < gs.maxclients; ++i ) {
 		game.clients[i].~gclient_t();
 	}
 
-	G_Free( game.clients );
+	Q_free( game.clients );
 	game.clients = nullptr;
-
-	G_LevelFreePool();
 }
 
 //======================================================================
@@ -463,13 +461,13 @@ static void G_UpdateMapRotation( void ) {
 
 		// reread the maplist
 		if( map_rotation_s ) {
-			G_Free( map_rotation_s );
+			Q_free( map_rotation_s );
 		}
 		if( map_rotation_p ) {
-			G_Free( map_rotation_p );
+			Q_free( map_rotation_p );
 		}
 
-		map_rotation_s = G_CopyString( g_maplist->string );
+		map_rotation_s = Q_strdup( g_maplist->string );
 		map_rotation_p = NULL;
 		map_rotation_current = -1;  // reset the mapcounter too
 		map_rotation_count = 0;
@@ -506,7 +504,7 @@ static void G_UpdateMapRotation( void ) {
 		}
 
 		// allocate the array of pointers
-		map_rotation_p = ( char ** )G_Malloc( ( count + 1 ) * sizeof( *map_rotation_p ) );
+		map_rotation_p = ( char ** )Q_malloc( ( count + 1 ) * sizeof( *map_rotation_p ) );
 
 		// now convert the string to tokens by nulling the separators
 		p = map_rotation_s;
@@ -711,6 +709,42 @@ void Com_Printf( const char *format, ... ) {
 
 	G_Printf( "%s", msg );
 }
+
+void *Q_malloc( size_t size ) {
+	// TODO: Ensure 16-byte alignment
+	// Zero memory as lots of old stuff rely on the old mempool behaviour
+	void *buf = std::calloc( size, 1 );
+
+	if( !buf ) {
+		throw std::bad_alloc();
+	}
+
+	return buf;
+}
+
+void *Q_realloc( void *buf, size_t newsize ) {
+	void *newbuf = realloc( buf, newsize );
+
+	if( !newbuf && newsize ) {
+		throw std::bad_alloc();
+	}
+
+	// TODO: Zero memory too? There's no portable way of doing that
+
+	return newbuf;
+}
+
+void Q_free( void *buf ) {
+	std::free( buf );
+}
+
+char *Q_strdup( const char *str ) {
+	auto len = std::strlen( str );
+	auto *result = (char *)Q_malloc( len + 1 );
+	std::memcpy( result, str, len + 1 );
+	return result;
+}
+
 #endif
 
 // Adapters for linking angelwrap

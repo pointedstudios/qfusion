@@ -60,7 +60,7 @@ AiBaseTeam *AiBaseTeam::ReplaceTeam( int teamNum, const std::type_info &desiredT
 	( *teamRef )->TransferStateFrom( oldTeam );
 	// Destroy the old team
 	oldTeam->~AiBaseTeam();
-	G_Free( oldTeam );
+	Q_free( oldTeam );
 
 	return *teamRef;
 }
@@ -257,7 +257,7 @@ void AiBaseTeam::ReleaseTeam( int teamNum ) {
 	// Destruct the team
 	( *teamToRef )->~AiBaseTeam();
 	// Free team memory
-	G_Free( *teamToRef );
+	Q_free( *teamToRef );
 	// Nullify the static memory cell holding no longer valid address
 	*teamToRef = nullptr;
 }
@@ -268,6 +268,6 @@ AiBaseTeam *AiBaseTeam::InstantiateTeam( int teamNum ) {
 		return AiSquadBasedTeam::InstantiateTeam( teamNum );
 	}
 
-	void *mem = G_Malloc( sizeof( AiBaseTeam ) );
+	void *mem = Q_malloc( sizeof( AiBaseTeam ) );
 	return new(mem)AiBaseTeam( teamNum );
 }

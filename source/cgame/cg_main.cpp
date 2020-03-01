@@ -192,7 +192,7 @@ void CG_LocalPrint( const char *format, ... ) {
 * Used only for gameshared linking
 */
 static void *CG_GS_Malloc( size_t size ) {
-	return CG_Malloc( size );
+	return Q_malloc( size );
 }
 
 /*
@@ -201,7 +201,7 @@ static void *CG_GS_Malloc( size_t size ) {
 * Used only for gameshared linking
 */
 static void CG_GS_Free( void *data ) {
-	CG_Free( data );
+	Q_free(   data );
 }
 
 /*
@@ -275,17 +275,6 @@ static void CG_InitGameShared( void ) {
 	module_GetConfigString = CG_GS_GetConfigString;
 
 	GS_InitWeapons();
-}
-
-/*
-* CG_CopyString
-*/
-char *_CG_CopyString( const char *in, const char *filename, int fileline ) {
-	char *out;
-
-	out = ( char * )CG_MemAlloc( strlen( in ) + 1, filename, fileline );
-	strcpy( out, in );
-	return out;
 }
 
 /*
@@ -980,7 +969,7 @@ void CG_Init( const char *serverName, unsigned int playerNum,
 	srand( time( NULL ) );
 
 	// save server name
-	cgs.serverName = CG_CopyString( serverName );
+	cgs.serverName = Q_strdup( serverName );
 
 	// save local player number
 	cgs.playerNum = playerNum;

@@ -135,7 +135,7 @@ CachedComputationReader::CachedComputationReader( const CachedComputation *paren
 
 	fileSize = fsResult;
 
-	fileData = (char *)::S_Malloc( (size_t)( fileSize + 1u ) );
+	fileData = (char *)::Q_malloc( (size_t)( fileSize + 1u ) );
 	if( !fileData ) {
 		fsResult = -1;
 		return;
