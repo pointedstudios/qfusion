@@ -6,12 +6,12 @@ import net.warsow 2.6
 Item {
     anchors.fill: parent
     visible: wsw.quakeClientState === QuakeClient.Disconnected
-    opacity: 0.98
+    opacity: 0.95
 
     Rectangle {
         anchors.fill: parent
         color: Material.backgroundColor
     }
 
-    CentralMenuGroup {}
+    CentralOverlayGroup {}
 }

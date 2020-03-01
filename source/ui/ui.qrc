@@ -1,6 +1,8 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource>
-        <file>CentralMenuGroup.qml</file>
+        <file>CentralOverlayButton.qml</file>
+        <file>CentralOverlayButtonTrail.qml</file>
+        <file>CentralOverlayGroup.qml</file>
         <file>DemoPlaybackMenu.qml</file>
         <file>InGameMenu.qml</file>
         <file>MainMenu.qml</file>
