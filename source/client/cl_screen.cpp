@@ -723,13 +723,7 @@ void SCR_UpdateScreen( void ) {
 		SCR_DrawNotify();
 	}
 
-	// Blit the UI texture that could contain recent UI updates.
-	// It contains a static UI image from previous frames in case of no updates.
-	if( auto maybeTexNum = uiSystem->getUITexNum() ) {
-		R_Set2DMode( true );
-		R_DrawExternalTextureOverlay( *maybeTexNum );
-		R_Set2DMode( false );
-	}
+	uiSystem->drawSelfInMainContext();
 
 	if( canDrawDebugGraph ) {
 		SCR_DrawDebugGraph();

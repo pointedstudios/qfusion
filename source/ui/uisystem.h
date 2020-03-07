@@ -28,8 +28,7 @@ public:
 
 	virtual void refresh( unsigned refreshFlags ) = 0;
 
-	[[nodiscard]]
-	virtual auto getUITexNum() const -> std::optional<unsigned> = 0;
+	virtual void drawSelfInMainContext() = 0;
 
 	virtual void beginRegistration() = 0;
 	virtual void endRegistration() = 0;

@@ -49,8 +49,7 @@ class QWswUISystem : public QObject, public UISystem {
 public:
 	void refresh( unsigned refreshFlags ) override;
 
-	[[nodiscard]]
-	auto getUITexNum() const -> std::optional<unsigned> override;
+	void drawSelfInMainContext() override;
 
 	void beginRegistration() override {};
 	void endRegistration() override {};
@@ -136,7 +135,7 @@ private:
 	explicit QWswUISystem( int width, int height );
 
 	void updateProps();
-	void render();
+	void renderQml();
 
 	[[nodiscard]]
 	auto getPressedMouseButtons() const -> Qt::MouseButtons;
@@ -226,7 +225,7 @@ void QWswUISystem::refresh( unsigned refreshFlags ) {
 	}
 
 	enterUIRenderingMode();
-	render();
+	renderQml();
 	leaveUIRenderingMode();
 }
 
@@ -311,7 +310,7 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 	ui_mouseAccel = Cvar_Get( "ui_mouseAccel", "0.25", CVAR_ARCHIVE );
 }
 
-void QWswUISystem::render() {
+void QWswUISystem::renderQml() {
 	assert( isValidAndReady );
 
 	if( !hasPendingSceneChange && !hasPendingRedraw ) {
@@ -357,11 +356,31 @@ void QWswUISystem::leaveUIRenderingMode() {
 	}
 }
 
-auto QWswUISystem::getUITexNum() const -> std::optional<unsigned> {
-	if( isValidAndReady ) {
-		return framebufferObject->texture();
+void R_Set2DMode( bool );
+void R_DrawExternalTextureOverlay( unsigned );
+shader_t *R_RegisterPic( const char * );
+void RF_DrawStretchPic( int x, int y, int w, int h, float s1, float t1, float s2, float t2,
+	                    const vec4_t color, const shader_t *shader );
+
+void QWswUISystem::drawSelfInMainContext() {
+	if( !isValidAndReady ) {
+		return;
 	}
-	return std::nullopt;
+
+	R_Set2DMode( true );
+
+	R_DrawExternalTextureOverlay( framebufferObject->texture() );
+
+	// TODO: Draw while showing an in-game menu as well (there should be a different condition)
+	if( lastFrameState.quakeClientState == QuakeClient::Disconnected ) {
+		vec4_t color = { 1.0f, 1.0f, 1.0f, 1.0f };
+		// TODO: Check why CL_BeginRegistration()/CL_EndRegistration() never gets called
+		auto *cursorMaterial = R_RegisterPic( "gfx/ui/cursor.tga" );
+		// TODO: Account for screen pixel density
+		RF_DrawStretchPic( (int)mouseXY[0], (int)mouseXY[1], 32, 32, 0.0f, 0.0f, 1.0f, 1.0f, color, cursorMaterial );
+	}
+
+	R_Set2DMode( false );
 }
 
 void QWswUISystem::updateProps() {
