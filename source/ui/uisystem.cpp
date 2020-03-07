@@ -55,12 +55,12 @@ public:
 	void beginRegistration() override {};
 	void endRegistration() override {};
 
-	virtual void handleKeyEvent( int quakeKey, bool keyDown, Context context ) override {};
-	virtual void handleCharEvent( int ch ) override {};
-	virtual void handleMouseMove( int frameTime, int dx, int dy ) override {};
+	void handleKeyEvent( int quakeKey, bool keyDown, Context context ) override;
+	void handleCharEvent( int ch ) override {};
+	void handleMouseMove( int frameTime, int dx, int dy ) override;
 
-	virtual void forceMenuOn() override {};
-	virtual void forceMenuOff() override {};
+	void forceMenuOn() override {};
+	void forceMenuOff() override {};
 
 	[[nodiscard]]
 	bool hasRespectMenu() const override { return isShowingRespectMenu; };
@@ -116,6 +116,11 @@ private:
 	bool isShowingInGameMenu { false };
 	bool isShowingRespectMenu { false };
 
+	cvar_t *ui_sensitivity { nullptr };
+	cvar_t *ui_mouseAccel { nullptr };
+
+	qreal mouseXY[2] { 0.0, 0.0 };
+
 	[[nodiscard]]
 	auto getQuakeClientState() const { return lastFrameState.quakeClientState; }
 
@@ -132,6 +137,11 @@ private:
 
 	void updateProps();
 	void render();
+
+	[[nodiscard]]
+	auto getPressedMouseButtons() const -> Qt::MouseButtons;
+	[[nodiscard]]
+	auto getPressedKeyboardModifiers() const -> Qt::KeyboardModifiers;
 };
 
 void QWswUISystem::onSceneGraphInitialized() {
@@ -296,6 +306,9 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 
 	connect( component, &QQmlComponent::statusChanged, this, &QWswUISystem::onComponentStatusChanged );
 	component->loadUrl( QUrl( "qrc:/RootItem.qml" ) );
+
+	ui_sensitivity = Cvar_Get( "ui_sensitivity", "1.0", CVAR_ARCHIVE );
+	ui_mouseAccel = Cvar_Get( "ui_mouseAccel", "0.25", CVAR_ARCHIVE );
 }
 
 void QWswUISystem::render() {
@@ -378,6 +391,100 @@ void QWswUISystem::updateProps() {
 	if( *isPlayingADemo != wasPlayingADemo ) {
 		Q_EMIT isPlayingADemoChanged( *isPlayingADemo );
 	}
+}
+
+void QWswUISystem::handleMouseMove( int frameTime, int dx, int dy ) {
+	if( !dx && !dy ) {
+		return;
+	}
+
+	const int bounds[2] = { quickWindow->width(), quickWindow->height() };
+	const int deltas[2] = { dx, dy };
+
+	if( ui_sensitivity->modified ) {
+		if( ui_sensitivity->value <= 0.0f || ui_sensitivity->value > 10.0f ) {
+			Cvar_ForceSet( ui_sensitivity->name, "1.0" );
+		}
+	}
+
+	if( ui_mouseAccel->modified ) {
+		if( ui_mouseAccel->value < 0.0f || ui_mouseAccel->value > 1.0f ) {
+			Cvar_ForceSet( ui_mouseAccel->name, "0.25" );
+		}
+	}
+
+	float sensitivity = ui_sensitivity->value;
+	if( frameTime > 0 ) {
+		sensitivity += (float)ui_mouseAccel->value * std::sqrt( dx * dx + dy * dy ) / (float)( frameTime );
+	}
+
+	for( int i = 0; i < 2; ++i ) {
+		if( !deltas[i] ) {
+			continue;
+		}
+		qreal scaledDelta = ( (qreal)deltas[i] * sensitivity );
+		// Make sure we won't lose a mouse movement due to fractional part loss
+		if( !scaledDelta ) {
+			scaledDelta = Q_sign( deltas[i] );
+		}
+		mouseXY[i] += scaledDelta;
+		Q_clamp( mouseXY[i], 0, bounds[i] );
+	}
+
+	QPointF point( mouseXY[0], mouseXY[1] );
+	QMouseEvent event( QEvent::MouseMove, point, Qt::NoButton, getPressedMouseButtons(), getPressedKeyboardModifiers() );
+	QCoreApplication::sendEvent( quickWindow, &event );
+}
+
+void QWswUISystem::handleKeyEvent( int quakeKey, bool keyDown, Context context ) {
+	// Currently only mouse key events in the main context are supported
+	if( context == RespectContext ) {
+		return;
+	}
+
+	Qt::MouseButton button;
+	if( quakeKey == K_MOUSE1 ) {
+		button = Qt::LeftButton;
+	} else if( quakeKey == K_MOUSE2 ) {
+		button = Qt::RightButton;
+	} else if( quakeKey == K_MOUSE3 ) {
+		button = Qt::MiddleButton;
+	} else {
+		return;
+	}
+
+	QPointF point( mouseXY[0], mouseXY[1] );
+	QEvent::Type eventType = keyDown ? QEvent::MouseButtonPress : QEvent::MouseButtonRelease;
+	QMouseEvent event( eventType, point, button, getPressedMouseButtons(), getPressedKeyboardModifiers() );
+	QCoreApplication::sendEvent( quickWindow, &event );
+}
+
+auto QWswUISystem::getPressedMouseButtons() const -> Qt::MouseButtons {
+	auto result = Qt::MouseButtons();
+	if( Key_IsDown( K_MOUSE1 ) ) {
+		result |= Qt::LeftButton;
+	}
+	if( Key_IsDown( K_MOUSE2 ) ) {
+		result |= Qt::RightButton;
+	}
+	if( Key_IsDown( K_MOUSE3 ) ) {
+		result |= Qt::MiddleButton;
+	}
+	return result;
+}
+
+auto QWswUISystem::getPressedKeyboardModifiers() const -> Qt::KeyboardModifiers {
+	auto result = Qt::KeyboardModifiers();
+	if( Key_IsDown( K_LCTRL ) || Key_IsDown( K_RCTRL ) ) {
+		result |= Qt::ControlModifier;
+	}
+	if( Key_IsDown( K_LALT ) || Key_IsDown( K_RALT ) ) {
+		result |= Qt::AltModifier;
+	}
+	if( Key_IsDown( K_LSHIFT ) || Key_IsDown( K_RSHIFT ) ) {
+		result |= Qt::ShiftModifier;
+	}
+	return result;
 }
 
 #include "uisystem.moc"
