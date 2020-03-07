@@ -55,7 +55,7 @@ public:
 	void endRegistration() override {};
 
 	void handleKeyEvent( int quakeKey, bool keyDown, Context context ) override;
-	void handleCharEvent( int ch ) override {};
+	void handleCharEvent( int ch ) override;
 	void handleMouseMove( int frameTime, int dx, int dy ) override;
 
 	void forceMenuOn() override {};
@@ -120,6 +120,8 @@ private:
 
 	qreal mouseXY[2] { 0.0, 0.0 };
 
+	QString charStrings[128];
+
 	[[nodiscard]]
 	auto getQuakeClientState() const { return lastFrameState.quakeClientState; }
 
@@ -141,6 +143,11 @@ private:
 	auto getPressedMouseButtons() const -> Qt::MouseButtons;
 	[[nodiscard]]
 	auto getPressedKeyboardModifiers() const -> Qt::KeyboardModifiers;
+
+	bool tryHandlingKeyEventAsAMouseEvent( int quakeKey, bool keyDown );
+
+	[[nodiscard]]
+	auto convertQuakeKeyToQtKey( int quakeKey ) const -> std::optional<Qt::Key>;
 };
 
 void QWswUISystem::onSceneGraphInitialized() {
@@ -215,7 +222,7 @@ auto UISystem::maybeInstance() -> std::optional<UISystem *> {
 
 void QWswUISystem::refresh( unsigned refreshFlags ) {
 #ifndef _WIN32
-	QGuiApplication::processEvents( QEventLoop::ExcludeUserInputEvents );
+	QGuiApplication::processEvents( QEventLoop::AllEvents );
 #endif
 
 	updateProps();
@@ -230,6 +237,15 @@ void QWswUISystem::refresh( unsigned refreshFlags ) {
 }
 
 QVariant VID_GetMainContextHandle();
+
+static bool isAPrintableChar( int ch ) {
+	if( ch < 0 || ch > 127 ) {
+		return false;
+	}
+
+	// See https://en.cppreference.com/w/cpp/string/byte/isprint
+	return std::isprint( (unsigned char)ch );
+}
 
 QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 	int fakeArgc = 0;
@@ -308,6 +324,14 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 
 	ui_sensitivity = Cvar_Get( "ui_sensitivity", "1.0", CVAR_ARCHIVE );
 	ui_mouseAccel = Cvar_Get( "ui_mouseAccel", "0.25", CVAR_ARCHIVE );
+
+	// Initialize the table of textual strings corresponding to characters
+	for( const QString &s: charStrings ) {
+		const auto offset = (int)( &s - charStrings );
+		if( ::isAPrintableChar( offset ) ) {
+			charStrings[offset] = QString::asprintf( "%c", (char)offset );
+		}
+	}
 }
 
 void QWswUISystem::renderQml() {
@@ -456,26 +480,37 @@ void QWswUISystem::handleMouseMove( int frameTime, int dx, int dy ) {
 }
 
 void QWswUISystem::handleKeyEvent( int quakeKey, bool keyDown, Context context ) {
-	// Currently only mouse key events in the main context are supported
+	// Currently unsupported
 	if( context == RespectContext ) {
 		return;
 	}
 
-	Qt::MouseButton button;
-	if( quakeKey == K_MOUSE1 ) {
-		button = Qt::LeftButton;
-	} else if( quakeKey == K_MOUSE2 ) {
-		button = Qt::RightButton;
-	} else if( quakeKey == K_MOUSE3 ) {
-		button = Qt::MiddleButton;
-	} else {
+	if( tryHandlingKeyEventAsAMouseEvent( quakeKey, keyDown ) ) {
 		return;
 	}
 
-	QPointF point( mouseXY[0], mouseXY[1] );
-	QEvent::Type eventType = keyDown ? QEvent::MouseButtonPress : QEvent::MouseButtonRelease;
-	QMouseEvent event( eventType, point, button, getPressedMouseButtons(), getPressedKeyboardModifiers() );
-	QCoreApplication::sendEvent( quickWindow, &event );
+	const auto maybeQtKey = convertQuakeKeyToQtKey( quakeKey );
+	if( !maybeQtKey ) {
+		return;
+	}
+
+	const auto type = keyDown ? QEvent::KeyPress : QEvent::KeyRelease;
+	QKeyEvent keyEvent( type, *maybeQtKey, getPressedKeyboardModifiers() );
+	QCoreApplication::sendEvent( quickWindow, &keyEvent );
+}
+
+void QWswUISystem::handleCharEvent( int ch ) {
+	if( !::isAPrintableChar( ch ) ) {
+		return;
+	}
+
+	const auto modifiers = getPressedKeyboardModifiers();
+	// The plain cast of `ch` to Qt::Key seems to be correct in this case
+	// (all printable characters seem to map 1-1 to Qt key codes)
+	QKeyEvent pressEvent( QEvent::KeyPress, (Qt::Key)ch, modifiers, charStrings[ch] );
+	QCoreApplication::sendEvent( quickWindow, &pressEvent );
+	QKeyEvent releaseEvent( QEvent::KeyRelease, (Qt::Key)ch, modifiers );
+	QCoreApplication::sendEvent( quickWindow, &releaseEvent );
 }
 
 auto QWswUISystem::getPressedMouseButtons() const -> Qt::MouseButtons {
@@ -504,6 +539,86 @@ auto QWswUISystem::getPressedKeyboardModifiers() const -> Qt::KeyboardModifiers 
 		result |= Qt::ShiftModifier;
 	}
 	return result;
+}
+
+bool QWswUISystem::tryHandlingKeyEventAsAMouseEvent( int quakeKey, bool keyDown ) {
+	Qt::MouseButton button;
+	if( quakeKey == K_MOUSE1 ) {
+		button = Qt::LeftButton;
+	} else if( quakeKey == K_MOUSE2 ) {
+		button = Qt::RightButton;
+	} else if( quakeKey == K_MOUSE3 ) {
+		button = Qt::MiddleButton;
+	} else {
+		return false;
+	}
+
+	QPointF point( mouseXY[0], mouseXY[1] );
+	QEvent::Type eventType = keyDown ? QEvent::MouseButtonPress : QEvent::MouseButtonRelease;
+	QMouseEvent event( eventType, point, button, getPressedMouseButtons(), getPressedKeyboardModifiers() );
+	QCoreApplication::sendEvent( quickWindow, &event );
+	return true;
+}
+
+auto QWswUISystem::convertQuakeKeyToQtKey( int quakeKey ) const -> std::optional<Qt::Key> {
+	if( quakeKey < 0 ) {
+		return std::nullopt;
+	}
+
+	static_assert( K_BACKSPACE == 127 );
+	if( quakeKey < 127 ) {
+		if( quakeKey == K_TAB ) {
+			return Qt::Key_Tab;
+		}
+		if( quakeKey == K_ENTER ) {
+			return Qt::Key_Enter;
+		}
+		if( quakeKey == K_ESCAPE ) {
+			return Qt::Key_Escape;
+		}
+		if( quakeKey == K_SPACE ) {
+			return Qt::Key_Space;
+		}
+		if( std::isprint( quakeKey ) ) {
+			return (Qt::Key)quakeKey;
+		}
+		return std::nullopt;
+	}
+
+	if( quakeKey >= K_F1 && quakeKey <= K_F15 ) {
+		return (Qt::Key)( Qt::Key_F1 + ( quakeKey - K_F1 ) );
+	}
+
+	// Some other seemingly unuseful keys are ignored
+	switch( quakeKey ) {
+		case K_BACKSPACE: return Qt::Key_Backspace;
+
+		case K_UPARROW: return Qt::Key_Up;
+		case K_DOWNARROW: return Qt::Key_Down;
+		case K_LEFTARROW: return Qt::Key_Left;
+		case K_RIGHTARROW: return Qt::Key_Right;
+
+		case K_LALT:
+		case K_RALT:
+			return Qt::Key_Alt;
+
+		case K_LCTRL:
+		case K_RCTRL:
+			return Qt::Key_Control;
+
+		case K_LSHIFT:
+		case K_RSHIFT:
+			return Qt::Key_Shift;
+
+		case K_INS: return Qt::Key_Insert;
+		case K_DEL: return Qt::Key_Delete;
+		case K_PGDN: return Qt::Key_PageDown;
+		case K_PGUP: return Qt::Key_PageUp;
+		case K_HOME: return Qt::Key_Home;
+		case K_END: return Qt::Key_End;
+
+		default: return std::nullopt;
+	}
 }
 
 #include "uisystem.moc"
