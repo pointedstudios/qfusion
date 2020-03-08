@@ -115,6 +115,9 @@ private:
 	bool isShowingInGameMenu { false };
 	bool isShowingRespectMenu { false };
 
+	bool hasStartedBackgroundMapLoading {false };
+	bool hasSucceededBackgroundMapLoading {false };
+
 	cvar_t *ui_sensitivity { nullptr };
 	cvar_t *ui_mouseAccel { nullptr };
 
@@ -136,7 +139,7 @@ private:
 
 	explicit QWswUISystem( int width, int height );
 
-	void updateProps();
+	void checkPropertyChanges();
 	void renderQml();
 
 	[[nodiscard]]
@@ -145,6 +148,8 @@ private:
 	auto getPressedKeyboardModifiers() const -> Qt::KeyboardModifiers;
 
 	bool tryHandlingKeyEventAsAMouseEvent( int quakeKey, bool keyDown );
+
+	void drawBackgroundMapIfNeeded();
 
 	[[nodiscard]]
 	auto convertQuakeKeyToQtKey( int quakeKey ) const -> std::optional<Qt::Key>;
@@ -225,7 +230,7 @@ void QWswUISystem::refresh( unsigned refreshFlags ) {
 	QGuiApplication::processEvents( QEventLoop::AllEvents );
 #endif
 
-	updateProps();
+	checkPropertyChanges();
 
 	if( !isValidAndReady ) {
 		return;
@@ -383,6 +388,10 @@ void QWswUISystem::leaveUIRenderingMode() {
 void R_Set2DMode( bool );
 void R_DrawExternalTextureOverlay( unsigned );
 shader_t *R_RegisterPic( const char * );
+struct model_s *R_RegisterModel( const char * );
+void RF_RegisterWorldModel( const char * );
+void RF_ClearScene();
+void RF_RenderScene( const refdef_t * );
 void RF_DrawStretchPic( int x, int y, int w, int h, float s1, float t1, float s2, float t2,
 	                    const vec4_t color, const shader_t *shader );
 
@@ -390,6 +399,8 @@ void QWswUISystem::drawSelfInMainContext() {
 	if( !isValidAndReady ) {
 		return;
 	}
+
+	drawBackgroundMapIfNeeded();
 
 	R_Set2DMode( true );
 
@@ -407,7 +418,54 @@ void QWswUISystem::drawSelfInMainContext() {
 	R_Set2DMode( false );
 }
 
-void QWswUISystem::updateProps() {
+void QWswUISystem::drawBackgroundMapIfNeeded() {
+	if( lastFrameState.quakeClientState != QuakeClient::Disconnected ) {
+		hasStartedBackgroundMapLoading = false;
+		hasSucceededBackgroundMapLoading = false;
+		return;
+	}
+
+	constexpr const char *worldModelName = "maps/ui.bsp";
+	if( !hasStartedBackgroundMapLoading ) {
+		RF_RegisterWorldModel( worldModelName );
+		hasStartedBackgroundMapLoading = true;
+	} else if( !hasSucceededBackgroundMapLoading ) {
+		if( R_RegisterModel( worldModelName ) ) {
+			hasSucceededBackgroundMapLoading = true;
+		}
+	}
+
+	if( !hasSucceededBackgroundMapLoading ) {
+		return;
+	}
+
+	refdef_t rdf;
+	memset( &rdf, 0, sizeof( rdf ) );
+	rdf.areabits = nullptr;
+
+	const auto widthAndHeight = std::make_pair( quickWindow->width(), quickWindow->height() );
+	std::tie( rdf.x, rdf.y ) = std::make_pair( 0, 0 );
+	std::tie( rdf.width, rdf.height ) = widthAndHeight;
+
+	// This is a copy-paste from Warsow 2.1 map_ui.pk3 CSS
+	const vec3_t origin { 302.0f, -490.0f, 120.0f };
+	const vec3_t angles { 0, -240, 0 };
+
+	VectorCopy( origin, rdf.vieworg );
+	AnglesToAxis( angles, rdf.viewaxis );
+	rdf.fov_x = 90.0f;
+	rdf.fov_y = CalcFov( 90.0f, rdf.width, rdf.height );
+	AdjustFov( &rdf.fov_x, &rdf.fov_y, rdf.width, rdf.height, false );
+	rdf.time = 0;
+
+	std::tie( rdf.scissor_x, rdf.scissor_y ) = std::make_pair( 0, 0 );
+	std::tie( rdf.scissor_width, rdf.scissor_height ) = widthAndHeight;
+
+	RF_ClearScene();
+	RF_RenderScene( &rdf );
+}
+
+void QWswUISystem::checkPropertyChanges() {
 	auto *currClientState = &lastFrameState.quakeClientState;
 	const auto formerClientState = *currClientState;
 
