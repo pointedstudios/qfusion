@@ -7,6 +7,8 @@ Item {
 	id: root
 	anchors.fill: parent
 
+	property real expansionFrac: someOverlayButton.expansionFrac
+
 	Item {
 		id: logoHolder
 		anchors.centerIn: parent
