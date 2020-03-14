@@ -82,4 +82,13 @@ Item {
 	CentralOverlayGroup {
 		id: centralOverlay
 	}
+
+	Keys.onPressed: {
+	    if (!centralOverlay.handleKeyEvent(event)) {
+	        if (event.key === Qt.Key_Escape) {
+	            root.forceActiveFocus()
+	            event.accepted = true
+	        }
+	    }
+	}
 }

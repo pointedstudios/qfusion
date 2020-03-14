@@ -7,11 +7,12 @@ Item {
 	id: root
 	height: 40
 
+    property bool highlighted: false
 	property string text
 	property bool leaningRight: false
 	property real expansionFrac: 0.0
 
-	signal clicked(var item)
+	signal clicked()
 
 	function toggleExpandedState() {
 		if (state == "centered") {
@@ -75,7 +76,7 @@ Item {
 		visible: !leaningRight
 		anchors.right: contentRow.left
 		anchors.rightMargin: 4
-		leftColor: mouseArea.containsMouse ? highlightedColor : root.foregroundColor
+		leftColor: highlighted || mouseArea.containsMouse ? highlightedColor : foregroundColor
 		rightColor: root.trailDecayColor
 		transformMatrix: root.transformMatrix
 	}
@@ -85,7 +86,7 @@ Item {
 		height: 40
 		width: 224
 		radius: 2
-		color: mouseArea.containsMouse ? highlightedColor : foregroundColor
+		color: highlighted || mouseArea.containsMouse ? highlightedColor : foregroundColor
 
 		transform: Matrix4x4 {
 			matrix: root.transformMatrix
@@ -118,7 +119,13 @@ Item {
 			id: mouseArea
 			anchors.fill: parent
 			hoverEnabled: true
-			onClicked: root.clicked(root)
+			onClicked: {
+			    let frac = root.expansionFrac
+			    // Suppress clicked() signal in an immediate state
+			    if (Math.abs(frac) < 0.001 || Math.abs(frac - 1.0) < 0.001) {
+			        root.clicked()
+			    }
+			}
 		}
 	}
 
@@ -127,7 +134,7 @@ Item {
 		anchors.leftMargin: 4
 		visible: leaningRight
 		leftColor: root.trailDecayColor
-		rightColor: mouseArea.containsMouse ? highlightedColor : root.foregroundColor
+		rightColor: highlighted || mouseArea.containsMouse ? highlightedColor : foregroundColor
 		transformMatrix: root.transformMatrix
 	}
 }
