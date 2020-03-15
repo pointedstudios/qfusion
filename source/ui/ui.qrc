@@ -4,10 +4,18 @@
         <file>CentralOverlayButtonTrail.qml</file>
         <file>CentralOverlayGroup.qml</file>
         <file>DemoPlaybackMenu.qml</file>
+        <file>DemosPage.qml</file>
+        <file>HelpPage.qml</file>
         <file>InGameMenu.qml</file>
+        <file>LocalGamePage.qml</file>
         <file>MainMenu.qml</file>
+        <file>NewsPage.qml</file>
+        <file>PlayOnlinePage.qml</file>
+        <file>ProfilePage.qml</file>
+        <file>QuitPage.qml</file>
         <file>RespectTokensMenu.qml</file>
         <file>RootItem.qml</file>
+        <file>SettingsPage.qml</file>
         <file>logo.webp</file>
         <file>qtquickcontrols2.conf</file>
     </qresource>

@@ -9,14 +9,6 @@ Item {
 	anchors.fill: parent
 	visible: wsw.quakeClientState === QuakeClient.Disconnected
 
-	Item {
-		id: contentPane
-		anchors.top: parent.top
-		anchors.bottom: parent.bottom
-		anchors.horizontalCenter: parent.horizontalCenter
-		width: 1024
-	}
-
 	readonly property real contentPaneMargin:
 		0.5 * (root.width - contentPane.width)
 	readonly property real centralPaneGradientFrac:
@@ -82,6 +74,83 @@ Item {
 	CentralOverlayGroup {
 		id: centralOverlay
 	}
+
+	Component {
+	    id: newsComponent
+	    NewsPage {}
+	}
+
+	Component {
+	    id: profileComponent
+	    ProfilePage {}
+	}
+
+	Component {
+	    id: playOnlineComponent
+	    PlayOnlinePage {}
+	}
+
+	Component {
+	    id: localGameComponent
+	    LocalGamePage {}
+	}
+
+    Component {
+        id: settingsComponent
+        SettingsPage {}
+    }
+
+    Component {
+        id: demosComponent
+        DemosPage {}
+    }
+
+    Component {
+        id: helpComponent
+        HelpPage {}
+    }
+
+    Component {
+        id: quitComponent
+        QuitPage {}
+    }
+
+    StackView {
+		id: contentPane
+		anchors.top: parent.top
+		anchors.bottom: parent.bottom
+		anchors.horizontalCenter: parent.horizontalCenter
+		width: 1024
+	}
+
+    Connections {
+        target: centralOverlay
+        onActivePageTagChanged: {
+            let tag = centralOverlay.activePageTag
+            if (!tag) {
+                contentPane.clear()
+                return
+            }
+            if (tag === centralOverlay.pageNews) {
+                contentPane.replace(newsComponent)
+            } else if (tag === centralOverlay.pageProfile) {
+                contentPane.replace(profileComponent)
+            } else if (tag === centralOverlay.pagePlayOnline) {
+                contentPane.replace(playOnlineComponent)
+            } else if (tag === centralOverlay.pageLocalGame) {
+                contentPane.replace(localGameComponent)
+            } else if (tag === centralOverlay.pageSettings) {
+                contentPane.replace(settingsComponent)
+            } else if (tag === centralOverlay.pageDemos) {
+                contentPane.replace(demosComponent)
+            } else if (tag === centralOverlay.pageHelp) {
+                contentPane.replace(helpComponent)
+            } else if (tag === centralOverlay.pageQuit) {
+                contentPane.replace(quitComponent)
+            }
+            contentPane.currentItem.forceActiveFocus()
+        }
+    }
 
 	Keys.onPressed: {
 	    if (!centralOverlay.handleKeyEvent(event)) {
