@@ -572,22 +572,25 @@ class ClientCommandsHandler : public SingleArgCommandsHandler<edict_t *> {
 		ScriptCommandCallback( wsw::String &&name )
 			: SingleArgCallback( "script", std::move( name ) ) {}
 
+		[[nodiscard]]
 		bool operator()( edict_t *arg ) override;
 	};
 
-	bool AddOrReplace( GenericCommandCallback *callback ) override;
-	static bool IsWriteProtected( const wsw::StringView &name );
+	[[nodiscard]]
+	bool addOrReplace( GenericCommandCallback *callback ) override;
+	[[nodiscard]]
+	static bool isWriteProtected( const wsw::StringView &name );
 public:
-	static void Init();
-	static void Shutdown();
-	static ClientCommandsHandler *Instance();
+	static void init();
+	static void shutdown();
+	static ClientCommandsHandler *instance();
 
 	ClientCommandsHandler();
 
-	void PrecacheCommands();
+	void precacheCommands();
 
-	void HandleClientCommand( edict_t *ent );
-	void AddScriptCommand( const char *name );
+	void handleClientCommand( edict_t *ent );
+	void addScriptCommand( const char *name );
 };
 
 //

@@ -1359,21 +1359,21 @@ static void Cmd_Upstate_f( edict_t *ent ) {
 
 static SingletonHolder<ClientCommandsHandler> clientCommandsHandlerHolder;
 
-void ClientCommandsHandler::Init() {
+void ClientCommandsHandler::init() {
 	::clientCommandsHandlerHolder.Init();
 }
 
-void ClientCommandsHandler::Shutdown() {
+void ClientCommandsHandler::shutdown() {
 	::clientCommandsHandlerHolder.Shutdown();
 }
 
-ClientCommandsHandler *ClientCommandsHandler::Instance() {
+ClientCommandsHandler *ClientCommandsHandler::instance() {
 	return ::clientCommandsHandlerHolder.Instance();
 }
 
-void ClientCommandsHandler::PrecacheCommands() {
+void ClientCommandsHandler::precacheCommands() {
 	int i = 0;
-	for( auto *callback = listHead; callback; callback = callback->NextInList() ) {
+	for( auto *callback = listHead; callback; callback = callback->nextInList() ) {
 		// TODO: This assumes zero-terminated string views!
 		trap_ConfigString( CS_GAMECOMMANDS + i, callback->name.data() );
 		i++;
@@ -1386,7 +1386,7 @@ void ClientCommandsHandler::PrecacheCommands() {
 static const wsw::StringView callvoteValidate( "callvoteValidate" );
 static const wsw::StringView callvotePassed( "callvotePassed" );
 
-bool ClientCommandsHandler::IsWriteProtected( const wsw::StringView &name ) {
+bool ClientCommandsHandler::isWriteProtected( const wsw::StringView &name ) {
 	for( const wsw::StringView &s: { callvoteValidate, callvotePassed } ) {
 		if( s.equalsIgnoreCase( name ) ) {
 			return true;
@@ -1395,16 +1395,16 @@ bool ClientCommandsHandler::IsWriteProtected( const wsw::StringView &name ) {
 	return false;
 }
 
-bool ClientCommandsHandler::AddOrReplace( GenericCommandCallback *callback ) {
+bool ClientCommandsHandler::addOrReplace( GenericCommandCallback *callback ) {
 	// TODO: The code assumes zero-terminated string views!
 
-	if( IsWriteProtected( callback->name ) ) {
+	if( isWriteProtected( callback->name ) ) {
 		G_Printf( "WARNING: G_AddCommand: command name '%s' is write protected\n", callback->name.data() );
 		return false;
 	}
 
 	// If there was an existing command
-	if( !CommandsHandler::AddOrReplace( callback ) ) {
+	if( !CommandsHandler::addOrReplace( callback ) ) {
 		return false;
 	}
 
@@ -1422,70 +1422,70 @@ bool ClientCommandsHandler::AddOrReplace( GenericCommandCallback *callback ) {
 }
 
 ClientCommandsHandler::ClientCommandsHandler() {
-	auto adapter( AdapterForTag( "builtin" ) );
-	adapter.Add( "cvarinfo", Cmd_CvarInfo_f );
-	adapter.Add( "position", Cmd_Position_f );
-	adapter.Add( "players", Cmd_Players_f );
-	adapter.Add( "spectators", Cmd_Spectators_f );
-	adapter.Add( "stats", Cmd_ShowStats_f );
-	adapter.Add( "say", Cmd_SayCmd_f );
-	adapter.Add( "say_team", Cmd_SayTeam_f );
-	adapter.Add( "svscore", Cmd_Score_f );
-	adapter.Add( "god", Cmd_God_f );
-	adapter.Add( "noclip", Cmd_Noclip_f );
-	adapter.Add( "use", Cmd_Use_f );
-	adapter.Add( "give", Cmd_Give_f );
-	adapter.Add( "kill", Cmd_Kill_f );
-	adapter.Add( "putaway", Cmd_PutAway_f );
-	adapter.Add( "chase", Cmd_ChaseCam_f );
-	adapter.Add( "chasenext", Cmd_ChaseNext_f );
-	adapter.Add( "chaseprev", Cmd_ChasePrev_f );
-	adapter.Add( "spec", Cmd_Spec_f );
-	adapter.Add( "enterqueue", G_Teams_JoinChallengersQueue );
-	adapter.Add( "leavequeue", G_Teams_LeaveChallengersQueue );
-	adapter.Add( "camswitch", Cmd_SwitchChaseCamMode_f );
-	adapter.Add( "timeout", Cmd_Timeout_f );
-	adapter.Add( "timein", Cmd_Timein_f );
-	adapter.Add( "cointoss", Cmd_CoinToss_f );
-	adapter.Add( "whois", Cmd_Whois_f );
+	auto adapter( adapterForTag( "builtin" ) );
+	adapter.addOrFail( "cvarinfo", Cmd_CvarInfo_f );
+	adapter.addOrFail( "position", Cmd_Position_f );
+	adapter.addOrFail( "players", Cmd_Players_f );
+	adapter.addOrFail( "spectators", Cmd_Spectators_f );
+	adapter.addOrFail( "stats", Cmd_ShowStats_f );
+	adapter.addOrFail( "say", Cmd_SayCmd_f );
+	adapter.addOrFail( "say_team", Cmd_SayTeam_f );
+	adapter.addOrFail( "svscore", Cmd_Score_f );
+	adapter.addOrFail( "god", Cmd_God_f );
+	adapter.addOrFail( "noclip", Cmd_Noclip_f );
+	adapter.addOrFail( "use", Cmd_Use_f );
+	adapter.addOrFail( "give", Cmd_Give_f );
+	adapter.addOrFail( "kill", Cmd_Kill_f );
+	adapter.addOrFail( "putaway", Cmd_PutAway_f );
+	adapter.addOrFail( "chase", Cmd_ChaseCam_f );
+	adapter.addOrFail( "chasenext", Cmd_ChaseNext_f );
+	adapter.addOrFail( "chaseprev", Cmd_ChasePrev_f );
+	adapter.addOrFail( "spec", Cmd_Spec_f );
+	adapter.addOrFail( "enterqueue", G_Teams_JoinChallengersQueue );
+	adapter.addOrFail( "leavequeue", G_Teams_LeaveChallengersQueue );
+	adapter.addOrFail( "camswitch", Cmd_SwitchChaseCamMode_f );
+	adapter.addOrFail( "timeout", Cmd_Timeout_f );
+	adapter.addOrFail( "timein", Cmd_Timein_f );
+	adapter.addOrFail( "cointoss", Cmd_CoinToss_f );
+	adapter.addOrFail( "whois", Cmd_Whois_f );
 
 	// callvotes commands
-	adapter.Add( "callvote", G_CallVote_Cmd );
-	adapter.Add( "vote", G_CallVotes_CmdVote );
+	adapter.addOrFail( "callvote", G_CallVote_Cmd );
+	adapter.addOrFail( "vote", G_CallVotes_CmdVote );
 
-	adapter.Add( "opcall", G_OperatorVote_Cmd );
-	adapter.Add( "operator", Cmd_GameOperator_f );
-	adapter.Add( "op", Cmd_GameOperator_f );
+	adapter.addOrFail( "opcall", G_OperatorVote_Cmd );
+	adapter.addOrFail( "operator", Cmd_GameOperator_f );
+	adapter.addOrFail( "op", Cmd_GameOperator_f );
 
 	// teams commands
-	adapter.Add( "ready", G_Match_Ready );
-	adapter.Add( "unready", G_Match_NotReady );
-	adapter.Add( "notready", G_Match_NotReady );
-	adapter.Add( "toggleready", G_Match_ToggleReady );
-	adapter.Add( "join", Cmd_Join_f );
+	adapter.addOrFail( "ready", G_Match_Ready );
+	adapter.addOrFail( "unready", G_Match_NotReady );
+	adapter.addOrFail( "notready", G_Match_NotReady );
+	adapter.addOrFail( "toggleready", G_Match_ToggleReady );
+	adapter.addOrFail( "join", Cmd_Join_f );
 
 	// coach commands
-	adapter.Add( "coach", G_Teams_Coach );
-	adapter.Add( "lockteam", G_Teams_CoachLockTeam );
-	adapter.Add( "unlockteam", G_Teams_CoachUnLockTeam );
-	adapter.Add( "invite", G_Teams_Invite_f );
+	adapter.addOrFail( "coach", G_Teams_Coach );
+	adapter.addOrFail( "lockteam", G_Teams_CoachLockTeam );
+	adapter.addOrFail( "unlockteam", G_Teams_CoachUnLockTeam );
+	adapter.addOrFail( "invite", G_Teams_Invite_f );
 
 	// bot commands
-	adapter.Add( "botnotarget", AI_Cheat_NoTarget );
+	adapter.addOrFail( "botnotarget", AI_Cheat_NoTarget );
 
-	// ch : added awards
-	adapter.Add( "awards", Cmd_Awards_f );
+	// ch : addOrFailed awards
+	adapter.addOrFail( "awards", Cmd_Awards_f );
 
 	// ignore-related commands
-	adapter.Add( "ignore", ChatHandlersChain::HandleIgnoreCommand );
-	adapter.Add( "unignore", ChatHandlersChain::HandleUnignoreCommand );
-	adapter.Add( "ignorelist", ChatHandlersChain::HandleIgnoreListCommand );
+	adapter.addOrFail( "ignore", ChatHandlersChain::HandleIgnoreCommand );
+	adapter.addOrFail( "unignore", ChatHandlersChain::HandleUnignoreCommand );
+	adapter.addOrFail( "ignorelist", ChatHandlersChain::HandleIgnoreListCommand );
 
 	// misc
-	adapter.Add( "upstate", Cmd_Upstate_f );
+	adapter.addOrFail( "upstate", Cmd_Upstate_f );
 }
 
-void ClientCommandsHandler::HandleClientCommand( edict_t *ent ) {
+void ClientCommandsHandler::handleClientCommand( edict_t *ent ) {
 	// Check whether the client is fully in-game
 	if( !ent->r.client || trap_GetClientState( PLAYERNUM( ent ) ) < CS_SPAWNED ) {
 		return;
@@ -1498,15 +1498,15 @@ void ClientCommandsHandler::HandleClientCommand( edict_t *ent ) {
 		G_Client_UpdateActivity( ent->r.client ); // activity detected
 	}
 
-	if( Super::Handle( cmd, ent ) ) {
+	if( Super::handle( cmd, ent ) ) {
 		return;
 	}
 
 	G_PrintMsg( ent, "Bad user command: %s\n", cmd );
 }
 
-void ClientCommandsHandler::AddScriptCommand( const char *name ) {
-	Add( new ScriptCommandCallback( wsw::String( name ) ) );
+void ClientCommandsHandler::addScriptCommand( const char *name ) {
+	(void)add( new ScriptCommandCallback( wsw::String( name ) ) );
 }
 
 bool ClientCommandsHandler::ScriptCommandCallback::operator()( edict_t *arg ) {

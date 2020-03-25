@@ -27,8 +27,10 @@ struct GenericCommandCallback {
 	GenericCommandCallback( const char *tag_, const char *name_ )
 		: nameBuffer( name_ ), tag( tag_ ), name( nameBuffer.data(), nameBuffer.length() ) {}
 
-	GenericCommandCallback *NextInBin() { return next[HASH_LINKS]; }
-	GenericCommandCallback *NextInList() { return next[LIST_LINKS]; }
+	[[nodiscard]]
+	auto nextInBin() ->GenericCommandCallback * { return next[HASH_LINKS]; }
+	[[nodiscard]]
+	auto nextInList() -> GenericCommandCallback * { return next[LIST_LINKS]; }
 
 	virtual ~GenericCommandCallback() = default;
 };
@@ -43,29 +45,42 @@ protected:
 
 	unsigned size { 0 };
 
-	void Link( Callback *entry, unsigned binIndex );
-	void UnlinkAndDelete( Callback *entry );
+	void link( Callback *entry, unsigned binIndex );
+	void unlinkAndDelete( Callback *entry );
 
-	virtual bool Add( Callback *entry );
-	virtual bool AddOrReplace( Callback *entry );
+	[[nodiscard]]
+	virtual bool add( Callback *entry );
+	[[nodiscard]]
+	virtual bool addOrReplace( Callback *entry );
 
-	Callback *FindByName( const char *name );
-	Callback *FindByName( const wsw::HashedStringView &name, unsigned binIndex );
-	void RemoveByTag( const char *tag );
+	auto findByName( const char *name ) -> Callback *;
+	auto findByName( const wsw::HashedStringView &name, unsigned binIndex ) -> Callback *;
+	void removeByTag( const char *tag );
 
-	void RemoveByName( const char *name ) {
-		if( Callback *callback = FindByName( name ) ) {
-			UnlinkAndDelete( callback );
+	void removeByName( const char *name ) {
+		if( Callback *callback = findByName( name ) ) {
+			unlinkAndDelete( callback );
 		}
 	}
-	void RemoveByName( const wsw::StringView &name ) {
-		if( Callback *callback = FindByName( name ) ) {
-			UnlinkAndDelete( callback );
+	void removeByName( const wsw::StringView &name ) {
+		if( Callback *callback = findByName( name ) ) {
+			unlinkAndDelete( callback );
 		}
 	}
-	void RemoveByName( const wsw::HashedStringView &name ) {
-		if( Callback *callback = FindByName( name ) ) {
-			UnlinkAndDelete( callback );
+	void removeByName( const wsw::HashedStringView &name ) {
+		if( Callback *callback = findByName( name ) ) {
+			unlinkAndDelete( callback );
+		}
+	}
+
+	/**
+	  * Useful for descendant implementation.
+	  * The purpose is just ensuring that a mistake gets caught in debug builds
+	  * (commands should never be added dynamically if this gets used).
+	  */
+	static void ensureAdded( bool additionResult ) {
+		if( !additionResult ) {
+			throw std::logic_error("Failed to add a command");
 		}
 	}
 public:
@@ -77,29 +92,29 @@ public:
 };
 
 template <typename Callback>
-bool CommandsHandler<Callback>::Add( Callback *entry ) {
+bool CommandsHandler<Callback>::add( Callback *entry ) {
 	const unsigned binIndex = entry->name.getHash() % NUM_BINS;
-	if( FindByName( entry->name, binIndex ) ) {
+	if( findByName( entry->name, binIndex ) ) {
 		return false;
 	}
-	Link( entry, binIndex );
+	link( entry, binIndex );
 	return true;
 }
 
 template <typename Callback>
-bool CommandsHandler<Callback>::AddOrReplace( Callback *entry ) {
+bool CommandsHandler<Callback>::addOrReplace( Callback *entry ) {
 	const unsigned binIndex = entry->name.getHash() % NUM_BINS;
 	bool result = true;
-	if( Callback *existing = FindByName( entry->name, binIndex ) ) {
-		UnlinkAndDelete( existing );
+	if( Callback *existing = findByName( entry->name, binIndex ) ) {
+		unlinkAndDelete( existing );
 		result = false;
 	}
-	Link( entry, binIndex );
+	link( entry, binIndex );
 	return result;
 }
 
 template <typename Callback>
-void CommandsHandler<Callback>::Link( Callback *entry, unsigned binIndex ) {
+void CommandsHandler<Callback>::link( Callback *entry, unsigned binIndex ) {
 	entry->binIndex = binIndex;
 	::Link( entry, &hashBins[binIndex], Callback::HASH_LINKS );
 	::Link( entry, &listHead, Callback::LIST_LINKS );
@@ -107,7 +122,7 @@ void CommandsHandler<Callback>::Link( Callback *entry, unsigned binIndex ) {
 }
 
 template <typename Callback>
-void CommandsHandler<Callback>::UnlinkAndDelete( Callback *entry ) {
+void CommandsHandler<Callback>::unlinkAndDelete( Callback *entry ) {
 	assert( entry->binIndex < NUM_BINS );
 	::Link( entry, &hashBins[entry->binIndex], Callback::HASH_LINKS );
 	::Link( entry, &listHead, Callback::LIST_LINKS );
@@ -120,37 +135,36 @@ template <typename Callback>
 CommandsHandler<Callback>::~CommandsHandler() {
 	Callback *nextEntry;
 	for( Callback *entry = listHead; entry; entry = nextEntry ) {
-		nextEntry = entry->NextInList();
+		nextEntry = entry->nextInList();
 		delete entry;
 	}
 }
 
 template <typename Callback>
-Callback* CommandsHandler<Callback>::FindByName( const char *name ) {
+auto CommandsHandler<Callback>::findByName( const char *name ) -> Callback * {
 	wsw::HashedStringView hashedNameView( name );
-	return FindByName( hashedNameView, hashedNameView.getHash() % NUM_BINS );
+	return findByName( hashedNameView, hashedNameView.getHash() % NUM_BINS );
 }
 
 template <typename Callback>
-Callback *CommandsHandler<Callback>::FindByName( const wsw::HashedStringView &name, unsigned binIndex ) {
+auto CommandsHandler<Callback>::findByName( const wsw::HashedStringView &name, unsigned binIndex ) -> Callback * {
 	Callback *entry = hashBins[binIndex];
 	while( entry ) {
 		if( entry->name.equalsIgnoreCase( name ) ) {
 			return entry;
 		}
-		entry = entry->NextInBin();
+		entry = entry->nextInBin();
 	}
 	return nullptr;
 }
 
 template <typename Callback>
-void CommandsHandler<Callback>::RemoveByTag( const char *tag ) {
+void CommandsHandler<Callback>::removeByTag( const char *tag ) {
 	Callback *nextEntry;
 	for( Callback *entry = listHead; entry; entry = nextEntry ) {
 		nextEntry = entry->NextInList();
 		if( !Q_stricmp( entry->tag, tag ) ) {
-			Unlink( entry );
-			delete entry;
+			unlinkAndDelete( entry );
 		}
 	}
 }
@@ -164,6 +178,7 @@ protected:
 			: GenericCommandCallback( tag_, cmd_ ) {}
 		NoArgCallback( const char *tag_,  wsw::String &&cmd_ )
 			: GenericCommandCallback( tag_, std::move( cmd_ ) ) {}
+		[[nodiscard]]
 		virtual bool operator()() = 0;
 	};
 
@@ -174,6 +189,7 @@ protected:
 			: NoArgCallback( tag_, cmd_ ), handler( handler_ ) {}
 		NoArgOptimizedCallback( const char *tag_, wsw::String &&cmd_, void (*handler_)() )
 			: NoArgCallback( tag_, std::move( cmd_ ) ), handler( handler_ ) {}
+		[[nodiscard]]
 		bool operator()() override { handler(); return true; }
 	};
 
@@ -184,6 +200,7 @@ protected:
 			: NoArgCallback( tag_, cmd_ ), handler( handler_ ) {}
 		NoArgClosureCallback( const char *tag_, wsw::String &&cmd_, std::function<void()> &&handler_ )
 			: NoArgCallback( tag_, std::move( cmd_ ) ), handler( handler_ ) {}
+		[[nodiscard]]
 		bool operator()() override { handler(); return true; }
 	};
 
@@ -194,24 +211,43 @@ public:
 		NoArgCommandsHandler *const parent;
 		Adapter( const char *tag_, NoArgCommandsHandler *parent_ ) : tag( tag_ ), parent( parent_ ) {}
 	public:
-		void Add( const char *cmd, void ( *handler )() ) {
-			parent->Add( new NoArgOptimizedCallback( tag, cmd, handler ) );
+		[[nodiscard]]
+		bool add( const char *cmd, void ( *handler )() ) {
+			return parent->add( new NoArgOptimizedCallback( tag, cmd, handler ) );
 		}
-		void Add( wsw::String &&cmd, void ( *handler )() ) {
-			parent->Add( new NoArgOptimizedCallback( tag, std::move( cmd ), handler ) );
+		[[nodiscard]]
+		bool add( wsw::String &&cmd, void ( *handler )() ) {
+			return parent->add( new NoArgOptimizedCallback( tag, std::move( cmd ), handler ) );
 		}
-		void Add( const char *cmd, std::function<void()> &&handler ) {
-			parent->Add( new NoArgClosureCallback( tag, cmd, std::move( handler ) ) );
+		[[nodiscard]]
+		bool add( const char *cmd, std::function<void()> &&handler ) {
+			return parent->add( new NoArgClosureCallback( tag, cmd, std::move( handler ) ) );
 		}
-		void Add( wsw::String &&cmd, std::function<void()> &&handler ) {
-			parent->Add( new NoArgClosureCallback( tag, std::move( cmd ), std::move( handler ) ) );
+		[[nodiscard]]
+		bool add( wsw::String &&cmd, std::function<void()> &&handler ) {
+			return parent->add( new NoArgClosureCallback( tag, std::move( cmd ), std::move( handler ) ) );
+		}
+
+		void addOrFail( const char *cmd, void ( *handler )() ) {
+			ensureAdded( parent->add( new NoArgOptimizedCallback( tag, cmd, handler ) ) );
+		}
+		void addOrFail( wsw::String &&cmd, void ( *handler )() ) {
+			ensureAdded( parent->add( new NoArgOptimizedCallback( tag, std::move( cmd ), handler ) ) );
+		}
+		void addOrFail( const char *cmd, std::function<void()> &&handler ) {
+			ensureAdded( parent->add( new NoArgClosureCallback( tag, cmd, std::move( handler ) ) ) );
+		}
+		void addOrFail( wsw::String &&cmd, std::function<void()> &&handler ) {
+			ensureAdded( parent->add( new NoArgClosureCallback( tag, std::move( cmd ), std::move( handler ) ) ) );
 		}
 	};
 
-	Adapter AdapterForTag( const char *tag ) { return { tag, this }; }
+	[[nodiscard]]
+	auto adapterForTag( const char *tag ) -> Adapter { return { tag, this }; }
 
-	bool Handle( const char *cmd ) {
-		if( GenericCommandCallback *callback = this->FindByName( cmd ) ) {
+	[[nodiscard]]
+	bool handle( const char *cmd ) {
+		if( GenericCommandCallback *callback = this->findByName( cmd ) ) {
 			return ( (NoArgCallback *)callback )->operator()();
 		}
 		return false;
@@ -228,6 +264,7 @@ protected:
 			: GenericCommandCallback( tag_, cmd_ ) {}
 		SingleArgCallback( const char *tag_, wsw::String &&cmd_ )
 			: GenericCommandCallback( tag_, std::move( cmd_ ) ) {}
+		[[nodiscard]]
 		virtual bool operator()( Arg arg ) = 0;
 	};
 
@@ -238,6 +275,7 @@ protected:
 			: SingleArgCallback( tag_, cmd_ ), handler( handler_ ) {}
 		SingleArgOptimizedCallback( const char *tag_, wsw::String &&cmd_, void (*handler_)( Arg ) )
 			: SingleArgCallback( tag_, cmd_ ), handler( handler_ ) {}
+		[[nodiscard]]
 		bool operator()( Arg arg ) override { handler( arg ); return true; }
 	};
 
@@ -248,6 +286,7 @@ protected:
 			: SingleArgCallback( tag_, cmd_ ), handler( handler_ ) {}
 		SingleArgClosureCallback( const char *tag_, wsw::String &&cmd_, std::function<void(Arg)> &&handler_ )
 			: SingleArgCallback( tag_, cmd_ ), handler( handler_ ) {}
+		[[nodiscard]]
 		bool operator()( Arg arg ) override { handler( arg ); return true; }
 	};
 public:
@@ -257,25 +296,44 @@ public:
 		SingleArgCommandsHandler *const parent;
 		Adapter( const char *tag_, SingleArgCommandsHandler *parent_ ) : tag( tag_ ), parent( parent_ ) {}
 	public:
-		void Add( const char *cmd, void (*handler)( Arg ) ) {
-			parent->Add( new SingleArgOptimizedCallback( tag, cmd, handler ) );
+		[[nodiscard]]
+		bool add( const char *cmd, void (*handler)( Arg ) ) {
+			return parent->add( new SingleArgOptimizedCallback( tag, cmd, handler ) );
 		}
-		void Add( wsw::String &&cmd, void (*handler)( Arg ) ) {
-			parent->Add( new SingleArgOptimizedCallback( tag, cmd, handler ) );
+		[[nodiscard]]
+		bool add( wsw::String &&cmd, void (*handler)( Arg ) ) {
+			return parent->add( new SingleArgOptimizedCallback( tag, cmd, handler ) );
 		}
-		void Add( const char *cmd, std::function<void( Arg )> &&handler ) {
-			parent->Add( new SingleArgClosureCallback( tag, cmd, handler ) );
+		[[nodiscard]]
+		bool add( const char *cmd, std::function<void( Arg )> &&handler ) {
+			return parent->add( new SingleArgClosureCallback( tag, cmd, handler ) );
 		}
-		void Add( wsw::String &&cmd, std::function<void( Arg )> &&handler ) {
-			parent->Add( new SingleArgClosureCallback( tag, cmd, handler ) );
+		[[nodiscard]]
+		bool add( wsw::String &&cmd, std::function<void( Arg )> &&handler ) {
+			return parent->add( new SingleArgClosureCallback( tag, cmd, handler ) );
+		}
+
+		void addOrFail( const char *cmd, void (*handler)( Arg ) ) {
+			ensureAdded( parent->add( new SingleArgOptimizedCallback( tag, cmd, handler ) ) );
+		}
+		void addOrFail( wsw::String &&cmd, void (*handler)( Arg ) ) {
+			ensureAdded( parent->add( new SingleArgOptimizedCallback( tag, cmd, handler ) ) );
+		}
+		void addOrFail( const char *cmd, std::function<void( Arg )> &&handler ) {
+			ensureAdded( parent->add( new SingleArgClosureCallback( tag, cmd, handler ) ) );
+		}
+		void addOrFail( wsw::String &&cmd, std::function<void( Arg )> &&handler ) {
+			ensureAdded( parent->add( new SingleArgClosureCallback( tag, cmd, handler ) ) );
 		}
 	};
 
-	Adapter AdapterForTag( const char *tag ) { return { tag, this }; }
+	[[nodiscard]]
+	auto adapterForTag( const char *tag ) -> Adapter { return { tag, this }; }
 
-	bool Handle( const char *cmd, Arg arg ) {
+	[[nodiscard]]
+	bool handle( const char *cmd, Arg arg ) {
 		static_assert( std::is_pointer<Arg>::value, "The argument type must be a pointer" );
-		if( GenericCommandCallback *callback = this->FindByName( cmd ) ) {
+		if( GenericCommandCallback *callback = this->findByName( cmd ) ) {
 			return ( (SingleArgCallback *)callback )->operator()( arg );
 		}
 		return false;

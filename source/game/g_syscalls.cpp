@@ -35,7 +35,7 @@ static void G_RemoveRating( edict_t *ent ) {
 }
 
 static void ClientCommand( edict_t *ent ) {
-	ClientCommandsHandler::Instance()->HandleClientCommand( ent );
+	ClientCommandsHandler::instance()->handleClientCommand( ent );
 }
 
 /*
