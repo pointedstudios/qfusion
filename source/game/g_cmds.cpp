@@ -1506,7 +1506,7 @@ void ClientCommandsHandler::HandleClientCommand( edict_t *ent ) {
 }
 
 void ClientCommandsHandler::AddScriptCommand( const char *name ) {
-	Add( new ScriptCommandCallback( wsw::HashedStringRef::deepCopyOf( name ) ) );
+	Add( new ScriptCommandCallback( wsw::String( name ) ) );
 }
 
 bool ClientCommandsHandler::ScriptCommandCallback::operator()( edict_t *arg ) {

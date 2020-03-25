@@ -569,7 +569,7 @@ class ClientCommandsHandler : public SingleArgCommandsHandler<edict_t *> {
 
 	class ScriptCommandCallback : public Super::SingleArgCallback {
 	public:
-		ScriptCommandCallback( wsw::HashedStringRef &&name )
+		ScriptCommandCallback( wsw::String &&name )
 			: SingleArgCallback( "script", std::move( name ) ) {}
 
 		bool operator()( edict_t *arg ) override;

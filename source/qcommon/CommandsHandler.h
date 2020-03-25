@@ -16,15 +16,16 @@ struct GenericCommandCallback {
 	GenericCommandCallback *prev[2] { nullptr, nullptr };
 	GenericCommandCallback *next[2] { nullptr, nullptr };
 
+	wsw::String nameBuffer;
 	const char *const tag;
-	wsw::HashedStringRef name;
+	wsw::HashedStringView name;
 	unsigned binIndex { ~0u };
 
-	GenericCommandCallback( const char *tag_, wsw::HashedStringRef &&name_ )
-		: tag( tag_ ), name( std::move( name_ ) ) {}
+	GenericCommandCallback( const char *tag_, wsw::String &&name_ )
+		: nameBuffer( std::move( name_ ) ), tag( tag_ ), name( nameBuffer.data(), nameBuffer.length() ) {}
 
 	GenericCommandCallback( const char *tag_, const char *name_ )
-		: tag( tag_ ), name( name_ ) {}
+		: nameBuffer( name_ ), tag( tag_ ), name( nameBuffer.data(), nameBuffer.length() ) {}
 
 	GenericCommandCallback *NextInBin() { return next[HASH_LINKS]; }
 	GenericCommandCallback *NextInList() { return next[LIST_LINKS]; }
@@ -161,7 +162,7 @@ protected:
 	protected:
 		NoArgCallback( const char *tag_, const char *cmd_ )
 			: GenericCommandCallback( tag_, cmd_ ) {}
-		NoArgCallback( const char *tag_,  wsw::HashedStringRef &&cmd_ )
+		NoArgCallback( const char *tag_,  wsw::String &&cmd_ )
 			: GenericCommandCallback( tag_, std::move( cmd_ ) ) {}
 		virtual bool operator()() = 0;
 	};
@@ -171,7 +172,7 @@ protected:
 	public:
 		NoArgOptimizedCallback( const char *tag_, const char *cmd_, void (*handler_)() )
 			: NoArgCallback( tag_, cmd_ ), handler( handler_ ) {}
-		NoArgOptimizedCallback( const char *tag_, wsw::HashedStringRef &&cmd_, void (*handler_)() )
+		NoArgOptimizedCallback( const char *tag_, wsw::String &&cmd_, void (*handler_)() )
 			: NoArgCallback( tag_, std::move( cmd_ ) ), handler( handler_ ) {}
 		bool operator()() override { handler(); return true; }
 	};
@@ -181,7 +182,7 @@ protected:
 	public:
 		NoArgClosureCallback( const char *tag_, const char *cmd_, std::function<void()> &&handler_ )
 			: NoArgCallback( tag_, cmd_ ), handler( handler_ ) {}
-		NoArgClosureCallback( const char *tag_, wsw::HashedStringRef &&cmd_, std::function<void()> &&handler_ )
+		NoArgClosureCallback( const char *tag_, wsw::String &&cmd_, std::function<void()> &&handler_ )
 			: NoArgCallback( tag_, std::move( cmd_ ) ), handler( handler_ ) {}
 		bool operator()() override { handler(); return true; }
 	};
@@ -196,13 +197,13 @@ public:
 		void Add( const char *cmd, void ( *handler )() ) {
 			parent->Add( new NoArgOptimizedCallback( tag, cmd, handler ) );
 		}
-		void Add( wsw::HashedStringRef &&cmd, void ( *handler )() ) {
+		void Add( wsw::String &&cmd, void ( *handler )() ) {
 			parent->Add( new NoArgOptimizedCallback( tag, std::move( cmd ), handler ) );
 		}
 		void Add( const char *cmd, std::function<void()> &&handler ) {
 			parent->Add( new NoArgClosureCallback( tag, cmd, std::move( handler ) ) );
 		}
-		void Add( wsw::HashedStringRef &&cmd, std::function<void()> &&handler ) {
+		void Add( wsw::String &&cmd, std::function<void()> &&handler ) {
 			parent->Add( new NoArgClosureCallback( tag, std::move( cmd ), std::move( handler ) ) );
 		}
 	};
@@ -225,7 +226,7 @@ protected:
 	protected:
 		SingleArgCallback( const char *tag_, const char *cmd_ )
 			: GenericCommandCallback( tag_, cmd_ ) {}
-		SingleArgCallback( const char *tag_, wsw::HashedStringRef &&cmd_ )
+		SingleArgCallback( const char *tag_, wsw::String &&cmd_ )
 			: GenericCommandCallback( tag_, std::move( cmd_ ) ) {}
 		virtual bool operator()( Arg arg ) = 0;
 	};
@@ -235,7 +236,7 @@ protected:
 	public:
 		SingleArgOptimizedCallback( const char *tag_, const char *cmd_, void (*handler_)( Arg ) )
 			: SingleArgCallback( tag_, cmd_ ), handler( handler_ ) {}
-		SingleArgOptimizedCallback( const char *tag_, wsw::HashedStringRef &&cmd_, void (*handler_)( Arg ) )
+		SingleArgOptimizedCallback( const char *tag_, wsw::String &&cmd_, void (*handler_)( Arg ) )
 			: SingleArgCallback( tag_, cmd_ ), handler( handler_ ) {}
 		bool operator()( Arg arg ) override { handler( arg ); return true; }
 	};
@@ -245,7 +246,7 @@ protected:
 	public:
 		SingleArgClosureCallback( const char *tag_, const char *cmd_, std::function<void(Arg)> &&handler_ )
 			: SingleArgCallback( tag_, cmd_ ), handler( handler_ ) {}
-		SingleArgClosureCallback( const char *tag_, wsw::HashedStringRef &&cmd_, std::function<void(Arg)> &&handler_ )
+		SingleArgClosureCallback( const char *tag_, wsw::String &&cmd_, std::function<void(Arg)> &&handler_ )
 			: SingleArgCallback( tag_, cmd_ ), handler( handler_ ) {}
 		bool operator()( Arg arg ) override { handler( arg ); return true; }
 	};
@@ -259,13 +260,13 @@ public:
 		void Add( const char *cmd, void (*handler)( Arg ) ) {
 			parent->Add( new SingleArgOptimizedCallback( tag, cmd, handler ) );
 		}
-		void Add( wsw::HashedStringRef &&cmd, void (*handler)( Arg ) ) {
+		void Add( wsw::String &&cmd, void (*handler)( Arg ) ) {
 			parent->Add( new SingleArgOptimizedCallback( tag, cmd, handler ) );
 		}
 		void Add( const char *cmd, std::function<void( Arg )> &&handler ) {
 			parent->Add( new SingleArgClosureCallback( tag, cmd, handler ) );
 		}
-		void Add( wsw::HashedStringRef &&cmd, std::function<void( Arg )> &&handler ) {
+		void Add( wsw::String &&cmd, std::function<void( Arg )> &&handler ) {
 			parent->Add( new SingleArgClosureCallback( tag, cmd, handler ) );
 		}
 	};
