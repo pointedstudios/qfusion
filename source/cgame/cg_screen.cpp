@@ -43,7 +43,6 @@ cvar_t *cg_viewSize;
 cvar_t *cg_centerTime;
 cvar_t *cg_showFPS;
 cvar_t *cg_showPointedPlayer;
-cvar_t *cg_showHUD;
 cvar_t *cg_draw2D;
 cvar_t *cg_weaponlist;
 
@@ -58,9 +57,6 @@ cvar_t *cg_crosshair_strong_color;
 
 cvar_t *cg_crosshair_damage_color;
 
-cvar_t *cg_clientHUD;
-cvar_t *cg_specHUD;
-cvar_t *cg_debugHUD;
 cvar_t *cg_showSpeed;
 cvar_t *cg_showPickup;
 cvar_t *cg_showTimer;
@@ -271,7 +267,6 @@ static void CG_QuickMenuOff_f( void ) {
 void CG_ScreenInit( void ) {
 	cg_viewSize =       Cvar_Get( "cg_viewSize", "100", CVAR_ARCHIVE );
 	cg_showFPS =        Cvar_Get( "cg_showFPS", "0", CVAR_ARCHIVE );
-	cg_showHUD =        Cvar_Get( "cg_showHUD", "1", CVAR_ARCHIVE );
 	cg_draw2D =     Cvar_Get( "cg_draw2D", "1", 0 );
 	cg_centerTime =     Cvar_Get( "cg_centerTime", "2.5", 0 );
 	cg_weaponlist =     Cvar_Get( "cg_weaponlist", "1", CVAR_ARCHIVE );
@@ -289,8 +284,6 @@ void CG_ScreenInit( void ) {
 	cg_crosshair_strong_color = Cvar_Get( "cg_crosshair_strong_color", "255 255 255", CVAR_ARCHIVE );
 	cg_crosshair_strong_color->modified = true;
 
-	cg_clientHUD =      Cvar_Get( "cg_clientHUD", "", CVAR_ARCHIVE );
-	cg_specHUD =        Cvar_Get( "cg_specHUD", "", CVAR_ARCHIVE );
 	cg_showTimer =      Cvar_Get( "cg_showTimer", "1", CVAR_ARCHIVE );
 	cg_showSpeed =      Cvar_Get( "cg_showSpeed", "1", CVAR_ARCHIVE );
 	cg_showPickup =     Cvar_Get( "cg_showPickup", "1", CVAR_ARCHIVE );
@@ -318,29 +311,28 @@ void CG_ScreenInit( void ) {
 	cg_scoreboardWidthScale = Cvar_Get( "cg_scoreboardWidthScale", "1.0", CVAR_ARCHIVE );
 	cg_scoreboardStats =    Cvar_Get( "cg_scoreboardStats", "1", CVAR_ARCHIVE );
 
-	// wsw : hud debug prints
-	cg_debugHUD =           Cvar_Get( "cg_debugHUD", "0", 0 );
-
 	//
 	// register our commands
 	//
 	Cmd_AddCommand( "sizeup", CG_SizeUp_f );
 	Cmd_AddCommand( "sizedown", CG_SizeDown_f );
-	Cmd_AddCommand( "help_hud", Cmd_CG_PrintHudHelp_f );
 	Cmd_AddCommand( "gamemenu", CG_GameMenu_f );
 
 	Cmd_AddCommand( "+quickmenu", &CG_QuickMenuOn_f );
 	Cmd_AddCommand( "-quickmenu", &CG_QuickMenuOff_f );
+
+	CG_InitHUD();
 }
 
 /*
 * CG_ScreenShutdown
 */
 void CG_ScreenShutdown( void ) {
+	CG_ShutdownHUD();
+
 	Cmd_RemoveCommand( "gamemenu" );
 	Cmd_RemoveCommand( "sizeup" );
 	Cmd_RemoveCommand( "sizedown" );
-	Cmd_RemoveCommand( "help_hud" );
 
 	Cmd_RemoveCommand( "+quickmenu" );
 	Cmd_RemoveCommand( "-quickmenu" );
@@ -1265,32 +1257,6 @@ static void CG_SCRDrawViewBlend( void ) {
 	}
 
 	RF_DrawStretchPic( 0, 0, cgs.vidWidth, cgs.vidHeight, 0, 0, 1, 1, colorblend, cgs.shaderWhite );
-}
-
-
-//=======================================================
-
-/*
-* CG_DrawHUD
-*/
-void CG_DrawHUD() {
-	if( !cg_showHUD->integer ) {
-		return;
-	}
-
-	// if changed from or to spec, reload the HUD
-	if( cg.specStateChanged ) {
-		cg_specHUD->modified = cg_clientHUD->modified = true;
-		cg.specStateChanged = false;
-	}
-
-	cvar_t *hud = ISREALSPECTATOR() ? cg_specHUD : cg_clientHUD;
-	if( hud->modified ) {
-		CG_LoadStatusBar();
-		hud->modified = false;
-	}
-
-	CG_ExecuteLayoutProgram( cg.statusBar );
 }
 
 /*

@@ -742,11 +742,12 @@ extern cvar_t *cg_showChasers;
 void CG_ScreenInit( void );
 void CG_ScreenShutdown( void );
 void CG_Draw2D( void );
-void CG_DrawHUD();
 void CG_CalcVrect( void );
 void CG_CenterPrint( const char *str );
 
-void CG_LoadStatusBar( void );
+void CG_InitHUD();
+void CG_ShutdownHUD();
+void CG_DrawHUD();
 
 void CG_LoadingString( const char *str );
 bool CG_LoadingItemName( const char *str );
@@ -786,16 +787,10 @@ void CG_ShowQuickMenu( int state );
 //
 extern cvar_t *cg_showminimap;
 extern cvar_t *cg_showitemtimers;
-extern cvar_t *cg_placebo;
-extern cvar_t *cg_strafeHUD;
 
 void CG_SC_ResetObituaries( void );
 void CG_SC_Obituary( void );
-void Cmd_CG_PrintHudHelp_f( void );
-void CG_ExecuteLayoutProgram( struct cg_layoutnode_s *rootnode );
-void CG_GetHUDTouchButtons( int *buttons, int *upmove );
 void CG_UpdateHUDPostDraw( void );
-void CG_UpdateHUDPostTouch( void );
 void CG_ShowWeaponCross( void );
 void CG_ClearHUDInputState( void );
 void CG_ClearAwards( void );

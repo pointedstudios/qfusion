@@ -711,8 +711,6 @@ static void CG_RegisterVariables( void ) {
 
 	cg_showminimap = Cvar_Get( "cg_showMiniMap", "0", CVAR_ARCHIVE );
 	cg_showitemtimers = Cvar_Get( "cg_showItemTimers", "3", CVAR_ARCHIVE );
-	cg_placebo =  Cvar_Get( "cg_placebo", "0", CVAR_ARCHIVE );
-	cg_strafeHUD = Cvar_Get( "cg_strafeHUD", "0", CVAR_ARCHIVE );
 
 	cg_playList = Cvar_Get( "cg_playList", S_PLAYLIST_MATCH, CVAR_ARCHIVE );
 	cg_playListShuffle = Cvar_Get( "cg_playListShuffle", "1", CVAR_ARCHIVE );
@@ -1022,8 +1020,6 @@ void CG_Init( const char *serverName, unsigned int playerNum,
 	CG_RegisterLightStyles();
 
 	CG_ValidateItemList();
-
-	CG_LoadStatusBar();
 
 	CG_LoadingString( "" );
 
