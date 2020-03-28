@@ -72,13 +72,20 @@ Item {
 
 	state: "centered"
 
-	CentralOverlayButtonTrail {
-		visible: !leaningRight
+	Loader {
+		active: !leaningRight
 		anchors.right: contentRow.left
 		anchors.rightMargin: 4
-		leftColor: highlighted || mouseArea.containsMouse ? highlightedColor : foregroundColor
-		rightColor: root.trailDecayColor
-		transformMatrix: root.transformMatrix
+		sourceComponent: leftTrailComponent
+	}
+
+	Component {
+		id: leftTrailComponent
+		CentralOverlayButtonTrail {
+			leftColor: highlighted || mouseArea.containsMouse ? highlightedColor : foregroundColor
+			rightColor: root.trailDecayColor
+			transformMatrix: root.transformMatrix
+		}
 	}
 
 	Rectangle {
@@ -129,12 +136,19 @@ Item {
 		}
 	}
 
-	CentralOverlayButtonTrail {
+	Loader {
+		active: leaningRight
 		anchors.left: contentRow.right
 		anchors.leftMargin: 4
-		visible: leaningRight
-		leftColor: root.trailDecayColor
-		rightColor: highlighted || mouseArea.containsMouse ? highlightedColor : foregroundColor
-		transformMatrix: root.transformMatrix
+		sourceComponent: rightTrailComponent
+	}
+
+	Component {
+		id: rightTrailComponent
+		CentralOverlayButtonTrail {
+			leftColor: root.trailDecayColor
+			rightColor: highlighted || mouseArea.containsMouse ? highlightedColor : foregroundColor
+			transformMatrix: root.transformMatrix
+		}
 	}
 }
