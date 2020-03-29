@@ -1188,7 +1188,7 @@ int GClip_FindInRadius( const vec3_t org, float rad, int *list, int maxcount ) {
 	return GClip_FindInRadius4D( org, rad, list, maxcount, 0 );
 }
 
-void G_SplashFrac( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir,
+void G_SplashFrac( int entNum, const vec3_t hitpoint, float maxradius, vec3_t pushdir,
 					 float *kickFrac, float *dmgFrac ) {
 	c4clipedict_t *clipEnt;
 
@@ -1197,7 +1197,7 @@ void G_SplashFrac( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir,
 				  maxradius, pushdir, kickFrac, dmgFrac );
 }
 
-void RS_SplashFrac( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir,
+void RS_SplashFrac( int entNum, const vec3_t hitpoint, float maxradius, vec3_t pushdir,
 					  float *kickFrac, float *dmgFrac, float splashFrac ) {
 	c4clipedict_t *clipEnt;
 

@@ -806,8 +806,8 @@ int G_PointContents4D( const vec3_t p, int timeDelta );
 void G_Trace4D( trace_t *tr, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, const edict_t *passedict, int contentmask, int timeDelta );
 void GClip_BackUpCollisionFrame( void );
 int GClip_FindInRadius4D( const vec3_t org, float rad, int *list, int maxcount, int timeDelta );
-void G_SplashFrac( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac );
-void RS_SplashFrac( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac, float splashFrac ); // racesow
+void G_SplashFrac( int entNum, const vec3_t hitpoint, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac );
+void RS_SplashFrac( int entNum, const vec3_t hitpoint, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac, float splashFrac ); // racesow
 void GClip_ClearWorld( void );
 void GClip_SetBrushModel( edict_t *ent, const char *name );
 void GClip_SetAreaPortalState( edict_t *ent, bool open );
@@ -839,7 +839,7 @@ bool CheckTeamDamage( edict_t *targ, edict_t *attacker );
 void G_SplashFrac( const vec3_t origin, const vec3_t mins, const vec3_t maxs, const vec3_t point, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac );
 void RS_SplashFrac( const vec3_t origin, const vec3_t mins, const vec3_t maxs, const vec3_t point, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac, float splashFrac );
 void G_Damage( edict_t *targ, edict_t *inflictor, edict_t *attacker, const vec3_t pushdir, const vec3_t dmgdir, const vec3_t point, float damage, float knockback, float stun, int dflags, int mod );
-void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, cplane_t *plane, edict_t *ignore, int mod );
+void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, const cplane_t *plane, const edict_t *ignore, int mod );
 
 // damage flags
 #define DAMAGE_RADIUS 0x00000001  // damage was indirect
@@ -898,9 +898,9 @@ edict_t *W_Fire_Lasergun( edict_t *self, vec3_t start, vec3_t angles, float dama
 edict_t *W_Fire_Lasergun_Weak( edict_t *self, vec3_t start, vec3_t end, float damage, int knockback, int stun, int timeout, int mod, int timeDelta );
 void W_Fire_Instagun( edict_t *self, vec3_t start, vec3_t angles, float damage, int knockback, int stun, int radius, int range, int mod, int timeDelta );
 
-void W_Detonate_Rocket( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags );
-void W_Detonate_Grenade( edict_t *self, edict_t *ignore );
-void W_Detonate_Wave( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags );
+void W_Detonate_Rocket( edict_t *ent, const edict_t *ignore, const cplane_t *plane, int surfFlags );
+void W_Detonate_Grenade( edict_t *self, const edict_t *ignore );
+void W_Detonate_Wave( edict_t *ent, const edict_t *ignore, const cplane_t *plane, int surfFlags );
 
 bool Pickup_Weapon( edict_t *other, const gsitem_t *item, int flags, int ammo_count );
 edict_t *Drop_Weapon( edict_t *ent, const gsitem_t *item );

@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // g_combat.c
 
 #include "g_local.h"
+#include "ai/static_vector.h"
 
 /*
 *
@@ -65,89 +66,6 @@ int G_ModToAmmo( int mod ) {
 	} else {
 		return AMMO_NONE;
 	}
-}
-
-/*
-* G_CanSplashDamage
-*/
-#define SPLASH_DAMAGE_TRACE_FRAC_EPSILON 1.0 / 32.0f
-static bool G_CanSplashDamage( edict_t *targ, edict_t *inflictor, cplane_t *plane ) {
-	vec3_t dest, origin;
-	trace_t trace;
-	int solidmask = MASK_SOLID;
-
-	if( !targ ) {
-		return false;
-	}
-
-	if( !plane ) {
-		VectorCopy( inflictor->s.origin, origin );
-	}
-
-	// bmodels need special checking because their origin is 0,0,0
-	if( targ->movetype == MOVETYPE_PUSH ) {
-		// NOT FOR PLAYERS only for entities that can push the players
-		VectorAdd( targ->r.absmin, targ->r.absmax, dest );
-		VectorScale( dest, 0.5, dest );
-		G_Trace4D( &trace, origin, vec3_origin, vec3_origin, dest, inflictor, solidmask, inflictor->timeDelta );
-		if( trace.fraction >= 1.0 - SPLASH_DAMAGE_TRACE_FRAC_EPSILON || trace.ent == ENTNUM( targ ) ) {
-			return true;
-		}
-
-		return false;
-	}
-
-	if( plane ) {
-		// up by 9 units to account for stairs
-		VectorMA( inflictor->s.origin, 9, plane->normal, origin );
-	}
-
-	// This is for players
-	G_Trace4D( &trace, origin, vec3_origin, vec3_origin, targ->s.origin, inflictor, solidmask, inflictor->timeDelta );
-	if( trace.fraction >= 1.0 - SPLASH_DAMAGE_TRACE_FRAC_EPSILON || trace.ent == ENTNUM( targ ) ) {
-		return true;
-	}
-
-	VectorCopy( targ->s.origin, dest );
-	dest[0] += 15.0;
-	dest[1] += 15.0;
-	G_Trace4D( &trace, origin, vec3_origin, vec3_origin, dest, inflictor, solidmask, inflictor->timeDelta );
-	if( trace.fraction >= 1.0 - SPLASH_DAMAGE_TRACE_FRAC_EPSILON || trace.ent == ENTNUM( targ ) ) {
-		return true;
-	}
-
-	VectorCopy( targ->s.origin, dest );
-	dest[0] += 15.0;
-	dest[1] -= 15.0;
-	G_Trace4D( &trace, origin, vec3_origin, vec3_origin, dest, inflictor, solidmask, inflictor->timeDelta );
-	if( trace.fraction >= 1.0 - SPLASH_DAMAGE_TRACE_FRAC_EPSILON || trace.ent == ENTNUM( targ ) ) {
-		return true;
-	}
-
-	VectorCopy( targ->s.origin, dest );
-	dest[0] -= 15.0;
-	dest[1] += 15.0;
-	G_Trace4D( &trace, origin, vec3_origin, vec3_origin, dest, inflictor, solidmask, inflictor->timeDelta );
-	if( trace.fraction >= 1.0 - SPLASH_DAMAGE_TRACE_FRAC_EPSILON || trace.ent == ENTNUM( targ ) ) {
-		return true;
-	}
-
-	VectorCopy( targ->s.origin, dest );
-	dest[0] -= 15.0;
-	dest[1] -= 15.0;
-	G_Trace4D( &trace, origin, vec3_origin, vec3_origin, dest, inflictor, solidmask, inflictor->timeDelta );
-	if( trace.fraction >= 1.0 - SPLASH_DAMAGE_TRACE_FRAC_EPSILON || trace.ent == ENTNUM( targ ) ) {
-		return true;
-	}
-/*
-    VectorCopy( targ->s.origin, dest );
-    origin[2] += 9;
-    G_Trace4D( &trace, origin, vec3_origin, vec3_origin, targ->s.origin, inflictor, solidmask, inflictor->timeDelta );
-    if( trace.fraction >= 1.0-SPLASH_DAMAGE_TRACE_FRAC_EPSILON || trace.ent == ENTNUM( targ ) )
-        return true;
-*/
-
-	return false;
 }
 
 /*
@@ -761,7 +679,43 @@ void RS_SplashFrac( const vec3_t origin, const vec3_t mins, const vec3_t maxs, c
 	VectorNormalize( pushdir );
 }
 
-static gs_weapon_definition_t *WeaponDefForSelfDamage( const edict_t *inflictor ) {
+class SplashPropagationSolver {
+	using EntNumsVector = StaticVector<int, 32>;
+
+	struct DamageParams {
+		int entNum;
+		float damage;
+		float knockback;
+		float stun;
+		float pushDir[3];
+	};
+
+	using DamageParamsVector = StaticVector<DamageParams, 32>;
+
+	edict_t *const m_inflictor;
+	edict_t *const m_attacker;
+	const edict_t *const m_ignore;
+	const cplane_t *const m_plane;
+	const int m_attackerEntNum;
+	const int m_mod;
+
+	[[nodiscard]]
+	bool coarseCanSplashDamage( const edict_t *ent );
+	inline bool isVulnerable( const edict_t *ent, bool volatileExplosives );
+	void findVulnerableEntsInRadius( EntNumsVector &entNums );
+	void computeDamageParams( const EntNumsVector &vulnerableEnts, DamageParamsVector &damageParams );
+	void applyDamage( const DamageParams &params );
+public:
+	SplashPropagationSolver( edict_t *inflictor, edict_t *attacker, const edict_t *ignore, const cplane_t *plane, int mod )
+		: m_inflictor( inflictor ), m_attacker( attacker )
+		, m_ignore( ignore ), m_plane( plane )
+		, m_attackerEntNum( attacker ? ENTNUM( attacker ) : -1 )
+		, m_mod( mod ) {}
+
+	void exec();
+};
+
+auto weaponDefForSelfDamage( const edict_t *inflictor ) -> const gs_weapon_definition_t * {
 	if( inflictor->s.type == ET_ROCKET ) {
 		return GS_GetWeaponDef( WEAP_ROCKETLAUNCHER );
 	}
@@ -778,75 +732,119 @@ static gs_weapon_definition_t *WeaponDefForSelfDamage( const edict_t *inflictor 
 	return nullptr;
 }
 
-/*
-* G_RadiusDamage
-*/
-void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, cplane_t *plane, edict_t *ignore, int mod ) {
-	const float radius = inflictor->projectileInfo.radius;
-	if( radius <= 1.0f ) {
-		return;
+inline bool SplashPropagationSolver::isVulnerable( const edict_t *ent, bool volatileExplosives ) {
+	if( ent == m_ignore ) {
+		return false;
 	}
-
-	const float maxdamage = inflictor->projectileInfo.maxDamage;
-	float maxknockback = inflictor->projectileInfo.maxKnockback;
-	if( maxdamage <= 0.0f && maxknockback <= 0.0f ) {
-		return;
+	if( ent->takedamage ) {
+		return true;
 	}
+	if( !volatileExplosives ) {
+		return false;
+	}
+	if( ent->floodnum ) {
+		return false;
+	}
+	if( ent->s.ownerNum != m_attackerEntNum ) {
+		return false;
+	}
+	const auto entType = ent->s.type;
+	return entType == ET_ROCKET || entType == ET_GRENADE || entType == ET_WAVE;
+}
 
-	float mindamage = std::min( inflictor->projectileInfo.minDamage, maxdamage );
-	float minknockback = std::min( inflictor->projectileInfo.minKnockback, maxknockback );
-	float maxstun = inflictor->projectileInfo.stun;
-	float minstun = std::min( 1.0f, maxstun );
-
+void SplashPropagationSolver::findVulnerableEntsInRadius( EntNumsVector &entNums ) {
 	const bool volatileExplosives = GS_RaceGametype() && g_volatile_explosives->integer;
-	const int attackerNum = attacker ? ENTNUM( attacker ) : -1;
+	const edict_t *const gameEdicts = game.edicts;
 
-	int touch[MAX_EDICTS];
-	const int numTouch = GClip_FindInRadius4D( inflictor->s.origin, radius, touch, MAX_EDICTS, inflictor->timeDelta );
-	for( int i = 0; i < numTouch; i++ ) {
-		const int entNum = touch[i];
-		edict_t *ent = game.edicts + entNum;
-		if( ent == ignore ) {
+	int rawEntNums[MAX_EDICTS];
+	const auto radius = (float)m_inflictor->projectileInfo.radius;
+	const int numRawEnts = GClip_FindInRadius4D( m_inflictor->s.origin, radius, rawEntNums, MAX_EDICTS, 0 );
+
+	if( numRawEnts <= (int)entNums.capacity() ) {
+		for( int i = 0; i < numRawEnts; ++i ) {
+			const int entNum = rawEntNums[i];
+			if( isVulnerable( gameEdicts + entNum, volatileExplosives ) ) {
+				entNums.push_back( rawEntNums[i] );
+			}
+		}
+		return;
+	}
+
+	// A rare but possible case, let's handle it.
+	// Give clients a priority.
+	for( int i = 0; i < numRawEnts; ++i ) {
+		const int entNum = rawEntNums[i];
+		const edict_t *ent = gameEdicts + i;
+		if( !ent->r.client ) {
 			continue;
 		}
-		if( !ent->takedamage ) {
-			if( !volatileExplosives ) {
-				continue;
-			}
-			if( ent->s.ownerNum != attackerNum ) {
-				continue;
-			}
-			if( ent->floodnum ) {
-				continue;
-			}
-			int entType = ent->s.type;
-			if( entType != ET_ROCKET && entType != ET_GRENADE && entType != ET_WAVE ) {
-				continue;
-			}
+		if( ent == m_ignore ) {
+			continue;
 		}
+		entNums.push_back( entNum );
+		if( entNums.size() == entNums.capacity() ) {
+			return;
+		}
+	}
 
-		const bool isSelfDamage = ent == attacker && ent->r.client;
+	for( int i = 0; i < numRawEnts; ++i ) {
+		const int entNum = rawEntNums[i];
+		const edict_t *ent = gameEdicts + i;
+		if( ent->r.client ) {
+			continue;
+		}
+		if( !isVulnerable( ent, volatileExplosives ) ) {
+			continue;
+		}
+		entNums.push_back( entNum );
+		if( entNums.size() == entNums.capacity() ) {
+			return;
+		}
+	}
+}
 
-		float pushDir[3], kickFrac, dmgFrac;
-		G_SplashFrac( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, &dmgFrac );
+void SplashPropagationSolver::computeDamageParams( const EntNumsVector &vulnerableEnts,
+												   DamageParamsVector &damageParams ) {
+	damageParams.clear();
 
-		float damage = std::max( 0.0f, mindamage + ( ( maxdamage - mindamage ) * dmgFrac ) );
-		float stun = std::max( 0.0f, minstun + ( ( maxstun - minstun ) * dmgFrac ) );
-		float knockback = std::max( 0.0f, minknockback + ( ( maxknockback - minknockback ) * kickFrac ) );
+	const float maxDamage = m_inflictor->projectileInfo.maxDamage;
+	float maxKnockback = m_inflictor->projectileInfo.maxKnockback;
+	assert( maxDamage > 0 || maxKnockback > 0 );
+
+	const float minDamage = std::min( m_inflictor->projectileInfo.minDamage, maxDamage );
+	float minKnockback = std::min( m_inflictor->projectileInfo.minKnockback, maxKnockback );
+	const float maxStun = (float) m_inflictor->projectileInfo.stun;
+	const float minStun = std::min( 1.0f, maxStun );
+
+	const float *origin = m_inflictor->s.origin;
+	const float radius = m_inflictor->projectileInfo.radius;
+	const bool isRaceGametype = GS_RaceGametype();
+	const edict_t *const gameEdicts = game.edicts;
+	for( int entNum: vulnerableEnts ) {
+		DamageParams *const p = damageParams.unsafe_grow_back();
+
+		float kickFrac, dmgFrac;
+		G_SplashFrac( entNum, origin, radius, p->pushDir, &kickFrac, &dmgFrac );
+
+		float damage = std::max( 0.0f, minDamage + ( ( maxDamage - minDamage ) * dmgFrac ) );
+		float stun = std::max( 0.0f, minStun + ( ( maxStun - minStun ) * dmgFrac ) );
+		float knockback = std::max( 0.0f, minKnockback + ( ( maxKnockback - minKnockback ) * kickFrac ) );
 
 		// Weapon jumps hack : when knockback on self, use strong weapon definition
-		const auto *weapondef = isSelfDamage ? WeaponDefForSelfDamage( inflictor ) : nullptr;
+		const edict_t *ent = gameEdicts + entNum;
+		const bool isSelfDamage = ent == m_attacker && ent->r.client;
+		const auto *weapondef = isSelfDamage ? weaponDefForSelfDamage( m_inflictor ) : nullptr;
 		if( weapondef ) {
-			if( volatileExplosives ) {
+			if( isRaceGametype ) {
 				const float splashFrac = weapondef->firedef.splashfrac;
-				RS_SplashFrac( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, nullptr, splashFrac );
+				RS_SplashFrac( entNum, origin, radius, p->pushDir, &kickFrac, nullptr, splashFrac );
 			} else {
-				G_SplashFrac( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, nullptr );
-				minknockback = weapondef->firedef.minknockback;
-				maxknockback = weapondef->firedef.knockback;
-				minknockback = std::min( minknockback, maxknockback );
+				G_SplashFrac( entNum, origin, radius, p->pushDir, &kickFrac, nullptr );
+				minKnockback = (float)weapondef->firedef.minknockback;
+				maxKnockback = (float)weapondef->firedef.knockback;
+				minKnockback = std::min( minKnockback, maxKnockback );
 			}
-			knockback = ( minknockback + ( ( maxknockback - minknockback ) * kickFrac ) ) * g_self_knockback->value;
+			knockback = ( minKnockback + ( ( maxKnockback - minKnockback ) * kickFrac ) ) * g_self_knockback->value;
 			damage *= weapondef->firedef.selfdamage;
 		}
 
@@ -859,30 +857,95 @@ void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, cplane_t *plane, edi
 		}
 
 		if( damage <= 0.0f && knockback <= 0.0f && stun <= 0.0f ) {
+			damageParams.pop_back();
 			continue;
 		}
 
-		if( !G_CanSplashDamage( ent, inflictor, plane ) ) {
-			continue;
-		}
-
-		if( !ent->takedamage ) {
-			// Make sure it it going to be skipped during recursive calls
-			ent->floodnum = 1;
-			assert( volatileExplosives );
-			if( ent->s.type == ET_ROCKET ) {
-				W_Detonate_Rocket( ent, inflictor, nullptr, 0 );
-			} else if( ent->s.type == ET_GRENADE ) {
-				W_Detonate_Grenade( ent, inflictor );
-			} else {
-				assert( ent->s.type == ET_WAVE );
-				W_Detonate_Wave( ent, inflictor, nullptr, 0 );
-			}
-			continue;
-		}
-
-		const float *vel = inflictor->velocity;
-		const float *org = inflictor->s.origin;
-		G_Damage( ent, inflictor, attacker, pushDir, vel, org, damage, knockback, stun, DAMAGE_RADIUS, mod );
+		std::tie( p->entNum, p->damage, p->knockback, p->stun ) =
+			std::make_tuple( entNum, damage, knockback, stun );
 	}
+}
+
+bool SplashPropagationSolver::coarseCanSplashDamage( const edict_t *ent ) {
+	vec3_t origin;
+	if( !m_plane ) {
+		// up by 9 units to account for stairs
+		VectorMA( m_inflictor->s.origin, 9, m_plane->normal, origin );
+	} else {
+		VectorCopy( m_inflictor->s.origin, origin );
+	}
+
+	// This is for players
+
+	// Currently keep the old behaviour as-is
+	const vec2_t testedOffsets[] = {
+		{ 0, 0 }, { +15.0, +15.0 }, { +15.0, -15.0 }, { -15.0, +15.0 }, { -15.0, -15.0 }
+	};
+
+	trace_t trace;
+	constexpr float minFrac = 1.0f - ( 1.0f / 32.0f );
+	for( const auto &[xOffset, yOffset]: testedOffsets ) {
+		const vec3_t dest { ent->s.origin[0], ent->s.origin[1] + xOffset, ent->s.origin[2] + yOffset };
+		G_Trace4D( &trace, origin, vec3_origin, vec3_origin, dest, m_inflictor, MASK_SOLID, 0 );
+		if( trace.fraction >= minFrac || trace.ent == ENTNUM( ent ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void SplashPropagationSolver::applyDamage( const DamageParams &params ) {
+	const auto &[entNum, damage, knockback, stun, pushDir] = params;
+
+	edict_t *ent = game.edicts + params.entNum;
+	if( !ent->takedamage ) {
+		// Make sure it it going to be skipped during recursive calls
+		ent->floodnum = 1;
+		if( ent->s.type == ET_ROCKET ) {
+			W_Detonate_Rocket( ent, m_inflictor, nullptr, 0 );
+		} else if( ent->s.type == ET_GRENADE ) {
+			W_Detonate_Grenade( ent, m_inflictor );
+		} else {
+			assert( ent->s.type == ET_WAVE );
+			W_Detonate_Wave( ent, m_inflictor, nullptr, 0 );
+		}
+		return;
+	}
+
+	const auto &[velocity, origin] = std::make_pair( m_inflictor->velocity, m_inflictor->s.origin );
+	G_Damage( ent, m_inflictor, m_attacker, pushDir, velocity, origin, damage, knockback, stun, DAMAGE_RADIUS, m_mod );
+}
+
+void SplashPropagationSolver::exec() {
+	EntNumsVector entNums;
+	findVulnerableEntsInRadius( entNums );
+
+	DamageParamsVector params;
+	computeDamageParams( entNums, params );
+
+	const edict_t *gameEdicts = game.edicts;
+	for( const auto &pm: params ) {
+		if( coarseCanSplashDamage( gameEdicts + pm.entNum ) ) {
+			applyDamage( pm );
+		}
+	}
+}
+
+/*
+* G_RadiusDamage
+*/
+void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, const cplane_t *plane, const edict_t *ignore, int mod ) {
+	if( inflictor->projectileInfo.radius <= 0.0f ) {
+		return;
+	}
+	if( inflictor->projectileInfo.maxDamage <= 0.0f ) {
+		return;
+	}
+	if( inflictor->projectileInfo.maxKnockback <= 0.0f ) {
+		return;
+	}
+
+	SplashPropagationSolver solver( inflictor, attacker, ignore, plane, mod );
+	solver.exec();
 }

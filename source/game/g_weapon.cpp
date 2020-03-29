@@ -600,7 +600,7 @@ void W_Fire_Riotgun( edict_t *self, vec3_t start, vec3_t angles, int seed, int r
 /*
 * W_Grenade_ExplodeDir
 */
-static void W_Grenade_ExplodeDir( edict_t *ent, vec3_t normal, edict_t *ignore ) {
+static void W_Grenade_ExplodeDir( edict_t *ent, vec3_t normal, const edict_t *ignore ) {
 	vec3_t origin;
 	int radius;
 	edict_t *event;
@@ -626,7 +626,7 @@ static void W_Grenade_Explode( edict_t *ent ) {
 	W_Grenade_ExplodeDir( ent, NULL, NULL );
 }
 
-void W_Detonate_Grenade( edict_t *ent, edict_t *ignore ) {
+void W_Detonate_Grenade( edict_t *ent, const edict_t *ignore ) {
 	W_Grenade_ExplodeDir( ent, NULL, ignore );
 }
 
@@ -789,7 +789,7 @@ static void W_Touch_Rocket( edict_t *ent, edict_t *other, cplane_t *plane, int s
 	W_Detonate_Rocket( ent, other, plane, surfFlags );
 }
 
-void W_Detonate_Rocket( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags ) {
+void W_Detonate_Rocket( edict_t *ent, const edict_t *ignore, const cplane_t *plane, int surfFlags ) {
 	int mod = ( ent->s.effects & EF_STRONG_WEAPON ) ? MOD_ROCKET_SPLASH_S : MOD_ROCKET_SPLASH_W;
 	G_RadiusDamage( ent, ent->r.owner, plane, ignore, mod );
 
@@ -1417,7 +1417,7 @@ static void W_Touch_Wave( edict_t *ent, edict_t *other, cplane_t *plane, int sur
 	W_Detonate_Wave( ent, other, plane, surfFlags );
 }
 
-void W_Detonate_Wave( edict_t *ent, edict_t *ignore, cplane_t *plane, int surfFlags ) {
+void W_Detonate_Wave( edict_t *ent, const edict_t *ignore, const cplane_t *plane, int surfFlags ) {
 	int mod_splash = ( ent->style == MOD_SHOCKWAVE_S ) ? MOD_SHOCKWAVE_SPLASH_S : MOD_SHOCKWAVE_SPLASH_W;
 
 	G_RadiusDamage( ent, ent->r.owner, plane, ignore, mod_splash );
