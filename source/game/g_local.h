@@ -806,8 +806,8 @@ int G_PointContents4D( const vec3_t p, int timeDelta );
 void G_Trace4D( trace_t *tr, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, const edict_t *passedict, int contentmask, int timeDelta );
 void GClip_BackUpCollisionFrame( void );
 int GClip_FindInRadius4D( const vec3_t org, float rad, int *list, int maxcount, int timeDelta );
-void G_SplashFrac4D( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac, int timeDelta );
-void RS_SplashFrac4D( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac, int timeDelta, float splashFrac ); // racesow
+void G_SplashFrac( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac );
+void RS_SplashFrac( int entNum, vec3_t hitpoint, float maxradius, vec3_t pushdir, float *kickFrac, float *dmgFrac, float splashFrac ); // racesow
 void GClip_ClearWorld( void );
 void GClip_SetBrushModel( edict_t *ent, const char *name );
 void GClip_SetAreaPortalState( edict_t *ent, bool open );

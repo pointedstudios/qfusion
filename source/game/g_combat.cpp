@@ -826,10 +826,9 @@ void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, cplane_t *plane, edi
 		}
 
 		const bool isSelfDamage = ent == attacker && ent->r.client;
-		const int timeDelta = isSelfDamage ? 0 : inflictor->timeDelta;
 
 		float pushDir[3], kickFrac, dmgFrac;
-		G_SplashFrac4D( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, &dmgFrac, timeDelta );
+		G_SplashFrac( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, &dmgFrac );
 
 		float damage = std::max( 0.0f, mindamage + ( ( maxdamage - mindamage ) * dmgFrac ) );
 		float stun = std::max( 0.0f, minstun + ( ( maxstun - minstun ) * dmgFrac ) );
@@ -840,9 +839,9 @@ void G_RadiusDamage( edict_t *inflictor, edict_t *attacker, cplane_t *plane, edi
 		if( weapondef ) {
 			if( volatileExplosives ) {
 				const float splashFrac = weapondef->firedef.splashfrac;
-				RS_SplashFrac4D( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, nullptr, 0, splashFrac );
+				RS_SplashFrac( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, nullptr, splashFrac );
 			} else {
-				G_SplashFrac4D( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, nullptr, 0 );
+				G_SplashFrac( entNum, inflictor->s.origin, radius, pushDir, &kickFrac, nullptr );
 				minknockback = weapondef->firedef.minknockback;
 				maxknockback = weapondef->firedef.knockback;
 				minknockback = std::min( minknockback, maxknockback );

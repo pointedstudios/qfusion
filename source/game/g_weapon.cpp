@@ -217,7 +217,7 @@ static void W_Touch_Projectile( edict_t *ent, edict_t *other, cplane_t *plane, i
 		VectorNormalize2( ent->velocity, dir );
 
 		if( hitType == PROJECTILE_TOUCH_DIRECTSPLASH ) { // use hybrid direction from splash and projectile
-			G_SplashFrac4D( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL, ent->timeDelta );
+			G_SplashFrac( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL );
 		} else {
 			VectorNormalize2( ent->velocity, dir );
 		}
@@ -416,7 +416,7 @@ static void W_Touch_GunbladeBlast( edict_t *ent, edict_t *other, cplane_t *plane
 		VectorNormalize2( ent->velocity, dir );
 
 		if( hitType == PROJECTILE_TOUCH_DIRECTSPLASH ) { // use hybrid direction from splash and projectile
-			G_SplashFrac4D( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL, ent->timeDelta );
+			G_SplashFrac( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL );
 		} else {
 			VectorNormalize2( ent->velocity, dir );
 		}
@@ -678,7 +678,7 @@ static void W_Touch_Grenade( edict_t *ent, edict_t *other, cplane_t *plane, int 
 		VectorNormalize2( ent->velocity, dir );
 
 		if( hitType == PROJECTILE_TOUCH_DIRECTSPLASH ) { // use hybrid direction from splash and projectile
-			G_SplashFrac4D( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL, ent->timeDelta );
+			G_SplashFrac( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL );
 		} else {
 			VectorNormalize2( ent->velocity, dir );
 
@@ -772,7 +772,7 @@ static void W_Touch_Rocket( edict_t *ent, edict_t *other, cplane_t *plane, int s
 
 		if( hitType == PROJECTILE_TOUCH_DIRECTSPLASH ) { // use hybrid direction from splash and projectile
 
-			G_SplashFrac4D( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL, ent->timeDelta );
+			G_SplashFrac( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL );
 		} else {
 			VectorNormalize2( ent->velocity, dir );
 
@@ -879,7 +879,7 @@ static void W_Touch_Plasma( edict_t *ent, edict_t *other, cplane_t *plane, int s
 		VectorNormalize2( ent->velocity, dir );
 
 		if( hitType == PROJECTILE_TOUCH_DIRECTSPLASH ) { // use hybrid direction from splash and projectile
-			G_SplashFrac4D( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL, ent->timeDelta );
+			G_SplashFrac( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL );
 		} else {
 			VectorNormalize2( ent->velocity, dir );
 		}
@@ -1406,7 +1406,7 @@ static void W_Touch_Wave( edict_t *ent, edict_t *other, cplane_t *plane, int sur
 		VectorNormalize2( ent->velocity, dir );
 
 		if( hitType == PROJECTILE_TOUCH_DIRECTSPLASH ) { // use hybrid direction from splash and projectile
-			G_SplashFrac4D( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL, ent->timeDelta );
+			G_SplashFrac( ENTNUM( other ), ent->s.origin, ent->projectileInfo.radius, dir, NULL, NULL );
 		} else {
 			VectorNormalize2( ent->velocity, dir );
 		}
