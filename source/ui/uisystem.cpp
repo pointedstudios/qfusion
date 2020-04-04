@@ -1,7 +1,10 @@
 #include "uisystem.h"
+#include "../qcommon/links.h"
 #include "../qcommon/singletonholder.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
+#include "../game/ai/static_vector.h"
+#include "nativelydrawnitems.h"
 
 #include <QGuiApplication>
 #include <QOpenGLContext>
@@ -46,6 +49,8 @@ class QWswUISystem : public QObject, public UISystem {
 	// The implementation is borrowed from https://github.com/RSATom/QuickLayer
 
 	template <typename> friend class SingletonHolder;
+	friend class NativelyDrawnImage;
+	friend class NativelyDrawnModel;
 public:
 	void refresh( unsigned refreshFlags ) override;
 
@@ -79,11 +84,16 @@ public:
 	Q_PROPERTY( bool isPlayingADemo READ isPlayingADemo NOTIFY isPlayingADemoChanged );
 	Q_PROPERTY( bool isShowingInGameMenu READ isShowingInGameMenuGetter NOTIFY isShowingInGameMenuChanged );
 	Q_PROPERTY( bool isShowingRespectMenu READ isShowingRespectMenuGetter NOTIFY isShowingRespectMenuChanged );
+	Q_PROPERTY( bool isDebuggingNativelyDrawnItems READ isDebuggingNativelyDrawnItems NOTIFY isDebuggingNativelyDrawnItemsChanged );
+
+	Q_INVOKABLE void registerNativelyDrawnItem( QQuickItem *item );
+	Q_INVOKABLE void unregisterNativelyDrawnItem( QQuickItem *item );
 signals:
 	Q_SIGNAL void quakeClientStateChanged( QuakeClient::State state );
 	Q_SIGNAL void isPlayingADemoChanged( bool isPlayingADemo );
 	Q_SIGNAL void isShowingInGameMenuChanged( bool isShowingInGameMenu );
 	Q_SIGNAL void isShowingRespectMenuChanged( bool isShowingRespectMenu );
+	Q_SIGNAL void isDebuggingNativelyDrawnItemsChanged( bool isDebuggingNativelyDrawnItems );
 public slots:
 	Q_SLOT void onSceneGraphInitialized();
 	Q_SLOT void onRenderRequested();
@@ -121,9 +131,17 @@ private:
 	cvar_t *ui_sensitivity { nullptr };
 	cvar_t *ui_mouseAccel { nullptr };
 
+	cvar_t *ui_debugNativelyDrawnItems { nullptr };
+
 	qreal mouseXY[2] { 0.0, 0.0 };
 
 	QString charStrings[128];
+
+	NativelyDrawn *m_nativelyDrawnListHead { nullptr };
+
+	static constexpr const int kMaxNativelyDrawnItems = 64;
+
+	int m_numNativelyDrawnItems { 0 };
 
 	[[nodiscard]]
 	auto getQuakeClientState() const { return lastFrameState.quakeClientState; }
@@ -136,6 +154,9 @@ private:
 
 	[[nodiscard]]
 	bool isShowingRespectMenuGetter() const { return isShowingRespectMenu; };
+
+	[[nodiscard]]
+	bool isDebuggingNativelyDrawnItems() const;
 
 	explicit QWswUISystem( int width, int height );
 
@@ -318,6 +339,8 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 	const QString reason( "This type is a native code bridge and cannot be instantiated" );
 	qmlRegisterUncreatableType<QWswUISystem>( "net.warsow", 2, 6, "Wsw", reason );
 	qmlRegisterUncreatableType<QuakeClient>( "net.warsow", 2, 6, "QuakeClient", reason );
+	qmlRegisterType<NativelyDrawnImage>( "net.warsow", 2, 6, "NativelyDrawnImage_Native" );
+	qmlRegisterType<NativelyDrawnModel>( "net.warsow", 2, 6, "NativelyDrawnModel_Native" );
 
 	engine = new QQmlEngine;
 	engine->rootContext()->setContextProperty( "wsw", this );
@@ -329,6 +352,8 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 
 	ui_sensitivity = Cvar_Get( "ui_sensitivity", "1.0", CVAR_ARCHIVE );
 	ui_mouseAccel = Cvar_Get( "ui_mouseAccel", "0.25", CVAR_ARCHIVE );
+
+	ui_debugNativelyDrawnItems = Cvar_Get( "ui_debugNativelyDrawnItems", "0", 0 );
 
 	// Initialize the table of textual strings corresponding to characters
 	for( const QString &s: charStrings ) {
@@ -402,19 +427,49 @@ void QWswUISystem::drawSelfInMainContext() {
 
 	drawBackgroundMapIfNeeded();
 
-	R_Set2DMode( true );
+	// Make deeper items get evicted first from a max-heap
+	const auto cmp = []( const NativelyDrawn *lhs, const NativelyDrawn *rhs ) {
+		return lhs->m_nativeZ > rhs->m_nativeZ;
+	};
 
-	R_DrawExternalTextureOverlay( framebufferObject->texture() );
-
-	// TODO: Draw while showing an in-game menu as well (there should be a different condition)
-	if( lastFrameState.quakeClientState == QuakeClient::Disconnected ) {
-		vec4_t color = { 1.0f, 1.0f, 1.0f, 1.0f };
-		// TODO: Check why CL_BeginRegistration()/CL_EndRegistration() never gets called
-		auto *cursorMaterial = R_RegisterPic( "gfx/ui/cursor.tga" );
-		// TODO: Account for screen pixel density
-		RF_DrawStretchPic( (int)mouseXY[0], (int)mouseXY[1], 32, 32, 0.0f, 0.0f, 1.0f, 1.0f, color, cursorMaterial );
+	StaticVector<NativelyDrawn *, kMaxNativelyDrawnItems> zHeaps[2];
+	for( NativelyDrawn *nativelyDrawn = m_nativelyDrawnListHead; nativelyDrawn; nativelyDrawn = nativelyDrawn->next ) {
+		auto &heap = zHeaps[nativelyDrawn->m_nativeZ >= 0];
+		heap.push_back( nativelyDrawn );
+		std::push_heap( heap.begin(), heap.end(), cmp );
 	}
 
+	// This is quite inefficient as we switch rendering modes for different kinds of items.
+	// Unfortunately this is mandatory for maintaining the desired Z order.
+	// Considering the low number of items of this kind the performance impact should be negligible.
+
+	while( !zHeaps[0].empty() ) {
+		std::pop_heap( zHeaps[0].begin(), zHeaps[0].end(), cmp );
+		zHeaps[0].back()->drawSelfNatively();
+		zHeaps[0].pop_back();
+	}
+
+	R_Set2DMode( true );
+	R_DrawExternalTextureOverlay( framebufferObject->texture() );
+	R_Set2DMode( false );
+
+	while( !zHeaps[1].empty() ) {
+		std::pop_heap( zHeaps[1].begin(), zHeaps[1].end(), cmp );
+		zHeaps[1].back()->drawSelfNatively();
+		zHeaps[1].pop_back();
+	}
+
+	// TODO: Draw while showing an in-game menu as well (there should be a different condition)
+	if( lastFrameState.quakeClientState != QuakeClient::Disconnected ) {
+		return;
+	}
+
+	R_Set2DMode( true );
+	vec4_t color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	// TODO: Check why CL_BeginRegistration()/CL_EndRegistration() never gets called
+	auto *cursorMaterial = R_RegisterPic( "gfx/ui/cursor.tga" );
+	// TODO: Account for screen pixel density
+	RF_DrawStretchPic( (int)mouseXY[0], (int)mouseXY[1], 32, 32, 0.0f, 0.0f, 1.0f, 1.0f, color, cursorMaterial );
 	R_Set2DMode( false );
 }
 
@@ -491,6 +546,11 @@ void QWswUISystem::checkPropertyChanges() {
 	*isPlayingADemo = cls.demo.playing;
 	if( *isPlayingADemo != wasPlayingADemo ) {
 		Q_EMIT isPlayingADemoChanged( *isPlayingADemo );
+	}
+
+	if( ui_debugNativelyDrawnItems->modified ) {
+		Q_EMIT isDebuggingNativelyDrawnItemsChanged( ui_debugNativelyDrawnItems->integer != 0 );
+		ui_debugNativelyDrawnItems->modified = false;
 	}
 }
 
@@ -677,6 +737,40 @@ auto QWswUISystem::convertQuakeKeyToQtKey( int quakeKey ) const -> std::optional
 
 		default: return std::nullopt;
 	}
+}
+
+bool QWswUISystem::isDebuggingNativelyDrawnItems() const {
+	return ui_debugNativelyDrawnItems->integer != 0;
+}
+
+void QWswUISystem::registerNativelyDrawnItem( QQuickItem *item ) {
+	auto *nativelyDrawn = dynamic_cast<NativelyDrawn *>( item );
+	if( !nativelyDrawn ) {
+		Com_Printf( "An item is not an instance of NativelyDrawn\n" );
+		return;
+	}
+	if( m_numNativelyDrawnItems == kMaxNativelyDrawnItems ) {
+		Com_Printf( "Too many natively drawn items, skipping this one\n" );
+		return;
+	}
+	::Link( nativelyDrawn, &this->m_nativelyDrawnListHead );
+	nativelyDrawn->m_isLinked = true;
+	m_numNativelyDrawnItems++;
+}
+
+void QWswUISystem::unregisterNativelyDrawnItem( QQuickItem *item ) {
+	auto *nativelyDrawn = dynamic_cast<NativelyDrawn *>( item );
+	if( !nativelyDrawn ) {
+		Com_Printf( "An item is not an instance of NativelyDrawn\n" );
+		return;
+	}
+	if( !nativelyDrawn->m_isLinked ) {
+		return;
+	}
+	::Unlink( nativelyDrawn, &this->m_nativelyDrawnListHead );
+	nativelyDrawn->m_isLinked = false;
+	m_numNativelyDrawnItems--;
+	assert( m_numNativelyDrawnItems >= 0 );
 }
 
 #include "uisystem.moc"

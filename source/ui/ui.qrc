@@ -9,6 +9,8 @@
         <file>InGameMenu.qml</file>
         <file>LocalGamePage.qml</file>
         <file>MainMenu.qml</file>
+        <file>NativelyDrawnImage.qml</file>
+        <file>NativelyDrawnModel.qml</file>
         <file>NewsPage.qml</file>
         <file>PlayOnlinePage.qml</file>
         <file>ProfilePage.qml</file>
