@@ -88,12 +88,25 @@ public:
 
 	Q_INVOKABLE void registerNativelyDrawnItem( QQuickItem *item );
 	Q_INVOKABLE void unregisterNativelyDrawnItem( QQuickItem *item );
+
+	Q_INVOKABLE QVariant getCVarValue( const QString &name ) const;
+	Q_INVOKABLE void setCVarValue( const QString &name, const QVariant &value );
+	Q_INVOKABLE void markPendingCVarChanges( QQuickItem *control, const QString &name, const QVariant &value );
+	Q_INVOKABLE bool hasControlPendingCVarChanges( QQuickItem *control ) const;
+
+	Q_PROPERTY( bool hasPendingCVarChanges READ hasPendingCVarChanges NOTIFY hasPendingCVarChangesChanged );
+	Q_INVOKABLE void commitPendingCVarChanges();
+	Q_INVOKABLE void rollbackPendingCVarChanges();
+
+	Q_INVOKABLE void registerCVarAwareControl( QQuickItem *control );
+	Q_INVOKABLE void unregisterCVarAwareControl( QQuickItem *control );
 signals:
 	Q_SIGNAL void quakeClientStateChanged( QuakeClient::State state );
 	Q_SIGNAL void isPlayingADemoChanged( bool isPlayingADemo );
 	Q_SIGNAL void isShowingInGameMenuChanged( bool isShowingInGameMenu );
 	Q_SIGNAL void isShowingRespectMenuChanged( bool isShowingRespectMenu );
 	Q_SIGNAL void isDebuggingNativelyDrawnItemsChanged( bool isDebuggingNativelyDrawnItems );
+	Q_SIGNAL void hasPendingCVarChangesChanged( bool hasPendingCVarChanges );
 public slots:
 	Q_SLOT void onSceneGraphInitialized();
 	Q_SLOT void onRenderRequested();
@@ -143,6 +156,10 @@ private:
 
 	int m_numNativelyDrawnItems { 0 };
 
+	QSet<QQuickItem *> m_cvarAwareControls;
+
+	QMap<QQuickItem *, QPair<QVariant, cvar_t *>> m_pendingCVarChanges;
+
 	[[nodiscard]]
 	auto getQuakeClientState() const { return lastFrameState.quakeClientState; }
 
@@ -158,8 +175,12 @@ private:
 	[[nodiscard]]
 	bool isDebuggingNativelyDrawnItems() const;
 
+	[[nodiscard]]
+	bool hasPendingCVarChanges() const { return !m_pendingCVarChanges.isEmpty(); }
+
 	explicit QWswUISystem( int width, int height );
 
+	void updateCVarAwareControls();
 	void checkPropertyChanges();
 	void renderQml();
 
@@ -552,6 +573,8 @@ void QWswUISystem::checkPropertyChanges() {
 		Q_EMIT isDebuggingNativelyDrawnItemsChanged( ui_debugNativelyDrawnItems->integer != 0 );
 		ui_debugNativelyDrawnItems->modified = false;
 	}
+
+	updateCVarAwareControls();
 }
 
 void QWswUISystem::handleMouseMove( int frameTime, int dx, int dy ) {
@@ -771,6 +794,142 @@ void QWswUISystem::unregisterNativelyDrawnItem( QQuickItem *item ) {
 	nativelyDrawn->m_isLinked = false;
 	m_numNativelyDrawnItems--;
 	assert( m_numNativelyDrawnItems >= 0 );
+}
+
+QVariant QWswUISystem::getCVarValue( const QString &name ) const {
+	const cvar_t *maybeVar = Cvar_Find( name.toUtf8().constData() );
+	return maybeVar ? maybeVar->string : QVariant();
+}
+
+void QWswUISystem::setCVarValue( const QString &name, const QVariant &value ) {
+	const QByteArray nameUtf( name.toUtf8() );
+
+#ifndef PUBLIC_BUILD
+	auto *const cvar = Cvar_Find( nameUtf.constData() );
+	if( !cvar ) {
+		Com_Printf( "Failed to find a var %s by name\n", nameUtf.constData() );
+		return;
+	}
+	if( ( cvar->flags & CVAR_LATCH_VIDEO ) || ( cvar->flags & CVAR_LATCH_SOUND ) ) {
+		Com_Printf( "Refusing to apply a video/sound-latched var %s value immediately\n", nameUtf.constData() );
+		return;
+	}
+#endif
+
+	Cvar_ForceSet( nameUtf.constData(), value.toString().toUtf8().constData() );
+}
+
+void QWswUISystem::markPendingCVarChanges( QQuickItem *control, const QString &name, const QVariant &value ) {
+	auto it = m_pendingCVarChanges.find( control );
+	if( it == m_pendingCVarChanges.end() ) {
+		const QByteArray nameUtf( name.toUtf8() );
+		cvar_t *var = Cvar_Find( nameUtf.constData() );
+		if( !var ) {
+			Com_Printf( "Failed to find a var %s by name\n", nameUtf.constData() );
+			return;
+		}
+		m_pendingCVarChanges.insert( control, { value, var } );
+		if( m_pendingCVarChanges.size() == 1 ) {
+			Q_EMIT hasPendingCVarChangesChanged( true );
+		}
+		return;
+	}
+
+	// Check if changes really going to have an effect
+	if( QVariant( it->second->string ) != value ) {
+		it->first = value;
+		return;
+	}
+
+	// TODO: Does a repeated check make any sense?
+	m_pendingCVarChanges.erase( it );
+	if( m_pendingCVarChanges.isEmpty() ) {
+		Q_EMIT hasPendingCVarChangesChanged( false );
+	}
+}
+
+bool QWswUISystem::hasControlPendingCVarChanges( QQuickItem *control ) const {
+	return m_pendingCVarChanges.contains( control );
+}
+
+void QWswUISystem::commitPendingCVarChanges() {
+	if( m_pendingCVarChanges.isEmpty() ) {
+		return;
+	}
+
+	auto [restartVideo, restartSound] = std::make_pair( false, false );
+	for( const auto &[value, cvar]: m_pendingCVarChanges ) {
+		Cvar_ForceSet( cvar->name, value.toString().toUtf8().constData() );
+		if( cvar->flags & CVAR_LATCH_VIDEO ) {
+			restartVideo = true;
+		}
+		if( cvar->flags & CVAR_LATCH_SOUND ) {
+			restartSound = true;
+		}
+	}
+
+	m_pendingCVarChanges.clear();
+	Q_EMIT hasPendingCVarChangesChanged( false );
+
+	if( restartVideo ) {
+		Cbuf_ExecuteText( EXEC_APPEND, "vid_restart" );
+	}
+	if( restartSound ) {
+		Cbuf_ExecuteText( EXEC_APPEND, "s_restart" );
+	}
+}
+
+void QWswUISystem::rollbackPendingCVarChanges() {
+	if( m_pendingCVarChanges.isEmpty() ) {
+		return;
+	}
+
+	QMapIterator<QQuickItem *, QPair<QVariant, cvar_t *>> it( m_pendingCVarChanges );
+	while( it.hasNext() ) {
+		(void)it.next();
+		QMetaObject::invokeMethod( it.key(), "rollbackChanges" );
+	}
+
+	m_pendingCVarChanges.clear();
+	Q_EMIT hasPendingCVarChangesChanged( false );
+}
+
+void QWswUISystem::registerCVarAwareControl( QQuickItem *control ) {
+#ifndef PUBLIC_BUILD
+	if( m_cvarAwareControls.contains( control ) ) {
+		Com_Printf( "A CVar-aware control is already registered\n" );
+		return;
+	}
+#endif
+	m_cvarAwareControls.insert( control );
+}
+
+void QWswUISystem::unregisterCVarAwareControl( QQuickItem *control ) {
+	if( !m_cvarAwareControls.remove( control ) ) {
+		Com_Printf( "Failed to unregister a CVar-aware control\n" );
+	}
+}
+
+void QWswUISystem::updateCVarAwareControls() {
+	// Check whether pending changes still hold
+
+	const bool hadPendingChanges = !m_pendingCVarChanges.isEmpty();
+	QMutableMapIterator<QQuickItem *, QPair<QVariant, cvar_t *>> it( m_pendingCVarChanges );
+	while( it.hasNext() ) {
+		(void)it.next();
+		auto [value, cvar] = it.value();
+		if( QVariant( cvar->string ) == value ) {
+			it.remove();
+		}
+	}
+
+	if( hadPendingChanges && m_pendingCVarChanges.isEmpty() ) {
+		Q_EMIT hasPendingCVarChangesChanged( false );
+	}
+
+	for( QQuickItem *control : m_cvarAwareControls ) {
+		QMetaObject::invokeMethod( control, "checkCVarChanges" );
+	}
 }
 
 #include "uisystem.moc"

@@ -3,6 +3,10 @@
         <file>CentralOverlayButton.qml</file>
         <file>CentralOverlayButtonTrail.qml</file>
         <file>CentralOverlayGroup.qml</file>
+        <file>CVarAwareCheckBox.qml</file>
+        <file>CVarAwareComboBox.qml</file>
+        <file>CVarAwareSlider.qml</file>
+        <file>CVarAwareTextField.qml</file>
         <file>DemoPlaybackMenu.qml</file>
         <file>DemosPage.qml</file>
         <file>HelpPage.qml</file>
