@@ -16,9 +16,9 @@ namespace wsw {
 
 class StringView {
 protected:
-	const char *s;
-	size_t len: 31;
-	bool zeroTerminated: 1;
+	const char *m_s;
+	size_t m_len: 31;
+	bool m_terminated: 1;
 
 	static constexpr unsigned kMaxLen = 1u << 31u;
 
@@ -30,22 +30,22 @@ protected:
 
 	[[nodiscard]]
 	auto toOffset( const char *p ) const -> unsigned {
-		assert( p - s < (ptrdiff_t)kMaxLen );
-		return (unsigned)( p - s );
+		assert( p - m_s < (ptrdiff_t)kMaxLen );
+		return (unsigned)( p - m_s );
 	}
 
 	struct Lookup {
-		bool data[std::numeric_limits<unsigned char>::max()];
+		bool m_data[std::numeric_limits<unsigned char>::max()];
 
 		Lookup( const wsw::StringView &chars ) {
-			memset( data, 0, sizeof( data ) );
+			memset( m_data, 0, sizeof( m_data ) );
 			for( char ch: chars ) {
-				data[(unsigned char)ch] = true;
+				m_data[(unsigned char)ch] = true;
 			}
 		}
 
 		bool operator()( char ch ) const {
-			return data[(unsigned char)ch];
+			return m_data[(unsigned char)ch];
 		}
 	};
 public:
@@ -55,34 +55,37 @@ public:
 	};
 
 	constexpr StringView() noexcept
-		: s( "" ), len( 0 ), zeroTerminated( true ) {}
+		: m_s( "" ), m_len( 0 ), m_terminated( true ) {}
 
-	explicit StringView( const char *s_ ) noexcept
-		: s( s_ ), len( checkLen( std::char_traits<char>::length( s_ ) ) ), zeroTerminated( true ) {}
+	explicit StringView( const char *s ) noexcept
+		: m_s( s ), m_len( checkLen( std::char_traits<char>::length( s ) ) ), m_terminated( true ) {}
 
-	constexpr StringView( const char *s_, size_t len_, Terminated terminated_ = Unspecified ) noexcept
-		: s( s_ ), len( checkLen( len_ ) ), zeroTerminated( terminated_ != Unspecified ) {
-		assert( !zeroTerminated || !s[len] );
+	constexpr StringView( const char *s, size_t len, Terminated terminated = Unspecified ) noexcept
+		: m_s( s ), m_len( checkLen( len ) ), m_terminated( terminated != Unspecified ) {
+		assert( !m_terminated || !m_s[len] );
 	}
 
 	[[nodiscard]]
-	bool isZeroTerminated() const { return zeroTerminated; }
+	bool isZeroTerminated() const { return m_terminated; }
 
 	[[nodiscard]]
-	auto data() const -> const char * { return s; }
+	auto data() const -> const char * { return m_s; }
 	[[nodiscard]]
-	auto size() const -> size_t { return len; }
+	auto size() const -> size_t { return m_len; }
 	[[nodiscard]]
-	auto length() const -> size_t { return len; }
+	auto length() const -> size_t { return m_len; }
+
+	[[nodiscard]]
+	bool empty() const { return !m_len; }
 
 	[[nodiscard]]
 	bool equals( const wsw::StringView &that ) const {
-		return len == that.len && !std::strncmp( s, that.s, len );
+		return m_len == that.m_len && !std::strncmp( m_s, that.m_s, m_len );
 	}
 
 	[[nodiscard]]
 	bool equalsIgnoreCase( const wsw::StringView &that ) const {
-		return len == that.len && !Q_strnicmp( s, that.s, len );
+		return m_len == that.m_len && !Q_strnicmp( m_s, that.m_s, m_len );
 	}
 
 	[[nodiscard]]
@@ -91,55 +94,55 @@ public:
 	bool operator!=( const wsw::StringView &that ) const { return !equals( that ); }
 
 	[[nodiscard]]
-	auto begin() const -> const char * { return s; }
+	auto begin() const -> const char * { return m_s; }
 	[[nodiscard]]
-	auto end() const -> const char * { return s + len; }
+	auto end() const -> const char * { return m_s + m_len; }
 	[[nodiscard]]
-	auto cbegin() const -> const char * { return s; }
+	auto cbegin() const -> const char * { return m_s; }
 	[[nodiscard]]
-	auto cend() const -> const char * { return s + len; }
+	auto cend() const -> const char * { return m_s + m_len; }
 
 	[[nodiscard]]
 	auto front() const -> const char & {
-		assert( len );
-		return s[0];
+		assert( m_len );
+		return m_s[0];
 	}
 
 	[[nodiscard]]
 	auto back() const -> const char & {
-		assert( len );
-		return s[0];
+		assert( m_len );
+		return m_s[0];
 	}
 
 	[[nodiscard]]
 	auto maybeFront() const -> std::optional<char> {
-		return len ? std::optional( s[0] ) : std::nullopt;
+		return m_len ? std::optional( m_s[0] ) : std::nullopt;
 	}
 
 	[[nodiscard]]
 	auto maybeBack() const -> std::optional<char> {
-		return len ? std::optional( s[len - 1] ) : std::nullopt;
+		return m_len ? std::optional( m_s[m_len - 1] ) : std::nullopt;
 	}
 
 	[[nodiscard]]
 	auto operator[]( size_t index ) const -> const char & {
-		assert( index < len );
-		return s[index];
+		assert( index < m_len );
+		return m_s[index];
 	}
 
 	[[nodiscard]]
 	auto maybeAt( size_t index ) const -> std::optional<char> {
-		return index < len ? std::optional( s[index] ) : std::nullopt;
+		return index < m_len ? std::optional( m_s[index] ) : std::nullopt;
 	}
 
 	[[nodiscard]]
 	auto indexOf( char ch ) const -> std::optional<unsigned> {
-		if( zeroTerminated ) {
-			if( const char *p = strchr( s, ch ) ) {
+		if( m_terminated ) {
+			if( const char *p = strchr( m_s, ch ) ) {
 				return toOffset( p );
 			}
 		} else {
-			if( const char *p = std::find( s, s + len, ch ); p != s + len ) {
+			if( const char *p = std::find( m_s, m_s + m_len, ch ); p != m_s + m_len ) {
 				return toOffset( p );
 			}
 		}
@@ -148,16 +151,16 @@ public:
 
 	[[nodiscard]]
 	auto lastIndexOf( char ch ) const -> std::optional<unsigned> {
-		auto start = std::make_reverse_iterator( s + len ), end = std::make_reverse_iterator( s );
+		auto start = std::make_reverse_iterator( m_s + m_len ), end = std::make_reverse_iterator( m_s );
 		if( const auto it = std::find( start, end, ch ); it != end ) {
-			return toOffset( it.base() );
+			return toOffset( it.base() ) - 1u;
 		}
 		return std::nullopt;
 	}
 
 	[[nodiscard]]
 	auto indexOf( const wsw::StringView &that ) const -> std::optional<unsigned> {
-		if( const char *p = std::search( s, s + len, that.s, that.s + that.len ); p != s + len ) {
+		if( const char *p = std::search( m_s, m_s + m_len, that.m_s, that.m_s + that.m_len ); p != m_s + m_len ) {
 			return toOffset( p );
 		}
 		return std::nullopt;
@@ -165,9 +168,12 @@ public:
 
 	[[nodiscard]]
 	auto lastIndexOf( const wsw::StringView &that ) const -> std::optional<unsigned> {
-		auto start = std::make_reverse_iterator( s + len ), end = std::make_reverse_iterator( s );
-		if( const auto it = std::search( start, end, that.s, that.s + that.len ); it != end ) {
-			return toOffset( it.base() ) - that.length();
+		auto start = std::make_reverse_iterator( m_s + m_len );
+		auto end = std::make_reverse_iterator( m_s );
+		auto thatStart = std::make_reverse_iterator( that.m_s + that.m_len );
+		auto thatEnd = std::make_reverse_iterator( that.m_s );
+		if( const auto it = std::search( start, end, thatStart, thatEnd ); it != end ) {
+			return toOffset( it.base() ) - that.m_len;
 		}
 		return std::nullopt;
 	}
@@ -185,83 +191,84 @@ public:
 	[[nodiscard]]
 	bool containsAny( const wsw::StringView &chars ) const {
 		Lookup lookup( chars );
-		return std::find_if( s, s + len, lookup ) != s + len;
+		return std::find_if( m_s, m_s + m_len, lookup ) != m_s + m_len;
 	}
 
 	[[nodiscard]]
 	bool containsOnly( const wsw::StringView &chars ) const {
 		Lookup lookup( chars );
-		return std::find_if_not( s, s + len, lookup ) == s + len;
+		return std::find_if_not( m_s, m_s + m_len, lookup ) == m_s + m_len;
 	}
 
 	[[nodiscard]]
-	bool containsAll( const wsw::StringView &chars ) {
+	bool containsAll( const wsw::StringView &chars ) const {
 		return chars.containsOnly( *this );
 	}
 
 	[[nodiscard]]
 	bool startsWith( char ch ) const {
-		return len && s[0] == ch;
+		return m_len && m_s[0] == ch;
 	}
 
 	[[nodiscard]]
 	bool endsWith( char ch ) const {
-		return len && s[len - 1] == ch;
+		return m_len && m_s[m_len - 1] == ch;
 	}
 
 	[[nodiscard]]
-	bool startsWith( wsw::StringView &prefix ) const {
-		return prefix.length() <= len && !memcmp( s, prefix.s, prefix.length() );
+	bool startsWith( const wsw::StringView &prefix ) const {
+		return prefix.length() <= m_len && !memcmp( m_s, prefix.m_s, prefix.length() );
 	}
 
 	[[nodiscard]]
-	bool endsWith( wsw::StringView &suffix ) const {
-		return suffix.length() <= len && !memcmp( s + len - suffix.length(), suffix.s, suffix.length() );
+	bool endsWith( const wsw::StringView &suffix ) const {
+		return suffix.length() <= m_len && !memcmp( m_s + m_len - suffix.length(), suffix.m_s, suffix.length() );
 	}
 
 	[[nodiscard]]
 	auto trimLeft() const -> wsw::StringView {
-		const char *p = std::find_if( s, s + len, []( char arg ) { return !std::isspace( arg ); } );
-		return wsw::StringView( p, len - ( p - s ), (Terminated)zeroTerminated );
+		const char *p = std::find_if( m_s, m_s + m_len, []( char arg ) { return !std::isspace( arg ); } );
+		return wsw::StringView( p, m_len - ( p - m_s ), (Terminated)m_terminated );
 	}
 
 	[[nodiscard]]
 	auto trimLeft( char ch ) const -> wsw::StringView {
-		const char *p = std::find_if( s, s + len, [=]( char arg ) { return arg != ch; });
-		return wsw::StringView( p, len - ( p - s ), (Terminated)zeroTerminated );
+		const char *p = std::find_if( m_s, m_s + m_len, [=]( char arg ) { return arg != ch; });
+		return wsw::StringView( p, m_len - ( p - m_s ), (Terminated)m_terminated );
 	}
 
 	[[nodiscard]]
 	auto trimLeft( const wsw::StringView &chars ) const -> wsw::StringView {
 		Lookup lookup( chars );
-		const char *p = std::find_if_not( s, s + len, lookup );
-		return wsw::StringView( p, len - ( s - p ), (Terminated)zeroTerminated );
+		const char *p = std::find_if_not( m_s, m_s + m_len, lookup );
+		return wsw::StringView( p, m_len - ( p - m_s ), (Terminated)m_terminated );
 	}
 
 	[[nodiscard]]
-	auto trimRight() -> wsw::StringView {
-		auto start = std::make_reverse_iterator( s + len ), end = std::make_reverse_iterator( s );
+	auto trimRight() const -> wsw::StringView {
+		auto start = std::make_reverse_iterator( m_s + m_len ), end = std::make_reverse_iterator( m_s );
 		auto it = std::find_if( start, end, []( char arg ) { return !std::isspace( arg ); } );
 		const char *p = it.base();
-		return wsw::StringView( p, p - s );
+		Terminated terminated = ( m_terminated && p == m_s + m_len ) ? ZeroTerminated : Unspecified;
+		return wsw::StringView( m_s, p - m_s, terminated );
 	}
 
 	[[nodiscard]]
-	auto trimRight( char ch ) -> wsw::StringView {
-		auto start = std::make_reverse_iterator( s + len ), end = std::make_reverse_iterator( s );
+	auto trimRight( char ch ) const -> wsw::StringView {
+		auto start = std::make_reverse_iterator( m_s + m_len ), end = std::make_reverse_iterator( m_s );
 		auto it = std::find_if( start, end, [=]( char arg ) { return arg != ch; });
 		const char *p = it.base();
-		Terminated terminated = ( zeroTerminated && p == s + len ) ? ZeroTerminated : Unspecified;
-		return wsw::StringView( p, p - s, terminated );
+		Terminated terminated = ( m_terminated && p == m_s + m_len ) ? ZeroTerminated : Unspecified;
+		return wsw::StringView( m_s, p - m_s, terminated );
 	}
 
 	[[nodiscard]]
-	auto trimRight( const wsw::StringView &chars ) -> wsw::StringView {
+	auto trimRight( const wsw::StringView &chars ) const -> wsw::StringView {
 		Lookup lookup( chars );
-		auto begin = std::make_reverse_iterator( s + len ), end = std::make_reverse_iterator( s );
+		auto begin = std::make_reverse_iterator( m_s + m_len ), end = std::make_reverse_iterator( m_s );
 		auto it = std::find_if_not( begin, end, lookup );
-		Terminated terminated = ( zeroTerminated && it == begin ) ? ZeroTerminated : Unspecified;
-		return wsw::StringView( s, it.base() - s, terminated );
+		Terminated terminated = ( m_terminated && it == begin ) ? ZeroTerminated : Unspecified;
+		return wsw::StringView( m_s, it.base() - m_s, terminated );
 	}
 
 	[[nodiscard]]
@@ -277,29 +284,29 @@ public:
 	[[nodiscard]]
 	auto trim( const wsw::StringView &chars ) -> wsw::StringView {
 		Lookup lookup( chars );
-		const char *left = std::find_if_not( s, s + len, lookup );
-		if( left == s + len ) {
+		const char *left = std::find_if_not( m_s, m_s + m_len, lookup );
+		if( left == m_s + m_len ) {
 			return wsw::StringView();
 		}
 
-		auto begin = std::make_reverse_iterator( s + len ), end = std::make_reverse_iterator( s );
+		auto begin = std::make_reverse_iterator( m_s + m_len ), end = std::make_reverse_iterator( m_s );
 		auto it = std::find_if_not( begin, end, lookup );
 		const char *right = it.base();
-		Terminated terminated = ( zeroTerminated && right == s + len ) ? ZeroTerminated : Unspecified;
+		Terminated terminated = ( m_terminated && right == m_s + m_len ) ? ZeroTerminated : Unspecified;
 		return wsw::StringView( left, right - left, terminated );
 	}
 
 	[[nodiscard]]
 	auto take( size_t n ) const -> wsw::StringView {
-		Terminated terminated = zeroTerminated && n >= len ? ZeroTerminated : Unspecified;
-		return wsw::StringView( s, std::min( len, n ), terminated );
+		Terminated terminated = m_terminated && n >= m_len ? ZeroTerminated : Unspecified;
+		return wsw::StringView( m_s, std::min( m_len, n ), terminated );
 	}
 
 	[[nodiscard]]
 	auto takeExact( size_t n ) const -> std::optional<wsw::StringView> {
-		if( n <= len ) {
-			Terminated terminated = zeroTerminated && n == len ? ZeroTerminated : Unspecified;
-			return wsw::StringView( s, n, terminated );
+		if( n <= m_len ) {
+			Terminated terminated = m_terminated && n == m_len ? ZeroTerminated : Unspecified;
+			return wsw::StringView( m_s, n, terminated );
 		}
 		return std::nullopt;
 	}
@@ -307,21 +314,21 @@ public:
 	template <typename Predicate>
 	[[nodiscard]]
 	auto takeWhile( Predicate predicate ) const -> wsw::StringView {
-		const char *p = std::find_if_not( s, s + len, predicate );
-		Terminated terminated = zeroTerminated && p == s + len ? ZeroTerminated : Unspecified;
-		return wsw::StringView( s, p - s, terminated );
+		const char *p = std::find_if_not( m_s, m_s + m_len, predicate );
+		Terminated terminated = m_terminated && p == m_s + m_len ? ZeroTerminated : Unspecified;
+		return wsw::StringView( m_s, p - m_s, terminated );
 	}
 
 	[[nodiscard]]
 	auto drop( size_t n ) const -> wsw::StringView {
-		size_t prefixLen = std::min( n, len );
-		return wsw::StringView( s + prefixLen, len - prefixLen, (Terminated)zeroTerminated );
+		size_t prefixLen = std::min( n, m_len );
+		return wsw::StringView( m_s + prefixLen, m_len - prefixLen, (Terminated)m_terminated );
 	}
 
 	[[nodiscard]]
 	auto dropExact( size_t n ) const -> std::optional<wsw::StringView> {
-		if( n <= len ) {
-			return wsw::StringView( s + n, len - n, (Terminated)zeroTerminated );
+		if( n <= m_len ) {
+			return wsw::StringView( m_s + n, m_len - n, (Terminated)m_terminated );
 		}
 		return std::nullopt;
 	}
@@ -329,20 +336,20 @@ public:
 	template <typename Predicate>
 	[[nodiscard]]
 	auto dropWhile( Predicate predicate ) const -> wsw::StringView {
-		const char *p = std::find_if_not( s, s + len, predicate );
-		return wsw::StringView( p, len - ( p - s ), (Terminated)zeroTerminated );
+		const char *p = std::find_if_not( m_s, m_s + m_len, predicate );
+		return wsw::StringView( p, m_len - ( p - m_s ), (Terminated)m_terminated );
 	}
 
 	[[nodiscard]]
 	auto takeRight( size_t n ) const -> wsw::StringView {
-		size_t suffixLen = std::min( n, len );
-		return wsw::StringView( s + len - suffixLen, suffixLen, (Terminated)zeroTerminated );
+		size_t suffixLen = std::min( n, m_len );
+		return wsw::StringView( m_s + m_len - suffixLen, suffixLen, (Terminated)m_terminated );
 	}
 
 	[[nodiscard]]
 	auto takeRightExact( size_t n ) const -> std::optional<wsw::StringView> {
-		if( n <= len ) {
-			return wsw::StringView( s + len - n, n, (Terminated)zeroTerminated );
+		if( n <= m_len ) {
+			return wsw::StringView( m_s + m_len - n, n, (Terminated)m_terminated );
 		}
 		return std::nullopt;
 	}
@@ -350,43 +357,41 @@ public:
 	template <typename Predicate>
 	[[nodiscard]]
 	auto takeRightWhile( Predicate predicate ) const -> wsw::StringView {
-		auto begin = std::make_reverse_iterator( s + len ), end = std::make_reverse_iterator( s );
+		auto begin = std::make_reverse_iterator( m_s + m_len ), end = std::make_reverse_iterator( m_s );
 		auto it = std::find_if_not( begin, end, predicate );
 		const char *p = it.base();
-		return wsw::StringView( p, len - ( p - s ), (Terminated)zeroTerminated );
+		return wsw::StringView( p, m_len - ( p - m_s ), (Terminated)m_terminated );
 	}
 
 	[[nodiscard]]
 	auto dropRight( size_t n ) const -> wsw::StringView {
-		Terminated terminated = ( zeroTerminated && n >= len ) ? ZeroTerminated : Unspecified;
-		size_t suffixLen = std::min( n, len );
-		return wsw::StringView( s + len - suffixLen, suffixLen, terminated );
+		Terminated terminated = ( m_terminated && n == 0 ) ? ZeroTerminated : Unspecified;
+		return wsw::StringView( m_s, m_len - std::min( n, m_len ), terminated );
 	}
 
 	[[nodiscard]]
 	auto dropRightExact( size_t n ) const -> std::optional<wsw::StringView> {
-		if( n <= len ) {
-			size_t suffixLen = std::min( n, len );
-			Terminated terminated = zeroTerminated && suffixLen == len ? ZeroTerminated : Unspecified;
-			return wsw::StringView( s + len - suffixLen, len, terminated );
+		if( n <= m_len ) {
+			Terminated terminated = m_terminated && n == 0 ? ZeroTerminated : Unspecified;
+			return wsw::StringView( m_s, m_len - n, terminated );
 		}
-		return wsw::StringView();
+		return std::nullopt;
 	}
 
 	template <typename Predicate>
 	[[nodiscard]]
 	auto dropRightWhile( Predicate predicate ) const -> wsw::StringView {
-		auto begin = std::make_reverse_iterator( s + len ), end = std::make_reverse_iterator( s );
+		auto begin = std::make_reverse_iterator( m_s + m_len ), end = std::make_reverse_iterator( m_s );
 		auto it = std::find_if_not( begin, end, predicate );
 		const char *p = it.base();
-		Terminated terminated = zeroTerminated && p == s + len ? ZeroTerminated : Unspecified;
-		return wsw::StringView( s, len - ( p - s ), terminated );
+		Terminated terminated = m_terminated && p == m_s + m_len ? ZeroTerminated : Unspecified;
+		return wsw::StringView( m_s, (unsigned)( p - m_s ), terminated );
 	}
 
 	void copyTo( char *buffer, size_t bufferSize ) const {
-		assert( bufferSize > len );
-		memcpy( buffer, s, len );
-		buffer[len] = '\0';
+		assert( bufferSize > m_len );
+		memcpy( buffer, m_s, m_len );
+		buffer[m_len] = '\0';
 	}
 
 	template <size_t N>
@@ -400,43 +405,51 @@ public:
  */
 class HashedStringView : public StringView {
 protected:
-	uint32_t hash;
+	uint32_t m_hash;
 public:
-	constexpr HashedStringView() : StringView(), hash( 0 ) {}
+	constexpr HashedStringView() : StringView(), m_hash( 0 ) {}
 
-	explicit HashedStringView( const char *s_ ) : StringView( s_ ) {
-		hash = GetHashForLength( s_, len );
+	explicit HashedStringView( const char *s ) : StringView( s ) {
+		m_hash = GetHashForLength( s, m_len );
 	}
 
-	HashedStringView( const char *s_, size_t len_, Terminated terminated_ = Unspecified )
-		: StringView( s_, len_, terminated_ ) {
-		hash = GetHashForLength( s_, len_ );
+	HashedStringView( const char *s, size_t len, Terminated terminated = Unspecified )
+		: StringView( s, len, terminated ) {
+		m_hash = GetHashForLength( s, len );
 	}
 
-	HashedStringView( const char *s_, size_t len_, uint32_t hash_, Terminated terminated_ = Unspecified )
-		: StringView( s_, len_, terminated_ ), hash( hash_ ) {}
+	HashedStringView( const char *s, size_t len, uint32_t hash, Terminated terminated = Unspecified )
+		: StringView( s, len, terminated ), m_hash( hash ) {}
 
 	explicit HashedStringView( const wsw::StringView &that )
 		: StringView( that.data(), that.size(), that.isZeroTerminated() ? ZeroTerminated : Unspecified ) {
-		hash = GetHashForLength( s, len );
+		m_hash = GetHashForLength( m_s, m_len );
 	}
 
 	[[nodiscard]]
-	auto getHash() const -> uint32_t { return hash; }
+	auto getHash() const -> uint32_t { return m_hash; }
 
 	[[nodiscard]]
 	bool equals( const wsw::HashedStringView &that ) const {
-		return hash == that.hash && len == that.len && !std::strncmp( s, that.s, len );
+		return m_hash == that.m_hash && m_len == that.m_len && !std::strncmp( m_s, that.m_s, m_len );
 	}
 
 	[[nodiscard]]
 	bool equalsIgnoreCase( const wsw::HashedStringView &that ) const {
-		return hash == that.hash && len == that.len && !Q_strnicmp( s, that.s, len );
+		return m_hash == that.m_hash && m_len == that.m_len && !Q_strnicmp( m_s, that.m_s, m_len );
 	}
 
 	bool operator==( const wsw::HashedStringView &that ) const { return equals( that ); }
 	bool operator!=( const wsw::HashedStringView &that ) const { return !equals( that ); }
 };
+
+inline constexpr auto operator "" _asView( const char *s, std::size_t len ) -> wsw::StringView {
+	return len ? wsw::StringView( s, len, wsw::StringView::ZeroTerminated ) : wsw::StringView();
+}
+
+inline auto operator "" _asHView( const char *s, std::size_t len ) -> wsw::HashedStringView {
+	return len ? wsw::HashedStringView( s, len, wsw::StringView::ZeroTerminated ) : wsw::HashedStringView();
+}
 
 using String = std::string;
 using StringStream = std::stringstream;
