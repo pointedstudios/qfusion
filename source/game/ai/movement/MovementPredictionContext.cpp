@@ -452,7 +452,7 @@ void MovementPredictionContext::CompleteOrSaveGoodEnoughPath( int minTravelTimeS
 
 	// We supply millis for convenience but convert to centis in order to match AAS time units
 	int travelTimeToTarget = TravelTimeToNavTarget() + penaltyMillis / 10;
-	if( travelTimeToTarget <= minTravelTimeSoFar ) {
+	if( !penaltyMillis && travelTimeToTarget <= minTravelTimeSoFar ) {
 		Debug( "%s: Stopping prediction\n", tag );
 		isCompleted = true;
 		return;
@@ -1303,15 +1303,6 @@ void MovementPredictionContext::CheatingCorrectVelocity( float velocity2DDirDotT
 	}
 
 	const auto &entityPhysicsState = this->movementState->entityPhysicsState;
-
-	// Make correction less effective for large angles multiplying it
-	// by the dot product to avoid a weird-looking cheating movement
-	float controlMultiplier = 0.05f + fabsf( velocity2DDirDotToTarget2DDir ) * 0.05f;
-	// Use lots of correction near items
-	if( bot->ShouldMoveCarefully() ) {
-		controlMultiplier += 0.10f;
-	}
-
 	const float speed = entityPhysicsState.Speed();
 	if( speed < 100 ) {
 		return;
@@ -1324,7 +1315,7 @@ void MovementPredictionContext::CheatingCorrectVelocity( float velocity2DDirDotT
 	// Normalize current velocity direction
 	newVelocity *= 1.0f / speed;
 	// Modify velocity direction
-	newVelocity += controlMultiplier * toTargetDir2D;
+	newVelocity += 0.06f * toTargetDir2D;
 	// Normalize velocity direction again after modification
 	newVelocity.Normalize();
 	// Restore velocity magnitude

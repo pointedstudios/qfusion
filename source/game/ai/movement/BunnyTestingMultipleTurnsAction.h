@@ -8,9 +8,8 @@ class BunnyTestingMultipleTurnsAction : public BunnyHopAction {
 	int attemptNum { 0 };
 	bool hasWalljumped { false };
 
-	static constexpr const auto kMaxAngles = 6;
-	static constexpr const auto kAttemptsPerAngle = 4;
-	static constexpr const auto kMaxAttempts = kAttemptsPerAngle * kMaxAngles;
+	static constexpr const auto kMaxAngles = 5;
+	static constexpr const auto kMaxAttempts = 2 * kMaxAngles;
 
 	static const float kAngularSpeed[kMaxAngles];
 public:

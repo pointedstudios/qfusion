@@ -75,8 +75,6 @@ protected:
 
 	inline bool WasOnGroundThisFrame( const MovementPredictionContext *context ) const;
 
-	inline bool HasSubstantiallyChangedZ( const AiEntityPhysicsState &entityPhysicsState ) const;
-
 	void EnsurePathPenalty( unsigned penalty ) {
 		assert( penalty < 30000 );
 		sequencePathPenalty = std::max( sequencePathPenalty, penalty );

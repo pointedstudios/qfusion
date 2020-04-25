@@ -339,16 +339,6 @@ bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 	const float oldSquare2DSpeed = oldEntityPhysicsState.SquareSpeed2D();
 	const float newSquare2DSpeed = newEntityPhysicsState.SquareSpeed2D();
 
-	bool continueOnFailure = false;
-	unsigned penalty = 0;
-	// Skip any further tests if the bot has changed Z substantially.
-	// Put cheaper tests first in outer conditions.
-	if( HasSubstantiallyChangedZ( newEntityPhysicsState ) ) {
-		if( originAtSequenceStart.SquareDistance2DTo( newEntityPhysicsState.Origin() ) > SQUARE( 72.0f ) ) {
-			continueOnFailure = true;
-		}
-	}
-
 	// Check for unintended bouncing back (starting from some speed threshold)
 	if( oldSquare2DSpeed > 100 * 100 && newSquare2DSpeed > 1 * 1 ) {
 		Vec3 oldVelocity2DDir( oldVelocity[0], oldVelocity[1], 0 );
@@ -356,22 +346,14 @@ bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 		Vec3 newVelocity2DDir( newVelocity[0], newVelocity[1], 0 );
 		newVelocity2DDir *= 1.0f / newEntityPhysicsState.Speed2D();
 		if( oldVelocity2DDir.Dot( newVelocity2DDir ) < 0.3f ) {
-			if( !continueOnFailure ) {
-				Debug( "A prediction step has lead to an unintended bouncing back\n" );
-				return false;
-			}
-			// Walljumping is fine but in this environment it might hide bouncing of walls of a pit
-			EnsurePathPenalty( 1000 + penalty );
+			Debug( "A prediction step has lead to an unintended bouncing back\n" );
+			return false;
 		}
 	}
 
 	// Avoid bumping into walls.
 	// Note: the lower speed limit is raised to actually trigger this check.
 	if( newSquare2DSpeed < 50 * 50 && oldSquare2DSpeed > 100 * 100 ) {
-		if( continueOnFailure ) {
-			EnsurePathPenalty( 1000 + penalty );
-			return true;
-		}
 		Debug( "A prediction step has lead to close to zero 2D speed while it was significant\n" );
 		return false;
 	}
@@ -407,11 +389,6 @@ bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 		return true;
 	}
 
-	if( continueOnFailure ) {
-		EnsurePathPenalty( 750 + penalty );
-		return true;
-	}
-
 	// Stop in this seemingly unrecoverable case
 	if( speed2D < 100 ) {
 		const char *format_ = "A sequential speed loss interval of %d millis exceeds the tolerable one of %d millis\n";
@@ -422,27 +399,14 @@ bool BunnyHopAction::CheckStepSpeedGainOrLoss( Context *context ) {
 	// If the area is not a "skip collision" area
 	if( !( AiAasWorld::Instance()->AreaSettings()[context->CurrAasAreaNum()].areaflags & AREA_SKIP_COLLISION_MASK ) ) {
 		const float frac = ( threshold - speed2D ) * Q_Rcp( threshold );
-		penalty += (unsigned)( 250 + 1250 * Q_Sqrt( frac ) );
+		EnsurePathPenalty( (unsigned)( 250 + 1250 * Q_Sqrt( frac ) ) );
 	}
 
-	EnsurePathPenalty( penalty );
 	return true;
 }
 
 inline bool BunnyHopAction::WasOnGroundThisFrame( const Context *context ) const {
 	return context->movementState->entityPhysicsState.GroundEntity() || context->frameEvents.hasJumped;
-}
-
-inline bool BunnyHopAction::HasSubstantiallyChangedZ( const AiEntityPhysicsState &state ) const {
-	if( !std::isfinite( groundZAtSequenceStart ) ) {
-		return false;
-	}
-	const float heightOverGround = state.HeightOverGround();
-	if( !std::isfinite( heightOverGround ) ) {
-		return false;
-	}
-	const float newGroundZ = state.Origin()[2] - heightOverGround + playerbox_stand_mins[2];
-	return std::fabs( groundZAtSequenceStart - newGroundZ ) > 48.0f;
 }
 
 void BunnyHopAction::CompleteOrSaveGoodEnoughPath( Context *context, unsigned additionalPenalty ) {
@@ -463,6 +427,8 @@ bool BunnyHopAction::TryHandlingWorseTravelTimeToTarget( Context *context,
 		Debug( format );
 		return false;
 	}
+
+	EnsurePathPenalty( 200 );
 
 	// Can't say much in this case. Continue prediction.
 	if( !groundedAreaNum || !minTravelTimeAreaNumSoFar ) {
@@ -644,9 +610,15 @@ void BunnyHopAction::CheckPredictionStepResults( Context *context ) {
 		// Note that if the current travel time is worse than the minimal one
 		// during the prediction sequence (but still is better than the start one) a penalty is applied.
 		if( currTravelTimeToTarget < travelTimeAtSequenceStart ) {
+			// Apply an additional penalty for an insufficient advancement
+			int advancement = travelTimeAtSequenceStart - currTravelTimeToTarget;
+			unsigned penalty = 0;
+			if( advancement < 30 ) {
+				penalty = (unsigned)( 30 - advancement );
+			}
 			// Remember that this call checks itself whether the current travel time
 			// is the minimal one so far and applies a penalty if needed on its own.
-			CompleteOrSaveGoodEnoughPath( context );
+			CompleteOrSaveGoodEnoughPath( context, penalty );
 			return;
 		}
 	}
