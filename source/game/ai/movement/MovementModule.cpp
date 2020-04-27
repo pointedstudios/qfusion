@@ -190,16 +190,33 @@ void BotMovementModule::ApplyPendingTurnToLookAtPoint( BotInput *botInput, Movem
 	botInput->canOverridePitch = false;
 }
 
+static const char *lastNoLookDirAction = "";
+static const char *lastNoUcmdAction = "";
+
 void BotMovementModule::ApplyInput( BotInput *input, MovementPredictionContext *context ) {
-	// It is legal (there are no enemies and no nav targets in some moments))
+	constexpr const char *tag = "BotMovementModule::ApplyInput";
+	// While these conditions can hold from time to time and that's not a bug
+	// it's better to eliminate these cases eventually completely.
 	if( !input->isLookDirSet ) {
-		//const float *origin = entityPhysicsState ? entityPhysicsState->Origin() : self->s.origin;
-		//AITools_DrawColorLine(origin, (Vec3(-32, +32, -32) + origin).Data(), COLOR_RGB(192, 0, 0), 0);
+		if( context ) {
+			if( strcmp( lastNoLookDirAction, context->ActiveActionName() ) != 0 ) {
+				Com_Printf( S_COLOR_RED "%s FIXME %s: No look dir set\n", tag, context->ActiveActionName() );
+				lastNoLookDirAction = context->ActiveActionName();
+			}
+		} else {
+			Com_Printf( S_COLOR_RED "%s FIXME: No look dir set\n", tag );
+		}
 		return;
 	}
 	if( !input->isUcmdSet ) {
-		//const float *origin = entityPhysicsState ? entityPhysicsState->Origin() : self->s.origin;
-		//AITools_DrawColorLine(origin, (Vec3(+32, -32, +32) + origin).Data(), COLOR_RGB(192, 0, 192), 0);
+		if( context ) {
+			if( strcmp( lastNoUcmdAction, context->ActiveActionName() ) != 0 ) {
+				Com_Printf( S_COLOR_RED "%s: FIXME %s: No ucmd set\n", tag, context->ActiveActionName() );
+				lastNoUcmdAction = context->ActiveActionName();
+			}
+		} else {
+			Com_Printf( S_COLOR_RED "%s: FIXME: No ucmd set\n", tag );
+		}
 		return;
 	}
 

@@ -3,7 +3,7 @@
 #include "MovementModule.h"
 
 const float BunnyTestingMultipleTurnsAction::kAngularSpeed[kMaxAngles] = {
-	60.0f, 90.0f, 180.0f + 30.0f, 270.0f + 60.0f, 360.0f + 90.0f
+	30.0f, 60.0f, 90.0f, 150.0f, 210.0f
 };
 
 void BunnyTestingMultipleTurnsAction::PlanPredictionStep( MovementPredictionContext *context ) {

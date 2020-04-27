@@ -134,6 +134,8 @@ bool BunnyHopAction::SetupBunnyHopping( const Vec3 &intendedLookVec, Context *co
 	auto *botInput = &context->record->botInput;
 
 	Vec3 toTargetDir2D( intendedLookVec );
+	botInput->SetIntendedLookDir( intendedLookVec );
+	botInput->isUcmdSet = true;
 	toTargetDir2D.Z() = 0;
 
 	Vec3 velocityDir2D( entityPhysicsState.Velocity() );
