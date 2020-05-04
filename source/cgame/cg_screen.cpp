@@ -395,7 +395,7 @@ static int CG_CrosshairDimensions( int x, int y, int size, int align, int *sx, i
 /*
 * CG_DrawCrosshairChar
 */
-static void CG_DrawCrosshairChar( int x, int y, int size, int num, vec_t *color ) {
+static void CG_DrawCrosshairChar( int x, int y, int size, int num, const vec_t *color ) {
 	struct qfontface_s *font = SCR_RegisterSpecialFont( cg_crosshair_font->string, QFONT_STYLE_NONE, size );
 	if( !font ) {
 		Cvar_Set( cg_crosshair_font->name, cg_crosshair_font->dvalue );
@@ -545,7 +545,7 @@ void CG_DrawKeyState( int x, int y, int w, int h, int align, const char *key ) {
 /*
 * CG_DrawClock
 */
-void CG_DrawClock( int x, int y, int align, struct qfontface_s *font, vec4_t color ) {
+void CG_DrawClock( int x, int y, int align, struct qfontface_s *font, const vec4_t color ) {
 	int64_t clocktime, startTime, duration, curtime;
 	double seconds;
 	int minutes;
@@ -658,7 +658,7 @@ static void CG_UpdatePointedNum( void ) {
 /*
 * CG_DrawPlayerNames
 */
-void CG_DrawPlayerNames( struct qfontface_s *font, vec4_t color ) {
+void CG_DrawPlayerNames( struct qfontface_s *font, const vec4_t color ) {
 	static vec4_t alphagreen = { 0, 1, 0, 0 }, alphared = { 1, 0, 0, 0 }, alphayellow = { 1, 1, 0, 0 }, alphamagenta = { 1, 0, 1, 1 }, alphagrey = { 0.85, 0.85, 0.85, 1 };
 	centity_t *cent;
 	vec4_t tmpcolor;
@@ -890,7 +890,7 @@ void CG_DrawTeamMates( void ) {
 /*
 * CG_DrawTeamInfo
 */
-void CG_DrawTeamInfo( int x, int y, int align, struct qfontface_s *font, vec4_t color ) {
+void CG_DrawTeamInfo( int x, int y, int align, struct qfontface_s *font, const vec4_t color ) {
 	char string[128];
 	int team;
 	int teammate;
@@ -1050,7 +1050,7 @@ void CG_DrawTeamInfo( int x, int y, int align, struct qfontface_s *font, vec4_t 
 /*
 * CG_DrawRSpeeds
 */
-void CG_DrawRSpeeds( int x, int y, int align, struct qfontface_s *font, vec4_t color ) {
+void CG_DrawRSpeeds( int x, int y, int align, struct qfontface_s *font, const vec4_t color ) {
 	char msg[1024];
 
 	RF_GetSpeedsMessage( msg, sizeof( msg ) );

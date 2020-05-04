@@ -133,7 +133,7 @@ BotItemsSelector::ItemAndGoalWeights BotItemsSelector::ComputeAmmoWeights( const
 	if( inventory[item->tag] < item->inventory_max ) {
 		float quantityFactor = 1.0f - inventory[item->tag] * Q_Rcp( item->inventory_max );
 		if( quantityFactor > 0 ) {
-			quantityFactor = SQRTFAST( quantityFactor );
+			quantityFactor = Q_Sqrt( quantityFactor );
 		}
 
 		for( int weapon = WEAP_GUNBLADE; weapon < WEAP_TOTAL; weapon++ ) {

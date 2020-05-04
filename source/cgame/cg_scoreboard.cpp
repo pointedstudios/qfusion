@@ -38,7 +38,7 @@ typedef struct {
 	int ping;
 } scr_spectator_t;
 
-void CG_DrawHUDNumeric( int x, int y, int align, float *color, int charwidth, int charheight, int value );
+void CG_DrawHUDNumeric( int x, int y, int align, const float *color, int charwidth, int charheight, int value );
 
 /*
 * CG_DrawAlignPic
@@ -330,7 +330,7 @@ static bool SCR_NiceSpecConfig( int rows, int columns, int count ) {
 /*
 * SCR_DrawSpectators
 */
-static int SCR_DrawSpectators( const char **ptrptr, int x, int y, int panelWidth, struct qfontface_s *font, bool havePing, const char *title, vec4_t titleColor, int pass ) {
+static int SCR_DrawSpectators( const char **ptrptr, int x, int y, int panelWidth, struct qfontface_s *font, bool havePing, const char *title, const vec4_t titleColor, int pass ) {
 	const char *backup;
 	scr_spectator_t spec;
 	char string[MAX_STRING_CHARS];

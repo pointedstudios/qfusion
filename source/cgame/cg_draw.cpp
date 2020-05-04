@@ -81,7 +81,7 @@ STRINGS DRAWING
 /*
 * CG_DrawHUDNumeric
 */
-void CG_DrawHUDNumeric( int x, int y, int align, float *color, int charwidth, int charheight, int value ) {
+void CG_DrawHUDNumeric( int x, int y, int align, const float *color, int charwidth, int charheight, int value ) {
 	char num[16], *ptr;
 	int length;
 	int frame;
@@ -479,7 +479,7 @@ void CG_DrawHUDRect( int x, int y, int align, int w, int h, int val, int maxval,
 /*
 * CG_DrawPicBar
 */
-void CG_DrawPicBar( int x, int y, int width, int height, int align, float percent, struct shader_s *shader, vec4_t backColor, vec4_t color ) {
+void CG_DrawPicBar( int x, int y, int width, int height, int align, float percent, struct shader_s *shader, const vec4_t backColor, const vec4_t color ) {
 	float widthFrac, heightFrac;
 
 	x = CG_HorizontalAlignForWidth( x, align, width );

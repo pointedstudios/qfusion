@@ -116,7 +116,7 @@ bool MovementPredictionContext::CheckPredictedOrigin( PredictedMovementAction *p
 		return true;
 	}
 
-	float distanceMismatch = SQRTFAST( squareDistanceMismatch );
+	float distanceMismatch = Q_Sqrt( squareDistanceMismatch );
 	const char *format_ = "Cannot use predicted movement action: distance mismatch %f is too high for lerp frac %f\n";
 	Debug( format_, distanceMismatch, checkLerpFrac );
 	return false;
@@ -1249,7 +1249,7 @@ void MovementPredictionContext::CheatingAccelerate( float frac ) {
 		speedGainPerSecond = maxSpeedGainPerSecond * ( 1.0f + ( 1.0f - speedFrac ) );
 		// Also modify the frac to ensure the bot accelerates fast to the pivotSpeed in all cases
 		// (the real applied frac is frac^(1/4))
-		frac = SQRTFAST( frac );
+		frac = Q_Sqrt( frac );
 	}
 
 	speedGainPerSecond *= groundSpeedScale;
@@ -1258,7 +1258,7 @@ void MovementPredictionContext::CheatingAccelerate( float frac ) {
 	// A caller should set an appropriate frac if CheatingAccelerate() is used for other kinds of movement.
 
 	clamp_high( frac, 1.0f );
-	frac = SQRTFAST( frac );
+	frac = Q_Sqrt( frac );
 
 	Vec3 newVelocity( entityPhysicsState.Velocity() );
 	// Preserve the old velocity Z.

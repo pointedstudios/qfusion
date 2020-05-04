@@ -420,7 +420,7 @@ void HazardsSelector::FindWaveHazards( const EntNumsVector &entNums ) {
 			continue;
 		}
 
-		float waveSpeed = SQRTFAST( squareSpeed );
+		float waveSpeed = Q_Sqrt( squareSpeed );
 		Vec3 botToLinePoint( wave->s.origin );
 		botToLinePoint -= self->s.origin;
 		Vec3 projection( lineDir );
@@ -449,7 +449,7 @@ void HazardsSelector::FindWaveHazards( const EntNumsVector &entNums ) {
 		// Put the likely case first
 		float damage = wave->projectileInfo.maxDamage;
 		if( !isDirectHit ) {
-			float distance = SQRTFAST( squareDistance );
+			float distance = Q_Sqrt( squareDistance );
 			float damageScore = damage * ( 3.0f - 2.0f * ( distance / hazardRadius ) );
 			// Treat the nearest point on the line as a hit point
 			// perpendicular = hitPoint - self->s.origin;

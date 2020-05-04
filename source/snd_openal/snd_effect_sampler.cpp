@@ -214,7 +214,7 @@ float ReverbEffectSampler::GetEmissionRadius() const {
 
 	clamp_high( attenuation, 10.0f );
 	float distance = 4.0f * REVERB_ENV_DISTANCE_THRESHOLD;
-	distance -= 3.5f * SQRTFAST( attenuation / 10.0f ) * REVERB_ENV_DISTANCE_THRESHOLD;
+	distance -= 3.5f * Q_Sqrt( attenuation / 10.0f ) * REVERB_ENV_DISTANCE_THRESHOLD;
 	return distance;
 }
 

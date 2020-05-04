@@ -251,26 +251,26 @@ fdrawchar_t SCR_SetDrawCharIntercept( fdrawchar_t intercept ) {
 //STRINGS DRAWING
 //===============================================================================
 
-void SCR_DrawRawChar( int x, int y, wchar_t num, qfontface_t *font, vec4_t color ) {
+void SCR_DrawRawChar( int x, int y, wchar_t num, qfontface_t *font, const vec4_t color ) {
 	FTLIB_DrawRawChar( x, y, num, font, color );
 }
 
-void SCR_DrawClampChar( int x, int y, wchar_t num, int xmin, int ymin, int xmax, int ymax, qfontface_t *font, vec4_t color ) {
+void SCR_DrawClampChar( int x, int y, wchar_t num, int xmin, int ymin, int xmax, int ymax, qfontface_t *font, const vec4_t color ) {
 	FTLIB_DrawClampChar( x, y, num, xmin, ymin, xmax, ymax, font, color );
 }
 
-void SCR_DrawClampString( int x, int y, const char *str, int xmin, int ymin, int xmax, int ymax, qfontface_t *font, vec4_t color, int flags ) {
+void SCR_DrawClampString( int x, int y, const char *str, int xmin, int ymin, int xmax, int ymax, qfontface_t *font, const vec4_t color, int flags ) {
 	FTLIB_DrawClampString( x, y, str, xmin, ymin, xmax, ymax, font, color, flags );
 }
 
-int SCR_DrawMultilineString( int x, int y, const char *str, int halign, int maxwidth, int maxlines, qfontface_t *font, vec4_t color, int flags ) {
+int SCR_DrawMultilineString( int x, int y, const char *str, int halign, int maxwidth, int maxlines, qfontface_t *font, const vec4_t color, int flags ) {
 	return FTLIB_DrawMultilineString( x, y, str, halign, maxwidth, maxlines, font, color, flags );
 }
 
 /*
 * SCR_DrawString
 */
-int SCR_DrawString( int x, int y, int align, const char *str, qfontface_t *font, vec4_t color, int flags ) {
+int SCR_DrawString( int x, int y, int align, const char *str, qfontface_t *font, const vec4_t color, int flags ) {
 	int width;
 	int fontHeight;
 
@@ -298,7 +298,7 @@ int SCR_DrawString( int x, int y, int align, const char *str, qfontface_t *font,
 *
 * ClampS to width in pixels. Returns drawn len
 */
-size_t SCR_DrawStringWidth( int x, int y, int align, const char *str, size_t maxwidth, qfontface_t *font, vec4_t color, int flags ) {
+size_t SCR_DrawStringWidth( int x, int y, int align, const char *str, size_t maxwidth, qfontface_t *font, const vec4_t color, int flags ) {
 	size_t width;
 	int fontHeight;
 
@@ -347,7 +347,7 @@ void SCR_DrawStretchPic( int x, int y, int w, int h, float s1, float t1, float s
 *
 * Fills a box of pixels with a single color
 */
-void SCR_DrawFillRect( int x, int y, int w, int h, vec4_t color ) {
+void SCR_DrawFillRect( int x, int y, int w, int h, const vec4_t color ) {
 	RF_DrawStretchPic( x, y, w, h, 0, 0, 1, 1, color, cls.whiteShader );
 }
 
@@ -356,7 +356,7 @@ void SCR_DrawFillRect( int x, int y, int w, int h, vec4_t color ) {
 *
 * Fills a scissored box of pixels with a single color
 */
-void SCR_DrawClampFillRect( int x, int y, int w, int h, int xmin, int ymin, int xmax, int ymax, vec4_t color ) {
+void SCR_DrawClampFillRect( int x, int y, int w, int h, int xmin, int ymin, int xmax, int ymax, const vec4_t color ) {
 	int x2 = x + w;
 	int y2 = y + h;
 

@@ -312,7 +312,7 @@ void ReactToHazardGoal::UpdateWeight( const WorldState &currWorldState ) {
 	float damageFraction = currWorldState.PotentialHazardDamageVar() / currWorldState.DamageToBeKilled();
 	float weight_ = configGroup.baseWeight + configGroup.dmgFracCoeff * damageFraction;
 	weight_ = BoundedFraction( weight_, configGroup.weightBound );
-	weight_ = configGroup.weightBound * SQRTFAST( weight_ );
+	weight_ = configGroup.weightBound * Q_Sqrt( weight_ );
 
 	this->weight = weight_;
 }
@@ -340,7 +340,7 @@ void ReactToThreatGoal::UpdateWeight( const WorldState &currWorldState ) {
 		weight_ *= ( 1.0f + configGroup.offCoeff * ( offensiveness - 0.5f ) );
 	}
 	weight_ = BoundedFraction( weight_, configGroup.weightBound );
-	weight_ = configGroup.weightBound / SQRTFAST( weight_ );
+	weight_ = configGroup.weightBound * Q_Sqrt( weight_ );
 
 	this->weight = weight_;
 }

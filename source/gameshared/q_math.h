@@ -75,30 +75,26 @@ typedef struct cplane_s {
 	short signbits;             // signx + (signy<<1) + (signz<<1)
 } cplane_t;
 
-extern vec3_t vec3_origin;
-extern mat3_t axis_identity;
-extern quat_t quat_identity;
+constexpr const vec3_t vec3_origin { 0, 0, 0 };
+constexpr const mat3_t axis_identity { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+constexpr const quat_t quat_identity { 0, 0, 0, 1 };
 
-extern vec4_t colorBlack;
-extern vec4_t colorRed;
-extern vec4_t colorGreen;
-extern vec4_t colorBlue;
-extern vec4_t colorYellow;
-extern vec4_t colorMagenta;
-extern vec4_t colorCyan;
-extern vec4_t colorWhite;
-extern vec4_t colorLtGrey;
-extern vec4_t colorMdGrey;
-extern vec4_t colorDkGrey;
-extern vec4_t colorOrange;
+constexpr const vec4_t colorBlack    { 0, 0, 0, 1 };
+constexpr const vec4_t colorRed      { 1, 0, 0, 1 };
+constexpr const vec4_t colorGreen    { 0, 1, 0, 1 };
+constexpr const vec4_t colorBlue     { 0, 0, 1, 1 };
+constexpr const vec4_t colorYellow   { 1, 1, 0, 1 };
+constexpr const vec4_t colorOrange   { 1, 0.5, 0, 1 };
+constexpr const vec4_t colorMagenta  { 1, 0, 1, 1 };
+constexpr const vec4_t colorCyan     { 0, 1, 1, 1 };
+constexpr const vec4_t colorWhite    { 1, 1, 1, 1 };
+constexpr const vec4_t colorLtGrey   { 0.75, 0.75, 0.75, 1 };
+constexpr const vec4_t colorMdGrey   { 0.5, 0.5, 0.5, 1 };
+constexpr const vec4_t colorDkGrey   { 0.25, 0.25, 0.25, 1 };
 
 #define MAX_S_COLORS 10
 
-extern vec4_t color_table[MAX_S_COLORS];
-
-#define nanmask ( 255 << 23 )
-
-#define IS_NAN( x ) ( ( ( *(int *)&x ) & nanmask ) == nanmask )
+extern const vec4_t color_table[MAX_S_COLORS];
 
 #ifndef M_PI
 #define M_PI       3.14159265358979323846   // matches value in gcc v2 math.h
@@ -200,10 +196,6 @@ int Q_log2( int val );
 
 int Q_bitcount( int v );
 
-#define ISPOWOF2( x ) ( !( ( x ) & ( ( x ) - 1 ) ) )
-
-#define SQRTFAST( x ) ( Q_Sqrt( x ) )
-
 #define DotProduct( x, y )     ( ( x )[0] * ( y )[0] + ( x )[1] * ( y )[1] + ( x )[2] * ( y )[2] )
 #define CrossProduct( v1, v2, cross ) ( ( cross )[0] = ( v1 )[1] * ( v2 )[2] - ( v1 )[2] * ( v2 )[1], ( cross )[1] = ( v1 )[2] * ( v2 )[0] - ( v1 )[0] * ( v2 )[2], ( cross )[2] = ( v1 )[0] * ( v2 )[1] - ( v1 )[1] * ( v2 )[0] )
 
@@ -227,8 +219,8 @@ int Q_bitcount( int v );
 #define DistanceSquared( v1, v2 ) ( ( ( v1 )[0] - ( v2 )[0] ) * ( ( v1 )[0] - ( v2 )[0] ) + ( ( v1 )[1] - ( v2 )[1] ) * ( ( v1 )[1] - ( v2 )[1] ) + ( ( v1 )[2] - ( v2 )[2] ) * ( ( v1 )[2] - ( v2 )[2] ) )
 #define Distance( v1, v2 ) ( sqrt( DistanceSquared( v1, v2 ) ) )
 
-#define VectorLengthFast( v )     ( SQRTFAST( DotProduct( ( v ), ( v ) ) ) )  // jal :  //The expression a * rsqrt(b) is intended as a higher performance alternative to a / sqrt(b). The two expressions are comparably accurate, but do not compute exactly the same value in every case. For example, a * rsqrt(a*a + b*b) can be just slightly greater than 1, in rare cases.
-#define DistanceFast( v1, v2 )     ( SQRTFAST( DistanceSquared( v1, v2 ) ) )  // jal :  //The expression a * rsqrt(b) is intended as a higher performance alternative to a / sqrt(b). The two expressions are comparably accurate, but do not compute exactly the same value in every case. For example, a * rsqrt(a*a + b*b) can be just slightly greater than 1, in rare cases.
+#define VectorLengthFast( v )     ( Q_Sqrt( DotProduct( ( v ), ( v ) ) ) )
+#define DistanceFast( v1, v2 )     ( Q_Sqrt( DistanceSquared( v1, v2 ) ) )
 
 #define Vector2Set( v, x, y )     ( ( v )[0] = ( x ), ( v )[1] = ( y ) )
 #define Vector2Copy( a, b )    ( ( b )[0] = ( a )[0], ( b )[1] = ( a )[1] )
@@ -244,20 +236,65 @@ int Q_bitcount( int v );
 #define Vector4Inverse( v )         ( ( v )[0] = -( v )[0], ( v )[1] = -( v )[1], ( v )[2] = -( v )[2], ( v )[3] = -( v )[3] )
 #define DotProduct4( x, y )    ( ( x )[0] * ( y )[0] + ( x )[1] * ( y )[1] + ( x )[2] * ( y )[2] + ( x )[3] * ( y )[3] )
 
-vec_t VectorNormalize( vec3_t v );       // returns vector length
-vec_t VectorNormalize2( const vec3_t v, vec3_t out );
-void  VectorNormalizeFast( vec3_t v );
+inline float VectorNormalize( float *v ) {
+	const float squareLen = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+	float len = 0.0f;
 
-vec_t Vector4Normalize( vec4_t v );      // returns vector length
+	// TODO: [[likely]]
+	if( squareLen > 0 ) {
+		len = std::sqrt( squareLen );
+		float invLen = 1.0f / len;
+		v[0] *= invLen;
+		v[1] *= invLen;
+		v[2] *= invLen;
+	}
+
+	return len;
+}
+
+inline float VectorNormalize2( const vec3_t v, vec3_t out ) {
+	const float squareLen = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+	float len = 0.0f;
+
+	// TODO: [[likely]]
+	if( squareLen > 0 ) {
+		len = std::sqrt( squareLen );
+		const float invLen = 1.0f / len;
+		out[0] = v[0] * invLen;
+		out[1] = v[1] * invLen;
+		out[2] = v[2] * invLen;
+	} else {
+		VectorClear( out );
+	}
+
+	return len;
+}
+
+inline float Vector4Normalize( float *v ) {
+	const float squareLen = v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3];
+	float len = 0.0f;
+
+	// TODO: [[likely]]
+	if( squareLen > 0.0f ) {
+		len = std::sqrt( squareLen );
+		const float invLen = 1.0f / len;
+		v[0] *= invLen;
+		v[1] *= invLen;
+		v[2] *= invLen;
+		v[3] *= invLen;
+	}
+
+	return len;
+}
+
+inline void VectorNormalizeFast( vec3_t v ) {
+	const float invLen = Q_RSqrt( DotProduct( v, v ) );
+	v[0] *= invLen;
+	v[1] *= invLen;
+	v[2] *= invLen;
+}
 
 void VectorReflect( const vec3_t v, const vec3_t n, const vec_t dist, vec3_t out );
-
-// just in case you do't want to use the macros
-void _VectorMA( const vec3_t veca, float scale, const vec3_t vecb, vec3_t vecc );
-vec_t _DotProduct( const vec3_t v1, const vec3_t v2 );
-void _VectorSubtract( const vec3_t veca, const vec3_t vecb, vec3_t out );
-void _VectorAdd( const vec3_t veca, const vec3_t vecb, vec3_t out );
-void _VectorCopy( const vec3_t in, vec3_t out );
 
 static inline void ClearBounds( vec3_t mins, vec3_t maxs ) {
 	mins[0] = mins[1] = mins[2] = 99999;
@@ -402,8 +439,6 @@ void ProjectPointOntoPlane( vec3_t dst, const vec3_t p, const vec3_t normal );
 void PerpendicularVector( vec3_t dst, const vec3_t src );
 void RotatePointAroundVector( vec3_t dst, const vec3_t dir, const vec3_t point, float degrees );
 void ProjectPointOntoVector( const vec3_t point, const vec3_t vStart, const vec3_t vDir, vec3_t vProj );
-float DistanceFromLineSquared( const vec3_t p, const vec3_t lp1, const vec3_t lp2, const vec3_t dir );
-#define DistanceFromLine( p,lp1,lp2,dir ) ( sqrt( DistanceFromLineSquared( p,lp1,lp2,dir ) ) )
 
 float LinearMovementWithOvershoot( vec_t start, vec_t end, float duration, float freq, float decay, float t );
 

@@ -262,7 +262,7 @@ fdrawchar_t FTLIB_SetDrawCharIntercept( fdrawchar_t intercept ) {
 * It can be clipped to the top of the screen to allow the console to be
 * smoothly scrolled off.
 */
-void FTLIB_DrawRawChar( int x, int y, wchar_t num, qfontface_t *font, vec4_t color ) {
+void FTLIB_DrawRawChar( int x, int y, wchar_t num, qfontface_t *font, const vec4_t color ) {
 	qglyph_t *glyph;
 	fdrawchar_t draw = RF_DrawStretchPic;
 
@@ -300,7 +300,7 @@ void FTLIB_DrawRawChar( int x, int y, wchar_t num, qfontface_t *font, vec4_t col
 * Draws one graphics character with 0 being transparent.
 * Clipped to [xmin, ymin; xmax, ymax].
 */
-void FTLIB_DrawClampChar( int x, int y, wchar_t num, int xmin, int ymin, int xmax, int ymax, qfontface_t *font, vec4_t color ) {
+void FTLIB_DrawClampChar( int x, int y, wchar_t num, int xmin, int ymin, int xmax, int ymax, qfontface_t *font, const vec4_t color ) {
 	qglyph_t *glyph;
 	int x2, y2;
 	float s1 = 0.0f, t1 = 0.0f, s2 = 1.0f, t2 = 1.0f;
@@ -369,7 +369,7 @@ void FTLIB_DrawClampChar( int x, int y, wchar_t num, int xmin, int ymin, int xma
 /*
 * FTLIB_DrawClampString
 */
-void FTLIB_DrawClampString( int x, int y, const char *str, int xmin, int ymin, int xmax, int ymax, qfontface_t *font, vec4_t color, int flags ) {
+void FTLIB_DrawClampString( int x, int y, const char *str, int xmin, int ymin, int xmax, int ymax, qfontface_t *font, const vec4_t color, int flags ) {
 	int xoffset = 0;
 	vec4_t scolor;
 	int colorindex;
@@ -446,7 +446,7 @@ void FTLIB_DrawClampString( int x, int y, const char *str, int xmin, int ymin, i
 * FTLIB_DrawRawString - Doesn't care about aligning. Returns drawn len.
 * It can stop when reaching maximum width when a value has been parsed.
 */
-size_t FTLIB_DrawRawString( int x, int y, const char *str, size_t maxwidth, int *width, qfontface_t *font, vec4_t color, int flags ) {
+size_t FTLIB_DrawRawString( int x, int y, const char *str, size_t maxwidth, int *width, qfontface_t *font, const vec4_t color, int flags ) {
 	unsigned int xoffset = 0;
 	vec4_t scolor;
 	const char *s, *olds;
@@ -526,7 +526,7 @@ size_t FTLIB_DrawRawString( int x, int y, const char *str, size_t maxwidth, int 
  *
  * Draws a string with word wrap.
  */
-int FTLIB_DrawMultilineString( int x, int y, const char *str, int halign, int maxwidth, int maxlines, qfontface_t *font, vec4_t color, int flags ) {
+int FTLIB_DrawMultilineString( int x, int y, const char *str, int halign, int maxwidth, int maxlines, qfontface_t *font, const vec4_t color, int flags ) {
 	bool ended = false; // whether to stop drawing lines
 
 	// characters and glyphs

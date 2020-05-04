@@ -22,9 +22,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "q_shared.h"
 #include "q_collision.h"
 
-vec3_t vec3_origin = { 0, 0, 0 };
-mat3_t axis_identity = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
-quat_t quat_identity = { 0, 0, 0, 1 };
 
 //============================================================================
 
@@ -74,20 +71,7 @@ void ByteToDir( int b, vec3_t dir ) {
 
 //============================================================================
 
-vec4_t colorBlack  = { 0, 0, 0, 1 };
-vec4_t colorRed    = { 1, 0, 0, 1 };
-vec4_t colorGreen  = { 0, 1, 0, 1 };
-vec4_t colorBlue   = { 0, 0, 1, 1 };
-vec4_t colorYellow = { 1, 1, 0, 1 };
-vec4_t colorOrange = { 1, 0.5, 0, 1 };
-vec4_t colorMagenta = { 1, 0, 1, 1 };
-vec4_t colorCyan   = { 0, 1, 1, 1 };
-vec4_t colorWhite  = { 1, 1, 1, 1 };
-vec4_t colorLtGrey = { 0.75, 0.75, 0.75, 1 };
-vec4_t colorMdGrey = { 0.5, 0.5, 0.5, 1 };
-vec4_t colorDkGrey = { 0.25, 0.25, 0.25, 1 };
-
-vec4_t color_table[MAX_S_COLORS] =
+const vec4_t color_table[MAX_S_COLORS] =
 {
 	{ 0.0, 0.0, 0.0, 1.0 },
 	{ 1.0, 0.0, 0.0, 1.0 },
@@ -305,35 +289,6 @@ void ProjectPointOntoVector( const vec3_t point, const vec3_t vStart, const vec3
 	VectorSubtract( point, vStart, pVec );
 	// project onto the directional vector for this segment
 	VectorMA( vStart, DotProduct( pVec, vDir ), vDir, vProj );
-}
-
-/*
-* DistanceFromLineSquared
-*/
-float DistanceFromLineSquared( const vec3_t p, const vec3_t lp1, const vec3_t lp2, const vec3_t dir ) {
-	vec3_t proj, t;
-	int j;
-
-	ProjectPointOntoVector( p, lp1, dir, proj );
-
-	for( j = 0; j < 3; j++ ) {
-		if( ( proj[j] > lp1[j] && proj[j] > lp2[j] ) ||
-			( proj[j] < lp1[j] && proj[j] < lp2[j] ) ) {
-			break;
-		}
-	}
-
-	if( j < 3 ) {
-		if( fabs( proj[j] - lp1[j] ) < fabs( proj[j] - lp2[j] ) ) {
-			VectorSubtract( p, lp1, t );
-		} else {
-			VectorSubtract( p, lp2, t );
-		}
-		return VectorLengthSquared( t );
-	}
-
-	VectorSubtract( p, proj, t );
-	return VectorLengthSquared( t );
 }
 
 //============================================================================
@@ -699,96 +654,6 @@ float RadiusFromBounds( const vec3_t mins, const vec3_t maxs ) {
 	}
 
 	return VectorLength( corner );
-}
-
-vec_t VectorNormalize( vec3_t v ) {
-	float length, ilength;
-
-	length = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
-
-	if( length ) {
-		length = sqrt( length ); // FIXME
-		ilength = 1.0 / length;
-		v[0] *= ilength;
-		v[1] *= ilength;
-		v[2] *= ilength;
-	}
-
-	return length;
-}
-
-vec_t VectorNormalize2( const vec3_t v, vec3_t out ) {
-	float length, ilength;
-
-	length = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
-
-	if( length ) {
-		length = sqrt( length ); // FIXME
-		ilength = 1.0 / length;
-		out[0] = v[0] * ilength;
-		out[1] = v[1] * ilength;
-		out[2] = v[2] * ilength;
-	} else {
-		VectorClear( out );
-	}
-
-	return length;
-}
-
-vec_t Vector4Normalize( vec4_t v ) {
-	float length, ilength;
-
-	length = v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3];
-
-	if( length ) {
-		length = sqrt( length ); // FIXME
-		ilength = 1.0 / length;
-		v[0] *= ilength;
-		v[1] *= ilength;
-		v[2] *= ilength;
-		v[3] *= ilength;
-	}
-
-	return length;
-}
-
-// fast vector normalize routine that does not check to make sure
-// that length != 0, nor does it return length, uses rsqrt approximation
-void VectorNormalizeFast( vec3_t v ) {
-	float ilength = Q_RSqrt( DotProduct( v, v ) );
-
-	v[0] *= ilength;
-	v[1] *= ilength;
-	v[2] *= ilength;
-}
-
-void _VectorMA( const vec3_t veca, float scale, const vec3_t vecb, vec3_t vecc ) {
-	vecc[0] = veca[0] + scale * vecb[0];
-	vecc[1] = veca[1] + scale * vecb[1];
-	vecc[2] = veca[2] + scale * vecb[2];
-}
-
-
-vec_t _DotProduct( const vec3_t v1, const vec3_t v2 ) {
-	return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
-}
-
-void _VectorSubtract( const vec3_t veca, const vec3_t vecb, vec3_t out ) {
-	out[0] = veca[0] - vecb[0];
-	out[1] = veca[1] - vecb[1];
-	out[2] = veca[2] - vecb[2];
-}
-
-void _VectorAdd( const vec3_t veca, const vec3_t vecb, vec3_t out ) {
-	out[0] = veca[0] + vecb[0];
-	out[1] = veca[1] + vecb[1];
-	out[2] = veca[2] + vecb[2];
-}
-
-void _VectorCopy( const vec3_t in, vec3_t out ) {
-	out[0] = in[0];
-	out[1] = in[1];
-	out[2] = in[2];
 }
 
 int Q_log2( int val ) {

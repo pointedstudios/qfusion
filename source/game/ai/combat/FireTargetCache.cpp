@@ -211,8 +211,8 @@ void BotFireTargetCache::AdjustDropAimTypeParams( const SelectedEnemies &selecte
 		return;
 	}
 
-	const float distance2D = SQRTFAST( squareDistance2D );
-	const float velocity2D = SQRTFAST( squareVelocity2D );
+	const float distance2D = Q_Sqrt( squareDistance2D );
+	const float velocity2D = Q_Sqrt( squareVelocity2D );
 	const float time = distance2D / velocity2D;
 	const float height = std::max( 0.0f, 0.5f * level.gravity * time * time - 32.0f );
 

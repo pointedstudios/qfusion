@@ -392,8 +392,8 @@ void TacticalSpotsBuilder::ComputeMutualSpotsVisibility() {
 	unsigned uNumSpots = (unsigned)numSpots;
 	spotVisibilityTable = (unsigned char *)Q_malloc( uNumSpots * uNumSpots );
 
-	float *mins = vec3_origin;
-	float *maxs = vec3_origin;
+	const float *mins = vec3_origin;
+	const float *maxs = vec3_origin;
 
 	trace_t trace;
 	for( unsigned i = 0; i < uNumSpots; ++i ) {

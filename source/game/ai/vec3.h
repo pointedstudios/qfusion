@@ -35,9 +35,9 @@ public:
 	float SquareDistanceTo( const Vec3 &that ) const { return SquareDistanceTo( that.Data() ); }
 	float SquareDistanceTo( const vec3_t that ) const { return DistanceSquared( vec, that ); }
 	float Distance2DTo( const Vec3 &that ) const { return Distance2DTo( that.vec ); }
-	float Distance2DTo( const vec3_t that ) const { return sqrtf( SquareDistance2DTo( that ) ); }
+	float Distance2DTo( const vec3_t that ) const { return std::sqrt( SquareDistance2DTo( that ) ); }
 	float FastDistance2DTo( const Vec3 &that ) const { return FastDistance2DTo( that.vec ); }
-	float FastDistance2DTo( const vec3_t that ) const { return SQRTFAST( SquareDistance2DTo( that ) ); }
+	float FastDistance2DTo( const vec3_t that ) const { return Q_Sqrt( SquareDistance2DTo( that ) ); }
 	float SquareDistance2DTo( const Vec3 &that ) const { return SquareDistanceTo( that.vec ); }
 	float SquareDistance2DTo( const vec3_t that ) const {
 		float dx = vec[0] - that[0];

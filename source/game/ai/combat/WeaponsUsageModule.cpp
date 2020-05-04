@@ -411,7 +411,7 @@ bool BotWeaponsUsageModule::CheckShot( const AimParams &aimParams,
 				const float squareDistance = DistanceSquared( aimParams.fireOrigin, aimParams.fireTarget );
 				// Shockwave requires rather precise directional aiming on long range
 				if( squareDistance > 128.0f * 128.0f ) {
-					const float distanceFactor = BoundedFraction( SQRTFAST( squareDistance ), 1024.0f );
+					const float distanceFactor = BoundedFraction( Q_Sqrt( squareDistance ), 1024.0f );
 					if( shouldAimPrecisely ) {
 						return toTargetDotLookDir > 0.9f + 0.09f * distanceFactor;
 					}

@@ -798,7 +798,7 @@ typedef struct {
 	int touchlist[MAX_EDICTS];
 	trace_t trace;
 	struct cmodel_s *cmodel;
-	float *angles;
+	const float *angles;
 
 	num = GClip_AreaEdicts( clip->boxmins, clip->boxmaxs, touchlist, MAX_EDICTS, AREA_SOLID, timeDelta );
 
