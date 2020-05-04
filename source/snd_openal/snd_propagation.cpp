@@ -435,98 +435,6 @@ done:
 	return std::sqrt( DistanceSquared( leafCenters[0], leafCenters[1] ) );
 }
 
-// TODO: Lift ByteToDirTable to outer scope
-
-static const vec3_t byteToDirNormals[] = {
-#include "../gameshared/anorms.h"
-};
-
-class DirToByteTable {
-	enum: uint8_t { SIZE = sizeof( byteToDirNormals ) / sizeof( *byteToDirNormals ) };
-
-	// Works quite good.
-	// Choosing a proper hash function that groups together similar directories is what that matter.
-	enum { NUM_BINS = SIZE };
-	uint8_t bins[NUM_BINS];
-	uint8_t next[SIZE];
-
-	enum: uint8_t {  NULL_LINK = std::numeric_limits<uint8_t>::max() };
-	// Ensure we can use 255 and 254 to indicate something else
-	static_assert( SIZE < std::numeric_limits<uint8_t>::max(), "" );
-
-	// The hit ratio (a success rate of GetFirstHashedFit()) is very good, something about 90 % or even more
-	static inline uint32_t Hash( const vec3_t v ) {
-		auto u0 = (uint32_t)( fabsf( v[0] ) * 3 );
-		auto u1 = (uint32_t)( fabsf( v[1] ) * 3 );
-		auto u2 = (uint32_t)( fabsf( v[2] ) * 3 );
-		return u0 * 64 + u1 * 8 + u2;
-	}
-
-	DirToByteTable() {
-		// MSVC has troubles compiling std::fill_n() for NULL_LINK (?) type and using memset() is error-prone
-		for( int i = 0; i < NUM_BINS; ++i ) {
-			bins[i] = NULL_LINK;
-		}
-
-		for( unsigned i = 0; i < SIZE; ++i ) {
-			int binIndex = Hash( ::byteToDirNormals[i] ) % NUM_BINS;
-			int oldHead = bins[binIndex];
-			// Link old bin head (or "null") as next for the newly added entry
-			next[i] = (uint8_t)oldHead;
-			// Link i-th entry to bin at bin index
-			bins[binIndex] = (uint8_t)i;
-		}
-	}
-
-	int GetFirstHashedFit( const vec3_t v ) const {
-		int binIndex = Hash( v ) % NUM_BINS;
-		const auto *normals = ::byteToDirNormals;
-		for( int num = bins[binIndex]; num != NULL_LINK; ) {
-			const auto *n = normals[num];
-			if( DotProduct( v, n ) > 0.95f ) {
-				return num;
-			}
-			num = next[num];
-		}
-		return -1;
-	}
-
-	int ScanForFirstFit( const vec3_t v ) const {
-		const auto *normals = ::byteToDirNormals;
-		for( int i = 0; i < SIZE; ++i ) {
-			const auto *n = normals[i];
-			if( DotProduct( v, n ) > 0.95f ) {
-				return i;
-			}
-		}
-		return -1;
-	}
-
-	static const DirToByteTable instance;
-public:
-	static int DirToByte( const vec3_t dir ) {
-		// Try getting a value in the same hash bin that is good enough
-		int byte = instance.GetFirstHashedFit( dir );
-		if( byte >= 0 ) {
-			return byte;
-		}
-
-		byte = instance.ScanForFirstFit( dir );
-		if( byte >= 0 ) {
-			return byte;
-		}
-
-		// Fallback to the default implementation. Should happen extremely rarely.
-		return ::DirToByte( const_cast<float *>( dir ) );
-	}
-
-	static bool IsValidDirByte( int byte ) {
-		return (unsigned)byte < SIZE;
-	}
-};
-
-const DirToByteTable DirToByteTable::instance;
-
 template <typename DistanceType>
 void PropagationGraphBuilder<DistanceType>::PrepareToBuild() {
 	SuperType::PrepareToBuild();
@@ -551,7 +459,7 @@ void PropagationGraphBuilder<DistanceType>::PrepareToBuild() {
 				assert( !GetDirFromLeafToLeaf( i, j, dir ) );
 				continue;
 			}
-			*dirsDataPtr++ = (uint8_t)DirToByteTable::DirToByte( dir );
+			*dirsDataPtr++ = (uint8_t)::DirToByteFast( dir );
 			// Check immediately
 			assert( GetDirFromLeafToLeaf( i, j, dir ) );
 		}
@@ -2089,7 +1997,7 @@ void PropagationTable::Shutdown() {
 }
 
 inline void PropagationTable::PropagationProps::SetDir( const vec3_t dir ) {
-	int byte = DirToByteTable::DirToByte( dir );
+	int byte = ::DirToByteFast( dir );
 	assert( (unsigned)byte < std::numeric_limits<uint8_t>::max() - 1 );
 	maybeDirByte = (uint8_t)byte;
 }
@@ -2142,7 +2050,7 @@ bool PropagationTableReader::ValidateTable( PropagationIOHelper::PropagationProp
 	const int maxByteValue = std::numeric_limits<uint8_t>::max();
 	for( int i = 0, end = actualNumLeafs * actualNumLeafs; i < end; ++i ) {
 		int dirByte = propsData[i].maybeDirByte;
-		if( !DirToByteTable::IsValidDirByte( dirByte ) ) {
+		if( !::IsValidDirByte( dirByte ) ) {
 			if( dirByte != maxByteValue && dirByte != maxByteValue - 1 ) {
 				return false;
 			}
@@ -2371,7 +2279,7 @@ bool CachedGraphReader::Read( CachedLeafsGraph *readObject ) {
 
 	// Validate dirs
 	for( int i = 0; i < numStoredDirs; ++i ) {
-		if( !DirToByteTable::IsValidDirByte( dirsData[i] ) ) {
+		if( !::IsValidDirByte( dirsData[i] ) ) {
 			if( dirsData[i] != std::numeric_limits<uint8_t>::max() ) {
 				return false;
 			}

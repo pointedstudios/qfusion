@@ -345,7 +345,11 @@ bool BoundsAndSphereIntersect( const vec3_t mins, const vec3_t maxs, const vec3_
 
 #define NUMVERTEXNORMALS    162
 int DirToByte( const vec3_t dir );
+int DirToByteFast( const vec3_t dir );
 void ByteToDir( int b, vec3_t dir );
+inline bool IsValidDirByte( int byte ) {
+	return (unsigned)byte < (unsigned)NUMVERTEXNORMALS;
+}
 
 void NormToLatLong( const vec3_t normal, float latlong[2] );
 

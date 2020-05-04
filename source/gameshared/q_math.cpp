@@ -25,10 +25,97 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 //============================================================================
 
-vec3_t bytedirs[NUMVERTEXNORMALS] =
+static const vec3_t bytedirs[NUMVERTEXNORMALS] =
 {
 #include "anorms.h"
 };
+
+// TODO: Lift ByteToDirTable to outer scope
+
+class DirToByteTable {
+	enum: uint8_t { kSize = NUMVERTEXNORMALS };
+
+	// Works quite good.
+	// Choosing a proper hash function that groups together similar directories is what that matter.
+	enum { kNumBins = kSize };
+	uint8_t bins[kNumBins];
+	uint8_t next[kSize];
+
+	enum: uint8_t { kNullLink = std::numeric_limits<uint8_t>::max() };
+	// Ensure we can use 255 and 254 to indicate something else
+	static_assert( kSize < std::numeric_limits<uint8_t>::max(), "" );
+
+	// The hit ratio (a success rate of GetFirstHashedFit()) is very good, something about 90 % or even more
+	static inline auto Hash( const vec3_t v ) -> uint32_t {
+		auto u0 = (uint32_t)( std::fabs( v[0] ) * 3 );
+		auto u1 = (uint32_t)( std::fabs( v[1] ) * 3 );
+		auto u2 = (uint32_t)( std::fabs( v[2] ) * 3 );
+		return u0 * 64 + u1 * 8 + u2;
+	}
+
+	auto getFirstHashedFit( const vec3_t v ) const -> int {
+		int binIndex = Hash( v ) % kNumBins;
+		const auto *normals = ::bytedirs;
+		for( int num = bins[binIndex]; num != kNullLink; ) {
+			const auto *n = normals[num];
+			if( DotProduct( v, n ) > 0.95f ) {
+				return num;
+			}
+			num = next[num];
+		}
+		return -1;
+	}
+
+	auto scanForFirstFit( const vec3_t v ) const -> int {
+		const auto *normals = ::bytedirs;
+		for( int i = 0; i < kSize; ++i ) {
+			const auto *n = normals[i];
+			if( DotProduct( v, n ) > 0.95f ) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+public:
+	DirToByteTable() {
+		// MSVC has troubles compiling std::fill_n() for kNullLink (?) type and using memset() is error-prone
+		for( int i = 0; i < kNumBins; ++i ) {
+			bins[i] = kNullLink;
+		}
+
+		for( unsigned i = 0; i < kSize; ++i ) {
+			int binIndex = Hash( ::bytedirs[i] ) % kNumBins;
+			int oldHead = bins[binIndex];
+			// Link old bin head (or "null") as next for the newly added entry
+			next[i] = (uint8_t)oldHead;
+			// Link i-th entry to bin at bin index
+			bins[binIndex] = (uint8_t)i;
+		}
+	}
+
+	auto dirToByte( const float *dir ) const -> int {
+		// Try getting a value in the same hash bin that is good enough
+		int byte = getFirstHashedFit( dir );
+		if( byte >= 0 ) {
+			return byte;
+		}
+
+		byte = scanForFirstFit( dir );
+		if( byte >= 0 ) {
+			return byte;
+		}
+
+		// Fallback to the default implementation. Should happen extremely rarely.
+		return ::DirToByte( dir );
+	}
+};
+
+static const DirToByteTable dirToByteTable;
+
+int DirToByteFast( const vec3_t dir ) {
+	return ::dirToByteTable.dirToByte( dir );
+}
 
 int DirToByte( const vec3_t dir ) {
 	int i, best;
