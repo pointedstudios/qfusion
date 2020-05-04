@@ -12,6 +12,7 @@ enable_testing(true)
 add_executable(
         qcommontest
         main.cpp
+        boundsbuildertest.cpp
         stringviewtest.cpp)
 
 add_test(NAME qcommontest COMMAND qcommontest)

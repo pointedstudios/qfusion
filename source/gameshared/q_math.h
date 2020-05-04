@@ -318,7 +318,7 @@ static inline bool BoundsIntersect( const vec3_t mins1, const vec3_t maxs1, cons
 	// Though collision code is likely to use its own BoundsIntersect() version
 	// optimized even further, this code is fine too for the rest of the code base
 
-#ifndef QF_SSE2
+#ifndef WSW_USE_SSE2
 	return (bool)( mins1[0] <= maxs2[0] && mins1[1] <= maxs2[1] && mins1[2] <= maxs2[2] &&
 				   maxs1[0] >= mins2[0] && maxs1[1] >= mins2[1] && maxs1[2] >= mins2[2] );
 
@@ -332,14 +332,113 @@ static inline bool BoundsIntersect( const vec3_t mins1, const vec3_t maxs1, cons
 	__m128 cmp2 = _mm_cmpge_ps( xmmMins2, xmmMaxs1 );
 	__m128 orCmp = _mm_or_ps( cmp1, cmp2 );
 
-#ifdef QF_SSE4_1
-	return (bool)_mm_testz_ps( orCmp, orCmp );
-#else
 	return _mm_movemask_epi8( _mm_cmpeq_epi32( _mm_castps_si128( orCmp ), _mm_setzero_si128() ) ) == 0xFFFF;
 #endif
-
-#endif
 }
+
+class alignas( 16 ) BoundsBuilder {
+#ifdef WSW_USE_SSE2
+	__m128 m_mins { _mm_setr_ps( +99999, +99999, +99999, 0 ) };
+	__m128 m_maxs { _mm_setr_ps( -99999, -99999, -99999, 1 ) };
+#else
+	vec3_t m_mins { +99999, +99999, +99999 };
+	vec3_t m_maxs { -99999, -99999, -99999 };
+#endif
+
+#ifdef _DEBUG
+	bool m_touched { false };
+#endif
+
+	void markAsTouched() {
+#ifdef _DEBUG
+		m_touched = true;
+#endif
+	}
+
+	void checkTouched() const {
+#ifdef _DEBUG
+		assert( m_touched );
+#endif
+	}
+public:
+	void addPoint( const float *__restrict p ) {
+#ifdef WSW_USE_SSE2
+		__m128 xmmP = _mm_setr_ps( p[0], p[1], p[2], 0 );
+		m_mins = _mm_min_ps( xmmP, m_mins );
+		m_maxs = _mm_max_ps( xmmP, m_maxs );
+#else
+		m_mins[0] = std::min( p[0], m_mins[0] );
+		m_maxs[0] = std::max( p[0], m_maxs[0] );
+		m_mins[1] = std::min( p[1], m_mins[1] );
+		m_maxs[1] = std::max( p[1], m_maxs[1] );
+		m_mins[2] = std::min( p[2], m_mins[2] );
+		m_maxs[2] = std::max( p[2], m_maxs[2] );
+#endif
+
+		markAsTouched();
+	}
+
+#ifdef WSW_USE_SSE2
+	void addPoint( __m128 p ) {
+		m_mins = _mm_min_ps( p, m_mins );
+		m_maxs = _mm_max_ps( p, m_maxs );
+
+		markAsTouched();
+	}
+#endif
+
+	void storeTo( float *__restrict mins, float *__restrict maxs ) const {
+		checkTouched();
+
+#ifdef WSW_USE_SSE2
+		alignas( 16 ) vec4_t tmpMins, tmpMaxs;
+		_mm_store_ps( tmpMins, m_mins );
+		_mm_store_ps( tmpMaxs, m_maxs );
+		VectorCopy( tmpMins, mins );
+		VectorCopy( tmpMaxs, maxs );
+#else
+		VectorCopy( m_mins, mins );
+		VectorCopy( m_maxs, maxs );
+#endif
+	}
+
+	void storeToWithAddedEpsilon( float *__restrict mins, float *__restrict maxs, float epsilon = 1.0f ) const {
+		checkTouched();
+
+#ifdef WSW_USE_SSE2
+		alignas( 16 ) vec4_t tmpMins, tmpMaxs;
+		__m128 xmmEpsilon = _mm_setr_ps( epsilon, epsilon, epsilon, 0.0f );
+		__m128 expandedMins = _mm_sub_ps( m_mins, xmmEpsilon );
+		__m128 expandedMaxs = _mm_add_ps( m_maxs, xmmEpsilon );
+		_mm_store_ps( tmpMins, expandedMins );
+		_mm_store_ps( tmpMaxs, expandedMaxs );
+		VectorCopy( tmpMins, mins );
+		VectorCopy( tmpMaxs, maxs );
+#else
+		mins[0] = m_mins[0] - epsilon;
+		maxs[0] = m_maxs[0] + epsilon;
+		mins[1] = m_mins[1] - epsilon;
+		maxs[1] = m_maxs[1] + epsilon;
+		mins[2] = m_mins[2] - epsilon;
+		maxs[2] = m_maxs[2] + epsilon;
+#endif
+	}
+
+#ifdef WSW_USE_SSE2
+	void storeTo( __m128 *__restrict mins, __m128 *__restrict maxs ) {
+		checkTouched();
+		*mins = m_mins;
+		*maxs = m_maxs;
+	}
+
+	void storeToWithAddedEpsilon( __m128 *__restrict mins, __m128 *__restrict maxs, float epsilon = 1.0f ) {
+		checkTouched();
+		__m128 xmmEpsilon = _mm_setr_ps( epsilon, epsilon, epsilon, 0.0f );
+		*mins = _mm_sub_ps( m_mins, xmmEpsilon );
+		*maxs = _mm_add_ps( m_maxs, xmmEpsilon );
+	}
+#endif
+};
 
 bool BoundsAndSphereIntersect( const vec3_t mins, const vec3_t maxs, const vec3_t centre, float radius );
 
