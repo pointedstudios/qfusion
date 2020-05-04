@@ -962,6 +962,7 @@ void CMTraceComputer::BuildShapeList( CMShapeList *list, const float *mins, cons
 		}
 	}
 
+	list->hasBounds = false;
 	list->numShapes = numShapes;
 }
 
@@ -974,15 +975,23 @@ void CMTraceComputer::ClipShapeList( CMShapeList *list, const CMShapeList *baseL
 
 	const float *__restrict testedMins = mins;
 	const float *__restrict testedMaxs = maxs;
+
+	BoundsBuilder builder;
 	for( int i = 0; i < numSrcShapes; ++i ) {
 		const cbrush_t *__restrict b = srcShapes[i];
 		if( !BoundsIntersect( b->mins, b->maxs, testedMins, testedMaxs ) ) {
 			continue;
 		}
 		destShapes[numDestShapes++] = b;
+		builder.addPoint( b->mins );
+		builder.addPoint( b->maxs );
 	}
 
 	list->numShapes = numDestShapes;
+	list->hasBounds = numDestShapes > 0;
+	if( list->hasBounds ) {
+		builder.storeTo( list->mins, list->maxs );
+	}
 }
 
 void CMTraceComputer::ClipToShapeList( const CMShapeList *list, trace_t *tr,
@@ -990,6 +999,14 @@ void CMTraceComputer::ClipToShapeList( const CMShapeList *list, trace_t *tr,
 	                                   const float *mins, const float *maxs, int clipMask ) {
 	CMTraceContext tlc;
 	SetupCollideContext( &tlc, tr, start, end, mins, maxs, clipMask );
+
+	if( list->hasBounds ) {
+		if( !BoundsIntersect( list->mins, list->maxs, tlc.absmins, tlc.absmaxs ) ) {
+			assert( tr->fraction == 1.0f );
+			VectorCopy( end, tr->endpos );
+			return;
+		}
+	}
 
 	const int numShapes = list->numShapes;
 	const auto *__restrict shapes = list->shapes;

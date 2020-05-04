@@ -252,6 +252,9 @@ struct CMShapeList {
 	const cbrush_t **shapes;
 	int numShapes { 0 };
 
+	vec3_t mins, maxs;
+	bool hasBounds { false };
+
 	explicit CMShapeList( void *mem ) {
 		assert( !( (uintptr_t)mem % sizeof( void * ) ) );
 		shapes = (const cbrush_t **)mem;

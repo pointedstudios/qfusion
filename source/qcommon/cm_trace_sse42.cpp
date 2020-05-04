@@ -23,16 +23,21 @@ struct VexEncodingFence {
 };
 
 static inline bool CM_BoundsIntersect_SSE42( __m128 traceAbsmins, __m128 traceAbsmaxs,
+											 __m128 shapeMins, __m128 shapeMaxs ) {
+	__m128 cmp1 = _mm_cmpge_ps( shapeMins, traceAbsmaxs );
+	__m128 cmp2 = _mm_cmpge_ps( traceAbsmins, shapeMaxs );
+	__m128 orCmp = _mm_or_ps( cmp1, cmp2 );
+
+	return _mm_movemask_epi8( _mm_cmpeq_epi32( _mm_castps_si128( orCmp ), _mm_setzero_si128() ) ) == 0xFFFF;
+}
+
+static inline bool CM_BoundsIntersect_SSE42( __m128 traceAbsmins, __m128 traceAbsmaxs,
 											 const vec4_t shapeMins, const vec4_t shapeMaxs ) {
 	// This version relies on fast unaligned loads, that's why it requires SSE4.
 	__m128 xmmShapeMins = _mm_loadu_ps( shapeMins );
 	__m128 xmmShapeMaxs = _mm_loadu_ps( shapeMaxs );
 
-	__m128 cmp1 = _mm_cmpge_ps( xmmShapeMins, traceAbsmaxs );
-	__m128 cmp2 = _mm_cmpge_ps( traceAbsmins, xmmShapeMaxs );
-	__m128 orCmp = _mm_or_ps( cmp1, cmp2 );
-
-	return _mm_movemask_epi8( _mm_cmpeq_epi32( _mm_castps_si128( orCmp ), _mm_setzero_si128() ) ) == 0xFFFF;
+	return CM_BoundsIntersect_SSE42( traceAbsmins, traceAbsmaxs, xmmShapeMins, xmmShapeMaxs );
 }
 
 static inline bool CM_MightCollide_SSE42( const vec_bounds_t shapeMins,
@@ -303,6 +308,7 @@ void CMSse42TraceComputer::BuildShapeList( CMShapeList *list, const float *mins,
 		}
 	}
 
+	list->hasBounds = false;
 	list->numShapes = numShapes;
 }
 
@@ -316,15 +322,25 @@ void CMSse42TraceComputer::ClipShapeList( CMShapeList *list, const CMShapeList *
 	__m128 testedMins = _mm_setr_ps( mins[0], mins[1], mins[2], 0 );
 	__m128 testedMaxs = _mm_setr_ps( maxs[0], maxs[1], maxs[2], 1 );
 
+	BoundsBuilder builder;
 	for( int i = 0; i < numSrcShapes; ++i ) {
 		const cbrush_t *__restrict b = srcShapes[i];
-		if( !CM_BoundsIntersect_SSE42( testedMins, testedMaxs, b->mins, b->maxs ) ) {
+		__m128 shapeMins = _mm_loadu_ps( b->mins );
+		__m128 shapeMaxs = _mm_loadu_ps( b->maxs );
+		if( !CM_BoundsIntersect_SSE42( testedMins, testedMaxs, shapeMins, shapeMaxs ) ) {
 			continue;
 		}
+
 		destShapes[numDestShapes++] = b;
+		builder.addPoint( shapeMins );
+		builder.addPoint( shapeMaxs );
 	}
 
 	list->numShapes = numDestShapes;
+	list->hasBounds = numDestShapes > 0;
+	if( list->hasBounds ) {
+		builder.storeTo( list->mins, list->maxs );
+	}
 }
 
 void CMSse42TraceComputer::ClipToShapeList( const CMShapeList *list, trace_t *tr,
@@ -332,6 +348,14 @@ void CMSse42TraceComputer::ClipToShapeList( const CMShapeList *list, trace_t *tr
 					  const float *mins, const float *maxs, int clipMask ) {
 	alignas( 16 ) CMTraceContext tlc;
 	SetupCollideContext( &tlc, tr, start, end, mins, maxs, clipMask );
+
+	if( list->hasBounds ) {
+		if( !BoundsIntersect( list->mins, list->maxs, tlc.absmins, tlc.absmaxs ) ) {
+			assert( tr->fraction == 1.0f );
+			VectorCopy( end, tr->endpos );
+			return;
+		}
+	}
 
 	// Make sure the virtual call address gets resolved here
 	auto clipFn = &CMSse42TraceComputer::ClipBoxToBrush;
