@@ -4,12 +4,15 @@ import QtQuick.Controls.Material 2.12
 import QtQuick.Window 2.12
 
 Item {
-    id: root
+    id: rootItem
+
+    property var windowContentItem
 
     Window.onWindowChanged: {
         if (Window.window) {
             Window.window.requestActivate()
-            root.forceActiveFocus()
+            rootItem.forceActiveFocus()
+            rootItem.windowContentItem = Window.window.contentItem
         }
     }
 

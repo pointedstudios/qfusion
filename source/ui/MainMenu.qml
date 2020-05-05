@@ -112,7 +112,11 @@ Item {
 
     Component {
         id: quitComponent
-        QuitPage {}
+        QuitPage {
+            backTrigger: () => {
+                centralOverlay.handleKeyBack()
+            }
+        }
     }
 
     StackView {

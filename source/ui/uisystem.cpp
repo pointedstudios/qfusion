@@ -81,6 +81,8 @@ public:
 
 	Q_INVOKABLE void registerCVarAwareControl( QQuickItem *control );
 	Q_INVOKABLE void unregisterCVarAwareControl( QQuickItem *control );
+
+	Q_INVOKABLE void quit();
 signals:
 	Q_SIGNAL void isShowingMainMenuChanged( bool isShowingMainMenu );
 	Q_SIGNAL void isShowingInGameMenuChanged( bool isShowingInGameMenu );
@@ -920,6 +922,10 @@ void QWswUISystem::updateCVarAwareControls() {
 	for( QQuickItem *control : m_cvarAwareControls ) {
 		QMetaObject::invokeMethod( control, "checkCVarChanges" );
 	}
+}
+
+void QWswUISystem::quit() {
+	Cbuf_AddText( "quit" );
 }
 
 #include "uisystem.moc"
