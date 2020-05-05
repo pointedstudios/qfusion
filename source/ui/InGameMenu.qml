@@ -4,7 +4,7 @@ import QtQuick.Controls.Material 2.12
 import net.warsow 2.6
 
 Item {
-    visible: wsw.quakeClientState === QuakeClient.Active
+    visible: wsw.isShowingInGameMenu
     anchors.fill: parent
     opacity: 0.98
 

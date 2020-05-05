@@ -4,7 +4,7 @@ import QtQuick.Controls.Material 2.12
 import net.warsow 2.6
 
 Item {
-    visible: wsw.isPlayingADemo
+    visible: wsw.isShowingDemoPlaybackMenu
     height: 240
     anchors.left: parent.left
     anchors.right: parent.right

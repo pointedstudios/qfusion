@@ -24,25 +24,6 @@ QVariant VID_GetMainContextHandle();
 bool GLimp_BeginUIRenderingHacks();
 bool GLimp_EndUIRenderingHacks();
 
-/**
- * Just to provide a nice prefix in Qml scope.
- * There could be multiple connections and multiple states.
- * This makes the state meaning clear.
- */
-class QuakeClient : public QObject {
-	Q_OBJECT
-
-public:
-	enum State {
-		Disconnected,
-		MMValidating,
-		Connecting,
-		Loading,
-		Active
-	};
-	Q_ENUM( State );
-};
-
 class QWswUISystem : public QObject, public UISystem {
 	Q_OBJECT
 
@@ -67,23 +48,23 @@ public:
 	void forceMenuOff() override {};
 
 	[[nodiscard]]
-	bool hasRespectMenu() const override { return isShowingRespectMenu; };
+	bool hasRespectMenu() const override { return m_isShowingRespectMenu; };
 
 	void showRespectMenu( bool show ) override {
-		if( show == isShowingRespectMenu ) {
+		if( show == m_isShowingRespectMenu ) {
 			return;
 		}
-		isShowingRespectMenu = show;
-		Q_EMIT isShowingRespectMenuChanged( isShowingRespectMenu );
+		m_isShowingRespectMenu = show;
+		Q_EMIT isShowingRespectMenuChanged( m_isShowingRespectMenu );
 	};
 
 	void enterUIRenderingMode();
 	void leaveUIRenderingMode();
 
-	Q_PROPERTY( QuakeClient::State quakeClientState READ getQuakeClientState NOTIFY quakeClientStateChanged );
-	Q_PROPERTY( bool isPlayingADemo READ isPlayingADemo NOTIFY isPlayingADemoChanged );
-	Q_PROPERTY( bool isShowingInGameMenu READ isShowingInGameMenuGetter NOTIFY isShowingInGameMenuChanged );
-	Q_PROPERTY( bool isShowingRespectMenu READ isShowingRespectMenuGetter NOTIFY isShowingRespectMenuChanged );
+	Q_PROPERTY( bool isShowingMainMenu READ isShowingMainMenu NOTIFY isShowingMainMenuChanged );
+	Q_PROPERTY( bool isShowingInGameMenu READ isShowingInGameMenu NOTIFY isShowingInGameMenuChanged );
+	Q_PROPERTY( bool isShowingRespectMenu READ isShowingRespectMenu NOTIFY isShowingRespectMenuChanged );
+	Q_PROPERTY( bool isShowingDemoPlaybackMenu READ isShowingDemoPlaybackMenu NOTIFY isShowingDemoPlaybackMenuChanged );
 	Q_PROPERTY( bool isDebuggingNativelyDrawnItems READ isDebuggingNativelyDrawnItems NOTIFY isDebuggingNativelyDrawnItemsChanged );
 
 	Q_INVOKABLE void registerNativelyDrawnItem( QQuickItem *item );
@@ -101,10 +82,10 @@ public:
 	Q_INVOKABLE void registerCVarAwareControl( QQuickItem *control );
 	Q_INVOKABLE void unregisterCVarAwareControl( QQuickItem *control );
 signals:
-	Q_SIGNAL void quakeClientStateChanged( QuakeClient::State state );
-	Q_SIGNAL void isPlayingADemoChanged( bool isPlayingADemo );
+	Q_SIGNAL void isShowingMainMenuChanged( bool isShowingMainMenu );
 	Q_SIGNAL void isShowingInGameMenuChanged( bool isShowingInGameMenu );
 	Q_SIGNAL void isShowingRespectMenuChanged( bool isShowingRespectMenu );
+	Q_SIGNAL void isShowingDemoPlaybackMenuChanged( bool isShowingDemoMenu );
 	Q_SIGNAL void isDebuggingNativelyDrawnItemsChanged( bool isDebuggingNativelyDrawnItems );
 	Q_SIGNAL void hasPendingCVarChangesChanged( bool hasPendingCVarChanges );
 public slots:
@@ -114,41 +95,41 @@ public slots:
 
 	Q_SLOT void onComponentStatusChanged( QQmlComponent::Status status );
 private:
-	QGuiApplication *application { nullptr };
-	QOpenGLContext *externalContext { nullptr };
-	QOpenGLContext *sharedContext { nullptr };
-	QQuickRenderControl *control { nullptr };
-	QOpenGLFramebufferObject *framebufferObject { nullptr };
-	QOffscreenSurface *surface { nullptr };
-	QQuickWindow *quickWindow { nullptr };
-	QQmlEngine *engine { nullptr };
-	QQmlComponent *component { nullptr };
-	bool hasPendingSceneChange { false };
-	bool hasPendingRedraw { false };
-	bool isInUIRenderingMode { false };
-	bool isValidAndReady { false };
+	QGuiApplication *m_application { nullptr };
+	QOpenGLContext *m_externalContext { nullptr };
+	QOpenGLContext *m_sharedContext { nullptr };
+	QQuickRenderControl *m_control { nullptr };
+	QOpenGLFramebufferObject *m_framebufferObject { nullptr };
+	QOffscreenSurface *m_surface { nullptr };
+	QQuickWindow *m_window { nullptr };
+	QQmlEngine *m_engine { nullptr };
+	QQmlComponent *m_component { nullptr };
+	bool m_hasPendingSceneChange { false };
+	bool m_hasPendingRedraw { false };
+	bool m_isInUIRenderingMode { false };
+	bool m_isValidAndReady { false };
 
 	// A copy of last frame client properties for state change detection without intrusive changes to client code.
 	// Use a separate scope for clarity and for avoiding name conflicts.
 	struct {
 		bool isPlayingADemo { false };
-		QuakeClient::State quakeClientState { QuakeClient::Disconnected };
-	} lastFrameState;
+		connstate_t clientState { CA_UNINITIALIZED };
+	} m_lastFrameState;
 
-	bool isShowingInGameMenu { false };
-	bool isShowingRespectMenu { false };
+	bool m_isShowingMainMenu { false };
+	bool m_isShowingInGameMenu { false };
+	bool m_isShowingRespectMenu { false };
 
-	bool hasStartedBackgroundMapLoading {false };
-	bool hasSucceededBackgroundMapLoading {false };
+	bool m_hasStartedBackgroundMapLoading { false };
+	bool m_hasSucceededBackgroundMapLoading { false };
 
-	cvar_t *ui_sensitivity { nullptr };
-	cvar_t *ui_mouseAccel { nullptr };
+	cvar_t *m_sensitivityVar { nullptr };
+	cvar_t *m_mouseAccelVar { nullptr };
+	cvar_t *m_debugNativelyDrawnItemsVar { nullptr };
 
-	cvar_t *ui_debugNativelyDrawnItems { nullptr };
+	qreal m_mouseXY[2] { 0.0, 0.0 };
 
-	qreal mouseXY[2] { 0.0, 0.0 };
-
-	QString charStrings[128];
+	QString m_charStrings[128];
 
 	NativelyDrawn *m_nativelyDrawnListHead { nullptr };
 
@@ -161,16 +142,16 @@ private:
 	QMap<QQuickItem *, QPair<QVariant, cvar_t *>> m_pendingCVarChanges;
 
 	[[nodiscard]]
-	auto getQuakeClientState() const { return lastFrameState.quakeClientState; }
+	bool isShowingDemoPlaybackMenu() const { return m_lastFrameState.isPlayingADemo; }
 
 	[[nodiscard]]
-	bool isPlayingADemo() const { return lastFrameState.isPlayingADemo; }
+	bool isShowingMainMenu() const { return m_isShowingMainMenu; }
 
 	[[nodiscard]]
-	bool isShowingInGameMenuGetter() const { return isShowingInGameMenu; };
+	bool isShowingInGameMenu() const { return m_isShowingInGameMenu; };
 
 	[[nodiscard]]
-	bool isShowingRespectMenuGetter() const { return isShowingRespectMenu; };
+	bool isShowingRespectMenu() const { return m_isShowingRespectMenu; };
 
 	[[nodiscard]]
 	bool isDebuggingNativelyDrawnItems() const;
@@ -199,28 +180,28 @@ private:
 
 void QWswUISystem::onSceneGraphInitialized() {
 	auto attachment = QOpenGLFramebufferObject::CombinedDepthStencil;
-	framebufferObject = new QOpenGLFramebufferObject( quickWindow->size(), attachment );
-	quickWindow->setRenderTarget( framebufferObject );
+	m_framebufferObject = new QOpenGLFramebufferObject( m_window->size(), attachment );
+	m_window->setRenderTarget( m_framebufferObject );
 }
 
 void QWswUISystem::onRenderRequested() {
-	hasPendingRedraw = true;
+	m_hasPendingRedraw = true;
 }
 
 void QWswUISystem::onSceneChanged() {
-	hasPendingSceneChange = true;
+	m_hasPendingSceneChange = true;
 }
 
 void QWswUISystem::onComponentStatusChanged( QQmlComponent::Status status ) {
 	if ( QQmlComponent::Ready != status ) {
 		if( status == QQmlComponent::Error ) {
 			Com_Printf( S_COLOR_RED "The root Qml component loading has failed: %s\n",
-				component->errorString().toUtf8().constData() );
+				m_component->errorString().toUtf8().constData() );
 		}
 		return;
 	}
 
-	QObject *const rootObject = component->create();
+	QObject *const rootObject = m_component->create();
 	if( !rootObject ) {
 		Com_Printf( S_COLOR_RED "Failed to finish the root Qml component creation\n" );
 		return;
@@ -232,13 +213,13 @@ void QWswUISystem::onComponentStatusChanged( QQmlComponent::Status status ) {
 		return;
 	}
 
-	QQuickItem *const parentItem = quickWindow->contentItem();
-	const QSizeF size( quickWindow->width(), quickWindow->height() );
+	QQuickItem *const parentItem = m_window->contentItem();
+	const QSizeF size( m_window->width(), m_window->height() );
 	parentItem->setSize( size );
 	rootItem->setParentItem( parentItem );
 	rootItem->setSize( size );
 
-	isValidAndReady = true;
+	m_isValidAndReady = true;
 }
 
 static SingletonHolder<QWswUISystem> uiSystemInstanceHolder;
@@ -274,7 +255,7 @@ void QWswUISystem::refresh( unsigned refreshFlags ) {
 
 	checkPropertyChanges();
 
-	if( !isValidAndReady ) {
+	if( !m_isValidAndReady ) {
 		return;
 	}
 
@@ -297,7 +278,7 @@ static bool isAPrintableChar( int ch ) {
 QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 	int fakeArgc = 0;
 	char *fakeArgv[] = { nullptr };
-	application = new QGuiApplication( fakeArgc, fakeArgv );
+	m_application = new QGuiApplication( fakeArgc, fakeArgv );
 
 	QSurfaceFormat format;
 	format.setDepthBufferSize( 24 );
@@ -307,34 +288,34 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 	format.setRenderableType( QSurfaceFormat::OpenGL );
 	format.setProfile( QSurfaceFormat::CompatibilityProfile );
 
-	externalContext = new QOpenGLContext;
-	externalContext->setNativeHandle( VID_GetMainContextHandle() );
-	if( !externalContext->create() ) {
+	m_externalContext = new QOpenGLContext;
+	m_externalContext->setNativeHandle( VID_GetMainContextHandle() );
+	if( !m_externalContext->create() ) {
 		Com_Printf( S_COLOR_RED "Failed to create a Qt wrapper of the main rendering context\n" );
 		return;
 	}
 
-	sharedContext = new QOpenGLContext;
-	sharedContext->setFormat( format );
-	sharedContext->setShareContext( externalContext );
-	if( !sharedContext->create() ) {
+	m_sharedContext = new QOpenGLContext;
+	m_sharedContext->setFormat( format );
+	m_sharedContext->setShareContext( m_externalContext );
+	if( !m_sharedContext->create() ) {
 		Com_Printf( S_COLOR_RED "Failed to create a dedicated Qt OpenGL rendering context\n" );
 		return;
 	}
 
-	control = new QQuickRenderControl();
-	quickWindow = new QQuickWindow( control );
-	quickWindow->setGeometry( 0, 0, initialWidth, initialHeight );
-	quickWindow->setColor( Qt::transparent );
+	m_control = new QQuickRenderControl();
+	m_window = new QQuickWindow( m_control );
+	m_window->setGeometry( 0, 0, initialWidth, initialHeight );
+	m_window->setColor( Qt::transparent );
 
-	QObject::connect( quickWindow, &QQuickWindow::sceneGraphInitialized, this, &QWswUISystem::onSceneGraphInitialized );
-	QObject::connect( control, &QQuickRenderControl::renderRequested, this, &QWswUISystem::onRenderRequested );
-	QObject::connect( control, &QQuickRenderControl::sceneChanged, this, &QWswUISystem::onSceneChanged );
+	QObject::connect( m_window, &QQuickWindow::sceneGraphInitialized, this, &QWswUISystem::onSceneGraphInitialized );
+	QObject::connect( m_control, &QQuickRenderControl::renderRequested, this, &QWswUISystem::onRenderRequested );
+	QObject::connect( m_control, &QQuickRenderControl::sceneChanged, this, &QWswUISystem::onSceneChanged );
 
-	surface = new QOffscreenSurface;
-	surface->setFormat( sharedContext->format() );
-	surface->create();
-	if ( !surface->isValid() ) {
+	m_surface = new QOffscreenSurface;
+	m_surface->setFormat( m_sharedContext->format() );
+	m_surface->create();
+	if ( !m_surface->isValid() ) {
 		Com_Printf( S_COLOR_RED "Failed to create a dedicated Qt OpenGL offscreen surface\n" );
 		return;
 	}
@@ -342,10 +323,10 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 	enterUIRenderingMode();
 
 	bool hadErrors = true;
-	if( sharedContext->makeCurrent( surface ) ) {
-		control->initialize( sharedContext );
-		quickWindow->resetOpenGLState();
-		hadErrors = sharedContext->functions()->glGetError() != GL_NO_ERROR;
+	if( m_sharedContext->makeCurrent( m_surface ) ) {
+		m_control->initialize( m_sharedContext );
+		m_window->resetOpenGLState();
+		hadErrors = m_sharedContext->functions()->glGetError() != GL_NO_ERROR;
 	} else {
 		Com_Printf( S_COLOR_RED "Failed to make the dedicated Qt OpenGL rendering context current\n" );
 	}
@@ -359,63 +340,62 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 
 	const QString reason( "This type is a native code bridge and cannot be instantiated" );
 	qmlRegisterUncreatableType<QWswUISystem>( "net.warsow", 2, 6, "Wsw", reason );
-	qmlRegisterUncreatableType<QuakeClient>( "net.warsow", 2, 6, "QuakeClient", reason );
 	qmlRegisterType<NativelyDrawnImage>( "net.warsow", 2, 6, "NativelyDrawnImage_Native" );
 	qmlRegisterType<NativelyDrawnModel>( "net.warsow", 2, 6, "NativelyDrawnModel_Native" );
 
-	engine = new QQmlEngine;
-	engine->rootContext()->setContextProperty( "wsw", this );
+	m_engine = new QQmlEngine;
+	m_engine->rootContext()->setContextProperty( "wsw", this );
 
-	component = new QQmlComponent( engine );
+	m_component = new QQmlComponent( m_engine );
 
-	connect( component, &QQmlComponent::statusChanged, this, &QWswUISystem::onComponentStatusChanged );
-	component->loadUrl( QUrl( "qrc:/RootItem.qml" ) );
+	connect( m_component, &QQmlComponent::statusChanged, this, &QWswUISystem::onComponentStatusChanged );
+	m_component->loadUrl( QUrl( "qrc:/RootItem.qml" ) );
 
-	ui_sensitivity = Cvar_Get( "ui_sensitivity", "1.0", CVAR_ARCHIVE );
-	ui_mouseAccel = Cvar_Get( "ui_mouseAccel", "0.25", CVAR_ARCHIVE );
+	m_sensitivityVar = Cvar_Get( "ui_sensitivity", "1.0", CVAR_ARCHIVE );
+	m_mouseAccelVar = Cvar_Get( "ui_mouseAccel", "0.25", CVAR_ARCHIVE );
 
-	ui_debugNativelyDrawnItems = Cvar_Get( "ui_debugNativelyDrawnItems", "0", 0 );
+	m_debugNativelyDrawnItemsVar = Cvar_Get( "ui_debugNativelyDrawnItems", "0", 0 );
 
 	// Initialize the table of textual strings corresponding to characters
-	for( const QString &s: charStrings ) {
-		const auto offset = (int)( &s - charStrings );
+	for( const QString &s: m_charStrings ) {
+		const auto offset = (int)( &s - m_charStrings );
 		if( ::isAPrintableChar( offset ) ) {
-			charStrings[offset] = QString::asprintf( "%c", (char)offset );
+			m_charStrings[offset] = QString::asprintf( "%c", (char)offset );
 		}
 	}
 }
 
 void QWswUISystem::renderQml() {
-	assert( isValidAndReady );
+	assert( m_isValidAndReady );
 
-	if( !hasPendingSceneChange && !hasPendingRedraw ) {
+	if( !m_hasPendingSceneChange && !m_hasPendingRedraw ) {
 		return;
 	}
 
-	if( hasPendingSceneChange ) {
-		control->polishItems();
-		control->sync();
+	if( m_hasPendingSceneChange ) {
+		m_control->polishItems();
+		m_control->sync();
 	}
 
-	hasPendingSceneChange = hasPendingRedraw = false;
+	m_hasPendingSceneChange = m_hasPendingRedraw = false;
 
-	if( !sharedContext->makeCurrent( surface ) ) {
+	if( !m_sharedContext->makeCurrent( m_surface ) ) {
 		// Consider this a fatal error
 		Com_Error( ERR_FATAL, "Failed to make the dedicated Qt OpenGL rendering context current\n" );
 	}
 
-	control->render();
+	m_control->render();
 
-	quickWindow->resetOpenGLState();
+	m_window->resetOpenGLState();
 
-	auto *const f = sharedContext->functions();
+	auto *const f = m_sharedContext->functions();
 	f->glFlush();
 	f->glFinish();
 }
 
 void QWswUISystem::enterUIRenderingMode() {
-	assert( !isInUIRenderingMode );
-	isInUIRenderingMode = true;
+	assert( !m_isInUIRenderingMode );
+	m_isInUIRenderingMode = true;
 
 	if( !GLimp_BeginUIRenderingHacks() ) {
 		Com_Error( ERR_FATAL, "Failed to enter the UI rendering mode\n" );
@@ -423,8 +403,8 @@ void QWswUISystem::enterUIRenderingMode() {
 }
 
 void QWswUISystem::leaveUIRenderingMode() {
-	assert( isInUIRenderingMode );
-	isInUIRenderingMode = false;
+	assert( m_isInUIRenderingMode );
+	m_isInUIRenderingMode = false;
 
 	if( !GLimp_EndUIRenderingHacks() ) {
 		Com_Error( ERR_FATAL, "Failed to leave the UI rendering mode\n" );
@@ -442,7 +422,7 @@ void RF_DrawStretchPic( int x, int y, int w, int h, float s1, float t1, float s2
 	                    const vec4_t color, const shader_t *shader );
 
 void QWswUISystem::drawSelfInMainContext() {
-	if( !isValidAndReady ) {
+	if( !m_isValidAndReady ) {
 		return;
 	}
 
@@ -471,7 +451,7 @@ void QWswUISystem::drawSelfInMainContext() {
 	}
 
 	R_Set2DMode( true );
-	R_DrawExternalTextureOverlay( framebufferObject->texture() );
+	R_DrawExternalTextureOverlay( m_framebufferObject->texture() );
 	R_Set2DMode( false );
 
 	while( !zHeaps[1].empty() ) {
@@ -481,7 +461,7 @@ void QWswUISystem::drawSelfInMainContext() {
 	}
 
 	// TODO: Draw while showing an in-game menu as well (there should be a different condition)
-	if( lastFrameState.quakeClientState != QuakeClient::Disconnected ) {
+	if( m_lastFrameState.clientState > CA_DISCONNECTED ) {
 		return;
 	}
 
@@ -490,28 +470,28 @@ void QWswUISystem::drawSelfInMainContext() {
 	// TODO: Check why CL_BeginRegistration()/CL_EndRegistration() never gets called
 	auto *cursorMaterial = R_RegisterPic( "gfx/ui/cursor.tga" );
 	// TODO: Account for screen pixel density
-	RF_DrawStretchPic( (int)mouseXY[0], (int)mouseXY[1], 32, 32, 0.0f, 0.0f, 1.0f, 1.0f, color, cursorMaterial );
+	RF_DrawStretchPic( (int)m_mouseXY[0], (int)m_mouseXY[1], 32, 32, 0.0f, 0.0f, 1.0f, 1.0f, color, cursorMaterial );
 	R_Set2DMode( false );
 }
 
 void QWswUISystem::drawBackgroundMapIfNeeded() {
-	if( lastFrameState.quakeClientState != QuakeClient::Disconnected ) {
-		hasStartedBackgroundMapLoading = false;
-		hasSucceededBackgroundMapLoading = false;
+	if( m_lastFrameState.clientState != CA_DISCONNECTED ) {
+		m_hasStartedBackgroundMapLoading = false;
+		m_hasSucceededBackgroundMapLoading = false;
 		return;
 	}
 
 	constexpr const char *worldModelName = "maps/ui.bsp";
-	if( !hasStartedBackgroundMapLoading ) {
+	if( !m_hasStartedBackgroundMapLoading ) {
 		RF_RegisterWorldModel( worldModelName );
-		hasStartedBackgroundMapLoading = true;
-	} else if( !hasSucceededBackgroundMapLoading ) {
+		m_hasStartedBackgroundMapLoading = true;
+	} else if( !m_hasSucceededBackgroundMapLoading ) {
 		if( R_RegisterModel( worldModelName ) ) {
-			hasSucceededBackgroundMapLoading = true;
+			m_hasSucceededBackgroundMapLoading = true;
 		}
 	}
 
-	if( !hasSucceededBackgroundMapLoading ) {
+	if( !m_hasSucceededBackgroundMapLoading ) {
 		return;
 	}
 
@@ -519,7 +499,7 @@ void QWswUISystem::drawBackgroundMapIfNeeded() {
 	memset( &rdf, 0, sizeof( rdf ) );
 	rdf.areabits = nullptr;
 
-	const auto widthAndHeight = std::make_pair( quickWindow->width(), quickWindow->height() );
+	const auto widthAndHeight = std::make_pair( m_window->width(), m_window->height() );
 	std::tie( rdf.x, rdf.y ) = std::make_pair( 0, 0 );
 	std::tie( rdf.width, rdf.height ) = widthAndHeight;
 
@@ -542,36 +522,46 @@ void QWswUISystem::drawBackgroundMapIfNeeded() {
 }
 
 void QWswUISystem::checkPropertyChanges() {
-	auto *currClientState = &lastFrameState.quakeClientState;
-	const auto formerClientState = *currClientState;
-
-	if( cls.state == CA_UNINITIALIZED || cls.state == CA_DISCONNECTED ) {
-		*currClientState = QuakeClient::Disconnected;
-	} else if( cls.state == CA_GETTING_TICKET ) {
-		*currClientState = QuakeClient::MMValidating;
-	} else if( cls.state == CA_LOADING ) {
-		*currClientState = QuakeClient::Loading;
-	} else if( cls.state == CA_ACTIVE ) {
-		*currClientState = QuakeClient::Active;
-	} else {
-		*currClientState = QuakeClient::Connecting;
+	const auto lastClientState = m_lastFrameState.clientState;
+	const auto actualClientState = cls.state;
+	m_lastFrameState.clientState = actualClientState;
+	if( m_lastFrameState.clientState != lastClientState ) {
+		if( actualClientState == CA_DISCONNECTED ) {
+			if( !m_isShowingMainMenu ) {
+				m_isShowingMainMenu = true;
+				Q_EMIT isShowingMainMenuChanged( true );
+			}
+			if( m_isShowingInGameMenu ) {
+				m_isShowingInGameMenu = false;
+				Q_EMIT isShowingInGameMenuChanged( false );
+			}
+			if( m_isShowingRespectMenu ) {
+				m_isShowingRespectMenu = false;
+				Q_EMIT isShowingRespectMenuChanged( false );
+			}
+		} else if( actualClientState == CA_ACTIVE ) {
+			if( m_isShowingMainMenu ) {
+				m_isShowingMainMenu = false;
+				Q_EMIT isShowingMainMenuChanged( false );
+			}
+			if( !m_isShowingInGameMenu ) {
+				m_isShowingInGameMenu = true;
+				Q_EMIT isShowingInGameMenuChanged( true );
+			}
+		}
 	}
 
-	if( *currClientState != formerClientState ) {
-		Q_EMIT quakeClientStateChanged( *currClientState );
-	}
-
-	auto *isPlayingADemo = &lastFrameState.isPlayingADemo;
+	auto *isPlayingADemo = &m_lastFrameState.isPlayingADemo;
 	const auto wasPlayingADemo = *isPlayingADemo;
 
 	*isPlayingADemo = cls.demo.playing;
 	if( *isPlayingADemo != wasPlayingADemo ) {
-		Q_EMIT isPlayingADemoChanged( *isPlayingADemo );
+		Q_EMIT isShowingDemoPlaybackMenuChanged( *isPlayingADemo );
 	}
 
-	if( ui_debugNativelyDrawnItems->modified ) {
-		Q_EMIT isDebuggingNativelyDrawnItemsChanged( ui_debugNativelyDrawnItems->integer != 0 );
-		ui_debugNativelyDrawnItems->modified = false;
+	if( m_debugNativelyDrawnItemsVar->modified ) {
+		Q_EMIT isDebuggingNativelyDrawnItemsChanged( m_debugNativelyDrawnItemsVar->integer != 0 );
+		m_debugNativelyDrawnItemsVar->modified = false;
 	}
 
 	updateCVarAwareControls();
@@ -582,24 +572,24 @@ void QWswUISystem::handleMouseMove( int frameTime, int dx, int dy ) {
 		return;
 	}
 
-	const int bounds[2] = { quickWindow->width(), quickWindow->height() };
+	const int bounds[2] = { m_window->width(), m_window->height() };
 	const int deltas[2] = { dx, dy };
 
-	if( ui_sensitivity->modified ) {
-		if( ui_sensitivity->value <= 0.0f || ui_sensitivity->value > 10.0f ) {
-			Cvar_ForceSet( ui_sensitivity->name, "1.0" );
+	if( m_sensitivityVar->modified ) {
+		if( m_sensitivityVar->value <= 0.0f || m_sensitivityVar->value > 10.0f ) {
+			Cvar_ForceSet( m_sensitivityVar->name, "1.0" );
 		}
 	}
 
-	if( ui_mouseAccel->modified ) {
-		if( ui_mouseAccel->value < 0.0f || ui_mouseAccel->value > 1.0f ) {
-			Cvar_ForceSet( ui_mouseAccel->name, "0.25" );
+	if( m_mouseAccelVar->modified ) {
+		if( m_mouseAccelVar->value < 0.0f || m_mouseAccelVar->value > 1.0f ) {
+			Cvar_ForceSet( m_mouseAccelVar->name, "0.25" );
 		}
 	}
 
-	float sensitivity = ui_sensitivity->value;
+	float sensitivity = m_sensitivityVar->value;
 	if( frameTime > 0 ) {
-		sensitivity += (float)ui_mouseAccel->value * std::sqrt( dx * dx + dy * dy ) / (float)( frameTime );
+		sensitivity += (float)m_mouseAccelVar->value * std::sqrt( dx * dx + dy * dy ) / (float)( frameTime );
 	}
 
 	for( int i = 0; i < 2; ++i ) {
@@ -611,13 +601,13 @@ void QWswUISystem::handleMouseMove( int frameTime, int dx, int dy ) {
 		if( !scaledDelta ) {
 			scaledDelta = Q_sign( deltas[i] );
 		}
-		mouseXY[i] += scaledDelta;
-		Q_clamp( mouseXY[i], 0, bounds[i] );
+		m_mouseXY[i] += scaledDelta;
+		Q_clamp( m_mouseXY[i], 0, bounds[i] );
 	}
 
-	QPointF point( mouseXY[0], mouseXY[1] );
+	QPointF point( m_mouseXY[0], m_mouseXY[1] );
 	QMouseEvent event( QEvent::MouseMove, point, Qt::NoButton, getPressedMouseButtons(), getPressedKeyboardModifiers() );
-	QCoreApplication::sendEvent( quickWindow, &event );
+	QCoreApplication::sendEvent( m_window, &event );
 }
 
 void QWswUISystem::handleKeyEvent( int quakeKey, bool keyDown, Context context ) {
@@ -637,7 +627,7 @@ void QWswUISystem::handleKeyEvent( int quakeKey, bool keyDown, Context context )
 
 	const auto type = keyDown ? QEvent::KeyPress : QEvent::KeyRelease;
 	QKeyEvent keyEvent( type, *maybeQtKey, getPressedKeyboardModifiers() );
-	QCoreApplication::sendEvent( quickWindow, &keyEvent );
+	QCoreApplication::sendEvent( m_window, &keyEvent );
 }
 
 void QWswUISystem::handleCharEvent( int ch ) {
@@ -648,10 +638,10 @@ void QWswUISystem::handleCharEvent( int ch ) {
 	const auto modifiers = getPressedKeyboardModifiers();
 	// The plain cast of `ch` to Qt::Key seems to be correct in this case
 	// (all printable characters seem to map 1-1 to Qt key codes)
-	QKeyEvent pressEvent( QEvent::KeyPress, (Qt::Key)ch, modifiers, charStrings[ch] );
-	QCoreApplication::sendEvent( quickWindow, &pressEvent );
+	QKeyEvent pressEvent( QEvent::KeyPress, (Qt::Key)ch, modifiers, m_charStrings[ch] );
+	QCoreApplication::sendEvent( m_window, &pressEvent );
 	QKeyEvent releaseEvent( QEvent::KeyRelease, (Qt::Key)ch, modifiers );
-	QCoreApplication::sendEvent( quickWindow, &releaseEvent );
+	QCoreApplication::sendEvent( m_window, &releaseEvent );
 }
 
 auto QWswUISystem::getPressedMouseButtons() const -> Qt::MouseButtons {
@@ -694,10 +684,10 @@ bool QWswUISystem::tryHandlingKeyEventAsAMouseEvent( int quakeKey, bool keyDown 
 		return false;
 	}
 
-	QPointF point( mouseXY[0], mouseXY[1] );
+	QPointF point( m_mouseXY[0], m_mouseXY[1] );
 	QEvent::Type eventType = keyDown ? QEvent::MouseButtonPress : QEvent::MouseButtonRelease;
 	QMouseEvent event( eventType, point, button, getPressedMouseButtons(), getPressedKeyboardModifiers() );
-	QCoreApplication::sendEvent( quickWindow, &event );
+	QCoreApplication::sendEvent( m_window, &event );
 	return true;
 }
 
@@ -763,7 +753,7 @@ auto QWswUISystem::convertQuakeKeyToQtKey( int quakeKey ) const -> std::optional
 }
 
 bool QWswUISystem::isDebuggingNativelyDrawnItems() const {
-	return ui_debugNativelyDrawnItems->integer != 0;
+	return m_debugNativelyDrawnItemsVar->integer != 0;
 }
 
 void QWswUISystem::registerNativelyDrawnItem( QQuickItem *item ) {

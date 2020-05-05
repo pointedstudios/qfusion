@@ -7,7 +7,7 @@ import net.warsow 2.6
 Item {
 	id: root
 	anchors.fill: parent
-	visible: wsw.quakeClientState === QuakeClient.Disconnected
+	visible: wsw.isShowingMainMenu
 
 	readonly property real contentPaneMargin:
 		0.5 * (root.width - contentPane.width)
