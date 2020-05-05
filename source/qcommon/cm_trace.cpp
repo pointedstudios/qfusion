@@ -1075,7 +1075,8 @@ void CM_ClipToShapeList( cmodel_state_t *cms, const CMShapeList *list, trace_t *
 	                     const float *mins, const float *maxs, int clipMask ) {
 	memset( tr, 0, sizeof( trace_t ) );
 	tr->fraction = 1.0f;
-	if( !list ) {
+	if( !list || !list->numShapes ) {
+		VectorCopy( end, tr->endpos );
 	    return;
 	}
 	CM_GetTraceComputer( cms )->ClipToShapeList( list, tr, start, end, mins, maxs, clipMask );
