@@ -117,6 +117,7 @@ Item {
 
     StackView {
 		id: contentPane
+		hoverEnabled: centralOverlay.expansionFrac > 0.999
 		anchors.top: parent.top
 		anchors.bottom: parent.bottom
 		anchors.horizontalCenter: parent.horizontalCenter
