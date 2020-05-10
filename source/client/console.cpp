@@ -161,13 +161,12 @@ void Con_ToggleConsole_f( void ) {
 	Con_ClearTyping();
 	Con_ClearNotify();
 
-	if( cls.key_dest == key_console ) {
+	if( CL_GetKeyDest() == key_console ) {
 		// close console
-		CL_SetKeyDest( cls.old_key_dest );
+		CL_PopKeyDest();
 	} else {
 		// open console
-		CL_SetOldKeyDest( cls.key_dest );
-		CL_SetKeyDest( key_console );
+		CL_PushKeyDest( key_console );
 		IN_ShowSoftKeyboard( true );
 	}
 }
@@ -336,7 +335,7 @@ void Con_ClearNotify( void ) {
 * Called from CL_SetKeyDest
 */
 void Con_SetMessageMode( void ) {
-	bool message = ( cls.key_dest == key_message );
+	bool message = ( CL_GetKeyDest() == key_message );
 
 	if( message ) {
 		Cvar_ForceSet( "con_messageMode", chat_team ? "2" : "1" );
@@ -699,7 +698,7 @@ static void Con_DrawInput( int vislines ) {
 	int textwidth;
 	int prewidth;   // width of input line before cursor
 
-	if( cls.key_dest != key_console ) {
+	if( CL_GetKeyDest() != key_console ) {
 		return;
 	}
 
@@ -758,7 +757,8 @@ void Con_DrawNotify( void ) {
 	int time;
 	float pixelRatio = Con_GetPixelRatio();
 
-	if( cls.state == CA_ACTIVE && ( cls.key_dest == key_game || cls.key_dest == key_message ) ) {
+	const auto keyDest = CL_GetKeyDest();
+	if( cls.state == CA_ACTIVE && ( keyDest == key_game || keyDest == key_message ) ) {
 		v = 0;
 		if( con_drawNotify->integer || developer->integer ) {
 			int x = 8 * pixelRatio;
@@ -808,7 +808,7 @@ void Con_DrawChat( int x, int y, int width, struct qfontface_s *font ) {
 	int candx, candy, candsincol = 0, candprewidth;
 	char candbuf[MAX_STRING_CHARS * 10], *cands[10];
 
-	if( cls.state != CA_ACTIVE || cls.key_dest != key_message ) {
+	if( cls.state != CA_ACTIVE || CL_GetKeyDest() != key_message ) {
 		return;
 	}
 
@@ -2215,7 +2215,8 @@ void Con_MessageKeyDown( int key ) {
 static void Con_TouchDown( int x, int y ) {
 	int smallCharHeight = SCR_FontHeight( cls.consoleFont );
 
-	if( cls.key_dest == key_console ) {
+	const auto keyDest = CL_GetKeyDest();
+	if( keyDest == key_console ) {
 		if( touch_x >= 0 ) {
 			return;
 		}
@@ -2235,7 +2236,7 @@ static void Con_TouchDown( int x, int y ) {
 				touch_y = y;
 			}
 		}
-	} else if( cls.key_dest == key_message ) {
+	} else if( keyDest == key_message ) {
 		touch_x = x;
 		touch_y = y;
 	}
@@ -2254,7 +2255,8 @@ static void Con_TouchUp( int x, int y ) {
 		return;
 	}
 
-	if( cls.key_dest == key_console ) {
+	const auto keyDest = CL_GetKeyDest();
+	if( keyDest == key_console ) {
 		if( touch_x >= 0 ) {
 			int smallCharHeight = SCR_FontHeight( cls.consoleFont );
 
@@ -2268,7 +2270,7 @@ static void Con_TouchUp( int x, int y ) {
 				IN_ShowSoftKeyboard( true );
 			}
 		}
-	} else if( cls.key_dest == key_message ) {
+	} else if( keyDest == key_message ) {
 		int x1 = -1, y1 = -1, x2 = -1, y2 = -1, promptwidth = 0;
 		if( Con_GetMessageArea( &x1, &y1, &x2, &y2, &promptwidth ) ) {
 			if( ( x >= x1 ) && ( y >= y1 ) && ( x < x2 ) && ( y < y2 ) ) {

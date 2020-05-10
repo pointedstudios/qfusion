@@ -39,6 +39,8 @@ public:
 	virtual void forceMenuOn() = 0;
 	virtual void forceMenuOff() = 0;
 
+	virtual void toggleInGameMenu() = 0;
+
 	[[nodiscard]]
 	virtual bool hasRespectMenu() const = 0;
 	virtual void showRespectMenu( bool show ) = 0;

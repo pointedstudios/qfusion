@@ -771,7 +771,7 @@ void IN_MouseEvent( int mstate ) {
 	if( !mouseinitialized || dinput_initialized ) {
 		return;
 	}
-	if( ( cls.key_dest == key_console ) && !in_grabinconsole->integer ) {
+	if( ( CL_GetKeyDest() == key_console ) && !in_grabinconsole->integer ) {
 		return;
 	}
 
@@ -981,7 +981,7 @@ void IN_Frame( void ) {
 				if( in_appactive ) {
 					IN_Activate( false );
 				}
-			} else if( in_grabinconsole->integer || cls.key_dest != key_console ) {
+			} else if( in_grabinconsole->integer || CL_GetKeyDest() != key_console ) {
 				if( !in_appactive && ActiveApp ) {
 					IN_Activate( true );
 				}

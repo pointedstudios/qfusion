@@ -766,8 +766,6 @@ void CG_DrawHUDNumeric( int x, int y, int align, float *color, int charwidth, in
 void CG_DrawTeamInfo( int x, int y, int align, struct qfontface_s *font, vec4_t color );
 void CG_DrawNet( int x, int y, int w, int h, int align, vec4_t color );
 
-void CG_GameMenu_f( void );
-
 void CG_ClearPointedNum( void );
 
 /**

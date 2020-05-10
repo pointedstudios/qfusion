@@ -542,7 +542,7 @@ void SCR_DrawChat( int x, int y, int width, struct qfontface_s *font ) {
 */
 void SCR_RunConsole( int msec ) {
 	// decide on the height of the console
-	if( cls.key_dest == key_console ) {
+	if( CL_GetKeyDest() == key_console ) {
 		scr_conlines = bound( 0.1f, scr_consize->value, 1.0f );
 	} else {
 		scr_conlines = 0;

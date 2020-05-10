@@ -493,12 +493,10 @@ load_refresh:
 			CL_GameModule_Init();
 			Con_Close();
 			UISystem::instance()->forceMenuOff();
-			CL_SetKeyDest( key_game );
 		} else {
 			if( auto maybeInstance = UISystem::maybeInstance() ) {
 				( *maybeInstance )->forceMenuOn();
 			}
-			CL_SetKeyDest( key_menu );
 		}
 
 		RF_EndRegistration();

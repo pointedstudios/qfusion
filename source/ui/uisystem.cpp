@@ -47,16 +47,14 @@ public:
 	void forceMenuOn() override {};
 	void forceMenuOff() override {};
 
-	[[nodiscard]]
-	bool hasRespectMenu() const override { return m_isShowingRespectMenu; };
+	void toggleInGameMenu() override;
 
-	void showRespectMenu( bool show ) override {
-		if( show == m_isShowingRespectMenu ) {
-			return;
-		}
-		m_isShowingRespectMenu = show;
-		Q_EMIT isShowingRespectMenuChanged( m_isShowingRespectMenu );
+	[[nodiscard]]
+	bool hasRespectMenu() const override {
+		return ( m_activeMenuMask & RespectMenu ) || ( m_backupMenuMask & RespectMenu );
 	};
+
+	void showRespectMenu( bool show ) override;
 
 	void enterUIRenderingMode();
 	void leaveUIRenderingMode();
@@ -82,6 +80,9 @@ public:
 	Q_INVOKABLE void registerCVarAwareControl( QQuickItem *control );
 	Q_INVOKABLE void unregisterCVarAwareControl( QQuickItem *control );
 
+	Q_INVOKABLE void showMainMenu();
+	Q_INVOKABLE void returnFromInGameMenu();
+	Q_INVOKABLE void returnFromMainMenu();
 	Q_INVOKABLE void quit();
 signals:
 	Q_SIGNAL void isShowingMainMenuChanged( bool isShowingMainMenu );
@@ -118,9 +119,15 @@ private:
 		connstate_t clientState { CA_UNINITIALIZED };
 	} m_lastFrameState;
 
-	bool m_isShowingMainMenu { false };
-	bool m_isShowingInGameMenu { false };
-	bool m_isShowingRespectMenu { false };
+	enum ActiveMenuMask : unsigned {
+		MainMenu             = 0x1,
+		InGameMenu           = 0x2,
+		RespectMenu          = 0x4,
+		DemoPlaybackMenu     = 0x8
+	};
+
+	unsigned m_backupMenuMask { 0 };
+	unsigned m_activeMenuMask { 0 };
 
 	bool m_hasStartedBackgroundMapLoading { false };
 	bool m_hasSucceededBackgroundMapLoading { false };
@@ -144,16 +151,24 @@ private:
 	QMap<QQuickItem *, QPair<QVariant, cvar_t *>> m_pendingCVarChanges;
 
 	[[nodiscard]]
-	bool isShowingDemoPlaybackMenu() const { return m_lastFrameState.isPlayingADemo; }
+	bool isShowingDemoPlaybackMenu() const {
+		return ( m_activeMenuMask & DemoPlaybackMenu ) != 0;
+	}
 
 	[[nodiscard]]
-	bool isShowingMainMenu() const { return m_isShowingMainMenu; }
+	bool isShowingMainMenu() const {
+		return ( m_activeMenuMask & MainMenu ) != 0;
+	}
 
 	[[nodiscard]]
-	bool isShowingInGameMenu() const { return m_isShowingInGameMenu; };
+	bool isShowingInGameMenu() const {
+		return ( m_activeMenuMask & InGameMenu ) != 0;
+	};
 
 	[[nodiscard]]
-	bool isShowingRespectMenu() const { return m_isShowingRespectMenu; };
+	bool isShowingRespectMenu() const {
+		return ( m_activeMenuMask & RespectMenu ) != 0;
+	};
 
 	[[nodiscard]]
 	bool isDebuggingNativelyDrawnItems() const;
@@ -165,6 +180,7 @@ private:
 
 	void updateCVarAwareControls();
 	void checkPropertyChanges();
+	void setActiveMenuMask( unsigned activeMask, std::optional<unsigned> backupMask = std::nullopt );
 	void renderQml();
 
 	[[nodiscard]]
@@ -462,8 +478,7 @@ void QWswUISystem::drawSelfInMainContext() {
 		zHeaps[1].pop_back();
 	}
 
-	// TODO: Draw while showing an in-game menu as well (there should be a different condition)
-	if( m_lastFrameState.clientState > CA_DISCONNECTED ) {
+	if( !m_activeMenuMask ) {
 		return;
 	}
 
@@ -523,42 +538,122 @@ void QWswUISystem::drawBackgroundMapIfNeeded() {
 	RF_RenderScene( &rdf );
 }
 
+void QWswUISystem::toggleInGameMenu() {
+	if( isShowingInGameMenu() ) {
+		setActiveMenuMask( m_activeMenuMask & ~InGameMenu );
+	} else {
+		setActiveMenuMask( m_activeMenuMask | InGameMenu );
+	}
+}
+
+void QWswUISystem::showRespectMenu( bool show ) {
+	if( hasRespectMenu() == show ) {
+		return;
+	}
+
+	if( m_activeMenuMask & MainMenu ) {
+		if( show ) {
+			m_backupMenuMask |= RespectMenu;
+		} else {
+			m_backupMenuMask &= ~RespectMenu;
+		}
+		return;
+	}
+
+	if( show ) {
+		setActiveMenuMask( m_activeMenuMask | RespectMenu );
+	} else {
+		setActiveMenuMask( m_activeMenuMask & ~RespectMenu );
+	}
+};
+
+void QWswUISystem::showMainMenu() {
+	setActiveMenuMask( MainMenu );
+}
+
+void QWswUISystem::returnFromInGameMenu() {
+	setActiveMenuMask( m_activeMenuMask & ~InGameMenu, 0 );
+}
+
+void QWswUISystem::returnFromMainMenu() {
+	if( m_backupMenuMask ) {
+		setActiveMenuMask( m_backupMenuMask, 0 );
+	}
+}
+
+void QWswUISystem::setActiveMenuMask( unsigned activeMask, std::optional<unsigned> backupMask ) {
+	if( m_activeMenuMask == activeMask ) {
+		if( backupMask ) {
+			m_backupMenuMask = *backupMask;
+		}
+		return;
+	}
+
+	const bool wasShowingMainMenu = isShowingMainMenu();
+	const bool wasShowingInGameMenu = isShowingInGameMenu();
+	const bool wasShowingRespectMenu = isShowingRespectMenu();
+	const bool wasShowingDemoPlaybackMenu = isShowingDemoPlaybackMenu();
+
+	m_backupMenuMask = backupMask ? *backupMask : m_activeMenuMask;
+	m_activeMenuMask = activeMask;
+
+	const bool _isShowingMainMenu = isShowingMainMenu();
+	const bool _isShowingInGameMenu = isShowingInGameMenu();
+	const bool _isShowingRespectMenu = isShowingRespectMenu();
+	const bool _isShowingDemoPlaybackMenu = isShowingDemoPlaybackMenu();
+
+	if( wasShowingMainMenu != _isShowingMainMenu ) {
+		Q_EMIT isShowingMainMenuChanged( _isShowingMainMenu );
+	}
+	if( wasShowingInGameMenu != _isShowingInGameMenu ) {
+		Q_EMIT isShowingInGameMenuChanged( _isShowingInGameMenu );
+	}
+	if( wasShowingRespectMenu != _isShowingRespectMenu ) {
+		Q_EMIT isShowingRespectMenuChanged( _isShowingRespectMenu );
+	}
+	if( wasShowingDemoPlaybackMenu != _isShowingDemoPlaybackMenu ) {
+		Q_EMIT isShowingDemoPlaybackMenuChanged( _isShowingDemoPlaybackMenu );
+	}
+
+	if( m_activeMenuMask ) {
+		if( CL_GetKeyDest() != key_menu ) {
+			CL_PushKeyDest( key_menu );
+		}
+	} else {
+		while( CL_GetKeyDest() != key_game ) {
+			CL_PopKeyDest();
+		}
+	}
+}
+
 void QWswUISystem::checkPropertyChanges() {
 	const auto lastClientState = m_lastFrameState.clientState;
 	const auto actualClientState = cls.state;
 	m_lastFrameState.clientState = actualClientState;
 	if( m_lastFrameState.clientState != lastClientState ) {
 		if( actualClientState == CA_DISCONNECTED ) {
-			if( !m_isShowingMainMenu ) {
-				m_isShowingMainMenu = true;
-				Q_EMIT isShowingMainMenuChanged( true );
-			}
-			if( m_isShowingInGameMenu ) {
-				m_isShowingInGameMenu = false;
-				Q_EMIT isShowingInGameMenuChanged( false );
-			}
-			if( m_isShowingRespectMenu ) {
-				m_isShowingRespectMenu = false;
-				Q_EMIT isShowingRespectMenuChanged( false );
-			}
+			setActiveMenuMask( MainMenu, 0 );
 		} else if( actualClientState == CA_ACTIVE ) {
-			if( m_isShowingMainMenu ) {
-				m_isShowingMainMenu = false;
-				Q_EMIT isShowingMainMenuChanged( false );
-			}
-			if( !m_isShowingInGameMenu ) {
-				m_isShowingInGameMenu = true;
-				Q_EMIT isShowingInGameMenuChanged( true );
-			}
+			setActiveMenuMask( InGameMenu, 0 );
 		}
 	}
 
-	auto *isPlayingADemo = &m_lastFrameState.isPlayingADemo;
-	const auto wasPlayingADemo = *isPlayingADemo;
-
-	*isPlayingADemo = cls.demo.playing;
-	if( *isPlayingADemo != wasPlayingADemo ) {
-		Q_EMIT isShowingDemoPlaybackMenuChanged( *isPlayingADemo );
+	const bool wasPlayingADemo = m_lastFrameState.isPlayingADemo;
+	const bool isPlayingADemo = m_lastFrameState.isPlayingADemo = cls.demo.playing;
+	if( isPlayingADemo != wasPlayingADemo ) {
+		if( isPlayingADemo ) {
+			if ( m_activeMenuMask & MainMenu ) {
+				m_backupMenuMask |= DemoPlaybackMenu;
+			} else {
+				setActiveMenuMask( m_activeMenuMask | DemoPlaybackMenu, 0 );
+			}
+		} else {
+			if( m_activeMenuMask & MainMenu ) {
+				m_backupMenuMask &= ~DemoPlaybackMenu;
+			} else {
+				setActiveMenuMask( m_activeMenuMask | ~DemoPlaybackMenu, 0 );
+			}
+		}
 	}
 
 	if( m_debugNativelyDrawnItemsVar->modified ) {

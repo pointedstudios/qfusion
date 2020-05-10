@@ -41,7 +41,7 @@ void CL_ClearInputState( void ) {
 
 	Key_ClearStates();
 
-	if( cls.key_dest == key_game ) {
+	if( CL_GetKeyDest() == key_game ) {
 		CL_GameModule_ClearInputState();
 	}
 }
@@ -59,13 +59,14 @@ static void CL_UpdateGameInput( int frameTime ) {
 	// refresh input in cgame
 	CL_GameModule_InputFrame( frameTime );
 
-	if( cls.key_dest == key_menu ) {
+	const auto keyDest = CL_GetKeyDest();
+	if( keyDest == key_menu ) {
 		UISystem::instance()->handleMouseMove( frameTime, mx, my );
 	} else {
 		CL_GameModule_MouseMove( mx, my );
 	}
 
-	if( cls.key_dest == key_game || ( ( cls.key_dest == key_console ) && Cvar_Value( "in_grabinconsole" ) != 0 ) ) {
+	if( keyDest == key_game || ( ( keyDest == key_console ) && Cvar_Value( "in_grabinconsole" ) != 0 ) ) {
 		CL_GameModule_AddViewAngles( cl.viewangles );
 	}
 }
@@ -149,7 +150,7 @@ void CL_ShutdownInput( void ) {
 static void CL_SetUcmdMovement( usercmd_t *ucmd ) {
 	vec3_t movement = { 0.0f, 0.0f, 0.0f };
 
-	if( cls.key_dest == key_game ) {
+	if( CL_GetKeyDest() == key_game ) {
 		CL_GameModule_AddMovement( movement );
 	}
 
@@ -162,7 +163,7 @@ static void CL_SetUcmdMovement( usercmd_t *ucmd ) {
 * CL_SetUcmdButtons
 */
 static void CL_SetUcmdButtons( usercmd_t *ucmd ) {
-	if( cls.key_dest == key_game ) {
+	if( CL_GetKeyDest() == key_game ) {
 		ucmd->buttons |= CL_GameModule_GetButtonBits();
 		if( anykeydown ) {
 			ucmd->buttons |= BUTTON_ANY;

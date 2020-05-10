@@ -512,7 +512,7 @@ void IN_Frame() {
 		return;
 	}
 
-	if( !input_focus || ( !Cvar_Value( "vid_fullscreen" ) && cls.key_dest == key_console && !in_grabinconsole->integer ) ) {
+	if( !input_focus || ( !Cvar_Value( "vid_fullscreen" ) && CL_GetKeyDest() == key_console && !in_grabinconsole->integer ) ) {
 		if( mouse_active ) {
 			if( mouse_relative ) {
 				mouse_relative = !( SDL_SetRelativeMouseMode( SDL_FALSE ) == 0 );

@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 #include "client.h"
 #include "../ui/uisystem.h"
+#include "../game/ai/static_vector.h"
 
 /*
 
@@ -29,6 +30,8 @@ key up events are sent even if in console mode
 #define SEMICOLON_BINDNAME  "SEMICOLON"
 
 int anykeydown;
+
+static StaticVector<keydest_t, 8> keyDestStack;
 
 static char *keybindings[256];
 static bool consolekeys[256];   // if true, can't be rebound while in console
@@ -157,9 +160,6 @@ const keyname_t keynames[] =
 
 	{ NULL, 0 }
 };
-
-static void Key_DelegateCallKeyDel( int key );
-static void Key_DelegateCallCharDel( wchar_t key );
 
 static int consolebinded = 0;
 
@@ -498,7 +498,7 @@ void Key_CharEvent( int key, wchar_t charkey ) {
 		return;
 	}
 
-	switch( cls.key_dest ) {
+	switch( CL_GetKeyDest() ) {
 		case key_message:
 			Con_MessageCharEvent( charkey );
 			break;
@@ -508,9 +508,6 @@ void Key_CharEvent( int key, wchar_t charkey ) {
 		case key_game:
 		case key_console:
 			Con_CharEvent( charkey );
-			break;
-		case key_delegate:
-			Key_DelegateCallCharDel( charkey );
 			break;
 		default:
 			Com_Error( ERR_FATAL, "Bad cls.key_dest" );
@@ -605,6 +602,8 @@ void Key_Event( int key, bool down, int64_t time ) {
 	bool have_quickmenu = SCR_IsQuickMenuShown();
 	bool numeric = numkey >= '0' && numkey <= '9';
 
+	const auto keyDest = CL_GetKeyDest();
+
 	// update auto-repeat status
 	if( down ) {
 		key_repeats[key]++;
@@ -613,7 +612,7 @@ void Key_Event( int key, bool down, int64_t time ) {
 				  && key != K_LEFTARROW && key != K_RIGHTARROW
 				  && key != K_UPARROW && key != K_DOWNARROW
 				  && key != K_PGUP && key != K_PGDN && ( key < 32 || key > 126 || key == '`' ) )
-				|| cls.key_dest == key_game ) {
+				|| keyDest == key_game ) {
 				return;
 			}
 		}
@@ -652,17 +651,17 @@ void Key_Event( int key, bool down, int64_t time ) {
 		}
 
 		if( cls.state != CA_ACTIVE ) {
-			if( cls.key_dest == key_game || cls.key_dest == key_menu ) {
+			if( keyDest == key_game || keyDest == key_menu ) {
 				if( cls.state != CA_DISCONNECTED ) {
 					Cbuf_AddText( "disconnect\n" );
-				} else if( cls.key_dest == key_menu ) {
+				} else if( keyDest == key_menu ) {
 					UISystem::instance()->handleKeyEvent( key, true, UISystem::MainContext );
 				}
 				return;
 			}
 		}
 
-		switch( cls.key_dest ) {
+		switch( keyDest ) {
 			case key_message:
 				Con_MessageKeyDown( key );
 				break;
@@ -675,9 +674,6 @@ void Key_Event( int key, bool down, int64_t time ) {
 			case key_console:
 				Con_ToggleConsole_f();
 				break;
-			case key_delegate:
-				Key_DelegateCallKeyDel( key );
-				break;
 			default:
 				Com_Error( ERR_FATAL, "Bad cls.key_dest" );
 		}
@@ -687,10 +683,10 @@ void Key_Event( int key, bool down, int64_t time ) {
 	//
 	// if not a consolekey, send to the interpreter no matter what mode is
 	//
-	if( ( cls.key_dest == key_menu && menubound[key] )
-		|| ( cls.key_dest == key_console && !consolekeys[key] )
-		|| ( cls.key_dest == key_game && ( cls.state == CA_ACTIVE || !consolekeys[key] ) && ( !have_quickmenu || !numeric ) )
-		|| ( cls.key_dest == key_message && ( key >= K_F1 && key <= K_F15 ) ) ) {
+	if( ( keyDest == key_menu && menubound[key] )
+		|| ( keyDest == key_console && !consolekeys[key] )
+		|| ( keyDest == key_game && ( cls.state == CA_ACTIVE || !consolekeys[key] ) && ( !have_quickmenu || !numeric ) )
+		|| ( keyDest == key_message && ( key >= K_F1 && key <= K_F15 ) ) ) {
 		kb = keybindings[key];
 
 		if( kb ) {
@@ -727,7 +723,7 @@ void Key_Event( int key, bool down, int64_t time ) {
 		}
 	}
 
-	if( cls.key_dest == key_menu ) {
+	if( keyDest == key_menu ) {
 		UISystem::instance()->handleKeyEvent( key, down, UISystem::MainContext );
 		return;
 	}
@@ -736,7 +732,7 @@ void Key_Event( int key, bool down, int64_t time ) {
 		return; // other systems only care about key down events
 
 	}
-	switch( cls.key_dest ) {
+	switch( keyDest ) {
 		case key_message:
 			Con_MessageKeyDown( key );
 			break;
@@ -747,9 +743,6 @@ void Key_Event( int key, bool down, int64_t time ) {
 			}
 		case key_console:
 			Con_KeyDown( key );
-			break;
-		case key_delegate:
-			Key_DelegateCallKeyDel( key );
 			break;
 		default:
 			Com_Error( ERR_FATAL, "Bad cls.key_dest" );
@@ -791,52 +784,55 @@ bool Key_IsDown( int keynum ) {
 	return keydown[keynum];
 }
 
-typedef struct {
-	key_delegate_f key_del;
-	key_char_delegate_f char_del;
-} key_delegates_t;
+keydest_t CL_GetKeyDest( void ) {
+	return !keyDestStack.empty() ? keyDestStack.back() : key_game;
+}
 
-static key_delegates_t key_delegate_stack[32];
-static int key_delegate_stack_index = 0;
+void CL_SetKeyDest( keydest_t key_dest ) {
+	if( key_dest < key_game || key_dest > key_menu ) {
+		Com_Error( ERR_DROP, "CL_SetKeyDest: invalid key_dest" );
+	}
 
-/*
-* Key_DelegatePush
-*/
-keydest_t Key_DelegatePush( key_delegate_f key_del, key_char_delegate_f char_del ) {
-	assert( key_delegate_stack_index < sizeof( key_delegate_stack ) / sizeof( key_delegates_t ) );
-	key_delegate_stack[key_delegate_stack_index].key_del = key_del;
-	key_delegate_stack[key_delegate_stack_index].char_del = char_del;
-	++key_delegate_stack_index;
-	if( key_delegate_stack_index == 1 ) {
-		CL_SetOldKeyDest( cls.key_dest );
-		CL_SetKeyDest( key_delegate );
-		return cls.old_key_dest;
+	// TODO: Should be reworked completely (check callers)
+	// assert( keyDestStack.size() == 1 );
+
+	std::optional<keydest_t> oldDest;
+	if( keyDestStack.empty() ) {
+		keyDestStack.push_back( key_dest );
 	} else {
-		return key_delegate;
+		oldDest = keyDestStack.back();
+		keyDestStack.back() = key_dest;
+	}
+
+	if( oldDest && *oldDest != key_dest ) {
+		CL_ClearInputState();
+		Con_SetMessageMode();
 	}
 }
 
-/*
-* Key_DelegatePop
-*/
-void Key_DelegatePop( keydest_t next_dest ) {
-	assert( key_delegate_stack_index > 0 );
-	--key_delegate_stack_index;
-	CL_SetKeyDest( next_dest );
+void CL_PushKeyDest( keydest_t key_dest ) {
+	if( key_dest < key_game || key_dest > key_menu ) {
+		Com_Error( ERR_DROP, "CL_SetKeyDest: invalid key_dest" );
+	}
+	if( keyDestStack.size() == keyDestStack.capacity() ) {
+		Com_Error( ERR_DROP, "CL_PushKeyDest: stack overflow" );
+	}
+
+	if( keyDestStack.empty() ) {
+		keyDestStack.push_back( key_dest );
+		return;
+	}
+
+	auto oldDest = keyDestStack.back();
+	keyDestStack.push_back( key_dest );
+	if( oldDest != key_dest ) {
+		CL_ClearInputState();
+		Con_SetMessageMode();
+	}
 }
 
-/*
-* Key_DelegateCallKeyDel
-*/
-static void Key_DelegateCallKeyDel( int key ) {
-	assert( key_delegate_stack_index > 0 );
-	key_delegate_stack[key_delegate_stack_index - 1].key_del( key, keydown );
-}
-
-/*
-* Key_DelegateCallCharDel
-*/
-static void Key_DelegateCallCharDel( wchar_t key ) {
-	assert( key_delegate_stack_index > 0 );
-	key_delegate_stack[key_delegate_stack_index - 1].char_del( key );
+void CL_PopKeyDest() {
+	if( !keyDestStack.empty() ) {
+		keyDestStack.pop_back();
+	}
 }

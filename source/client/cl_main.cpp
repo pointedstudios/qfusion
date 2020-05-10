@@ -609,38 +609,6 @@ void CL_OpenURLInBrowser( const char *url ) {
 }
 
 /*
-* CL_GetKeyDest
-*/
-keydest_t CL_GetKeyDest( void ) {
-	return cls.key_dest;
-}
-
-/*
-* CL_SetKeyDest
-*/
-void CL_SetKeyDest( keydest_t key_dest ) {
-	if( key_dest < key_game || key_dest > key_delegate ) {
-		Com_Error( ERR_DROP, "CL_SetKeyDest: invalid key_dest" );
-	}
-
-	if( cls.key_dest != key_dest ) {
-		CL_ClearInputState();
-		cls.key_dest = key_dest;
-		Con_SetMessageMode();
-	}
-}
-
-/*
-* CL_SetOldKeyDest
-*/
-void CL_SetOldKeyDest( keydest_t key_dest ) {
-	if( key_dest < key_game || key_dest > key_delegate ) {
-		Com_Error( ERR_DROP, "CL_SetKeyDest: invalid key_dest" );
-	}
-	cls.old_key_dest = key_dest;
-}
-
-/*
 * CL_GetBaseServerURL
 */
 size_t CL_GetBaseServerURL( char *buffer, size_t buffer_size ) {
@@ -1735,7 +1703,6 @@ void CL_SetClientState( int state ) {
 			uiSystem->refresh( UISystem::ShowCursor | UISystem::UseOwnBackground );
 			uiSystem->forceMenuOn();
 			//CL_UIModule_MenuMain ();
-			CL_SetKeyDest( key_menu );
 			//SCR_UpdateScreen();
 			break;
 		case CA_GETTING_TICKET:
@@ -1745,7 +1712,6 @@ void CL_SetClientState( int state ) {
 			uiSystem->forceMenuOff();
 			SoundSystem::Instance()->StopBackgroundTrack();
 			SoundSystem::Instance()->Clear();
-			CL_SetKeyDest( key_game );
 			//SCR_UpdateScreen();
 			break;
 		case CA_CONNECTED:
@@ -1760,7 +1726,6 @@ void CL_SetClientState( int state ) {
 			Con_Close();
 			uiSystem->refresh( 0 );
 			uiSystem->forceMenuOff();
-			CL_SetKeyDest( key_game );
 			//SCR_UpdateScreen();
 			CL_AddReliableCommand( "svmotd 1" );
 			SoundSystem::Instance()->Clear();

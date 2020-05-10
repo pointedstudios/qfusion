@@ -158,11 +158,18 @@ Item {
     }
 
 	Keys.onPressed: {
-	    if (!centralOverlay.handleKeyEvent(event)) {
-	        if (event.key === Qt.Key_Escape) {
-	            root.forceActiveFocus()
-	            event.accepted = true
-	        }
+	    if (!visible) {
+	        return
 	    }
+	    if (centralOverlay.handleKeyEvent(event)) {
+	        return
+	    }
+	    if (event.key !== Qt.Key_Escape) {
+	        return
+	    }
+
+	    wsw.returnFromMainMenu()
+	    root.forceActiveFocus()
+	    event.accepted = true
 	}
 }

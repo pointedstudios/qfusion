@@ -36,6 +36,7 @@ end of unit intermissions
 #include "cg_local.h"
 #include "../client/client.h"
 #include "../ref/frontend.h"
+#include "../ui/uisystem.h"
 
 vrect_t scr_vrect;
 
@@ -316,7 +317,6 @@ void CG_ScreenInit( void ) {
 	//
 	Cmd_AddCommand( "sizeup", CG_SizeUp_f );
 	Cmd_AddCommand( "sizedown", CG_SizeDown_f );
-	Cmd_AddCommand( "gamemenu", CG_GameMenu_f );
 
 	Cmd_AddCommand( "+quickmenu", &CG_QuickMenuOn_f );
 	Cmd_AddCommand( "-quickmenu", &CG_QuickMenuOff_f );
@@ -330,7 +330,6 @@ void CG_ScreenInit( void ) {
 void CG_ScreenShutdown( void ) {
 	CG_ShutdownHUD();
 
-	Cmd_RemoveCommand( "gamemenu" );
 	Cmd_RemoveCommand( "sizeup" );
 	Cmd_RemoveCommand( "sizedown" );
 
@@ -1130,27 +1129,10 @@ static void CG_InGameMenu( void ) {
 }
 
 /*
-* CG_GameMenu_f
-*/
-void CG_GameMenu_f( void ) {
-	if( cgs.demoPlaying ) {
-		Cbuf_ExecuteText( EXEC_NOW, "menu_open demoplay\n" );
-		return;
-	}
-
-	// if the menu is up, close it
-	if( CG_IsScoreboardShown() ) {
-		Cbuf_ExecuteText( EXEC_NOW, "cmd putaway\n" );
-	}
-
-	CG_InGameMenu();
-}
-
-/*
 * CG_EscapeKey
 */
 void CG_EscapeKey( void ) {
-	CG_GameMenu_f();
+	UISystem::instance()->toggleInGameMenu();
 }
 
 /*
