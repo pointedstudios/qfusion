@@ -19,8 +19,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "serverlist.h"
-#include "../qcommon/qcommon.h"
-#include "../qcommon/hash.h"
 #include "../qcommon/links.h"
 #include "../qcommon/singletonholder.h"
 #include "client.h"
@@ -61,11 +59,11 @@ void ServerList::init() {
 	}
 
 	// Set this first as some resolvers may return almost immediately
-	::numActiveResolvers = std::min( (int)MAX_MASTER_SERVERS, numMasters );
+	::numActiveResolvers = std::min( (int)kMaxMasterServers, numMasters );
 
 	int numSpawnedResolvers = 0;
 	for( const char *ptr = masterServersStr; ptr; ) {
-		if( numSpawnedResolvers == MAX_MASTER_SERVERS ) {
+		if( numSpawnedResolvers == kMaxMasterServers ) {
 			break;
 		}
 		char *addressString = COM_Parse( &ptr );
@@ -87,7 +85,7 @@ void ServerList::shutdown() {
 	// The mutex is not disposed intentionally
 }
 
-ServerList *ServerList::instance() {
+auto ServerList::instance() -> ServerList * {
 	return serverListHolder.Instance();
 }
 
@@ -129,84 +127,8 @@ void *ServerList::resolverThreadFunc( void *param ) {
 	return nullptr;
 }
 
-class ServerInfoParser {
-	// These fields are used to pass info during parsing
-	ServerInfo *info { nullptr };
-	uint64_t lastAcknowledgedChallenge { 0 };
-
-	// This field is parsed along with info KV pairs
-	uint64_t parsedChallenge { 0 };
-
-	wsw::HashedStringView keyView;
-	wsw::StringView valueView;
-
-	const char *chars { nullptr };
-	unsigned index { 0 };
-	unsigned bytesLeft { 0 };
-
-	typedef bool ( ServerInfoParser::*HandlerMethod )( const wsw::StringView & );
-
-	struct TokenHandler {
-		wsw::HashedStringView key;
-		TokenHandler *nextInHashBin { nullptr };
-		HandlerMethod method { nullptr };
-
-		TokenHandler() = default;
-
-		TokenHandler( const char *key_, HandlerMethod handler_ )
-			: key( key_ ), method( handler_ ) {}
-
-		[[nodiscard]]
-		bool canHandle( const wsw::HashedStringView &key_ ) const {
-			return key.equalsIgnoreCase( key_ );
-		}
-
-		[[nodiscard]]
-		bool handle( ServerInfoParser *parser, const wsw::StringView &value ) {
-			return ( parser->*method )( value );
-		}
-	};
-
-	static constexpr auto HASH_MAP_SIZE = 17;
-	TokenHandler *handlersHashMap[HASH_MAP_SIZE];
-	static constexpr auto MAX_HANDLERS = 16;
-	TokenHandler handlersStorage[MAX_HANDLERS];
-	unsigned numHandlers { 0 };
-
-	void addHandler( const char *command, HandlerMethod handler );
-	void linkHandlerEntry( TokenHandler *handlerEntry );
-
-	bool handleChallenge( const wsw::StringView &value );
-	bool handleHostname( const wsw::StringView & );
-	bool handleMaxClients( const wsw::StringView & );
-	bool handleMapname( const wsw::StringView & );
-	bool handleMatchTime( const wsw::StringView & );
-	bool handleMatchScore( const wsw::StringView & );
-	bool handleGameFS(const wsw::StringView &);
-	bool handleGametype( const wsw::StringView & );
-	bool handleNumBots( const wsw::StringView & );
-	bool handleNumClients( const wsw::StringView & );
-	bool handleNeedPass( const wsw::StringView & );
-
-	template<typename T>
-	bool handleInteger( const wsw::StringView &, T *result ) const;
-
-	template<unsigned N>
-	bool handleString( const wsw::StringView &, StaticString<N> *result ) const;
-
-	bool scanForKey();
-	bool scanForValue();
-public:
-	ServerInfoParser();
-
-	bool parse( msg_t *msg_, ServerInfo *info_, uint64_t lastAcknowledgedChallenge_ );
-	bool handleKVPair();
-
-	uint64_t getParsedChallenge() const { return parsedChallenge; }
-};
-
 void ServerList::parseGetServersResponse( const socket_t *socket, const netadr_t &address, msg_t *msg ) {
-	if( !listener ) {
+	if( !m_listener ) {
 		return;
 	}
 
@@ -274,7 +196,7 @@ void ServerList::parseGetServersResponse( const socket_t *socket, const netadr_t
 }
 
 void ServerList::parseGetInfoResponse( const socket_t *socket, const netadr_t &address, msg_t *msg ) {
-	if( !listener ) {
+	if( !m_listener ) {
 		return;
 	}
 
@@ -299,10 +221,10 @@ void ServerList::parseGetInfoResponse( const socket_t *socket, const netadr_t &a
 	onNewServerInfo( server, parsedServerInfo );
 }
 
-ServerInfo *ServerList::parseServerInfo( msg_t *msg, PolledGameServer *server ) {
+auto ServerList::parseServerInfo( msg_t *msg, PolledGameServer *server ) -> ServerInfo * {
 	auto *const info = new ServerInfo;
-	if( serverInfoParser->parse( msg, info, server->lastAcknowledgedChallenge ) ) {
-		server->lastAcknowledgedChallenge = serverInfoParser->getParsedChallenge();
+	if( m_serverInfoParser->parse( msg, info, server->m_lastAcknowledgedChallenge ) ) {
+		server->m_lastAcknowledgedChallenge = m_serverInfoParser->getParsedChallenge();
 		return info;
 	}
 
@@ -310,408 +232,8 @@ ServerInfo *ServerList::parseServerInfo( msg_t *msg, PolledGameServer *server ) 
 	return nullptr;
 }
 
-ServerInfoParser::ServerInfoParser() {
-	memset( handlersHashMap, 0, sizeof( handlersHashMap ) );
-
-	addHandler( "challenge", &ServerInfoParser::handleChallenge );
-	addHandler( "sv_hostname", &ServerInfoParser::handleHostname );
-	addHandler( "sv_maxclients", &ServerInfoParser::handleMaxClients );
-	addHandler( "mapname", &ServerInfoParser::handleMapname );
-	addHandler( "g_match_time", &ServerInfoParser::handleMatchTime );
-	addHandler( "g_match_score", &ServerInfoParser::handleMatchScore );
-	addHandler( "fs_game", &ServerInfoParser::handleGameFS );
-	addHandler( "gametype", &ServerInfoParser::handleGametype );
-	addHandler( "bots", &ServerInfoParser::handleNumBots );
-	addHandler( "clients", &ServerInfoParser::handleNumClients );
-	addHandler( "g_needpass", &ServerInfoParser::handleNeedPass );
-}
-
-bool ServerInfoParser::scanForKey() {
-	uint32_t hash = 0;
-	unsigned start = index;
-	while( index < bytesLeft && chars[index] != '\\' ) {
-		hash = NextHashStep( hash, chars[index] );
-		index++;
-	}
-
-	// If no '\\' has been found before end of data
-	if( index >= bytesLeft ) {
-		return false;
-	}
-
-	// Otherwise we have met a '\\'
-	keyView = wsw::HashedStringView( chars + start, index - start, hash );
-	index++;
-	return true;
-}
-
-bool ServerInfoParser::scanForValue() {
-	unsigned start = index;
-	while( index < bytesLeft && chars[index] != '\\' && chars[index] != '\n' ) {
-		index++;
-	}
-
-	// If we have ran out of range without stopping at termination characters
-	if( index >= bytesLeft ) {
-		return false;
-	}
-
-	valueView = wsw::StringView( chars + start, index - start );
-	return true;
-}
-
-bool ServerInfoParser::parse( msg_t *msg_, ServerInfo *info_, uint64_t lastAcknowledgedChallenge_ ) {
-	this->info = info_;
-	this->lastAcknowledgedChallenge = lastAcknowledgedChallenge_;
-	this->parsedChallenge = 0;
-	this->index = 0;
-	this->chars = (const char *)( msg_->data + msg_->readcount );
-	this->bytesLeft = MSG_BytesLeft( msg_ );
-
-	constexpr const char *missingChallenge = "Warning: ServerList::ServerInfoParser::Parse(): missing a challenge\n";
-
-	for(;; ) {
-		if( index >= bytesLeft ) {
-			msg_->readcount += index;
-			if( !parsedChallenge ) {
-				Com_DPrintf( missingChallenge );
-				return false;
-			}
-			return true;
-		}
-
-		// Expect new '\\'
-		if( chars[index] != '\\' ) {
-			return false;
-		}
-		index++;
-
-		// Expect a key
-		if( !scanForKey() ) {
-			return false;
-		}
-
-		// Expect a value
-		if( !scanForValue() ) {
-			return false;
-		}
-
-		// Now try handling the pair matched in the character input
-		if( !handleKVPair() ) {
-			return false;
-		}
-
-		// If we have stopped at \n while scanning for value
-		if( chars[index] == '\n' ) {
-			msg_->readcount += index;
-			if( !parsedChallenge ) {
-				Com_DPrintf( missingChallenge );
-				return false;
-			}
-			return true;
-		}
-	}
-}
-
-void ServerInfoParser::addHandler( const char *command, HandlerMethod handler ) {
-	if( numHandlers < MAX_HANDLERS ) {
-		void *mem = &handlersStorage[numHandlers++];
-		linkHandlerEntry( new( mem )TokenHandler( command, handler ) );
-		return;
-	}
-	Com_Printf( "ServerList::ServerInfoParser::AddHandler(): too many handlers\n" );
-	abort();
-}
-
-void ServerInfoParser::linkHandlerEntry( TokenHandler *handlerEntry ) {
-	unsigned hashBinIndex = handlerEntry->key.getHash() % HASH_MAP_SIZE;
-
-	handlerEntry->nextInHashBin = handlersHashMap[hashBinIndex];
-	handlersHashMap[hashBinIndex] = handlerEntry;
-}
-
-bool ServerInfoParser::handleKVPair() {
-	unsigned hashBinIndex = this->keyView.getHash() % HASH_MAP_SIZE;
-	for( TokenHandler *entry = handlersHashMap[hashBinIndex]; entry; entry = entry->nextInHashBin ) {
-		if( entry->canHandle( this->keyView ) ) {
-			return entry->handle( this, this->valueView );
-		}
-	}
-
-	// If the key is unknown, return with success.
-	// Only parsing errors for known keys should terminate parsing.
-	return true;
-}
-
-template <typename T>
-bool ServerInfoParser::handleInteger( const wsw::StringView &value, T *result ) const {
-	const char *endPtr = nullptr;
-	if( auto maybeResult = Q_tonum<T>( value.data(), &endPtr ) ) {
-		if( endPtr - value.data() == value.size() ) {
-			*result = *maybeResult;
-			return true;
-		}
-	}
-	return false;
-}
-
-template<unsigned N>
-bool ServerInfoParser::handleString( const wsw::StringView &value, StaticString<N> *result ) const {
-	// Its better to pass a caller name but we do not really want adding extra parameters to this method
-	constexpr const char *function = "ServerList::ServerInfoParser::HandleString()";
-
-	const char *s = value.data();
-	if( value.size() > std::numeric_limits<uint8_t>::max() ) {
-		Com_Printf( "Warning: %s: the value `%s` exceeds result size limits\n", function, s );
-		return false;
-	}
-
-	if( value.size() >= result->capacity() ) {
-		Com_Printf( "Warning: %s: the value `%s` exceeds a result capacity %d\n", function, s, (int)result->capacity() );
-		return false;
-	}
-
-	result->setFrom( value );
-	return true;
-}
-
-bool ServerInfoParser::handleChallenge( const wsw::StringView &value ) {
-	if( !handleInteger( value, &parsedChallenge ) ) {
-		return false;
-	}
-	return parsedChallenge > lastAcknowledgedChallenge;
-}
-
-bool ServerInfoParser::handleHostname( const wsw::StringView &value ) {
-	return handleString( value, &info->serverName );
-}
-
-bool ServerInfoParser::handleMaxClients( const wsw::StringView &value ) {
-	return handleInteger( value, &info->maxClients );
-}
-
-bool ServerInfoParser::handleMapname( const wsw::StringView &value ) {
-	return handleString( value, &info->mapname );
-}
-
-static inline bool ScanInt( const char *s, char **endptr, int *result ) {
-	long maybeResult = strtol( s, endptr, 10 );
-
-	if( maybeResult == std::numeric_limits<long>::min() || maybeResult == std::numeric_limits<long>::max() ) {
-		if( errno == ERANGE ) {
-			return false;
-		}
-	}
-	*result = (int)maybeResult;
-	return true;
-}
-
-static inline bool scanMinutesAndSeconds( const char *s, char **endptr, int *minutes, int8_t *seconds ) {
-	int minutesValue, secondsValue;
-
-	if( !ScanInt( s, endptr, &minutesValue ) ) {
-		return false;
-	}
-
-	s = *endptr;
-
-	if( *s != ':' ) {
-		return false;
-	}
-	s++;
-
-	if( !ScanInt( s, endptr, &secondsValue ) ) {
-		return false;
-	}
-
-	if( minutesValue < 0 ) {
-		return false;
-	}
-
-	if( secondsValue < 0 || secondsValue > 60 ) {
-		return false;
-	}
-	*minutes = minutesValue;
-	*seconds = (int8_t)secondsValue;
-	return true;
-}
-
-#define DECLARE_MATCH_FUNC( funcName, flagString )            \
-	static inline bool funcName( const char *s, char **endptr ) { \
-		static const size_t length = strlen( flagString );        \
-		if( !strncmp( s, flagString, length ) ) {                 \
-			*endptr = const_cast<char *>( s + length );           \
-			return true;                                          \
-		}                                                         \
-		return false;                                             \
-	}
-
-DECLARE_MATCH_FUNC( MatchOvertime, "overtime" )
-DECLARE_MATCH_FUNC( MatchSuddenDeath, "suddendeath" )
-DECLARE_MATCH_FUNC( MatchInTimeout, "(in timeout)" )
-
-static wsw::StringView kTimeWarmup( "Warmup" );
-static wsw::StringView kTimeFinished( "Finished" );
-static wsw::StringView kTimeCountdown( "Countdown" );
-
-bool ServerInfoParser::handleMatchTime( const wsw::StringView &value ) {
-	if( kTimeWarmup.equalsIgnoreCase( value ) ) {
-		info->time.isWarmup = true;
-		return true;
-	}
-
-	if( kTimeFinished.equalsIgnoreCase( value ) ) {
-		info->time.isFinished = true;
-		return true;
-	}
-
-	if( kTimeCountdown.equalsIgnoreCase( value ) ) {
-		info->time.isCountdown = true;
-		return true;
-	}
-
-	char *ptr;
-	if( !scanMinutesAndSeconds( value.data(), &ptr, &info->time.timeMinutes, &info->time.timeSeconds ) ) {
-		return false;
-	}
-
-	if( ptr - value.data() == value.size() ) {
-		return true;
-	}
-
-	if( *ptr != ' ' ) {
-		return false;
-	}
-	ptr++;
-
-	if( *ptr == '/' ) {
-		ptr++;
-
-		if( *ptr != ' ' ) {
-			return false;
-		}
-		ptr++;
-
-		if( !scanMinutesAndSeconds( value.data(), &ptr, &info->time.limitMinutes, &info->time.limitSeconds ) ) {
-			return false;
-		}
-
-		if( !*ptr ) {
-			return true;
-		}
-
-		if( *ptr == ' ' ) {
-			ptr++;
-		}
-	}
-
-	for(;; ) {
-		if( *ptr == 'o' && MatchOvertime( ptr, &ptr ) ) {
-			info->time.isOvertime = true;
-			continue;
-		}
-
-		if( *ptr == 's' && MatchSuddenDeath( ptr, &ptr ) ) {
-			info->time.isSuddenDeath = true;
-			continue;
-		}
-
-		if( *ptr == '(' && MatchInTimeout( ptr, &ptr ) ) {
-			info->time.isTimeout = true;
-			continue;
-		}
-
-		if( *ptr == ' ' ) {
-			ptr++;
-			continue;
-		}
-
-		if( *ptr == '/' || *ptr == '\n' ) {
-			return true;
-		}
-
-		if( ptr - value.data() >= value.size() ) {
-			return false;
-		}
-	}
-}
-
-bool ServerInfoParser::handleMatchScore( const wsw::StringView &value ) {
-	info->score.clear();
-
-	const auto valueLength = value.size();
-	if( !valueLength ) {
-		return true;
-	}
-
-	int scores[2] = { 0, 0 };
-	unsigned offsets[2] = { 0, 0 };
-	unsigned lengths[2] = { 0, 0 };
-	const char *const valueData = value.data();
-	const char *s = valueData;
-	for( int i = 0; i < 2; ++i ) {
-		while( *s == ' ' && ( s - valueData ) < valueLength ) {
-			s++;
-		}
-		offsets[i] = (unsigned)( s - valueData );
-		// Should not use strchr here (there is no zero terminator at the end of the value)
-		while( *s != ':' && ( s - valueData ) < valueLength ) {
-			s++;
-		}
-
-		if( ( s - valueData ) >= valueLength ) {
-			return false;
-		}
-		lengths[i] = (unsigned)( s - valueData ) - offsets[i];
-
-		if( lengths[i] >= info->score.scores[0].name.capacity() ) {
-			return false;
-		}
-		s++;
-
-		if( *s != ' ' ) {
-			return false;
-		}
-		s++;
-
-		char *endptr;
-		if( !ScanInt( s, &endptr, &scores[i] ) ) {
-			return false;
-		}
-		s = endptr;
-	}
-
-	for( int i = 0; i < 2; ++i ) {
-		auto *teamScore = &info->score.scores[i];
-		teamScore->score = scores[i];
-		teamScore->name.assign( valueData + offsets[i], lengths[i] );
-	}
-
-	return true;
-}
-
-bool ServerInfoParser::handleGameFS( const wsw::StringView &value ) {
-	return handleString( value, &info->modname );
-}
-
-bool ServerInfoParser::handleGametype( const wsw::StringView &value ) {
-	return handleString( value, &info->gametype );
-}
-
-bool ServerInfoParser::handleNumBots( const wsw::StringView &value ) {
-	return handleInteger( value, &info->numBots );
-}
-
-bool ServerInfoParser::handleNumClients( const wsw::StringView &value ) {
-	return handleInteger( value, &info->numClients );
-}
-
-bool ServerInfoParser::handleNeedPass( const wsw::StringView &value ) {
-	return handleInteger( value, &info->needPassword );
-}
-
 void ServerList::parseGetStatusResponse( const socket_t *socket, const netadr_t &address, msg_t *msg ) {
-	if( !listener ) {
+	if( !m_listener ) {
 		return;
 	}
 
@@ -758,7 +280,7 @@ PlayerInfo *ServerList::parsePlayerInfo( msg_t *msg ) {
 }
 
 // TODO: Generalize and lift to Links.h
-static PlayerInfo *LinkToTail( PlayerInfo *item, PlayerInfo **listTailRef ) {
+static auto LinkToTail( PlayerInfo *item, PlayerInfo **listTailRef ) -> PlayerInfo * {
 	if( *listTailRef ) {
 		( *listTailRef )->next = item;
 	}
@@ -796,7 +318,7 @@ bool ServerList::parsePlayerInfo( msg_t *msg_, PlayerInfo **listHead ) {
 			break;
 		}
 
-		if( !ScanInt( s, &endptr, &score ) ) {
+		if( !scanInt( s, &endptr, &score ) ) {
 			return false;
 		}
 		s = endptr + 1;
@@ -805,7 +327,7 @@ bool ServerList::parsePlayerInfo( msg_t *msg_, PlayerInfo **listHead ) {
 			return false;
 		}
 
-		if( !ScanInt( s, &endptr, &ping ) ) {
+		if( !scanInt( s, &endptr, &ping ) ) {
 			return false;
 		}
 		s = endptr + 1;
@@ -844,7 +366,7 @@ bool ServerList::parsePlayerInfo( msg_t *msg_, PlayerInfo **listHead ) {
 			return false;
 		}
 
-		if( !ScanInt( s, &endptr, &team ) ) {
+		if( !scanInt( s, &endptr, &team ) ) {
 			return false;
 		}
 		s = endptr;
@@ -870,13 +392,13 @@ bool ServerList::parsePlayerInfo( msg_t *msg_, PlayerInfo **listHead ) {
 	return true;
 }
 
-PolledGameServer *ServerList::findServerByAddress( const netadr_t &address ) {
-	return findServerByAddress( address, ::NET_AddressHash( address ) % HASH_MAP_SIZE );
+auto ServerList::findServerByAddress( const netadr_t &address ) -> PolledGameServer * {
+	return findServerByAddress( address, ::NET_AddressHash( address ) % kNumHashBins );
 }
 
-PolledGameServer *ServerList::findServerByAddress( const netadr_t &address, unsigned binIndex ) {
-	for( PolledGameServer *server = serversHashBins[binIndex]; server; server = server->nextInBin() ) {
-		if( NET_CompareAddress( &server->networkAddress, &address ) ) {
+auto ServerList::findServerByAddress( const netadr_t &address, unsigned binIndex ) -> PolledGameServer * {
+	for( PolledGameServer *server = m_serversHashBins[binIndex]; server; server = server->nextInBin() ) {
+		if( NET_CompareAddress( &server->m_networkAddress, &address ) ) {
 			return server;
 		}
 	}
@@ -885,18 +407,18 @@ PolledGameServer *ServerList::findServerByAddress( const netadr_t &address, unsi
 
 void ServerList::onServerAddressReceived( const netadr_t &address ) {
 	const uint32_t hash = NET_AddressHash( address );
-	const auto binIndex = hash % HASH_MAP_SIZE;
+	const auto binIndex = hash % kNumHashBins;
 	if( findServerByAddress( address, binIndex ) ) {
 		// TODO: Touch the found server?
 		return;
 	}
 
 	auto *const server = new PolledGameServer;
-	server->networkAddress = address;
-	::Link( server, &serversHead, PolledGameServer::LIST_LINKS );
-	server->addressHash = hash;
-	server->hashBinIndex = binIndex;
-	::Link( server, &serversHashBins[binIndex], PolledGameServer::BIN_LINKS );
+	server->m_networkAddress = address;
+	::Link( server, &m_serversHead, PolledGameServer::LIST_LINKS );
+	server->m_addressHash = hash;
+	server->m_hashBinIndex = binIndex;
+	::Link( server, &m_serversHashBins[binIndex], PolledGameServer::BIN_LINKS );
 }
 
 ServerInfo::ServerInfo() {
@@ -910,17 +432,17 @@ ServerInfo::ServerInfo() {
 }
 
 ServerList::ServerList() {
-	memset( serversHashBins, 0, sizeof( serversHashBins ) );
-	this->serverInfoParser = new ServerInfoParser;
+	memset( m_serversHashBins, 0, sizeof( m_serversHashBins ) );
+	this->m_serverInfoParser = new ServerInfoParser;
 }
 
 ServerList::~ServerList() {
 	clearExistingServerList();
-	delete serverInfoParser;
+	delete m_serverInfoParser;
 }
 
 void ServerList::frame() {
-	if( !listener ) {
+	if( !m_listener ) {
 		return;
 	}
 
@@ -932,78 +454,78 @@ void ServerList::frame() {
 
 void ServerList::clearExistingServerList() {
 	PolledGameServer *nextServer;
-	for( PolledGameServer *server = serversHead; server; server = nextServer ) {
+	for( PolledGameServer *server = m_serversHead; server; server = nextServer ) {
 		nextServer = server->nextInList();
 		delete server;
 	}
 
-	serversHead = nullptr;
-	memset( serversHashBins, 0, sizeof( serversHashBins ) );
+	m_serversHead = nullptr;
+	memset( m_serversHashBins, 0, sizeof( m_serversHashBins ) );
 
-	lastMasterServerIndex = 0;
-	lastMasterServersPollAt = 0;
+	m_lastMasterServerIndex = 0;
+	m_lastMasterServersPollAt = 0;
 }
 
-void ServerList::startPushingUpdates( ServerListListener *listener_, bool showEmptyServers_, bool showPlayerInfo_ ) {
-	if( !listener_ ) {
+void ServerList::startPushingUpdates( ServerListListener *listener, bool showEmptyServers, bool showPlayerInfo ) {
+	if( !listener ) {
 		Com_Error( ERR_FATAL, "The listener is not specified" );
 	}
 
-	if( this->listener == listener_ ) {
-		if( this->showEmptyServers == showEmptyServers_ && this->showPlayerInfo == showPlayerInfo_ ) {
+	if( this->m_listener == listener ) {
+		if( this->m_showEmptyServers == showEmptyServers && this->m_showPlayerInfo == showPlayerInfo ) {
 			return;
 		}
 	}
 
-	if( this->listener ) {
+	if( this->m_listener ) {
 		clearExistingServerList();
 	}
 
-	this->listener = listener_;
-	this->showEmptyServers = showEmptyServers_;
-	this->showPlayerInfo = showPlayerInfo_;
+	this->m_listener = listener;
+	this->m_showEmptyServers = showEmptyServers;
+	this->m_showPlayerInfo = showPlayerInfo;
 }
 
 void ServerList::stopPushingUpdates() {
 	clearExistingServerList();
-	this->listener = nullptr;
+	this->m_listener = nullptr;
 }
 
 void ServerList::emitPollMasterServersPackets() {
 	const auto millisNow = Sys_Milliseconds();
 
-	if( millisNow - lastMasterServersPollAt < 750 ) {
+	if( millisNow - m_lastMasterServersPollAt < 750 ) {
 		return;
 	}
 
 	// Make the warning affected by the timer too (do not spam in console way too often), do not return prematurely
-	if( numMasterServers ) {
-		lastMasterServerIndex = ( lastMasterServerIndex + 1 ) % numMasterServers;
-		sendPollMasterServerPacket( masterServers[lastMasterServerIndex] );
+	if( m_numMasterServers ) {
+		m_lastMasterServerIndex = ( m_lastMasterServerIndex + 1 ) % m_numMasterServers;
+		sendPollMasterServerPacket( m_masterServers[m_lastMasterServerIndex] );
 	}
 
-	lastMasterServersPollAt = millisNow;
+	m_lastMasterServersPollAt = millisNow;
 }
 
 void ServerList::emitPollGameServersPackets() {
 	const auto millisNow = Sys_Milliseconds();
-	for( PolledGameServer *server = serversHead; server; server = server->nextInList() ) {
-		if( millisNow - server->lastInfoRequestSentAt < 300 ) {
+	for( PolledGameServer *server = m_serversHead; server; server = server->nextInList() ) {
+		if( millisNow - server->m_lastInfoRequestSentAt < 300 ) {
 			continue;
 		}
 		sendPollGameServerPacket( server );
-		server->lastInfoRequestSentAt = millisNow;
+		server->m_lastInfoRequestSentAt = millisNow;
 	}
 }
 
 void ServerList::dropTimedOutServers() {
 	const auto millisNow = Sys_Milliseconds();
 	PolledGameServer *nextServer;
-	for( PolledGameServer *server = serversHead; server; server = nextServer ) {
+	for( PolledGameServer *server = m_serversHead; server; server = nextServer ) {
 		nextServer = server->nextInList();
-		if( millisNow - server->lastInfoRequestSentAt < 1000 ) {
+		if( millisNow - server->m_lastInfoRequestSentAt < 1000 ) {
 			// Wait for the first info received...
-			if( server->lastInfoReceivedAt && millisNow - server->lastInfoReceivedAt > 5000 ) {
+			if( server->m_lastInfoReceivedAt && millisNow - server->m_lastInfoReceivedAt > 5000 ) {
 				dropServer( server );
 			}
 		}
@@ -1011,47 +533,47 @@ void ServerList::dropTimedOutServers() {
 }
 
 void ServerList::dropServer( PolledGameServer *server ) {
-	listener->onServerRemoved( *server );
-	Unlink( server, &serversHead, PolledGameServer::LIST_LINKS );
-	Unlink( server, &serversHashBins[server->hashBinIndex], PolledGameServer::BIN_LINKS );
+	m_listener->onServerRemoved( *server );
+	Unlink( server, &m_serversHead, PolledGameServer::LIST_LINKS );
+	Unlink( server, &m_serversHashBins[server->m_hashBinIndex], PolledGameServer::BIN_LINKS );
 	delete server;
 }
 
 void ServerList::sendPollMasterServerPacket( const netadr_t &address ) {
 	socket_t *socket = ( address.type == NA_IP ) ? &cls.socket_udp : &cls.socket_udp6;
-	const char *empty = showEmptyServers ? "empty" : "";
+	const char *empty = m_showEmptyServers ? "empty" : "";
 	Netchan_OutOfBandPrint( socket, &address, "getservers Warsow %d full%s", 22, empty );
 }
 
 void ServerList::sendPollGameServerPacket( PolledGameServer *server ) {
 	uint64_t challenge = Sys_Milliseconds();
-	socket_t *socket = ( server->networkAddress.type == NA_IP ) ? &cls.socket_udp : &cls.socket_udp6;
-	if( showPlayerInfo ) {
-		Netchan_OutOfBandPrint( socket, &server->networkAddress, "getstatus %" PRIu64, challenge );
+	socket_t *socket = ( server->m_networkAddress.type == NA_IP ) ? &cls.socket_udp : &cls.socket_udp6;
+	if( m_showPlayerInfo ) {
+		Netchan_OutOfBandPrint( socket, &server->m_networkAddress, "getstatus %" PRIu64, challenge );
 	} else {
-		Netchan_OutOfBandPrint( socket, &server->networkAddress, "getinfo %" PRIu64, challenge );
+		Netchan_OutOfBandPrint( socket, &server->m_networkAddress, "getinfo %" PRIu64, challenge );
 	}
 }
 
 void ServerList::onNewServerInfo( PolledGameServer *server, ServerInfo *newServerInfo ) {
-	if( server->oldInfo ) {
-		delete server->oldInfo;
-		assert( server->currInfo );
-		server->oldInfo = server->currInfo;
+	if( server->m_oldInfo ) {
+		delete server->m_oldInfo;
+		assert( server->m_currInfo );
+		server->m_oldInfo = server->m_currInfo;
 	}
 
-	server->oldInfo = server->currInfo;
-	server->currInfo = newServerInfo;
-	server->lastInfoReceivedAt = Sys_Milliseconds();
+	server->m_oldInfo = server->m_currInfo;
+	server->m_currInfo = newServerInfo;
+	server->m_lastInfoReceivedAt = Sys_Milliseconds();
 
-	if( !newServerInfo->matchesOld( server->oldInfo ) ) {
-		if( server->oldInfo ) {
-			listener->onServerUpdated( *server );
+	if( !newServerInfo->matchesOld( server->m_oldInfo ) ) {
+		if( server->m_oldInfo ) {
+			m_listener->onServerUpdated( *server );
 		} else {
 			// Defer server addition until a first info arrives.
 			// Otherwise there is just nothing to show in a server browser.
 			// If there is no old info, the listener has not been notified about a new server yet.
-			listener->onServerAdded( *server );
+			m_listener->onServerAdded( *server );
 		}
 	}
 }

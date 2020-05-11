@@ -3,6 +3,8 @@
 
 #include "../qcommon/qcommon.h"
 #include "../qcommon/wswstdtypes.h"
+#include "../game/ai/static_vector.h"
+#include "serverinfoparser.h"
 
 #include <atomic>
 
@@ -196,61 +198,75 @@ class PolledGameServer {
 	PolledGameServer *nextInBin() { return next[BIN_LINKS]; }
 	PolledGameServer *nextInList() { return next[LIST_LINKS]; }
 
-	uint32_t addressHash { 0 };
-	unsigned hashBinIndex { 0 };
-	netadr_t networkAddress {};
+	uint32_t m_addressHash { 0 };
+	unsigned m_hashBinIndex { 0 };
+	netadr_t m_networkAddress {};
 
-	ServerInfo *currInfo { nullptr };
-	ServerInfo *oldInfo { nullptr };
+	ServerInfo *m_currInfo { nullptr };
+	ServerInfo *m_oldInfo { nullptr };
 
-	int64_t lastInfoRequestSentAt { 0 };
-	int64_t lastInfoReceivedAt { 0 };
+	int64_t m_lastInfoRequestSentAt { 0 };
+	int64_t m_lastInfoReceivedAt { 0 };
 
-	uint64_t lastAcknowledgedChallenge { 0 };
+	uint64_t m_lastAcknowledgedChallenge { 0 };
 
-	unsigned instanceId { 0 };
+	unsigned m_instanceId { 0 };
 
 	const ServerInfo *CheckInfo() const {
-		assert( currInfo );
-		return currInfo;
+		assert( m_currInfo );
+		return m_currInfo;
 	}
 
 public:
 	~PolledGameServer() {
-		delete currInfo;
-		delete oldInfo;
+		delete m_currInfo;
+		delete m_oldInfo;
 	}
 
-	unsigned getInstanceId() const { return instanceId; }
+	[[nodiscard]]
+	auto getInstanceId() const -> unsigned { return m_instanceId; }
 
-	const netadr_t &getAddress() const { return networkAddress; }
+	[[nodiscard]]
+	auto getAddress() const -> const netadr_t & { return m_networkAddress; }
 
-	const wsw::StringView getServerName() const {
+	[[nodiscard]]
+	auto getServerName() const -> const wsw::StringView {
 		return CheckInfo()->serverName.asView();
 	}
 
-	const wsw::StringView getModName() const {
+	[[nodiscard]]
+	auto getModName() const -> const wsw::StringView {
 		return CheckInfo()->modname.asView();
 	}
 
-	const wsw::StringView getGametype() const {
+	[[nodiscard]]
+	auto getGametype() const -> const wsw::StringView {
 		return CheckInfo()->gametype.asView();
 	}
 
-	const wsw::StringView getMapName() const {
+	[[nodiscard]]
+	auto getMapName() const -> const wsw::StringView {
 		return CheckInfo()->mapname.asView();
 	}
 
-	const MatchTime &getTime() const { return CheckInfo()->time; }
-	const MatchScore &getScore() const { return CheckInfo()->score; }
+	[[nodiscard]]
+	auto getTime() const -> const MatchTime & { return CheckInfo()->time; }
+	[[nodiscard]]
+	auto getScore() const -> const MatchScore & { return CheckInfo()->score; }
 
-	uint8_t getMaxClients() const { return CheckInfo()->maxClients; }
-	uint8_t getNumClients() const { return CheckInfo()->numClients; }
-	uint8_t getNumBots() const { return CheckInfo()->numBots; }
+	[[nodiscard]]
+	auto getMaxClients() const -> int { return CheckInfo()->maxClients; }
+	[[nodiscard]]
+	auto getNumClients() const -> int { return CheckInfo()->numClients; }
+	[[nodiscard]]
+	auto getNumBots() const -> int { return CheckInfo()->numBots; }
+	[[nodiscard]]
 	bool hasPlayerInfo() const { return CheckInfo()->hasPlayerInfo; }
+	[[nodiscard]]
 	bool needPassword() const { return CheckInfo()->needPassword; }
 
-	PlayerInfo *getPlayerInfoHead() const { return CheckInfo()->playerInfoHead; }
+	[[nodiscard]]
+	auto getPlayerInfoHead() const -> const PlayerInfo * { return CheckInfo()->playerInfoHead; }
 };
 
 class ServerListListener {
@@ -267,34 +283,39 @@ class ServerInfoParser;
 class ServerList {
 	template <typename> friend class SingletonHolder;
 
-	ServerListListener *listener { nullptr };
+	ServerListListener *m_listener { nullptr };
 
-	PolledGameServer *serversHead { nullptr };
+	PolledGameServer *m_serversHead { nullptr };
 
-	static constexpr unsigned HASH_MAP_SIZE = 97;
-	PolledGameServer *serversHashBins[HASH_MAP_SIZE];
+	static constexpr unsigned kNumHashBins = 97;
+	PolledGameServer *m_serversHashBins[kNumHashBins];
 
-	enum { MAX_MASTER_SERVERS = 4 };
+	static constexpr unsigned kMaxMasterServers = 4;
+	netadr_t m_masterServers[kMaxMasterServers];
 
-	netadr_t masterServers[MAX_MASTER_SERVERS];
-	unsigned numMasterServers { 0 };
+	unsigned m_numMasterServers { 0 };
 
-	int64_t lastMasterServersPollAt { 0 };
-	unsigned lastMasterServerIndex { 0 };
+	int64_t m_lastMasterServersPollAt { 0 };
+	unsigned m_lastMasterServerIndex { 0 };
 
-	bool showEmptyServers { false };
-	bool showPlayerInfo { true };
+	bool m_showEmptyServers { false };
+	bool m_showPlayerInfo { true };
 
 	void onNewServerInfo( PolledGameServer *server, ServerInfo *parsedServerInfo );
 
-	ServerInfoParser *serverInfoParser;
+	ServerInfoParser *m_serverInfoParser;
 
-	ServerInfo *parseServerInfo( msg_t *msg, PolledGameServer *server );
-	PlayerInfo *parsePlayerInfo( msg_t *msg );
+	[[nodiscard]]
+	auto parseServerInfo( msg_t *msg, PolledGameServer *server ) -> ServerInfo *;
+	[[nodiscard]]
+	auto parsePlayerInfo( msg_t *msg ) -> PlayerInfo *;
+	[[nodiscard]]
 	bool parsePlayerInfo( msg_t *msg, PlayerInfo **listHead );
 
-	PolledGameServer *findServerByAddress( const netadr_t &address );
-	PolledGameServer *findServerByAddress( const netadr_t &address, unsigned binIndex );
+	[[nodiscard]]
+	auto findServerByAddress( const netadr_t &address ) -> PolledGameServer *;
+	[[nodiscard]]
+	auto findServerByAddress( const netadr_t &address, unsigned binIndex ) -> PolledGameServer *;
 
 	void emitPollMasterServersPackets();
 	void sendPollMasterServerPacket( const netadr_t &address );
@@ -310,8 +331,8 @@ class ServerList {
 	static void *resolverThreadFunc( void * );
 
 	void addMasterServer( const netadr_t &address ) {
-		assert( numMasterServers < MAX_MASTER_SERVERS );
-		masterServers[numMasterServers++] = address;
+		assert( m_numMasterServers < kMaxMasterServers );
+		m_masterServers[m_numMasterServers++] = address;
 	}
 
 	// TODO: Should not be called directly by global context
@@ -322,7 +343,7 @@ class ServerList {
 public:
 	static void init();
 	static void shutdown();
-	static ServerList *instance();
+	static auto instance() -> ServerList *;
 
 	void startPushingUpdates( ServerListListener *listener_, bool showEmptyServers_, bool showPlayerInfo_ );
 	void stopPushingUpdates();
