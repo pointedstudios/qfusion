@@ -171,18 +171,28 @@ inline bool NextReachDirsCollector::CheckForStairsCluster( int areaNum ) {
 
 bool NextReachDirsCollector::Accept( int, const aas_reachability_t &reach, int ) {
 	const auto travelType = ( reach.traveltype & TRAVELTYPE_MASK );
-	if( travelType != TRAVEL_WALK && travelType != TRAVEL_WALKOFFLEDGE ) {
-		// Interrupt walking reach chain at this
-		return false;
+	const int areaNum = reach.areanum;
+	const auto &__restrict areaSettings = aasAreaSettings[areaNum];
+
+	if( travelType != TRAVEL_WALK ) {
+		if( travelType == TRAVEL_WALKOFFLEDGE ) {
+			if( !( areaSettings.areaflags & AREA_NOFALL ) ) {
+				return false;
+			}
+		} else if( travelType == TRAVEL_BARRIERJUMP ) {
+			if( reach.end[2] - reach.start[2] > 40.0f ) {
+				return false;
+			}
+		} else {
+			return false;
+		}
 	}
 
-	const int areaNum = reach.areanum;
 	if( !CheckForStairsCluster( areaNum ) ) {
 		// Skip the area and continue walking
 		return true;
 	}
 
-	const auto &__restrict areaSettings = aasAreaSettings[areaNum];
 	// Skip the area and continue walking if these conditions are unmet
 	if( areaSettings.contents & AREACONTENTS_DONOTENTER ) {
 		return true;

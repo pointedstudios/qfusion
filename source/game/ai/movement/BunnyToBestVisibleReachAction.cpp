@@ -12,8 +12,8 @@ struct Walker : public ReachChainWalker {
 		, botOrigin( context->movementState->entityPhysicsState.Origin() )
 		, aasWorld( AiAasWorld::Instance() ) {}
 
-	bool TestReachVis( const aas_reachability_t &reach );
-	bool PerformRaycast( const aas_reachability_t &reach );
+	bool TestReachVis( const aas_reachability_t &reach, float playerZOffset = 0.0f, float reachZOffset = 12.0f );
+	bool PerformRaycast( const aas_reachability_t &reach, float playerZOffset, float reachZOffset );
 
 	bool Accept( int, const aas_reachability_t &reach, int travelTime ) override;
 
@@ -53,7 +53,14 @@ bool Walker::Accept( int, const aas_reachability_t &reach, int travelTime ) {
 	}
 
 	if( travelType != TRAVEL_WALKOFFLEDGE ) {
-		return false;
+		if( travelType != TRAVEL_BARRIERJUMP ) {
+			return false;
+		}
+		if( reach.end[2] - reach.start[2] > 40.0f ) {
+			return false;
+		}
+		const float playerZOffset = playerbox_stand_viewheight;
+		return TestReachVis( reach, playerZOffset );
 	}
 
 	if( reach.start[2] - reach.end[2] < 40.0f ) {
@@ -67,7 +74,7 @@ bool Walker::Accept( int, const aas_reachability_t &reach, int travelTime ) {
 	return false;
 }
 
-bool Walker::PerformRaycast( const aas_reachability_t &reach ) {
+bool Walker::PerformRaycast( const aas_reachability_t &reach, float playerZOffset, float reachZOffset ) {
 	const auto *__restrict clusterNums = aasWorld->AreaFloorClusterNums();
 	if( clusterNums[startAreaNum] && clusterNums[startAreaNum] == clusterNums[lastAreaNum] ) {
 		return aasWorld->IsAreaWalkableInFloorCluster( startAreaNum, lastAreaNum );
@@ -76,13 +83,15 @@ bool Walker::PerformRaycast( const aas_reachability_t &reach ) {
 	trace_t trace;
 	// Calling TraceArcInSolidWorld() seems to be way too expensive.
 	// The reach chain gets straightened every prediction frame.
+	Vec3 traceStart( botOrigin );
+	traceStart.Z() += playerZOffset;
 	Vec3 traceEnd( reach.start );
-	traceEnd.Z() += 24.0f;
-	SolidWorldTrace( &trace, botOrigin, traceEnd.Data() );
+	traceEnd.Z() += reachZOffset;
+	SolidWorldTrace( &trace, traceStart.Data(), traceEnd.Data() );
 	return trace.fraction == 1.0f;
 }
 
-bool Walker::TestReachVis( const aas_reachability_t &reach ) {
+bool Walker::TestReachVis( const aas_reachability_t &reach, float playerZOffset, float reachZOffset ) {
 	const float squareDistance = Distance2DSquared( botOrigin, reach.start );
 	float markReachThreshold = 144.0f;
 
@@ -96,7 +105,7 @@ bool Walker::TestReachVis( const aas_reachability_t &reach ) {
 			return false;
 		}
 
-		if( !PerformRaycast( reach ) ) {
+		if( !PerformRaycast( reach, playerZOffset, reachZOffset ) ) {
 			return false;
 		}
 	}
