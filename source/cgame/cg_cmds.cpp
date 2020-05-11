@@ -459,29 +459,6 @@ static void CG_SC_ChannelRemove( void ) {
  * @return match message text
  */
 static const char *CG_MatchMessageString( matchmessage_t mm ) {
-	if( ( IN_SupportedDevices() & ( IN_DEVICE_KEYBOARD | IN_DEVICE_MOUSE ) ) != ( IN_DEVICE_KEYBOARD | IN_DEVICE_MOUSE ) ) {
-		switch( mm ) {
-			case MATCHMESSAGE_CHALLENGERS_QUEUE:
-				return "You are inside the challengers queue waiting for your turn to play.\n"
-					   "Use the in-game menu to exit the queue.";
-
-			case MATCHMESSAGE_ENTER_CHALLENGERS_QUEUE:
-				return "Use the in-game menu to enter the challengers queue.\n"
-					   "Only players in the queue will have a turn to play against the last winner.";
-
-			case MATCHMESSAGE_GET_READY:
-				return "Set yourself READY using the in-game menu to start the match!";
-
-			case MATCHMESSAGE_WAITING_FOR_PLAYERS:
-				return "Waiting for players.";
-
-			default:
-				return "";
-		}
-
-		return "";
-	}
-
 	switch( mm ) {
 		case MATCHMESSAGE_CHALLENGERS_QUEUE:
 			return "'ESC' for in-game menu or 'ENTER' for in-game chat.\n"

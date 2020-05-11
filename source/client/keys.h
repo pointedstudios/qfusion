@@ -36,10 +36,3 @@ const char *Key_KeynumToString( int keynum );
 
 int Key_StringToKeynum( const char *str );
 bool Key_IsDown( int keynum );
-
-// wsw : aiwa : delegate pattern to forward key strokes to arbitrary code
-// delegates can be stacked, the topmost delegate is sent the key
-typedef void ( *key_delegate_f )( int key, bool *key_down );
-typedef void ( *key_char_delegate_f )( wchar_t c );
-keydest_t Key_DelegatePush( key_delegate_f key_del, key_char_delegate_f char_del );  // returns previous dest
-void Key_DelegatePop( keydest_t next_dest );

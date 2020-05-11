@@ -25,10 +25,7 @@ void VID_SetProcessDPIAware( void );
 
 void CL_Sys_Init( void ) {
 	VID_SetProcessDPIAware();
-
-	IN_WinIME_Init();
 }
 
 void CL_Sys_Shutdown( void ) {
-	IN_WinIME_Shutdown();
 }

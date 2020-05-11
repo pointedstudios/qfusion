@@ -163,7 +163,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 
             "../sdl/sdl_input.cpp"
             "../sdl/sdl_input_joy.cpp"
-            "../sdl/sdl_input_win.cpp"
             "../sdl/sdl_vid.cpp"
             "../sdl/sdl_sys.cpp"
             "../sdl/sdl_clipboard.cpp"
@@ -254,7 +253,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 
             "../sdl/sdl_input.cpp"
             "../sdl/sdl_input_joy.cpp"
-            "../sdl/sdl_input_unix.cpp"
             "../sdl/sdl_vid.cpp"
             "../sdl/sdl_sys.cpp"
             "../sdl/sdl_clipboard.cpp"

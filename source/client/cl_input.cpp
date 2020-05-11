@@ -37,8 +37,6 @@ static void CL_CreateNewUserCommand( int realMsec );
 * CL_ClearInputState
 */
 void CL_ClearInputState( void ) {
-	IN_ShowSoftKeyboard( false );
-
 	Key_ClearStates();
 
 	if( CL_GetKeyDest() == key_game ) {

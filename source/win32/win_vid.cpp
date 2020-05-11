@@ -330,7 +330,6 @@ LONG WINAPI MainWndProc(
 		case WM_CREATE:
 			cl_hwnd = hWnd;
 			cl_parent_hwnd = GetParent( hWnd );
-			IN_WinIME_AssociateContext();
 			AppActivate( TRUE, FALSE, FALSE );
 			MSH_MOUSEWHEEL = RegisterWindowMessage( "MSWHEEL_ROLLMSG" );
 			break;
@@ -342,7 +341,6 @@ LONG WINAPI MainWndProc(
 			// let sound and input know about this?
 			cl_hwnd = NULL;
 			cl_parent_hwnd = NULL;
-			IN_WinIME_AssociateContext();
 			AppActivate( FALSE, FALSE, TRUE );
 			break;
 
