@@ -9,10 +9,15 @@
         <file>CVarAwareTextField.qml</file>
         <file>DemoPlaybackMenu.qml</file>
         <file>DemosPage.qml</file>
+        <file>GeneralSettings.qml</file>
+        <file>GraphicsSettings.qml</file>
         <file>HelpPage.qml</file>
+        <file>HudSettings.qml</file>
         <file>InGameMenu.qml</file>
+        <file>KeyboardSettings.qml</file>
         <file>LocalGamePage.qml</file>
         <file>MainMenu.qml</file>
+        <file>MouseSettings.qml</file>
         <file>NativelyDrawnImage.qml</file>
         <file>NativelyDrawnModel.qml</file>
         <file>NewsPage.qml</file>
@@ -22,6 +27,8 @@
         <file>RespectTokensMenu.qml</file>
         <file>RootItem.qml</file>
         <file>SettingsPage.qml</file>
+        <file>SoundSettings.qml</file>
+        <file>TeamsSettings.qml</file>
         <file>logo.webp</file>
         <file>qtquickcontrols2.conf</file>
     </qresource>
