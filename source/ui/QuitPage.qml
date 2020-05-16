@@ -13,24 +13,25 @@ Item {
         id: popup
         modal: true
         focus: true
+        dim: false
         closePolicy: Popup.NoAutoClose
         anchors.centerIn: parent
         width: 280
         height: 220
 
-        Overlay.modal: Rectangle { color: "#3A885500" }
-
         function openSelf() {
             popup.parent = rootItem.windowContentItem
+            rootItem.enablePopupOverlay()
             popup.open()
         }
 
         function closeSelf() {
-            if (!visible) {
+            if (!opened) {
                 return
             }
 
             popup.close()
+            rootItem.disablePopupOverlay()
             quitPage.backTrigger()
         }
 

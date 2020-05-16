@@ -30,4 +30,24 @@ Item {
     InGameMenu {
         id: inGameMenu
     }
+
+    MouseArea {
+        id: popupOverlay
+        visible: false
+        hoverEnabled: true
+        anchors.fill: parent
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#3A885500"
+        }
+    }
+
+    function enablePopupOverlay() {
+        popupOverlay.visible = true
+    }
+
+    function disablePopupOverlay() {
+        popupOverlay.visible = false
+    }
 }
