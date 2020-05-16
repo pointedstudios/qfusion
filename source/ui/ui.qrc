@@ -26,6 +26,7 @@
         <file>QuitPage.qml</file>
         <file>RespectTokensMenu.qml</file>
         <file>RootItem.qml</file>
+        <file>SettingsLabel.qml</file>
         <file>SettingsPage.qml</file>
         <file>SoundSettings.qml</file>
         <file>TeamsSettings.qml</file>
