@@ -13,7 +13,10 @@
         <file>GraphicsSettings.qml</file>
         <file>HelpPage.qml</file>
         <file>HudSettings.qml</file>
+        <file>InGameCallvotesPage.qml</file>
+        <file>InGameGeneralPage.qml</file>
         <file>InGameMenu.qml</file>
+        <file>InGamePlayersPage.qml</file>
         <file>KeyboardSettings.qml</file>
         <file>LocalGamePage.qml</file>
         <file>MainMenu.qml</file>
