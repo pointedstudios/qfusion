@@ -217,7 +217,6 @@ void ServerList::parseGetInfoResponse( const socket_t *socket, const netadr_t &a
 		return;
 	}
 
-	parsedServerInfo->hasPlayerInfo = false;
 	onNewServerInfo( server, parsedServerInfo );
 }
 
@@ -247,36 +246,16 @@ void ServerList::parseGetStatusResponse( const socket_t *socket, const netadr_t 
 		return;
 	}
 
-	PlayerInfo *parsedPlayerInfo = nullptr;
-
 	// ParsePlayerInfo() returns a null pointer if there is no clients.
 	// Avoid qualifying this case as a parsing failure, do an actual parsing only if there are clients.
 	if( parsedServerInfo->numClients ) {
-		if( !( parsedPlayerInfo = parsePlayerInfo( msg ) ) ) {
+		if( !( parsePlayerInfo( msg, parsedServerInfo ) ) ) {
 			delete parsedServerInfo;
 			return;
 		}
-		parsedServerInfo->playerInfoHead = parsedPlayerInfo;
 	}
 
-	parsedServerInfo->hasPlayerInfo = true;
 	onNewServerInfo( server, parsedServerInfo );
-}
-
-PlayerInfo *ServerList::parsePlayerInfo( msg_t *msg ) {
-	PlayerInfo *listHead = nullptr;
-
-	if( parsePlayerInfo( msg, &listHead ) ) {
-		return listHead;
-	}
-
-	PlayerInfo *nextInfo;
-	for( PlayerInfo *info = listHead; info; info = nextInfo ) {
-		nextInfo = info->next;
-		delete info;
-	}
-
-	return nullptr;
 }
 
 // TODO: Generalize and lift to Links.h
@@ -290,7 +269,7 @@ static auto LinkToTail( PlayerInfo *item, PlayerInfo **listTailRef ) -> PlayerIn
 	return item;
 }
 
-bool ServerList::parsePlayerInfo( msg_t *msg_, PlayerInfo **listHead ) {
+bool ServerList::parsePlayerInfo( msg_t *msg_, ServerInfo *serverInfo ) {
 	const char *chars = (const char *)( msg_->data + msg_->readcount );
 
 	const unsigned currSize = msg_->cursize;
@@ -299,7 +278,7 @@ bool ServerList::parsePlayerInfo( msg_t *msg_, PlayerInfo **listHead ) {
 	unsigned bytesLeft = currSize - readCount;
 	const char *s = chars;
 
-	PlayerInfo *listTail = nullptr;
+	PlayerInfo *listTail[4] = { nullptr, nullptr, nullptr, nullptr };
 
 	// Skip '\n' at the beginning (if any)
 	if( *s == '\n' ) {
@@ -369,8 +348,12 @@ bool ServerList::parsePlayerInfo( msg_t *msg_, PlayerInfo **listHead ) {
 		if( !scanInt( s, &endptr, &team ) ) {
 			return false;
 		}
-		s = endptr;
 
+		if( (unsigned)team > 3u ) {
+			return false;
+		}
+
+		s = endptr;
 		if( *s != '\n' ) {
 			return false;
 		}
@@ -378,14 +361,17 @@ bool ServerList::parsePlayerInfo( msg_t *msg_, PlayerInfo **listHead ) {
 		auto *playerInfo = new PlayerInfo;
 		playerInfo->score = score;
 		playerInfo->name.assign( chars + nameStart, nameLength );
-		playerInfo->ping = (uint16_t)ping;
-		playerInfo->team = (uint8_t)team;
+		playerInfo->ping = ping;
+		playerInfo->team = team;
 
-		if( !*listHead ) {
-			*listHead = playerInfo;
+		if( !serverInfo->teamInfoHeads[team] ) {
+			serverInfo->teamInfoHeads[team] = playerInfo;
+			listTail[team] = playerInfo;
+		} else {
+			::LinkToTail( playerInfo, &listTail[team] );
 		}
 
-		::LinkToTail( playerInfo, &listTail );
+		serverInfo->numTeamPlayers[team]++;
 		s++;
 	}
 
@@ -421,23 +407,18 @@ void ServerList::onServerAddressReceived( const netadr_t &address ) {
 	::Link( server, &m_serversHashBins[binIndex], PolledGameServer::BIN_LINKS );
 }
 
-ServerInfo::ServerInfo() {
-	time.clear();
-	score.clear();
-	hasPlayerInfo = false;
-	playerInfoHead = nullptr;
-	maxClients = 0;
-	numClients = 0;
-	numBots = 0;
-}
-
 ServerList::ServerList() {
 	memset( m_serversHashBins, 0, sizeof( m_serversHashBins ) );
 	this->m_serverInfoParser = new ServerInfoParser;
 }
 
 ServerList::~ServerList() {
-	clearExistingServerList();
+	PolledGameServer *nextServer;
+	for( PolledGameServer *server = m_serversHead; server; server = nextServer ) {
+		nextServer = server->nextInList();
+		delete server;
+	}
+
 	delete m_serverInfoParser;
 }
 
@@ -452,20 +433,6 @@ void ServerList::frame() {
 	emitPollGameServersPackets();
 }
 
-void ServerList::clearExistingServerList() {
-	PolledGameServer *nextServer;
-	for( PolledGameServer *server = m_serversHead; server; server = nextServer ) {
-		nextServer = server->nextInList();
-		delete server;
-	}
-
-	m_serversHead = nullptr;
-	memset( m_serversHashBins, 0, sizeof( m_serversHashBins ) );
-
-	m_lastMasterServerIndex = 0;
-	m_lastMasterServersPollAt = 0;
-}
-
 void ServerList::startPushingUpdates( ServerListListener *listener, bool showEmptyServers, bool showPlayerInfo ) {
 	if( !listener ) {
 		Com_Error( ERR_FATAL, "The listener is not specified" );
@@ -477,24 +444,19 @@ void ServerList::startPushingUpdates( ServerListListener *listener, bool showEmp
 		}
 	}
 
-	if( this->m_listener ) {
-		clearExistingServerList();
-	}
-
 	this->m_listener = listener;
 	this->m_showEmptyServers = showEmptyServers;
 	this->m_showPlayerInfo = showPlayerInfo;
 }
 
 void ServerList::stopPushingUpdates() {
-	clearExistingServerList();
 	this->m_listener = nullptr;
 }
 
 void ServerList::emitPollMasterServersPackets() {
 	const auto millisNow = Sys_Milliseconds();
 
-	if( millisNow - m_lastMasterServersPollAt < 750 ) {
+	if( millisNow - m_lastMasterServersPollAt < 1500 ) {
 		return;
 	}
 
@@ -510,7 +472,7 @@ void ServerList::emitPollMasterServersPackets() {
 void ServerList::emitPollGameServersPackets() {
 	const auto millisNow = Sys_Milliseconds();
 	for( PolledGameServer *server = m_serversHead; server; server = server->nextInList() ) {
-		if( millisNow - server->m_lastInfoRequestSentAt < 300 ) {
+		if( millisNow - server->m_lastInfoRequestSentAt < 750 ) {
 			continue;
 		}
 		sendPollGameServerPacket( server );
@@ -533,7 +495,7 @@ void ServerList::dropTimedOutServers() {
 }
 
 void ServerList::dropServer( PolledGameServer *server ) {
-	m_listener->onServerRemoved( *server );
+	m_listener->onServerRemoved( server );
 	Unlink( server, &m_serversHead, PolledGameServer::LIST_LINKS );
 	Unlink( server, &m_serversHashBins[server->m_hashBinIndex], PolledGameServer::BIN_LINKS );
 	delete server;
@@ -568,12 +530,12 @@ void ServerList::onNewServerInfo( PolledGameServer *server, ServerInfo *newServe
 
 	if( !newServerInfo->matchesOld( server->m_oldInfo ) ) {
 		if( server->m_oldInfo ) {
-			m_listener->onServerUpdated( *server );
+			m_listener->onServerUpdated( server );
 		} else {
 			// Defer server addition until a first info arrives.
 			// Otherwise there is just nothing to show in a server browser.
 			// If there is no old info, the listener has not been notified about a new server yet.
-			m_listener->onServerAdded( *server );
+			m_listener->onServerAdded( server );
 		}
 	}
 }
@@ -615,11 +577,34 @@ bool PlayerInfo::operator==( const PlayerInfo &that ) const {
 	return this->name == that.name;
 }
 
-ServerInfo::~ServerInfo() {
+void ServerInfo::clearPlayerInfo( PlayerInfo *infoHead ) {
 	PlayerInfo *nextInfo;
-	for( PlayerInfo *info = playerInfoHead; info; info = nextInfo ) {
+	for( PlayerInfo *info = infoHead; info; info = nextInfo ) {
 		nextInfo = info->next;
 		delete info;
+	}
+}
+
+ServerInfo::~ServerInfo() {
+	for( auto *infoHead: teamInfoHeads ) {
+		clearPlayerInfo( infoHead );
+	}
+}
+
+bool ServerInfo::comparePlayersList( const PlayerInfo *list1, const PlayerInfo *list2 ) {
+	for(;; ) {
+		if( !list1 ) {
+			return !list2;
+		}
+		if( !list2 ) {
+			return false;
+		}
+		if( *list1 != *list2 ) {
+			return false;
+		}
+
+		list1 = list1->next;
+		list2 = list2->next;
 	}
 }
 
@@ -638,30 +623,13 @@ bool ServerInfo::matchesOld( ServerInfo *oldInfo ) {
 		return false;
 	}
 
-	if( this->hasPlayerInfo && oldInfo->hasPlayerInfo ) {
-		PlayerInfo *thisInfo = this->playerInfoHead;
-		PlayerInfo *thatInfo = oldInfo->playerInfoHead;
-
-		for(;; ) {
-			if( !thisInfo ) {
-				if( !thatInfo ) {
-					break;
-				}
-				return false;
-			}
-
-			if( !thatInfo ) {
-				return false;
-			}
-
-			if( *thisInfo != *thatInfo ) {
-				return false;
-			}
-
-			thisInfo++, thatInfo++;
+	for( int i = 0; i < 4; ++i ) {
+		if( this->numTeamPlayers[i] != oldInfo->numTeamPlayers[i] ) {
+			return false;
 		}
-	} else if( this->hasPlayerInfo != oldInfo->hasPlayerInfo ) {
-		return false;
+		if( !comparePlayersList( teamInfoHeads[i], oldInfo->teamInfoHeads[i] ) ) {
+			return false;
+		}
 	}
 
 	if( this->score != oldInfo->score ) {

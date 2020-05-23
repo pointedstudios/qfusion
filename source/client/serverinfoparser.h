@@ -4,7 +4,7 @@
 #include "../qcommon/wswstdtypes.h"
 #include "../game/ai/static_vector.h"
 
-struct ServerInfo;
+class ServerInfo;
 struct msg_s;
 template <unsigned> class StaticString;
 
@@ -44,7 +44,7 @@ class ServerInfoParser {
 		}
 	};
 
-	StaticVector<HandlerMethod, 16> m_handlers;
+	StaticVector<TokenHandler, 16> m_handlers;
 
 	static constexpr auto kNumHashBins = 17;
 	TokenHandler *m_handlersHashMap[kNumHashBins];

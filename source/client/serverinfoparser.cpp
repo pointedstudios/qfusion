@@ -186,7 +186,7 @@ bool ServerInfoParser::handleMapname( const wsw::StringView &value ) {
 	return handleString( value, &m_info->mapname );
 }
 
-static inline bool scanMinutesAndSeconds( const char *s, char **endptr, int *minutes, int8_t *seconds ) {
+static inline bool scanMinutesAndSeconds( const char *s, char **endptr, int *minutes, int *seconds ) {
 	int minutesValue, secondsValue;
 
 	if( !scanInt( s, endptr, &minutesValue ) ) {
@@ -212,7 +212,7 @@ static inline bool scanMinutesAndSeconds( const char *s, char **endptr, int *min
 		return false;
 	}
 	*minutes = minutesValue;
-	*seconds = (int8_t)secondsValue;
+	*seconds = secondsValue;
 	return true;
 }
 

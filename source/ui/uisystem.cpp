@@ -5,6 +5,7 @@
 #include "../client/client.h"
 #include "../game/ai/static_vector.h"
 #include "nativelydrawnitems.h"
+#include "serverlistmodel.h"
 
 #include <QGuiApplication>
 #include <QOpenGLContext>
@@ -84,6 +85,20 @@ public:
 	Q_INVOKABLE void returnFromInGameMenu();
 	Q_INVOKABLE void returnFromMainMenu();
 	Q_INVOKABLE void quit();
+
+	Q_INVOKABLE void startServerListUpdates();
+	Q_INVOKABLE void stopServerListUpdates();
+
+	Q_PROPERTY( QColor black MEMBER m_colorBlack CONSTANT );
+	Q_PROPERTY( QColor red MEMBER m_colorRed CONSTANT );
+	Q_PROPERTY( QColor green MEMBER m_colorGreen CONSTANT );
+	Q_PROPERTY( QColor yellow MEMBER m_colorYellow CONSTANT );
+	Q_PROPERTY( QColor blue MEMBER m_colorBlue CONSTANT );
+	Q_PROPERTY( QColor cyan MEMBER m_colorCyan CONSTANT );
+	Q_PROPERTY( QColor magenta MEMBER m_colorMagenta CONSTANT );
+	Q_PROPERTY( QColor white MEMBER m_colorWhite CONSTANT );
+	Q_PROPERTY( QColor orange MEMBER m_colorOrange CONSTANT );
+	Q_PROPERTY( QColor grey MEMBER m_colorGrey CONSTANT );
 signals:
 	Q_SIGNAL void isShowingMainMenuChanged( bool isShowingMainMenu );
 	Q_SIGNAL void isShowingInGameMenuChanged( bool isShowingInGameMenu );
@@ -111,6 +126,8 @@ private:
 	bool m_hasPendingRedraw { false };
 	bool m_isInUIRenderingMode { false };
 	bool m_isValidAndReady { false };
+
+	ServerListModel *m_serverListModel { nullptr };
 
 	// A copy of last frame client properties for state change detection without intrusive changes to client code.
 	// Use a separate scope for clarity and for avoiding name conflicts.
@@ -149,6 +166,23 @@ private:
 	QSet<QQuickItem *> m_cvarAwareControls;
 
 	QMap<QQuickItem *, QPair<QVariant, cvar_t *>> m_pendingCVarChanges;
+
+	[[nodiscard]]
+	static auto colorForNum( int num ) -> QColor {
+		const auto *v = color_table[num];
+		return QColor::fromRgbF( v[0], v[1], v[2] );
+	}
+
+	const QColor m_colorBlack { colorForNum( 0 ) };
+	const QColor m_colorRed { colorForNum( 1 ) };
+	const QColor m_colorGreen { colorForNum( 2 ) };
+	const QColor m_colorYellow { colorForNum( 3 ) };
+	const QColor m_colorBlue { colorForNum( 4 ) };
+	const QColor m_colorCyan { colorForNum( 5 ) };
+	const QColor m_colorMagenta { colorForNum( 6 ) };
+	const QColor m_colorWhite { colorForNum( 7 ) };
+	const QColor m_colorOrange { colorForNum( 8 ) };
+	const QColor m_colorGrey { colorForNum( 9 ) };
 
 	[[nodiscard]]
 	bool isShowingDemoPlaybackMenu() const {
@@ -358,11 +392,15 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 
 	const QString reason( "This type is a native code bridge and cannot be instantiated" );
 	qmlRegisterUncreatableType<QWswUISystem>( "net.warsow", 2, 6, "Wsw", reason );
+	qmlRegisterUncreatableType<ServerListModel>( "net.warsow", 2, 6, "ServerListModel", reason );
 	qmlRegisterType<NativelyDrawnImage>( "net.warsow", 2, 6, "NativelyDrawnImage_Native" );
 	qmlRegisterType<NativelyDrawnModel>( "net.warsow", 2, 6, "NativelyDrawnModel_Native" );
 
 	m_engine = new QQmlEngine;
 	m_engine->rootContext()->setContextProperty( "wsw", this );
+
+	m_serverListModel = new ServerListModel;
+	m_engine->rootContext()->setContextProperty( "serverListModel", m_serverListModel );
 
 	m_component = new QQmlComponent( m_engine );
 
@@ -1021,6 +1059,14 @@ void QWswUISystem::updateCVarAwareControls() {
 
 void QWswUISystem::quit() {
 	Cbuf_AddText( "quit" );
+}
+
+void QWswUISystem::startServerListUpdates() {
+	ServerList::instance()->startPushingUpdates( m_serverListModel, true, true );
+}
+
+void QWswUISystem::stopServerListUpdates() {
+	ServerList::instance()->stopPushingUpdates();
 }
 
 #include "uisystem.moc"

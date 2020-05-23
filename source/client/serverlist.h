@@ -74,7 +74,7 @@ public:
 	}
 
 	[[nodiscard]]
-	const wsw::StringView asView() const { return wsw::StringView( chars, length ); }
+	auto asView() const -> wsw::StringView { return wsw::StringView( chars, length ); }
 
 	// STL structural compatibility routines
 	char *begin() { return chars; }
@@ -100,30 +100,41 @@ public:
 
 class PlayerInfo {
 public:
+	StaticString<32> name;
 	PlayerInfo *prev { nullptr };
 	PlayerInfo *next { nullptr };
 	int score { 0 };
-	StaticString<32> name;
-	uint16_t ping { 0 };
-	uint8_t team { 0 };
+	int ping { 0 };
+	int team { 0 };
 
 	bool operator==( const PlayerInfo &that ) const;
 	bool operator!=( const PlayerInfo &that ) const {
 		return !( *this == that );
 	}
+
+	[[nodiscard]]
+	auto getName() const -> wsw::StringView { return name.asView(); }
+	[[nodiscard]]
+	auto getPing() const -> int { return ping; }
+	[[nodiscard]]
+	auto getScore() const -> int { return score; }
 };
 
 struct MatchTime {
 	int timeMinutes;
 	int limitMinutes;
-	int8_t timeSeconds;
-	int8_t limitSeconds;
+	int timeSeconds;
+	int limitSeconds;
 	bool isWarmup : 1;
 	bool isCountdown : 1;
 	bool isFinished : 1;
 	bool isOvertime : 1;
 	bool isSuddenDeath : 1;
 	bool isTimeout : 1;
+
+	MatchTime() {
+		clear();
+	}
 
 	void clear();
 	bool operator==( const MatchTime &that ) const;
@@ -159,17 +170,19 @@ struct MatchScore {
 };
 
 class ServerInfo {
+	static void clearPlayerInfo( PlayerInfo *infoHead );
+	[[nodiscard]]
+	static bool comparePlayersList( const PlayerInfo *list1, const PlayerInfo *list2 );
 public:
 	StaticString<64> serverName;
 	StaticString<32> gametype;
 	StaticString<32> modname;
 	StaticString<32> mapname;
 
-	ServerInfo();
 	~ServerInfo();
 
-	// May be null even if extended player info is present
-	PlayerInfo *playerInfoHead { nullptr };
+	PlayerInfo *teamInfoHeads[4] { nullptr, nullptr, nullptr, nullptr };
+	int numTeamPlayers[4] { 0, 0, 0, 0 };
 
 	MatchTime time;
 	MatchScore score;
@@ -180,10 +193,13 @@ public:
 
 	bool needPassword { false };
 
-	// Indicates if an extended player info is present.
-	bool hasPlayerInfo { false };
-
 	bool matchesOld( ServerInfo *oldInfo );
+
+	[[nodiscard]]
+	auto getPlayersListForTeam( int team ) const -> std::pair<const PlayerInfo *, int> {
+		assert( (unsigned)team <= 3u );
+		return std::make_pair( teamInfoHeads[team], numTeamPlayers[team] );
+	}
 };
 
 class PolledGameServer {
@@ -212,7 +228,8 @@ class PolledGameServer {
 
 	unsigned m_instanceId { 0 };
 
-	const ServerInfo *CheckInfo() const {
+	[[nodiscard]]
+	auto getCheckedInfo() const -> const ServerInfo * {
 		assert( m_currInfo );
 		return m_currInfo;
 	}
@@ -230,52 +247,79 @@ public:
 	auto getAddress() const -> const netadr_t & { return m_networkAddress; }
 
 	[[nodiscard]]
-	auto getServerName() const -> const wsw::StringView {
-		return CheckInfo()->serverName.asView();
+	auto getServerName() const -> wsw::StringView {
+		return getCheckedInfo()->serverName.asView();
 	}
 
 	[[nodiscard]]
-	auto getModName() const -> const wsw::StringView {
-		return CheckInfo()->modname.asView();
+	auto getModName() const -> wsw::StringView {
+		return getCheckedInfo()->modname.asView();
 	}
 
 	[[nodiscard]]
-	auto getGametype() const -> const wsw::StringView {
-		return CheckInfo()->gametype.asView();
+	auto getGametype() const -> wsw::StringView {
+		return getCheckedInfo()->gametype.asView();
 	}
 
 	[[nodiscard]]
-	auto getMapName() const -> const wsw::StringView {
-		return CheckInfo()->mapname.asView();
+	auto getMapName() const -> wsw::StringView {
+		return getCheckedInfo()->mapname.asView();
 	}
 
 	[[nodiscard]]
-	auto getTime() const -> const MatchTime & { return CheckInfo()->time; }
-	[[nodiscard]]
-	auto getScore() const -> const MatchScore & { return CheckInfo()->score; }
+	auto getTime() const -> const MatchTime & { return getCheckedInfo()->time; }
 
 	[[nodiscard]]
-	auto getMaxClients() const -> int { return CheckInfo()->maxClients; }
+	auto getAlphaName() const -> wsw::StringView {
+		return getCheckedInfo()->score.getAlphaScore().name.asView();
+	}
+	auto getBetaName() const -> wsw::StringView {
+		return getCheckedInfo()->score.getBetaScore().name.asView();
+	}
 	[[nodiscard]]
-	auto getNumClients() const -> int { return CheckInfo()->numClients; }
+	auto getAlphaScore() const -> int {
+		return getCheckedInfo()->score.getAlphaScore().score;
+	}
 	[[nodiscard]]
-	auto getNumBots() const -> int { return CheckInfo()->numBots; }
-	[[nodiscard]]
-	bool hasPlayerInfo() const { return CheckInfo()->hasPlayerInfo; }
-	[[nodiscard]]
-	bool needPassword() const { return CheckInfo()->needPassword; }
+	auto getBetaScore() const -> int {
+		return getCheckedInfo()->score.getBetaScore().score;
+	}
 
 	[[nodiscard]]
-	auto getPlayerInfoHead() const -> const PlayerInfo * { return CheckInfo()->playerInfoHead; }
+	auto getMaxClients() const -> int { return getCheckedInfo()->maxClients; }
+	[[nodiscard]]
+	auto getNumClients() const -> int { return getCheckedInfo()->numClients; }
+	[[nodiscard]]
+	auto getNumBots() const -> int { return getCheckedInfo()->numBots; }
+
+	[[nodiscard]]
+	bool needPassword() const { return getCheckedInfo()->needPassword; }
+
+	[[nodiscard]]
+	auto getSpectators() const -> std::pair<const PlayerInfo *, int> {
+		return getCheckedInfo()->getPlayersListForTeam( 0 );
+	}
+	[[nodiscard]]
+	auto getPlayersTeam() const -> std::pair<const PlayerInfo *, int> {
+		return getCheckedInfo()->getPlayersListForTeam( 1 );
+	}
+	[[nodiscard]]
+	auto getAlphaTeam() const -> std::pair<const PlayerInfo *, int> {
+		return getCheckedInfo()->getPlayersListForTeam( 2 );
+	}
+	[[nodiscard]]
+	auto getBetaTeam() const -> std::pair<const PlayerInfo *, int> {
+		return getCheckedInfo()->getPlayersListForTeam( 3 );
+	}
 };
 
 class ServerListListener {
 public:
 	virtual ~ServerListListener() = default;
 
-	virtual void onServerAdded( const PolledGameServer &server ) = 0;
-	virtual void onServerRemoved( const PolledGameServer &server ) = 0;
-	virtual void onServerUpdated( const PolledGameServer &server ) = 0;
+	virtual void onServerAdded( const PolledGameServer *server ) = 0;
+	virtual void onServerRemoved( const PolledGameServer *server ) = 0;
+	virtual void onServerUpdated( const PolledGameServer *server ) = 0;
 };
 
 class ServerInfoParser;
@@ -308,9 +352,7 @@ class ServerList {
 	[[nodiscard]]
 	auto parseServerInfo( msg_t *msg, PolledGameServer *server ) -> ServerInfo *;
 	[[nodiscard]]
-	auto parsePlayerInfo( msg_t *msg ) -> PlayerInfo *;
-	[[nodiscard]]
-	bool parsePlayerInfo( msg_t *msg, PlayerInfo **listHead );
+	bool parsePlayerInfo( msg_t *msg, ServerInfo *serverInfo );
 
 	[[nodiscard]]
 	auto findServerByAddress( const netadr_t &address ) -> PolledGameServer *;
@@ -338,8 +380,6 @@ class ServerList {
 	// TODO: Should not be called directly by global context
 	// (ingoing connectionless packets should be tested and parsed by an instance of this ServerList entirely)
 	void onServerAddressReceived( const netadr_t &address );
-
-	void clearExistingServerList();
 public:
 	static void init();
 	static void shutdown();
