@@ -6,6 +6,7 @@
 #include "../game/ai/static_vector.h"
 #include "nativelydrawnitems.h"
 #include "serverlistmodel.h"
+#include "keysandbindingsmodel.h"
 
 #include <QGuiApplication>
 #include <QOpenGLContext>
@@ -392,6 +393,7 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 
 	const QString reason( "This type is a native code bridge and cannot be instantiated" );
 	qmlRegisterUncreatableType<QWswUISystem>( "net.warsow", 2, 6, "Wsw", reason );
+	qmlRegisterUncreatableType<KeysAndBindingsModel>( "net.warsow", 2, 6, "KeysAndBindings", reason );
 	qmlRegisterUncreatableType<ServerListModel>( "net.warsow", 2, 6, "ServerListModel", reason );
 	qmlRegisterType<NativelyDrawnImage>( "net.warsow", 2, 6, "NativelyDrawnImage_Native" );
 	qmlRegisterType<NativelyDrawnModel>( "net.warsow", 2, 6, "NativelyDrawnModel_Native" );
@@ -401,6 +403,7 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 
 	m_serverListModel = new ServerListModel;
 	m_engine->rootContext()->setContextProperty( "serverListModel", m_serverListModel );
+	m_engine->rootContext()->setContextProperty( "keysAndBindings", new KeysAndBindingsModel );
 
 	m_component = new QQmlComponent( m_engine );
 

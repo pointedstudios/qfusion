@@ -1,5 +1,7 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource>
+        <file>BindableCommand.qml</file>
+        <file>BindableCommandsColumn.qml</file>
         <file>CentralOverlayButton.qml</file>
         <file>CentralOverlayButtonTrail.qml</file>
         <file>CentralOverlayGroup.qml</file>
@@ -17,9 +19,13 @@
         <file>InGameGeneralPage.qml</file>
         <file>InGameMenu.qml</file>
         <file>InGamePlayersPage.qml</file>
+        <file>KeyboardKey.qml</file>
+        <file>KeyboardPane.qml</file>
+        <file>KeyboardRow.qml</file>
         <file>KeyboardSettings.qml</file>
         <file>LocalGamePage.qml</file>
         <file>MainMenu.qml</file>
+        <file>MouseKeysPane.qml</file>
         <file>MouseSettings.qml</file>
         <file>NativelyDrawnImage.qml</file>
         <file>NativelyDrawnModel.qml</file>

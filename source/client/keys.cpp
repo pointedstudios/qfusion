@@ -771,6 +771,9 @@ void Key_ClearStates( void ) {
 * Key_GetBindingBuf
 */
 const char *Key_GetBindingBuf( int binding ) {
+	if( binding < 0 || binding > 255 ) {
+		return nullptr;
+	}
 	return keybindings[binding];
 }
 
