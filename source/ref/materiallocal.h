@@ -277,11 +277,16 @@ public:
 	}
 
 	[[nodiscard]]
-	auto getCurrTokenNum() -> int { return currToken; }
+	auto getCurrTokenNum() const -> int { return currToken; }
 
 	void setCurrTokenNum( int num ) {
 		assert( num >= 0 && num <= numTokens );
 		currToken = num;
+		if( num < numTokens ) {
+			currLine = tokenSpans[num].line;
+		} else {
+			currLine = std::numeric_limits<int>::max();
+		}
 	}
 
 	[[nodiscard]]
@@ -307,6 +312,7 @@ public:
 		return std::optional( getView( off, len ) );
 	}
 
+	[[maybe_unused]]
 	bool unGetToken() {
 		assert( currToken <= numTokens );
 		if( currToken == 0 ) {

@@ -13,6 +13,7 @@ add_executable(
         clienttest
         "main.cpp"
         "tokensplittertest.cpp"
+        "tokenstreamtest.cpp"
         "../../ref/materiallexer.cpp")
 
 add_test(NAME clienttest COMMAND clienttest)
