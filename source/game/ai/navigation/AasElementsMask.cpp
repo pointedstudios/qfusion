@@ -1,11 +1,11 @@
 #include "AasWorld.h"
 #include "AasElementsMask.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 
 BitVector *AasElementsMask::areasMask = nullptr;
 BitVector *AasElementsMask::facesMask = nullptr;
 
-static StaticVector<BitVector, 2> bitVectorsHolder;
+static wsw::StaticVector<BitVector, 2> bitVectorsHolder;
 bool *AasElementsMask::tmpAreasVisRow = nullptr;
 bool *AasElementsMask::blockedAreasTable = nullptr;
 

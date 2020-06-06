@@ -1,7 +1,7 @@
 #include "NavMeshManager.h"
 #include "../ai_precomputed_file_handler.h"
 #include "../buffer_builder.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 
 #include <Recast.h>
 #include <RecastAlloc.h>
@@ -65,7 +65,7 @@ static void CustomDetourFree( void *ptr ) {
 	CustomFree( ptr, DT_ALLOC_TEMP );
 }
 
-static StaticVector<AiNavMeshManager, 1> instanceHolder;
+static wsw::StaticVector<AiNavMeshManager, 1> instanceHolder;
 
 const AiNavMeshManager *AiNavMeshManager::Instance() {
 	return &instanceHolder.front();

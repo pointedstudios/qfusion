@@ -55,7 +55,7 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		}
 	};
 
-	using Candidates = StaticVector<BotAndScore, MAX_CLIENTS>;
+	using Candidates = wsw::StaticVector<BotAndScore, MAX_CLIENTS>;
 
 	/**
 	 * Contains a shared implementation of objective spot logic
@@ -114,12 +114,12 @@ class AiObjectiveBasedTeam: public AiSquadBasedTeam {
 		/**
 		 * Sets raw scores shared for all spots.
 		 */
-		virtual void ComputeRawScores( StaticVector<BotAndScore, MAX_CLIENTS> &candidates ) = 0;
+		virtual void ComputeRawScores( wsw::StaticVector<BotAndScore, MAX_CLIENTS> &candidates ) = 0;
 
 		/**
 		 * Sets effective scores for this spot
 		 */
-		virtual void ComputeEffectiveScores( StaticVector<BotAndScore, MAX_CLIENTS> &candidates );
+		virtual void ComputeEffectiveScores( wsw::StaticVector<BotAndScore, MAX_CLIENTS> &candidates );
 
 		/**
 		 * Assigns bot orders as it is appropriate for the concrete type of spot.

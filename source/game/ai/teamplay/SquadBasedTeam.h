@@ -5,7 +5,7 @@
 #include "../awareness/EnemiesTracker.h"
 #include "../navigation/AasRouteCache.h"
 #include "../navigation/AasWorld.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 
 #include <utility>
 
@@ -242,7 +242,7 @@ class AiSquadBasedTeam : public AiBaseTeam {
 	friend class AiSquad;
 	friend class SquadsBuilder;
 
-	StaticVector<AiSquad, MAX_CLIENTS> squads;
+	wsw::StaticVector<AiSquad, MAX_CLIENTS> squads;
 
 	AiSquad *usedSquadsHead { nullptr };
 	AiSquad *freeSquadsHead { nullptr };

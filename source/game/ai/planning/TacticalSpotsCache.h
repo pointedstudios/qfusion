@@ -81,7 +81,7 @@ class BotTacticalSpotsCache {
 	bool FindRunAwayJumppadOrigin( const Vec3 &origin, const Vec3 &enemyOrigin, vec3_t result[2] );
 	bool FindRunAwayElevatorOrigin( const Vec3 &origin, const Vec3 &enemyOrigin, vec3_t result[2] );
 
-	typedef StaticVector<EntAndScore, 16> ReachableEntities;
+	using ReachableEntities = wsw::StaticVector<EntAndScore, 16>;
 	void FindReachableClassEntities( const Vec3 &origin, float radius, const char *classname, ReachableEntities &result );
 
 	// AiAasWorld::FindAreaNum() fails so often for teleports/elevators, etc, so we have to use this method.

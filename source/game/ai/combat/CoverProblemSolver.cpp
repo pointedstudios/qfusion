@@ -23,7 +23,7 @@ int CoverProblemSolver::findMany( vec3_t *spots, int maxSpots ) {
 		return 0;
 	}
 
-	StaticVector<int, MAX_EDICTS> entNums;
+	wsw::StaticVector<int, MAX_EDICTS> entNums;
 	const int topNode = findTopNodeAndEntNums( candidateSpots, entNums );
 
 	// These calls rely on vis tables to some degree and thus should not be extremely expensive.

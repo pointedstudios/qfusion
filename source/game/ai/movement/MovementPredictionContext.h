@@ -115,11 +115,11 @@ private:
 			  movementStatesMask( 0 ) {}
 	};
 
-	StaticVector<PredictedMovementAction, MAX_PREDICTED_STATES> predictedMovementActions;
-	StaticVector<BotMovementState, MAX_PREDICTED_STATES> botMovementStatesStack;
-	StaticVector<player_state_t, MAX_PREDICTED_STATES> playerStatesStack;
+	wsw::StaticVector<PredictedMovementAction, MAX_PREDICTED_STATES> predictedMovementActions;
+	wsw::StaticVector<BotMovementState, MAX_PREDICTED_STATES> botMovementStatesStack;
+	wsw::StaticVector<player_state_t, MAX_PREDICTED_STATES> playerStatesStack;
 
-	StaticVector<PredictedMovementAction, MAX_PREDICTED_STATES> goodEnoughPath;
+	wsw::StaticVector<PredictedMovementAction, MAX_PREDICTED_STATES> goodEnoughPath;
 	int travelTimeForGoodEnoughPath { std::numeric_limits<int>::max() };
 
 	template <typename T, unsigned N>
@@ -127,7 +127,7 @@ private:
 	{
 		static_assert( sizeof( uint64_t ) * 8 >= N, "64-bit bitset capacity overflow" );
 
-		StaticVector<T, N> values;
+		wsw::StaticVector<T, N> values;
 		uint64_t isCachedBitset;
 
 		inline void SetBit( unsigned bit ) { isCachedBitset |= ( ( (uint64_t)1 ) << bit ); }
@@ -182,7 +182,7 @@ private:
 
 	CachesStack<BotInput, MAX_PREDICTED_STATES> defaultBotInputsCachesStack;
 	CachesStack<HitWhileRunningTestResult, MAX_PREDICTED_STATES> mayHitWhileRunningCachesStack;
-	StaticVector<EnvironmentTraceCache, MAX_PREDICTED_STATES> environmentTestResultsStack;
+	wsw::StaticVector<EnvironmentTraceCache, MAX_PREDICTED_STATES> environmentTestResultsStack;
 
 	// We have decided to keep the frametime hardcoded.
 	// The server code uses a hardcoded one too.

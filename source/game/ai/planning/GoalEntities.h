@@ -2,7 +2,7 @@
 #define QFUSION_AI_GOAL_ENTITIES_H
 
 #include "../ai_local.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 #include "../vec3.h"
 
 enum class NavEntityFlags : unsigned {

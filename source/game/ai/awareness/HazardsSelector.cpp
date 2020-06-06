@@ -120,7 +120,7 @@ public:
 };
 
 class PlasmaBeamsBuilder {
-	StaticVector<SameDirBeamsList, 1024> sameDirLists;
+	wsw::StaticVector<SameDirBeamsList, 1024> sameDirLists;
 
 	static constexpr float SQ_HAZARD_RADIUS = 300.0f * 300.0f;
 
@@ -189,7 +189,7 @@ public:
 	}
 };
 
-static StaticVector<HazardsSelectorCache, 1> instanceHolder;
+static wsw::StaticVector<HazardsSelectorCache, 1> instanceHolder;
 HazardsSelectorCache *HazardsSelectorCache::instance = nullptr;
 
 HazardsSelectorCache::HazardsSelectorCache() {

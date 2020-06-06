@@ -2,8 +2,8 @@
 #define QFUSION_AI_BASE_ENEMY_POOL_H
 
 #include "../AIComponent.h"
-#include "../static_deque.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticdeque.h"
+#include "../../../qcommon/wswstaticvector.h"
 #include "../vec3.h"
 #include "../../../gameshared/q_comref.h"
 #include <limits>
@@ -273,7 +273,7 @@ public:
 		}
 	};
 
-	typedef StaticDeque<Snapshot, MAX_TRACKED_SNAPSHOTS> SnapshotsQueue;
+	using SnapshotsQueue = wsw::StaticDeque<Snapshot, MAX_TRACKED_SNAPSHOTS>;
 	SnapshotsQueue lastSeenSnapshots;
 };
 
@@ -374,8 +374,8 @@ private:
 
 	int64_t prevThinkLevelTime { 0 };
 
-	StaticVector<AttackStats, MAX_TRACKED_ATTACKERS> attackers;
-	StaticVector<AttackStats, MAX_TRACKED_TARGETS> targets;
+	wsw::StaticVector<AttackStats, MAX_TRACKED_ATTACKERS> attackers;
+	wsw::StaticVector<AttackStats, MAX_TRACKED_TARGETS> targets;
 
 	void RemoveEnemy( TrackedEnemy *enemy );
 

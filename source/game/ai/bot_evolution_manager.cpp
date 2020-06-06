@@ -55,8 +55,8 @@ public:
 	}
 };
 
-static StaticVector<DefaultBotEvolutionManager, 1> defaultEvolutionManagerInstanceHolder;
-static StaticVector<ScriptBotEvolutionManager, 1> scriptEvolutionManagerInstanceHolder;
+static wsw::StaticVector<DefaultBotEvolutionManager, 1> defaultEvolutionManagerInstanceHolder;
+static wsw::StaticVector<ScriptBotEvolutionManager, 1> scriptEvolutionManagerInstanceHolder;
 
 void BotEvolutionManager::Init() {
 	if( instance ) {
@@ -119,7 +119,7 @@ void DefaultBotEvolutionManager::LoadReferenceWeightConfig() {
 	referenceConfig.ResetToDefaultValues();
 }
 
-static StaticVector<std::pair<std::mt19937, std::normal_distribution<float> >, 1> randomHolder;
+static wsw::StaticVector<std::pair<std::mt19937, std::normal_distribution<float> >, 1> randomHolder;
 
 static inline float GetNextGaussianRandom( float stdDev ) {
 	if( randomHolder.empty() ) {

@@ -2,7 +2,7 @@
 #define QFUSION_AWARENESSLOCAL_H
 
 #include "EntitiesPvsCache.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 
 static inline bool IsGenericProjectileVisible( const edict_t *self, const edict_t *ent ) {
 	trace_t trace;
@@ -43,12 +43,12 @@ struct EntAndDistance {
 };
 
 static const unsigned MAX_NONCLIENT_ENTITIES = MAX_EDICTS - MAX_CLIENTS;
-typedef StaticVector<uint16_t, MAX_NONCLIENT_ENTITIES> EntNumsVector;
-typedef StaticVector<EntAndDistance, MAX_NONCLIENT_ENTITIES> EntsAndDistancesVector;
+typedef wsw::StaticVector<uint16_t, MAX_NONCLIENT_ENTITIES> EntNumsVector;
+typedef wsw::StaticVector<EntAndDistance, MAX_NONCLIENT_ENTITIES> EntsAndDistancesVector;
 
 template<unsigned N, unsigned M, typename PvsFunc, typename VisFunc>
-bool VisCheckRawEnts( StaticVector<EntAndDistance, N> &rawEnts,
-					  StaticVector<uint16_t, M> &filteredEnts,
+bool VisCheckRawEnts( wsw::StaticVector<EntAndDistance, N> &rawEnts,
+					  wsw::StaticVector<uint16_t, M> &filteredEnts,
 					  const edict_t *self, unsigned visEntsLimit,
 					  PvsFunc pvsFunc, VisFunc visFunc ) {
 	filteredEnts.clear();
@@ -64,7 +64,7 @@ bool VisCheckRawEnts( StaticVector<EntAndDistance, N> &rawEnts,
 
 	const edict_t *const gameEdicts = game.edicts;
 
-	StaticVector<uint16_t, M> entsInPvs;
+	wsw::StaticVector<uint16_t, M> entsInPvs;
 	bool result = true;
 	unsigned limit = rawEnts.size();
 	if( limit > entsInPvs.capacity() ) {

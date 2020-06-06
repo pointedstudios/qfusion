@@ -743,7 +743,7 @@ bool AiSquad::ShouldNotDropItemsNow() const {
 	};
 
 	// First reject enemies by distance
-	StaticVector<MaybeStealer, MAX_EDICTS> maybeStealers;
+	wsw::StaticVector<MaybeStealer, MAX_EDICTS> maybeStealers;
 	for( const TrackedEnemy *enemy = EnemiesTracker()->TrackedEnemiesHead(); enemy; enemy = enemy->NextInTrackedList() ) {
 		// Check whether an enemy has been invalidated and invalidation is not processed yet to prevent crash
 		if( !enemy->IsValid() || G_ISGHOSTING( enemy->ent ) ) {
@@ -834,7 +834,7 @@ void AiSquad::FindSupplierCandidates( Bot *consumer, Bot **suppliersListHead ) c
 		bool operator<( const BotAndScore &that ) const { return score > that.score; }
 	};
 
-	StaticVector<BotAndScore, MAX_SQUAD_SIZE - 1> candidates;
+	wsw::StaticVector<BotAndScore, MAX_SQUAD_SIZE - 1> candidates;
 
 	const auto thisBotNum = consumer->ClientNum();
 	for( Bot *bot = botsListHead; bot; bot = bot->NextInSquad() ) {
@@ -1327,7 +1327,7 @@ void AiSquadBasedTeam::SetupSquads() {
 	const auto &table = ::clientToClientTable;
 	// Given N as the maximal number of clients, there could be up to N * (N - 1) pairs.
 	// This will never be met in realistic use cases (the number of bots is limited and teams are almost always even).
-	StaticVector<CandidatePair, 64> candidatePairs;
+	wsw::StaticVector<CandidatePair, 64> candidatePairs;
 	for( Bot *bot = orphanBotsHead; bot; bot = bot->NextInSquad() ) {
 		if( bot->IsGhosting() ) {
 			continue;

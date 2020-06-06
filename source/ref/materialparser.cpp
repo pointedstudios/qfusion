@@ -3,7 +3,7 @@
 #include "shader.h"
 
 #include "../qcommon/hash.h"
-#include "../game/ai/static_vector.h"
+#include "../qcommon/wswstaticvector.h"
 
 static bool isANumber( const wsw::StringView &view ) {
 	for( char ch: view ) {
@@ -1146,7 +1146,7 @@ bool MaterialParser::parseTemplate() {
 
 	// TODO: check immediately for template existance before parsing args?
 
-	StaticVector<wsw::StringView, 16> args;
+	wsw::StaticVector<wsw::StringView, 16> args;
 	for(;; ) {
 		if( auto maybeToken = lexer->getNextTokenInLine() ) {
 			if( args.size() == args.capacity() ) {
@@ -1861,8 +1861,8 @@ shader_t *MaterialParser::build() {
 
 	using TcGenSpec = MemSpecBuilder::Spec<float>;
 	using TcModSpec = MemSpecBuilder::Spec<tcmod_t>;
-	StaticVector<std::optional<TcGenSpec>, 16> tcGenSpecs;
-	StaticVector<std::optional<TcModSpec>, 16> tcModSpecs;
+	wsw::StaticVector<std::optional<TcGenSpec>, 16> tcGenSpecs;
+	wsw::StaticVector<std::optional<TcModSpec>, 16> tcModSpecs;
 
 	MemSpecBuilder memSpec;
 	const auto shaderSpec = memSpec.add<shader_t>();

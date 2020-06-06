@@ -11,7 +11,7 @@ class SelectedEnemies: public Selection {
 	// Selected active enemies are kept in array for these reasons:
 	// 1) Being stable relatively to unlinking by the supplying tracker
 	// 2) Being able to address precached data by enemy index
-	StaticVector<const TrackedEnemy *, MAX_ACTIVE_ENEMIES> enemies;
+	wsw::StaticVector<const TrackedEnemy *, MAX_ACTIVE_ENEMIES> enemies;
 
 	const Bot *const bot;
 	int64_t timeoutAt { 0 };

@@ -3,7 +3,7 @@
 
 #include <tuple>
 #include "ai_local.h"
-#include "static_vector.h"
+#include "../../qcommon/wswstaticvector.h"
 #include "../../qcommon/hash.h"
 
 void GT_asRegisterScriptWeightConfig( class AiWeightConfig *weightConfig, const edict_t *configOwner );

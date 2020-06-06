@@ -5,7 +5,7 @@
 #include "GoalEntities.h"
 #include "Pool.h"
 #include "../AIComponent.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 #include "../navigation/AasRouteCache.h"
 #include "../ai_base_ai.h"
 #include "WorldState.h"
@@ -214,8 +214,8 @@ protected:
 	AiGoal *activeGoal { nullptr };
 	int64_t nextActiveGoalUpdateAt { 0 };
 
-	StaticVector<AiGoal *, MAX_GOALS> goals;
-	StaticVector<AiAction *, MAX_ACTIONS> actions;
+	wsw::StaticVector<AiGoal *, MAX_GOALS> goals;
+	wsw::StaticVector<AiAction *, MAX_ACTIONS> actions;
 
 	static constexpr unsigned MAX_PLANNER_NODES = 384;
 	Pool<PlannerNode, MAX_PLANNER_NODES> plannerNodesPool { "PlannerNodesPool" };

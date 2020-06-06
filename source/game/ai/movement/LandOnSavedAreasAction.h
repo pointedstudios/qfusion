@@ -8,8 +8,8 @@ class LandOnSavedAreasAction : public BaseMovementAction
 	friend class HandleTriggeredJumppadAction;
 	friend class BotTryWeaponJumpShortcutMovementAction;
 
-	StaticVector<int, MAX_SAVED_LANDING_AREAS> savedLandingAreas;
-	typedef StaticVector<AreaAndScore, MAX_SAVED_LANDING_AREAS * 2> FilteredAreas;
+	wsw::StaticVector<int, MAX_SAVED_LANDING_AREAS> savedLandingAreas;
+	using FilteredAreas = wsw::StaticVector<AreaAndScore, MAX_SAVED_LANDING_AREAS * 2>;
 
 	int currAreaIndex;
 	unsigned totalTestedAreas;

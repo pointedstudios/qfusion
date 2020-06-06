@@ -3,7 +3,7 @@
 
 #include "../qcommon/qcommon.h"
 #include "../qcommon/wswstdtypes.h"
-#include "../game/ai/static_vector.h"
+#include "../qcommon/wswstaticvector.h"
 #include "serverinfoparser.h"
 
 #include <atomic>

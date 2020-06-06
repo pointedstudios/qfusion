@@ -2,7 +2,7 @@
 #define QFUSION_BOT_WEAPONS_USAGE_MODULE_H
 
 #include "../ai_local.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 #include "FireTargetCache.h"
 
 class Bot;
@@ -47,8 +47,8 @@ class BotWeaponsUsageModule {
 	static constexpr unsigned MAX_SCRIPT_WEAPONS = 3;
 
 	Bot *const bot;
-	StaticVector<AiScriptWeaponDef, MAX_SCRIPT_WEAPONS> scriptWeaponDefs;
-	StaticVector<int, MAX_SCRIPT_WEAPONS> scriptWeaponCooldown;
+	wsw::StaticVector<AiScriptWeaponDef, MAX_SCRIPT_WEAPONS> scriptWeaponDefs;
+	wsw::StaticVector<int, MAX_SCRIPT_WEAPONS> scriptWeaponCooldown;
 
 	BotFireTargetCache builtinFireTargetCache;
 	BotFireTargetCache scriptFireTargetCache;

@@ -1080,9 +1080,9 @@ class BuiltinTexMatcher {
 		char data[16];
 	};
 
-	StaticVector<Chunk, 12> stringChunks;
+	wsw::StaticVector<Chunk, 12> stringChunks;
 
-	using TexNumberViews = StaticVector<std::pair<wsw::StringView, BuiltinTexNumber>, 6>;
+	using TexNumberViews = wsw::StaticVector<std::pair<wsw::StringView, BuiltinTexNumber>, 6>;
 
 	TexNumberViews longTexNumbers;
 	TexNumberViews shortTexNumbers;

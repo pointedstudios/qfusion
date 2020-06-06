@@ -2,7 +2,7 @@
 #define QFUSION_HAZARDSDETECTOR_H
 
 #include "../ai_local.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 
 #include "AwarenessLocal.h"
 
@@ -30,8 +30,8 @@ class HazardsDetector {
 	void Clear();
 
 	static const auto MAX_NONCLIENT_ENTITIES = MAX_EDICTS - MAX_CLIENTS;
-	typedef StaticVector<EntAndDistance, MAX_NONCLIENT_ENTITIES> EntsAndDistancesVector;
-	typedef StaticVector<uint16_t, MAX_NONCLIENT_ENTITIES> EntNumsVector;
+	using EntsAndDistancesVector = wsw::StaticVector<EntAndDistance, MAX_NONCLIENT_ENTITIES>;
+	using EntNumsVector = wsw::StaticVector<uint16_t, MAX_NONCLIENT_ENTITIES>;
 
 	inline void TryAddEntity( const edict_t *ent,
 							  float squareDistanceThreshold,

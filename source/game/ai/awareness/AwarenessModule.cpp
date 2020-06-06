@@ -365,7 +365,7 @@ void BotAwarenessModule::RegisterVisibleEnemies() {
 	const float dotFactor = bot->FovDotFactor();
 
 	// Note: non-client entities also may be candidate targets.
-	StaticVector<EntAndDistance, MAX_EDICTS> candidateTargets;
+	wsw::StaticVector<EntAndDistance, MAX_EDICTS> candidateTargets;
 
 	edict_t *const gameEdicts = game.edicts;
 	for( int i = 1; i < game.numentities; ++i ) {
@@ -396,7 +396,7 @@ void BotAwarenessModule::RegisterVisibleEnemies() {
 		candidateTargets.emplace_back( EntAndDistance( ENTNUM( ent ), 1.0f / invDistance ) );
 	}
 
-	StaticVector<uint16_t, MAX_CLIENTS> visibleTargets;
+	wsw::StaticVector<uint16_t, MAX_CLIENTS> visibleTargets;
 	const edict_t *self = game.edicts + bot->EntNum();
 	VisCheckRawEnts( candidateTargets, visibleTargets, self, MAX_CLIENTS, IsGenericEntityInPvs, IsEnemyVisible );
 

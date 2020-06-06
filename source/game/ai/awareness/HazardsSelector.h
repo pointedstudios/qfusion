@@ -79,11 +79,12 @@ class HazardsSelectorCache {
 	class CachingAllocator *sortedProjectilesAllocator;
 	class CachingAllocator *plasmaBeamsAllocator;
 
+	static HazardsSelectorCache *instance;
+public:
+	// TODO: Make private, use a SingletonHolder
 	HazardsSelectorCache();
 	~HazardsSelectorCache();
 
-	static HazardsSelectorCache *instance;
-public:
 	static HazardsSelectorCache *Instance() {
 		assert( instance );
 		return instance;

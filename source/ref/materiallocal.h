@@ -8,7 +8,7 @@
 #include "vattribs.h"
 #include "shader.h"
 #include "glimp.h"
-#include "../game/ai/static_vector.h"
+#include "../qcommon/wswstaticvector.h"
 
 #include <optional>
 
@@ -551,9 +551,9 @@ class MaterialCache {
 
 	std::vector<uint16_t> freeMaterialIds;
 
-	StaticVector<TokenStream, 1> templateTokenStreamHolder;
-	StaticVector<MaterialLexer, 1> templateLexerHolder;
-	StaticVector<TokenStream, 1> primaryTokenStreamHolder;
+	wsw::StaticVector<TokenStream, 1> templateTokenStreamHolder;
+	wsw::StaticVector<MaterialLexer, 1> templateLexerHolder;
+	wsw::StaticVector<TokenStream, 1> primaryTokenStreamHolder;
 
 	auto createFileCache( const char *filename ) -> FileCache *;
 	auto readFileContents( const char *filename ) -> const wsw::String *;
@@ -640,10 +640,10 @@ class MaterialParser {
 	const wsw::StringView name;
 	const wsw::HashedStringView cleanName;
 
-	StaticVector<int, 256> deformSig;
-	StaticVector<shaderpass_t, MAX_SHADER_PASSES> passes;
-	StaticVector<deformv_t, MAX_SHADER_DEFORMVS> deforms;
-	StaticVector<tcmod_t, MAX_SHADER_PASSES * MAX_SHADER_TCMODS> tcMods;
+	wsw::StaticVector<int, 256> deformSig;
+	wsw::StaticVector<shaderpass_t, MAX_SHADER_PASSES> passes;
+	wsw::StaticVector<deformv_t, MAX_SHADER_DEFORMVS> deforms;
+	wsw::StaticVector<tcmod_t, MAX_SHADER_PASSES * MAX_SHADER_TCMODS> tcMods;
 
 	int sort { 0 };
 	int flags { SHADER_CULL_FRONT };

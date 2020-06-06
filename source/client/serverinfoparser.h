@@ -2,7 +2,7 @@
 #define WSW_SERVERINFOPARSER_H
 
 #include "../qcommon/wswstdtypes.h"
-#include "../game/ai/static_vector.h"
+#include "../qcommon/wswstaticvector.h"
 
 class ServerInfo;
 struct msg_s;
@@ -44,7 +44,7 @@ class ServerInfoParser {
 		}
 	};
 
-	StaticVector<TokenHandler, 16> m_handlers;
+	wsw::StaticVector<TokenHandler, 16> m_handlers;
 
 	static constexpr auto kNumHashBins = 17;
 	TokenHandler *m_handlersHashMap[kNumHashBins];

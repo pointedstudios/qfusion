@@ -5,7 +5,6 @@
 #include "../ai_base_ai.h"
 #include "../ai_ground_trace_cache.h"
 #include "../navigation/AasWorld.h"
-#include "../static_vector.h"
 #include "../../../gameshared/q_collision.h"
 
 AiAction::PlannerNodePtr AiAction::NewNodeForRecord( AiActionRecord *record ) {
@@ -141,7 +140,7 @@ bool AiPlanner::FindNewGoalAndPlan( const WorldState &currWorldState ) {
 		goal->UpdateWeight( currWorldState );
 
 	// Filter relevant goals
-	StaticVector<GoalRef, MAX_GOALS> relevantGoals;
+	wsw::StaticVector<GoalRef, MAX_GOALS> relevantGoals;
 	for( AiGoal *goal: goals ) {
 		if( goal->IsRelevant() ) {
 			relevantGoals.emplace_back( GoalRef( goal ) );
@@ -190,7 +189,7 @@ bool AiPlanner::UpdateGoalAndPlan( const WorldState &currWorldState ) {
 
 	AiGoal *activeRelevantGoal = nullptr;
 	// Filter relevant goals and mark whether the active goal is relevant
-	StaticVector<GoalRef, MAX_GOALS> relevantGoals;
+	wsw::StaticVector<GoalRef, MAX_GOALS> relevantGoals;
 	for( AiGoal *goal: goals ) {
 		if( goal->IsRelevant() ) {
 			if( goal == activeGoal ) {
@@ -366,7 +365,7 @@ public:
 // A heap that supports removal of an arbitrary node by its intrusive heap index
 class PlannerNodesHeap
 {
-	StaticVector<PlannerNode *, 128> array;
+	wsw::StaticVector<PlannerNode *, 128> array;
 
 	inline void Swap( unsigned i, unsigned j ) {
 		PlannerNode *tmp = array[i];

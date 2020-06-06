@@ -10,7 +10,7 @@
 AiManager *AiManager::instance = nullptr;
 
 // Actual instance location in memory
-static StaticVector<AiManager, 1> instanceHolder;
+static wsw::StaticVector<AiManager, 1> instanceHolder;
 
 void AiManager::Init( const char *gametype, const char *mapname ) {
 	if( instance ) {
@@ -558,7 +558,7 @@ void AiManager::FindHubAreas() {
 		return;
 	}
 
-	StaticVector<AreaAndScore, sizeof( hubAreas ) / sizeof( *hubAreas )> bestAreasHeap;
+	wsw::StaticVector<AreaAndScore, sizeof( hubAreas ) / sizeof( *hubAreas )> bestAreasHeap;
 	for( int i = 1; i < aasWorld->NumAreas(); ++i ) {
 		const auto &areaSettings = aasWorld->AreaSettings()[i];
 		if( !( areaSettings.areaflags & AREA_GROUNDED ) ) {

@@ -2,7 +2,7 @@
 #define QFUSION_BOT_ROAMING_MANAGER_H
 
 #include "../ai_local.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 
 class BotRoamingManager {
 	// Note: very large values lead to all spots being considered as visited
@@ -21,7 +21,7 @@ class BotRoamingManager {
 	const class TacticalSpotsRegistry *tacticalSpotsRegistry;
 	const class AiAasWorld *aasWorld;
 
-	typedef StaticVector<int, 20> Candidates;
+	using Candidates = wsw::StaticVector<int, 20>;
 
 	const Vec3 &GetRoamingSpot();
 

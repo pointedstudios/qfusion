@@ -121,8 +121,8 @@ class BotMovementModule {
 	Bot *const bot;
 
 	static constexpr unsigned MAX_SAVED_AREAS = MovementPredictionContext::MAX_SAVED_LANDING_AREAS;
-	StaticVector<int, MAX_SAVED_AREAS> savedLandingAreas;
-	StaticVector<int, MAX_SAVED_AREAS> savedPlatformAreas;
+	wsw::StaticVector<int, MAX_SAVED_AREAS> savedLandingAreas;
+	wsw::StaticVector<int, MAX_SAVED_AREAS> savedPlatformAreas;
 
 	// Limits weapon jumps attempts per second
 	// (consequential attempts are allowed but no more than several frames,
@@ -132,7 +132,7 @@ class BotMovementModule {
 	Int64Align4 lastWeaponJumpTriggeringFailedAt { 0 };
 
 	// Must be initialized before any of movement actions constructors is called
-	StaticVector<BaseMovementAction *, 20> movementActions;
+	wsw::StaticVector<BaseMovementAction *, 20> movementActions;
 
 	FallbackMovementAction fallbackMovementAction;
 	HandleTriggeredJumppadAction handleTriggeredJumppadAction;

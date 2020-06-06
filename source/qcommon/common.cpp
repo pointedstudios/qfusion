@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "printstream.h"
 
 // TODO: Lift the header to the toplevel
-#include "../game/ai/static_vector.h"
+#include "wswstaticvector.h"
 
 #if ( defined( _MSC_VER ) && ( defined( _M_IX86 ) || defined( _M_AMD64 ) || defined( _M_X64 ) ) )
 // For __cpuid() intrinsic
@@ -261,7 +261,7 @@ class LogStreamAllocator {
 	static constexpr const int kMaxStreams = 8;
 	static constexpr const int kMaxTopOfStack = kMaxStreams - 1;
 
-	StaticVector<Stream, kMaxStreams> streams;
+	wsw::StaticVector<Stream, kMaxStreams> streams;
 
 	int topOfStack { 0 };
 	int numToSReuses { 0 };

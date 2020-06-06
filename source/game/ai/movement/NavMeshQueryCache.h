@@ -2,7 +2,7 @@
 #define QFUSION_NAVMESHQUERYCACHE_H
 
 #include "../ai_local.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 
 class Bot;
 class MovementPredictionContext;
@@ -26,7 +26,7 @@ class BotNavMeshQueryCache {
 	mutable uint32_t paths[MAX_TESTED_REACH][MAX_PATH_POLYS];
 	mutable int pathLengths[MAX_TESTED_REACH];
 
-	using ReachChainVector = StaticVector<int, MAX_TESTED_REACH>;
+	using ReachChainVector = wsw::StaticVector<int, MAX_TESTED_REACH>;
 
 	const Vec3 *FindClosestToTargetPoint( MovementPredictionContext *context ) const;
 

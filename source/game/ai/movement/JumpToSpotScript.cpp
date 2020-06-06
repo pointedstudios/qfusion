@@ -216,7 +216,7 @@ void JumpToSpotScript::SetupMovement( Context *context ) {
 }
 
 class BestAreaCenterJumpableSpotDetector: public BestRegularJumpableSpotDetector {
-	StaticVector<SpotAndScore, 64> spotsHeap;
+	wsw::StaticVector<SpotAndScore, 64> spotsHeap;
 	void GetCandidateSpots( SpotAndScore **begin, SpotAndScore **end ) override;
 	inline int GetBoxAreas( int *boxAreaNums, int maxAreaNums );
 	void FillCandidateSpotsUsingRoutingTest( const int *boxAreaNums, int numBoxAreas );
@@ -318,7 +318,7 @@ void BestAreaCenterJumpableSpotDetector::FillCandidateSpotsWithoutRoutingTest( c
 }
 
 class BestNavMeshPolyJumpableSpotDetector: public BestRegularJumpableSpotDetector {
-	StaticVector<SpotAndScore, 64> spotsHeap;
+	wsw::StaticVector<SpotAndScore, 64> spotsHeap;
 	const AiNavMeshManager *navMeshManager;
 
 	void GetCandidateSpots( SpotAndScore **begin, SpotAndScore **end ) override;
@@ -651,7 +651,7 @@ MovementScript *FallbackMovementAction::TryFindJumpLikeReachFallback( Context *c
 }
 
 class BestConnectedToHubAreasJumpableSpotDetector: public BestRegularJumpableSpotDetector {
-	StaticVector<SpotAndScore, 256> spotsHeap;
+	wsw::StaticVector<SpotAndScore, 256> spotsHeap;
 	void GetCandidateSpots( SpotAndScore **begin, SpotAndScore **end ) override;
 public:
 	float searchRadius;

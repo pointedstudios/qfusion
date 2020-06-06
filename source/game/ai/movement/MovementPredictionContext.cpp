@@ -696,7 +696,7 @@ bool MovementPredictionContext::NextPredictionStep() {
 #ifdef CHECK_ACTION_SUGGESTION_LOOPS
 	Assert( module->movementActions.size() < 32 );
 	uint32_t testedActionsMask = 0;
-	StaticVector<BaseMovementAction *, 32> testedActionsList;
+	wsw::StaticVector<BaseMovementAction *, 32> testedActionsList;
 #endif
 
 	// Get an initial suggested a-priori action

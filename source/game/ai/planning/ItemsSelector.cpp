@@ -216,7 +216,7 @@ struct NavEntityAndWeight {
 SelectedNavEntity BotItemsSelector::SuggestGoalNavEntity( const SelectedNavEntity &currSelectedNavEntity ) {
 	UpdateInternalItemAndGoalWeights();
 
-	StaticVector<NavEntityAndWeight, MAX_NAVENTS> rawWeightCandidates;
+	wsw::StaticVector<NavEntityAndWeight, MAX_NAVENTS> rawWeightCandidates;
 	const auto levelTime = level.time;
 	auto *navEntitiesRegistry = NavEntitiesRegistry::Instance();
 	const auto *routeCache = bot->RouteCache();

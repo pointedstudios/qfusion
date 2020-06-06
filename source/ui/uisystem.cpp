@@ -1,9 +1,9 @@
 #include "uisystem.h"
 #include "../qcommon/links.h"
 #include "../qcommon/singletonholder.h"
+#include "../qcommon/wswstaticvector.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
-#include "../game/ai/static_vector.h"
 #include "nativelydrawnitems.h"
 #include "serverlistmodel.h"
 #include "keysandbindingsmodel.h"
@@ -492,7 +492,7 @@ void QWswUISystem::drawSelfInMainContext() {
 		return lhs->m_nativeZ > rhs->m_nativeZ;
 	};
 
-	StaticVector<NativelyDrawn *, kMaxNativelyDrawnItems> zHeaps[2];
+	wsw::StaticVector<NativelyDrawn *, kMaxNativelyDrawnItems> zHeaps[2];
 	for( NativelyDrawn *nativelyDrawn = m_nativelyDrawnListHead; nativelyDrawn; nativelyDrawn = nativelyDrawn->next ) {
 		auto &heap = zHeaps[nativelyDrawn->m_nativeZ >= 0];
 		heap.push_back( nativelyDrawn );

@@ -9,13 +9,12 @@ class AiGroundTraceCache {
 	 */
 	void *data;
 
-	template <typename, unsigned> friend class StaticVector;
-
+	static AiGroundTraceCache *instance;
+public:
+	// TODO: Make private, use a SingletonHolder
 	AiGroundTraceCache();
 	~AiGroundTraceCache();
 
-	static AiGroundTraceCache *instance;
-public:
 	static void Init();
 	static void Shutdown();
 

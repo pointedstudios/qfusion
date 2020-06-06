@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // g_combat.c
 
 #include "g_local.h"
-#include "ai/static_vector.h"
+#include "../qcommon/wswstaticvector.h"
 #include "ai/vec3.h"
 
 /*
@@ -715,7 +715,7 @@ bool ClipRegion::castRay( const float *from, const float *to ) const {
 }
 
 class SplashPropagationSolver {
-	using EntNumsVector = StaticVector<int, 32>;
+	using EntNumsVector = wsw::StaticVector<int, 32>;
 
 	struct DamageParams {
 		int entNum;
@@ -727,8 +727,8 @@ class SplashPropagationSolver {
 
 	enum : unsigned { kMaxCoordSteps = 11 };
 
-	using DamageParamsVector = StaticVector<DamageParams, 32>;
-	using DamageParamRefsVector = StaticVector<const DamageParams *, 32>;
+	using DamageParamsVector = wsw::StaticVector<DamageParams, 32>;
+	using DamageParamRefsVector = wsw::StaticVector<const DamageParams *, 32>;
 
 	edict_t *const m_inflictor;
 	edict_t *const m_attacker;

@@ -25,7 +25,7 @@ public:
 									   unsigned stoppedAtFrameIndex ) override;
 
 	static constexpr auto MAX_SAVED_AREAS = MovementPredictionContext::MAX_SAVED_LANDING_AREAS;
-	typedef StaticVector<int, MAX_SAVED_AREAS> ExitAreasVector;
+	using ExitAreasVector = wsw::StaticVector<int, MAX_SAVED_AREAS>;
 
 private:
 	ExitAreasVector tmpExitAreas;

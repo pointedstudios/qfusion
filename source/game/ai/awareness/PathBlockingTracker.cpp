@@ -84,7 +84,7 @@ private:
 	// Lets put it last even if it has the largest alignment requirements
 	// Last elements of this array are unlikely to be accessed.
 	// Let the array head be closer to the memory hot spot
-	StaticVector<EnemyComputationalProxy, MAX_ENEMIES> enemyProxies;
+	wsw::StaticVector<EnemyComputationalProxy, MAX_ENEMIES> enemyProxies;
 
 	void AddAreas( const uint16_t *__restrict areasList, bool *__restrict blockedAreasTable );
 
@@ -127,7 +127,7 @@ void PathBlockingTracker::Update() {
 
 	const int botBestWeaponTier = FindBestWeaponTier( self->r.client );
 
-	StaticVector<const TrackedEnemy *, DisableMapAreasRequest::MAX_ENEMIES> potentialBlockers;
+	wsw::StaticVector<const TrackedEnemy *, DisableMapAreasRequest::MAX_ENEMIES> potentialBlockers;
 
 	const TrackedEnemy *enemy = self->ai->botRef->TrackedEnemiesHead();
 	for(; enemy; enemy = enemy->NextInTrackedList() ) {

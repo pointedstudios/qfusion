@@ -1,7 +1,7 @@
 #ifndef AI_BOT_H
 #define AI_BOT_H
 
-#include "static_vector.h"
+#include "../../qcommon/wswstaticvector.h"
 #include "awareness/AwarenessModule.h"
 #include "planning/PlanningModule.h"
 #include "ai_base_ai.h"

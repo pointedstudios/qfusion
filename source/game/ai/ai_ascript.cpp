@@ -232,7 +232,7 @@ static const asClassDescriptor_t asAiActionRecordClassDescriptor =
 class TypeHolderAndChecker
 {
     const char *name;
-    StaticVector<int, 24> subtypesIds;
+    wsw::StaticVector<int, 24> subtypesIds;
 public:
     TypeHolderAndChecker(const char *name_): name(name_) {}
 
@@ -1239,7 +1239,7 @@ class ASFunctionsRegistry
 {
     friend struct ASUntypedFunction;
 
-    StaticVector<struct ASUntypedFunction *, 64> functions;
+    wsw::StaticVector<struct ASUntypedFunction *, 64> functions;
 
     inline void Register(struct ASUntypedFunction &function)
     {

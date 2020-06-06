@@ -3,7 +3,7 @@
 
 #include "../ai_local.h"
 #include "../navigation/AasRouteCache.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 #include "../bot.h"
 #include "../../../qcommon/links.h"
 
@@ -110,7 +110,7 @@ public:
 	// Make sure we can also use MAX_SPOTS + 1 to indicate illegal spot
 	static constexpr uint16_t MAX_SPOTS = std::numeric_limits<uint16_t>::max() - 1;
 
-	typedef StaticVector<uint16_t, MAX_SPOTS> SpotsQueryVector;
+	typedef wsw::StaticVector<uint16_t, MAX_SPOTS> SpotsQueryVector;
 
 	struct alignas( 2 )SpotAndScore {
 		uint16_t spotNum;
@@ -141,9 +141,9 @@ public:
 		}
 	};
 
-	typedef StaticVector<SpotAndScore, MAX_SPOTS> SpotsAndScoreVector;
-	typedef StaticVector<OriginAndScore, MAX_SPOTS> OriginAndScoreVector;
-	typedef StaticVector<CriteriaScores, MAX_SPOTS> CriteriaScoresVector;
+	using SpotsAndScoreVector = wsw::StaticVector<SpotAndScore, MAX_SPOTS>;
+	using OriginAndScoreVector = wsw::StaticVector<OriginAndScore, MAX_SPOTS>;
+	using CriteriaScoresVector = wsw::StaticVector<CriteriaScores, MAX_SPOTS>;
 
 	SpotsQueryVector &cleanAndGetSpotsQueryVector() const;
 	SpotsAndScoreVector &cleanAndGetSpotsAndScoreVector() const;

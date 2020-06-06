@@ -39,7 +39,7 @@ protected:
 			: dir( dir_ ), area( area_ ), pathPenalty( pathPenalty_ ) {}
 	};
 
-	StaticVector<SuggestedDir, kMaxSuggestedLookDirs> suggestedLookDirs;
+	wsw::StaticVector<SuggestedDir, kMaxSuggestedLookDirs> suggestedLookDirs;
 
 	unsigned maxSuggestedLookDirs {kMaxSuggestedLookDirs };
 	unsigned currSuggestedLookDirNum { 0 };

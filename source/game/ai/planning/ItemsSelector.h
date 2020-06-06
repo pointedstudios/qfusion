@@ -3,7 +3,7 @@
 
 #include "../ai_local.h"
 #include "GoalEntities.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 
 class SelectedNavEntity {
 	friend class Bot;

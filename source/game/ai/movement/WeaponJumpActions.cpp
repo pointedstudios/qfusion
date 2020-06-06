@@ -21,7 +21,7 @@ class WeaponJumpWeaponsTester {
 	WeaponJumpableSpotDetector detector;
 
 	typedef WeaponJumpableSpotDetector::SpotAndScore SpotAndScore;
-	StaticVector<SpotAndScore, 64> spots;
+	wsw::StaticVector<SpotAndScore, 64> spots;
 
 	float zOffsets[64];
 
@@ -326,7 +326,7 @@ int ScheduleWeaponJumpAction::GetCandidatesForJumpingToTarget( Context *context,
 		// Having much more areas in cluster than MAX_AREAS is not rare.
 		// Make sure we won't miss closest to target areas.
 
-		StaticVector<AreaAndScore, MAX_AREAS> heap;
+		wsw::StaticVector<AreaAndScore, MAX_AREAS> heap;
 		float farthestPresentDistance = 0.0f;
 
 		const auto *aasAreas = aasWorld->Areas();

@@ -2,7 +2,7 @@
 #define QFUSION_SAMEFLOORCLUSTERAREASCACHE_H
 
 #include "../ai_local.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 
 class Bot;
 struct Hazard;
@@ -12,7 +12,7 @@ class FloorClusterAreasCache {
 protected:
 	static constexpr unsigned HEAP_SIZE = 20;
 
-	using CandidateAreasHeap = StaticVector<AreaAndScore, HEAP_SIZE>;
+	using CandidateAreasHeap = wsw::StaticVector<AreaAndScore, HEAP_SIZE>;
 
 	/**
 	 * If a bot remains in the same area candidates computation might be skipped

@@ -4,7 +4,7 @@
 #include "planning/Planner.h"
 #include "AIComponent.h"
 #include "planning/GoalEntities.h"
-#include "static_vector.h"
+#include "../../qcommon/wswstaticvector.h"
 
 class Bot;
 
@@ -72,7 +72,7 @@ protected:
 	class StringValueMap {
 		using value_type = std::pair<const char *, T>;
 
-		StaticVector<value_type, N> keyValuePairs;
+		wsw::StaticVector<value_type, N> keyValuePairs;
 		unsigned clearLimit { 0 };
 public:
 		using iterator = value_type *;

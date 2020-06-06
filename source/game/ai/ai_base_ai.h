@@ -5,7 +5,7 @@
 #include "planning/GoalEntities.h"
 #include "navigation/AasWorld.h"
 #include "navigation/AasRouteCache.h"
-#include "static_vector.h"
+#include "../../qcommon/wswstaticvector.h"
 #include "../../gameshared/q_comref.h"
 
 class alignas ( 4 )AiEntityPhysicsState

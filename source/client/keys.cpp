@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 #include "client.h"
 #include "../ui/uisystem.h"
-#include "../game/ai/static_vector.h"
+#include "../qcommon/wswstaticvector.h"
 
 /*
 
@@ -31,7 +31,7 @@ key up events are sent even if in console mode
 
 int anykeydown;
 
-static StaticVector<keydest_t, 8> keyDestStack;
+static wsw::StaticVector<keydest_t, 8> keyDestStack;
 
 static char *keybindings[256];
 static bool consolekeys[256];   // if true, can't be rebound while in console

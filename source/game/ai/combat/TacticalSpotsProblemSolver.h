@@ -156,7 +156,7 @@ private:
 	unsigned addedCriteriaMask { 0 };
 
 	// TODO: Use magic_enum
-	StaticVector<AddedCriterion, 9> criteria;
+	wsw::StaticVector<AddedCriterion, 9> criteria;
 public:
 	TacticalSpotsProblemSolver( const OriginParams &originParams_, const BaseProblemParams &problemParams_ )
 		: originParams( originParams_ )

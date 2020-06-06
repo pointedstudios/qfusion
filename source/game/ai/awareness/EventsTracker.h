@@ -2,7 +2,7 @@
 #define QFUSION_BOT_PERCEPTION_MANAGER_H
 
 #include "../planning/Planner.h"
-#include "../static_deque.h"
+#include "../../../qcommon/wswstaticdeque.h"
 #include "AwarenessLocal.h"
 
 class EventsTracker: public AiFrameAwareComponent {
@@ -28,7 +28,7 @@ class EventsTracker: public AiFrameAwareComponent {
 		}
 	};
 
-	StaticDeque<DetectedEvent, 16> eventsQueue;
+	wsw::StaticDeque<DetectedEvent, 16> eventsQueue;
 
 	// The failure chance is specified mainly to throttle excessive plasma spam
 	void TryGuessingBeamOwnersOrigins( const EntNumsVector &dangerousEntsNums, float failureChance = 0.0f );

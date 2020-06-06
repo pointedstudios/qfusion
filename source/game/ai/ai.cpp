@@ -155,7 +155,7 @@ void AITools_DrawColorLine( const vec3_t origin, const vec3_t dest, int color, i
 	GClip_LinkEntity( event );
 }
 
-static StaticVector<int, 16> hubAreas;
+static wsw::StaticVector<int, 16> hubAreas;
 
 //==========================================
 // AI_InitLevel

@@ -9,11 +9,13 @@
 #include <stddef.h>
 #include <stdarg.h>
 
-#include "../../gameshared/q_shared.h"
+#include "../gameshared/q_shared.h"
 
 #ifdef _MSC_VER
 #pragma warning( disable : 4324 )       // structure was padded due to alignment specifier
 #endif
+
+namespace wsw {
 
 template <typename T, unsigned int N>
 class alignas ( 16 )StaticVector
@@ -317,5 +319,7 @@ public:
 		return basePointer + ( position - cbegin() );
 	}
 };
+
+}
 
 #endif

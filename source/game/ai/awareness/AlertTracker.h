@@ -2,7 +2,7 @@
 #define QFUSION_ALERTTRACKER_H
 
 #include "../ai_local.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 #include "../AIComponent.h"
 
 /**
@@ -66,13 +66,13 @@ private:
 	void DisableAutoAlert( int id );
 
 	static constexpr unsigned MAX_ALERT_SPOTS = 3;
-	StaticVector<AlertSpot, MAX_ALERT_SPOTS> alertSpots;
+	wsw::StaticVector<AlertSpot, MAX_ALERT_SPOTS> alertSpots;
 
 	Bot *const bot;
 
 	explicit AlertTracker( Bot *bot_ ): bot( bot_ ) {}
 
-	void CheckAlertSpots( const StaticVector<uint16_t, MAX_CLIENTS> &visibleTargets );
+	void CheckAlertSpots( const wsw::StaticVector<uint16_t, MAX_CLIENTS> &visibleTargets );
 };
 
 #endif

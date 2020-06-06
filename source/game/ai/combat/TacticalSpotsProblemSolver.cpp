@@ -173,7 +173,7 @@ void TacticalSpotsProblemSolver::applyEnemiesInfluence( SpotsAndScoreVector &can
 	};
 
 	// Pick at most as many enemies as the number of AAS tmp rows we can allocate
-	StaticVector<CachedEnemyData, AasElementsMask::TMP_ROW_REDUNDANCY_SCALE> cachedEnemyData;
+	wsw::StaticVector<CachedEnemyData, AasElementsMask::TMP_ROW_REDUNDANCY_SCALE> cachedEnemyData;
 
 	const auto *aasWorld = AiAasWorld::Instance();
 	const int64_t levelTime = level.time;

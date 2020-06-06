@@ -29,7 +29,7 @@ void AlertTracker::DisableAutoAlert( int id ) {
 	AI_FailWith( "AlertTracker::DisableAutoAlert()", "Can't find alert spot by id %d\n", id );
 }
 
-void AlertTracker::CheckAlertSpots( const StaticVector<uint16_t, MAX_CLIENTS> &visibleTargets ) {
+void AlertTracker::CheckAlertSpots( const wsw::StaticVector<uint16_t, MAX_CLIENTS> &visibleTargets ) {
 	float scores[MAX_ALERT_SPOTS];
 
 	edict_t *const gameEdicts = game.edicts;

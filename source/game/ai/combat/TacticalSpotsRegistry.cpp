@@ -9,7 +9,7 @@ typedef TacticalSpotsRegistry::SpotsQueryVector SpotsQueryVector;
 
 TacticalSpotsRegistry *TacticalSpotsRegistry::instance = nullptr;
 // An actual storage for an instance
-static StaticVector<TacticalSpotsRegistry, 1> instanceHolder;
+static wsw::StaticVector<TacticalSpotsRegistry, 1> instanceHolder;
 
 bool TacticalSpotsRegistry::Init( const char *mapname ) {
 	if( instance ) {

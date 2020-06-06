@@ -1,6 +1,6 @@
 #include "AasRouteCache.h"
 #include "AasElementsMask.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 #include "../ai_local.h"
 #include "../bot.h"
 
@@ -1455,7 +1455,7 @@ void AiAasRouteCache::UpdatePortalRoutingCache( AreaOrPortalCacheTable *portalCa
 		portalCache->travelTimes[-clusterNum] = ToUint16CheckingRange( portalCache->startTravelTime );
 	}
 
-	StaticVector<RoutingUpdateRef, 1024> updateHeap;
+	wsw::StaticVector<RoutingUpdateRef, 1024> updateHeap;
 	updateHeap.push_back( RoutingUpdateRef( numPortals, ToUint16CheckingRange( portalCache->startTravelTime ) ) );
 
 	//while there are updates in the current list

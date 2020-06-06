@@ -1,5 +1,5 @@
 #include "ai_ground_trace_cache.h"
-#include "static_vector.h"
+#include "../../qcommon/wswstaticvector.h"
 #include "ai_local.h"
 
 struct CachedTrace {
@@ -20,7 +20,7 @@ AiGroundTraceCache::~AiGroundTraceCache() {
 }
 
 AiGroundTraceCache *AiGroundTraceCache::instance = nullptr;
-static StaticVector<AiGroundTraceCache, 1> instanceHolder;
+static wsw::StaticVector<AiGroundTraceCache, 1> instanceHolder;
 
 void AiGroundTraceCache::Init() {
 	assert( instanceHolder.empty() );

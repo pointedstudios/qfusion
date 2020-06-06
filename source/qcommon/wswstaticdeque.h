@@ -7,11 +7,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "ai_local.h"
-
 #ifdef _MSC_VER
 #pragma warning( disable : 4324 )       // structure was padded due to alignment specifier
 #endif
+
+namespace wsw {
 
 template<typename T, unsigned N>
 class alignas ( 16 )StaticDeque
@@ -281,5 +281,7 @@ public:
 		}
 	}
 };
+
+}
 
 #endif

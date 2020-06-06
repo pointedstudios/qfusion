@@ -22,7 +22,7 @@ public:
 		}
 	};
 private:
-	using EntNumsVector = StaticVector<int, MAX_EDICTS>;
+	using EntNumsVector = wsw::StaticVector<int, MAX_EDICTS>;
 
 	int findTopNodeAndEntNums( SpotsAndScoreVector &spotsAndScores, EntNumsVector &entNums );
 

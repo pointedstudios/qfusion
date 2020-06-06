@@ -23,9 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "../qcommon/links.h"
 
-// TODO: Lift to the project toplevel
-#include "../game/ai/static_vector.h"
-
 template <typename T, unsigned MaxBins = 16, unsigned MaxMatchers = 32>
 class EnumTokenMatcher {
 	static_assert( MaxBins != 0 );
@@ -46,7 +43,7 @@ private:
 	TokenPattern *smallLenHeads[MaxBins] { nullptr };
 	TokenPattern *largeLenHead { nullptr };
 
-	StaticVector<TokenPattern, MaxMatchers> matchers;
+	wsw::StaticVector<TokenPattern, MaxMatchers> matchers;
 protected:
 	void add( const char *name, T value ) {
 		matchers.emplace_back( { name, value } );

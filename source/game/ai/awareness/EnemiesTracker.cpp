@@ -575,7 +575,7 @@ const TrackedEnemy *AiEnemiesTracker::ChooseVisibleEnemy( const edict_t *challen
 	// Until these bounds distance factor scales linearly
 	constexpr float distanceBounds = 3500.0f;
 
-	StaticVector<EntAndScore, MAX_EDICTS> candidates;
+	wsw::StaticVector<EntAndScore, MAX_EDICTS> candidates;
 	for( TrackedEnemy *enemy = TrackedEnemiesHead(); enemy; enemy = enemy->NextInTrackedList() ) {
 		isEntityTested[enemy->entNum] = true;
 
@@ -609,7 +609,7 @@ const TrackedEnemy *AiEnemiesTracker::ChooseVisibleEnemy( const edict_t *challen
 	std::sort( candidates.begin(), candidates.end() );
 
 	// Now candidates should be merged in a list of active enemies
-	StaticVector<EntAndScore, MAX_ACTIVE_ENEMIES * 2> mergedActiveEnemies;
+	wsw::StaticVector<EntAndScore, MAX_ACTIVE_ENEMIES * 2> mergedActiveEnemies;
 	// Best candidates are first (EnemyAndScore::operator<() yields this result)
 	// Choose not more than maxActiveEnemies candidates
 	// that have a score not than twice less than the current best one

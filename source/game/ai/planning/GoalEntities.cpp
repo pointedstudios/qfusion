@@ -1,5 +1,4 @@
 #include "GoalEntities.h"
-#include "../static_vector.h"
 #include "../../../qcommon/links.h"
 
 float NavEntity::CostInfluence() const {
@@ -165,7 +164,7 @@ int64_t NavEntity::Timeout() const {
 	return std::numeric_limits<int64_t>::max();
 }
 
-static StaticVector<NavEntitiesRegistry, 1> instanceHolder;
+static wsw::StaticVector<NavEntitiesRegistry, 1> instanceHolder;
 NavEntitiesRegistry *NavEntitiesRegistry::instance = nullptr;
 
 void NavEntitiesRegistry::Init() {

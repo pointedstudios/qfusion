@@ -2,7 +2,7 @@
 #include "AasElementsMask.h"
 #include "AasAreasWalker.h"
 #include "../buffer_builder.h"
-#include "../static_vector.h"
+#include "../../../qcommon/wswstaticvector.h"
 #include "../ai_local.h"
 #include "../ai_precomputed_file_handler.h"
 #include "../../../qcommon/md5.h"
@@ -1597,7 +1597,7 @@ class StairsClusterBuilder: public AreasClusterBuilder<ClassifyStairsArea>
 		return true;
 	}
 public:
-	StaticVector<AreaAndScore, 128> areasAndHeights;
+	wsw::StaticVector<AreaAndScore, 128> areasAndHeights;
 
 	StairsClusterBuilder( BitVector *areasMask_, uint16_t *resultsBuffer, AiAasWorld *aasWorld_ )
 		: AreasClusterBuilder( areasMask_, resultsBuffer, aasWorld_ ), firstAreaIndex(0), lastAreaIndex(0) {}
