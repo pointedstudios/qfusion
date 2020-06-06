@@ -1,0 +1,3 @@
+clienttest_autogen/
+clienttest
+*.cmake
