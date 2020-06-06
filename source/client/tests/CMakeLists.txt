@@ -11,7 +11,9 @@ enable_testing(true)
 
 add_executable(
         clienttest
-        main.cpp)
+        "main.cpp"
+        "tokensplittertest.cpp"
+        "../../ref/materiallexer.cpp")
 
 add_test(NAME clienttest COMMAND clienttest)
 set_property(TARGET clienttest PROPERTY CXX_STANDARD 17)
