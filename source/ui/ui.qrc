@@ -5,7 +5,10 @@
         <file>CentralOverlayButton.qml</file>
         <file>CentralOverlayButtonTrail.qml</file>
         <file>CentralOverlayGroup.qml</file>
+        <file>ColorPickerItem.qml</file>
+        <file>ColorPickerColorItem.qml</file>
         <file>CVarAwareCheckBox.qml</file>
+        <file>CVarAwareColorPicker.qml</file>
         <file>CVarAwareComboBox.qml</file>
         <file>CVarAwareSlider.qml</file>
         <file>CVarAwareTextField.qml</file>

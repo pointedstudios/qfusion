@@ -87,6 +87,8 @@ public:
 	Q_INVOKABLE void returnFromMainMenu();
 	Q_INVOKABLE void quit();
 
+	Q_INVOKABLE QVariant colorFromRgbString( const QString &string ) const;
+
 	Q_INVOKABLE void startServerListUpdates();
 	Q_INVOKABLE void stopServerListUpdates();
 
@@ -100,6 +102,7 @@ public:
 	Q_PROPERTY( QColor white MEMBER m_colorWhite CONSTANT );
 	Q_PROPERTY( QColor orange MEMBER m_colorOrange CONSTANT );
 	Q_PROPERTY( QColor grey MEMBER m_colorGrey CONSTANT );
+	Q_PROPERTY( QVariantList consoleColors MEMBER m_consoleColors CONSTANT );
 signals:
 	Q_SIGNAL void isShowingMainMenuChanged( bool isShowingMainMenu );
 	Q_SIGNAL void isShowingInGameMenuChanged( bool isShowingInGameMenu );
@@ -184,6 +187,11 @@ private:
 	const QColor m_colorWhite { colorForNum( 7 ) };
 	const QColor m_colorOrange { colorForNum( 8 ) };
 	const QColor m_colorGrey { colorForNum( 9 ) };
+
+	const QVariantList m_consoleColors {
+		m_colorBlack, m_colorRed, m_colorGreen, m_colorYellow, m_colorBlue,
+		m_colorCyan, m_colorMagenta, m_colorWhite, m_colorOrange, m_colorGrey
+	};
 
 	[[nodiscard]]
 	bool isShowingDemoPlaybackMenu() const {
@@ -1062,6 +1070,13 @@ void QWswUISystem::updateCVarAwareControls() {
 
 void QWswUISystem::quit() {
 	Cbuf_AddText( "quit" );
+}
+
+auto QWswUISystem::colorFromRgbString( const QString &string ) const -> QVariant {
+	if( int color = COM_ReadColorRGBString( string.toUtf8().constData() ); color != -1 ) {
+		return QColor::fromRgb( COLOR_R( color ), COLOR_G( color ), COLOR_B( color ), 255 );
+	}
+	return QVariant();
 }
 
 void QWswUISystem::startServerListUpdates() {
