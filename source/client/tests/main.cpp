@@ -1,4 +1,5 @@
 #include <QCoreApplication>
+#include "materialsourcetest.h"
 #include "tokensplittertest.h"
 #include "tokenstreamtest.h"
 
@@ -15,6 +16,11 @@ int main( int argc, char **argv ) {
 	{
 		TokenStreamTest tokenStreamTest;
 		result |= QTest::qExec( &tokenStreamTest, argc, argv );
+	}
+
+	{
+		MaterialSourceTest materialSourceTest;
+		result |= QTest::qExec( &materialSourceTest, argc, argv );
 	}
 
 	return result;

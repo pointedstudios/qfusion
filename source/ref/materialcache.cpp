@@ -208,7 +208,7 @@ auto MaterialCache::makeCleanName( const wsw::StringView &name ) -> wsw::HashedS
 }
 
 auto MaterialCache::getTokenStreamForShader( const wsw::HashedStringView &cleanName ) -> TokenStream * {
-	Source *source = findSourceByName( cleanName );
+	MaterialSource *source = findSourceByName( cleanName );
 	if( !source ) {
 		return nullptr;
 	}
@@ -217,10 +217,9 @@ auto MaterialCache::getTokenStreamForShader( const wsw::HashedStringView &cleanN
 		primaryTokenStreamHolder.pop_back();
 	}
 
-	const char *data = source->file->data;
-	const TokenSpan *spans = source->file->spans + source->tokenSpansOffset;
 	void *mem = primaryTokenStreamHolder.unsafe_grow_back();
-	return new( mem )TokenStream( data, spans, source->numTokens );
+	const auto [spans, numTokens] = source->getTokenSpans();
+	return new( mem )TokenStream( source->getCharData(), spans, numTokens );
 }
 
 /*
@@ -750,7 +749,7 @@ auto MaterialCache::newDefaultMaterial( int type, const wsw::HashedStringView &c
 	return nullptr;
 }
 
-auto MaterialCache::readFileContents( const char *filename ) -> const wsw::String * {
+auto MaterialCache::readRawContents( const char *filename ) -> const wsw::String * {
 	wsw::String &pathName = pathNameBuffer;
 	pathName.clear();
 	pathName.append( "scripts/" );
@@ -783,23 +782,23 @@ auto MaterialCache::readFileContents( const char *filename ) -> const wsw::Strin
 	return &fileContentsBuffer;
 }
 
-auto MaterialCache::createFileCache( const char *filename ) -> FileCache * {
-	const wsw::String *fileContents = readFileContents( filename );
-	if( !fileContents ) {
+auto MaterialCache::loadFileContents( const char *filename ) -> MaterialFileContents * {
+	const wsw::String *rawContents = readRawContents( filename );
+	if( !rawContents ) {
 		return nullptr;
 	}
 
 	int offsetShift = 0;
 	// Strip an UTF8 BOM (if any)
-	if( fileContents->size() > 2 ) {
+	if( rawContents->size() > 2 ) {
 		// The data must be cast to an unsigned type first, otherwise a comparison gets elided by a compiler
-		const auto *p = (const uint8_t *)fileContents->data();
+		const auto *p = (const uint8_t *)rawContents->data();
 		if( ( p[0] == 0xEFu ) && ( p[1] == 0xBBu ) && ( p[2] == 0xBFu ) ) {
 			offsetShift = 3;
 		}
 	}
 
-	TokenSplitter splitter( fileContents->data() + offsetShift, fileContents->size() - offsetShift );
+	TokenSplitter splitter( rawContents->data() + offsetShift, rawContents->size() - offsetShift );
 
 	fileTokenSpans.clear();
 
@@ -815,7 +814,7 @@ auto MaterialCache::createFileCache( const char *filename ) -> FileCache * {
 	}
 
 	MemSpecBuilder memSpec;
-	auto headerSpec = memSpec.add<FileCache>();
+	auto headerSpec = memSpec.add<MaterialFileContents>();
 	auto spansSpec = memSpec.add<TokenSpan>( fileTokenSpans.size() );
 	auto contentsSpec = memSpec.add<char>( numKeptChars );
 
@@ -824,7 +823,7 @@ auto MaterialCache::createFileCache( const char *filename ) -> FileCache * {
 		return nullptr;
 	}
 
-	auto *result = new( headerSpec.get( mem ) )FileCache();
+	auto *result = new( headerSpec.get( mem ) )MaterialFileContents();
 	result->spans = spansSpec.get( mem );
 	result->data = contentsSpec.get( mem );
 	assert( !result->dataSize && !result->numSpans );
@@ -835,7 +834,7 @@ auto MaterialCache::createFileCache( const char *filename ) -> FileCache * {
 		auto *copiedSpan = &result->spans[result->numSpans++];
 		*copiedSpan = parsedSpan;
 		copiedSpan->offset = result->dataSize;
-		std::memcpy( data + copiedSpan->offset, fileContents->data() + parsedSpan.offset, parsedSpan.len );
+		std::memcpy( data + copiedSpan->offset, rawContents->data() + parsedSpan.offset, parsedSpan.len );
 		result->dataSize += parsedSpan.len;
 		assert( parsedSpan.len == copiedSpan->len && parsedSpan.line == copiedSpan->line );
 	}
@@ -847,24 +846,24 @@ auto MaterialCache::createFileCache( const char *filename ) -> FileCache * {
 }
 
 void MaterialCache::addFileContents( const char *filename ) {
-	if( FileCache *fileCache = createFileCache( filename ) ) {
-		if( tryAddingFileCacheContents( fileCache ) ) {
-			assert( !fileCache->next );
-			fileCache->next = fileCacheHead;
-			fileCacheHead = fileCache;
+	if( MaterialFileContents *contents = loadFileContents( filename ) ) {
+		if( tryAddingFileContents( contents ) ) {
+			assert( !contents->next );
+			contents->next = fileContentsHead;
+			fileContentsHead = contents;
 		} else {
-			fileCache->~FileCache();
-			free( fileCache );
+			contents->~MaterialFileContents();
+			free( contents );
 		}
 	}
 }
 
-bool MaterialCache::tryAddingFileCacheContents( const FileCache *fileCache ) {
+bool MaterialCache::tryAddingFileContents( const MaterialFileContents *contents ) {
 	fileMaterialNames.clear();
 	fileSourceSpans.clear();
 
 	unsigned tokenNum = 0;
-	TokenStream stream( fileCache->data, fileCache->spans, fileCache->numSpans );
+	TokenStream stream( contents->data, contents->spans, contents->numSpans );
 	for(;;) {
 		auto maybeNameToken = stream.getNextToken();
 		if( !maybeNameToken ) {
@@ -911,28 +910,28 @@ bool MaterialCache::tryAddingFileCacheContents( const FileCache *fileCache ) {
 		fileSourceSpans.emplace_back( std::make_pair( shaderSpanStart, tokenNum - shaderSpanStart - 1 ) );
 	}
 
-	auto *mem = (uint8_t *)::malloc( sizeof( Source ) * fileMaterialNames.size() );
+	auto *mem = (uint8_t *)::malloc( sizeof( MaterialSource ) * fileMaterialNames.size() );
 	if( !mem ) {
 		return false;
 	}
 
-	auto *const firstInSameMemChunk = (Source *)mem;
+	auto *const firstInSameMemChunk = (MaterialSource *)mem;
 
 	assert( fileMaterialNames.size() == fileSourceSpans.size() );
 	for( size_t i = 0; i < fileMaterialNames.size(); ++i ) {
-		auto *const source = new( mem )Source;
-		mem += sizeof( Source );
+		auto *const source = new( mem )MaterialSource;
+		mem += sizeof( MaterialSource );
 
 		auto [from, len] = fileSourceSpans[i];
-		source->tokenSpansOffset = from;
-		source->numTokens = len;
-		source->file = fileCache;
-		source->firstInSameMemChunk = firstInSameMemChunk;
-		source->name = wsw::HashedStringView( fileMaterialNames[i] );
+		source->m_tokenSpansOffset = from;
+		source->m_numTokens = len;
+		source->m_fileContents = contents;
+		source->m_firstInSameMemChunk = firstInSameMemChunk;
+		source->m_name = wsw::HashedStringView( fileMaterialNames[i] );
 		source->nextInList = sourcesHead;
 		sourcesHead = source;
 
-		auto binIndex = source->name.getHash() % kNumBins;
+		auto binIndex = source->getName().getHash() % kNumBins;
 		source->nextInBin = sourceBins[binIndex];
 		sourceBins[binIndex] = source;
 	}
@@ -940,58 +939,10 @@ bool MaterialCache::tryAddingFileCacheContents( const FileCache *fileCache ) {
 	return true;
 }
 
-auto MaterialCache::Source::preparePlaceholders() -> std::optional<Placeholders> {
-	wsw::Vector<PlaceholderSpan> buffer;
-
-	TokenSpan *tokenSpans = file->spans + this->tokenSpansOffset;
-	const char *data = file->data;
-
-	for( unsigned i = 0; i < numTokens; ++i ) {
-		const auto &tokenSpan = tokenSpans[i];
-		findPlaceholdersInToken( wsw::StringView( data + tokenSpan.offset, tokenSpan.len ), i, buffer );
-	}
-
-	return buffer.empty() ? std::nullopt : std::optional( buffer );
-}
-
-void MaterialCache::Source::findPlaceholdersInToken( const wsw::StringView &token, int tokenNum,
-													 wsw::Vector<PlaceholderSpan> &buffer ) {
-	size_t index = 0;
-
-	for(;; ) {
-		auto *p = std::find( token.data() + index, token.data() + token.size(), '$' );
-		if( p == token.data() + token.size() ) {
-			return;
-		}
-		index = p - token.data() + 1;
-		auto start = index;
-		int num = 0;
-		bool overflow = false;
-		for(; index < token.length() && isdigit( token[index] ); index++ ) {
-			if( !overflow ) {
-				num = num * 10 + ( token[index] - '0' );
-				if( num > std::numeric_limits<uint8_t>::max()) {
-					overflow = true;
-				}
-			}
-		}
-		// If it was just a single dollar character
-		if( !num ) {
-			continue;
-		}
-		if( overflow ) {
-			// TODO: Show a warning
-		}
-		auto len = index - start;
-		PlaceholderSpan span = { (uint32_t)tokenNum, (uint16_t)start, (uint8_t)len, (uint8_t)num };
-		buffer.emplace_back( span );
-	}
-}
-
-auto MaterialCache::findSourceByName( const wsw::HashedStringView &name ) -> Source * {
+auto MaterialCache::findSourceByName( const wsw::HashedStringView &name ) -> MaterialSource * {
 	auto binIndex = name.getHash() % kNumBins;
-	for( Source *source = sourceBins[binIndex]; source; source = source->nextInBin ) {
-		if( source->name.equalsIgnoreCase( name ) ) {
+	for( MaterialSource *source = sourceBins[binIndex]; source; source = source->nextInBin ) {
+		if( source->getName().equalsIgnoreCase( name ) ) {
 			return source;
 		}
 	}
@@ -1000,14 +951,16 @@ auto MaterialCache::findSourceByName( const wsw::HashedStringView &name ) -> Sou
 
 auto MaterialCache::expandTemplate( const wsw::StringView &name, const wsw::StringView *args, size_t numArgs )
 	-> MaterialLexer * {
-	Source *source = findSourceByName( name );
+	MaterialSource *source = findSourceByName( name );
 	if( !source ) {
 		return nullptr;
 	}
 
 	expansionBuffer.clear();
 	templateTokenSpans.clear();
-	source->expandTemplate( args, numArgs, expansionBuffer, templateTokenSpans );
+	if( !source->expandTemplate( args, numArgs, expansionBuffer, templateTokenSpans ) ) {
+		return nullptr;
+	}
 
 	if( !templateLexerHolder.empty() ) {
 		templateLexerHolder.pop_back();
@@ -1015,63 +968,12 @@ auto MaterialCache::expandTemplate( const wsw::StringView &name, const wsw::Stri
 	}
 
 	void *streamMem = templateTokenStreamHolder.unsafe_grow_back();
-	new( streamMem )TokenStream( source->file->data, templateTokenSpans.data(),templateTokenSpans.size(), expansionBuffer.data() );
+	new( streamMem )TokenStream( source->getCharData(), templateTokenSpans.data(),templateTokenSpans.size(), expansionBuffer.data() );
 
 	void *lexerMem = templateLexerHolder.unsafe_grow_back();
 	new( lexerMem )MaterialLexer( templateTokenStreamHolder.begin() );
 
 	return templateLexerHolder.begin();
-}
-
-bool MaterialCache::Source::expandTemplate( const wsw::StringView *args, size_t numArgs, wsw::String &expansionBuffer, wsw::Vector<TokenSpan> &resultingTokens ) {
-	if( !maybePlaceholders ) {
-		preparePlaceholders();
-		if( !maybePlaceholders ) {
-			return false;
-		}
-	}
-
-	const Placeholders &placeholders = *this->maybePlaceholders;
-
-	const char *const tokensData = file->data;
-	const TokenSpan *const tokenSpans = file->spans + this->tokenSpansOffset;
-
-	int resultSize = 0;
-	for( const auto &__restrict placeholder: placeholders ) {
-		if( placeholder.argNum >= numArgs ) {
-			return false;
-		}
-		resultSize -= placeholder.len;
-		resultSize += args[placeholder.argNum].length();
-	}
-
-	expansionBuffer.reserve( resultSize );
-
-	size_t lastTokenNum = 0;
-	size_t offsetInLastToken = 0;
-	// for each token that needs a substitution
-	for( const auto &__restrict placeholder: placeholders ) {
-		if( lastTokenNum != placeholder.tokenNum ) {
-			// Copy token characters after last span
-			// Create token bounds for copied characters
-			// Add the newly created bounds to stream
-			lastTokenNum = placeholder.tokenNum;
-			offsetInLastToken = 0;
-		}
-		// Copy token characters before span
-		// Create token bounds and add to stream
-		for( int j = offsetInLastToken; j < placeholder.offset; ++j ) {
-		}
-
-		// Copy argument data and add to span
-	}
-
-	// Copy token characters after last span again and add token bounds
-	// Copy all tokens after last bounds
-
-	// TODO:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	// TODO:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	return false;
 }
 
 class BuiltinTexMatcher {

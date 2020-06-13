@@ -497,47 +497,88 @@ struct PlaceholderSpan {
 	uint8_t argNum;
 };
 
+struct MaterialFileContents {
+	MaterialFileContents *next {nullptr };
+	const char *data { nullptr };
+	size_t dataSize { 0 };
+	TokenSpan *spans { nullptr };
+	unsigned numSpans { 0 };
+};
+
+class MaterialSource {
+	friend class MaterialCache;
+	friend class MaterialSourceTest;
+
+	using Placeholders = wsw::Vector<PlaceholderSpan>;
+
+	std::optional<Placeholders> m_placeholders;
+
+	MaterialSource *nextInList { nullptr };
+	MaterialSource *nextInBin { nullptr };
+
+	wsw::HashedStringView m_name;
+
+	const MaterialSource *m_firstInSameMemChunk { nullptr };
+	const MaterialFileContents *m_fileContents {nullptr };
+	unsigned m_tokenSpansOffset { ~0u };
+	unsigned m_numTokens { ~0u };
+	bool m_triedPreparingPlaceholders { false };
+
+	struct ExpansionParams {
+		const wsw::StringView *args;
+		const size_t numArgs;
+		const Placeholders &placeholders;
+	};
+
+	struct ExpansionState {
+		wsw::String &expansionBuffer;
+		wsw::Vector<TokenSpan> &resultingTokens;
+		size_t tokenStart { 1 };
+		size_t lastOffsetInSpan { 0 };
+	};
+
+	[[nodiscard]]
+	bool expandTemplate( const ExpansionParams &params, ExpansionState &state ) const;
+
+	void addTheRest( ExpansionState &state, size_t lastSpanNum, size_t currSpanNum ) const;
+
+	[[nodiscard]]
+	auto validateAndEstimateExpandedDataSize( const ExpansionParams &params ) const -> std::optional<unsigned>;
+public:
+	[[nodiscard]]
+	auto getName() const -> const wsw::HashedStringView & { return m_name; }
+
+	[[nodiscard]]
+	auto getCharData() const -> const char * { return m_fileContents->data; }
+
+	// TODO: std::span
+	[[nodiscard]]
+	auto getTokenSpans() const -> std::pair<const TokenSpan *, unsigned> {
+		return std::make_pair( m_fileContents->spans + m_tokenSpansOffset, m_numTokens );
+	}
+
+	[[nodiscard]]
+	auto preparePlaceholders() -> std::optional<Placeholders>;
+
+	static void findPlaceholdersInToken( const wsw::StringView &token, unsigned tokenNum,
+										 wsw::Vector<PlaceholderSpan> &spans );
+
+	[[nodiscard]]
+	bool expandTemplate( const wsw::StringView *args, size_t numArgs,
+						 wsw::String &expansionBuffer,
+						 wsw::Vector<TokenSpan> &resultingTokens );
+};
+
 class MaterialCache {
 	friend class MaterialParser;
+	friend class MaterialSource;
 
-	struct FileCache {
-		FileCache *next { nullptr };
-		const char *data { nullptr };
-		size_t dataSize { 0 };
-		TokenSpan *spans { nullptr };
-		unsigned numSpans { 0 };
-	};
-
-	FileCache *fileCacheHead { nullptr };
-
-	struct Source {
-		using Placeholders = wsw::Vector<PlaceholderSpan>;
-
-		std::optional<Placeholders> maybePlaceholders;
-
-		Source *nextInList { nullptr };
-		Source *nextInBin { nullptr };
-
-		wsw::HashedStringView name;
-
-		const Source *firstInSameMemChunk { nullptr };
-		const FileCache *file { nullptr };
-		unsigned tokenSpansOffset { ~0u };
-		unsigned numTokens { ~0u };
-
-		auto preparePlaceholders() -> std::optional<Placeholders>;
-
-		void findPlaceholdersInToken( const wsw::StringView &token, int tokenNum, wsw::Vector<PlaceholderSpan> &spans );
-
-		bool expandTemplate( const wsw::StringView *args, size_t numArgs,
-							 wsw::String &expansionBuffer,
-			                 wsw::Vector<TokenSpan> &resultingTokens );
-	};
+	MaterialFileContents *fileContentsHead {nullptr };
 
 	enum { kNumBins = 307 };
 
-	Source *sourcesHead { nullptr };
-	Source *sourceBins[kNumBins] { nullptr };
+	MaterialSource *sourcesHead { nullptr };
+	MaterialSource *sourceBins[kNumBins] { nullptr };
 
 	shader_t *materialsHead { nullptr };
 	shader_t *materialBins[kNumBins] { nullptr };
@@ -561,14 +602,14 @@ class MaterialCache {
 	wsw::StaticVector<MaterialLexer, 1> templateLexerHolder;
 	wsw::StaticVector<TokenStream, 1> primaryTokenStreamHolder;
 
-	auto createFileCache( const char *filename ) -> FileCache *;
-	auto readFileContents( const char *filename ) -> const wsw::String *;
+	auto loadFileContents( const char *filename ) -> MaterialFileContents *;
+	auto readRawContents( const char *filename ) -> const wsw::String *;
 
-	auto findSourceByName( const wsw::StringView &name ) -> Source * {
+	auto findSourceByName( const wsw::StringView &name ) -> MaterialSource * {
 		return findSourceByName( wsw::HashedStringView( name ) );
 	}
 
-	auto findSourceByName( const wsw::HashedStringView &name ) -> Source *;
+	auto findSourceByName( const wsw::HashedStringView &name ) -> MaterialSource *;
 
 	auto findImage( const wsw::StringView &name, int flags, int imageTags, int minMipSize = 1 ) -> image_s *;
 	void loadMaterial( image_s **images, const wsw::StringView &fullName, int flags, int imageTags, int minMipSize = 1 );
@@ -576,7 +617,7 @@ class MaterialCache {
 	void loadDirContents( const char *dir );
 
 	void addFileContents( const char *filename );
-	bool tryAddingFileCacheContents( const FileCache *fileCache );
+	bool tryAddingFileContents( const MaterialFileContents *contents );
 
 	void unlinkAndFree( shader_t *s );
 
