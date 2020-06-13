@@ -160,14 +160,14 @@ private:
 	bool reloadColumnCommandBindings( QJsonArray &column );
 
 	[[nodiscard]]
-	auto registerKnownBindings( std::map<wsw::String, int> &dest,
+	auto registerKnownBindings( wsw::HashMap<wsw::String, int> &dest,
 							    const wsw::StringView *begin,
 							    const wsw::StringView *end,
 							    BindingGroup bindingGroup,
 							    int startFromNum ) -> int;
 
 	template <typename Array>
-	auto registerKnownBindings( std::map<wsw::String, int> &dest,
+	auto registerKnownBindings( wsw::HashMap<wsw::String, int> &dest,
 								const Array &bindings,
 								BindingGroup bindingGroup,
 								int startFromNum ) -> int;
@@ -189,13 +189,13 @@ private:
 	static constexpr auto kMaxCommands = 48;
 	std::array<BindingGroup, kMaxCommands> m_commandBindingGroups;
 
-	std::map<wsw::String, int> m_otherBindingNums;
-	std::map<wsw::String, int> m_weaponBindingNums;
-	std::map<wsw::String, int> m_respectBindingNums;
+	wsw::HashMap<wsw::String, int> m_otherBindingNums;
+	wsw::HashMap<wsw::String, int> m_weaponBindingNums;
+	wsw::HashMap<wsw::String, int> m_respectBindingNums;
 
 	// TODO: Optimize by avoiding allocations
 	// (all known bindings/commands can use &'static lifetime)
-	std::map<int, wsw::String> m_oldKeyBindings;
+	wsw::HashMap<int, wsw::String> m_oldKeyBindings;
 
 	std::array<QQuickItem *, 256> m_keyItems {};
 	std::array<QQuickItem *, kMaxCommands> m_commandItems {};

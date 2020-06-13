@@ -511,7 +511,7 @@ class MaterialCache {
 	FileCache *fileCacheHead { nullptr };
 
 	struct Source {
-		using Placeholders = std::vector<PlaceholderSpan>;
+		using Placeholders = wsw::Vector<PlaceholderSpan>;
 
 		std::optional<Placeholders> maybePlaceholders;
 
@@ -527,11 +527,11 @@ class MaterialCache {
 
 		auto preparePlaceholders() -> std::optional<Placeholders>;
 
-		void findPlaceholdersInToken( const wsw::StringView &token, int tokenNum, std::vector<PlaceholderSpan> &spans );
+		void findPlaceholdersInToken( const wsw::StringView &token, int tokenNum, wsw::Vector<PlaceholderSpan> &spans );
 
 		bool expandTemplate( const wsw::StringView *args, size_t numArgs,
 							 wsw::String &expansionBuffer,
-			                 std::vector<TokenSpan> &resultingTokens );
+			                 wsw::Vector<TokenSpan> &resultingTokens );
 	};
 
 	enum { kNumBins = 307 };
@@ -549,13 +549,13 @@ class MaterialCache {
 	wsw::String expansionBuffer;
 	wsw::String fileContentsBuffer;
 
-	std::vector<TokenSpan> fileTokenSpans;
-	std::vector<TokenSpan> templateTokenSpans;
+	wsw::Vector<TokenSpan> fileTokenSpans;
+	wsw::Vector<TokenSpan> templateTokenSpans;
 
-	std::vector<wsw::StringView> fileMaterialNames;
-	std::vector<std::pair<unsigned, unsigned>> fileSourceSpans;
+	wsw::Vector<wsw::StringView> fileMaterialNames;
+	wsw::Vector<std::pair<unsigned, unsigned>> fileSourceSpans;
 
-	std::vector<uint16_t> freeMaterialIds;
+	wsw::Vector<uint16_t> freeMaterialIds;
 
 	wsw::StaticVector<TokenStream, 1> templateTokenStreamHolder;
 	wsw::StaticVector<MaterialLexer, 1> templateLexerHolder;

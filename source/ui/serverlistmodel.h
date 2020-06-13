@@ -28,7 +28,7 @@ class ServerListModel : public QAbstractTableModel, public ServerListListener {
 		SpectatorsList
 	};
 
-	std::vector<const PolledGameServer *> m_servers;
+	wsw::Vector<const PolledGameServer *> m_servers;
 
 	[[nodiscard]]
 	auto getServerAtIndex( int index ) const -> const PolledGameServer *;

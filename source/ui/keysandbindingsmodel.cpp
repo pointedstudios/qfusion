@@ -386,7 +386,7 @@ auto KeysAndBindingsModel::getCommandNum( const wsw::StringView &bindingView ) c
 	}
 
 	const wsw::StringView prefixes[2] = { kUsePrefix, kSayPrefix };
-	const std::map<wsw::String, int> *mapsOfNums[2] = { &m_weaponBindingNums, &m_respectBindingNums };
+	const wsw::HashMap<wsw::String, int> *mapsOfNums[2] = { &m_weaponBindingNums, &m_respectBindingNums };
 	for( int i = 0; i < 2; ++i ) {
 		if( !bindingView.startsWith( prefixes[i] ) ) {
 			continue;
@@ -430,7 +430,7 @@ void KeysAndBindingsModel::unregisterCommandItem( QQuickItem *item, int commandN
 	m_commandItems[commandNum] = nullptr;
 }
 
-auto KeysAndBindingsModel::registerKnownBindings( std::map<wsw::String, int> &dest,
+auto KeysAndBindingsModel::registerKnownBindings( wsw::HashMap<wsw::String, int> &dest,
 												  const wsw::StringView *begin,
 												  const wsw::StringView *end,
 												  BindingGroup bindingGroup,
@@ -446,7 +446,7 @@ auto KeysAndBindingsModel::registerKnownBindings( std::map<wsw::String, int> &de
 }
 
 template <typename Array>
-auto KeysAndBindingsModel::registerKnownBindings( std::map<wsw::String, int> &dest,
+auto KeysAndBindingsModel::registerKnownBindings( wsw::HashMap<wsw::String, int> &dest,
 												  const Array &bindings,
 												  BindingGroup bindingGroup,
 												  int startFromNum ) -> int {

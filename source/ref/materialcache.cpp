@@ -941,7 +941,7 @@ bool MaterialCache::tryAddingFileCacheContents( const FileCache *fileCache ) {
 }
 
 auto MaterialCache::Source::preparePlaceholders() -> std::optional<Placeholders> {
-	std::vector<PlaceholderSpan> buffer;
+	wsw::Vector<PlaceholderSpan> buffer;
 
 	TokenSpan *tokenSpans = file->spans + this->tokenSpansOffset;
 	const char *data = file->data;
@@ -955,7 +955,7 @@ auto MaterialCache::Source::preparePlaceholders() -> std::optional<Placeholders>
 }
 
 void MaterialCache::Source::findPlaceholdersInToken( const wsw::StringView &token, int tokenNum,
-													 std::vector<PlaceholderSpan> &buffer ) {
+													 wsw::Vector<PlaceholderSpan> &buffer ) {
 	size_t index = 0;
 
 	for(;; ) {
@@ -1023,7 +1023,7 @@ auto MaterialCache::expandTemplate( const wsw::StringView &name, const wsw::Stri
 	return templateLexerHolder.begin();
 }
 
-bool MaterialCache::Source::expandTemplate( const wsw::StringView *args, size_t numArgs, wsw::String &expansionBuffer, std::vector<TokenSpan> &resultingTokens ) {
+bool MaterialCache::Source::expandTemplate( const wsw::StringView *args, size_t numArgs, wsw::String &expansionBuffer, wsw::Vector<TokenSpan> &resultingTokens ) {
 	if( !maybePlaceholders ) {
 		preparePlaceholders();
 		if( !maybePlaceholders ) {
