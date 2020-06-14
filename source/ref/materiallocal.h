@@ -867,4 +867,153 @@ const wsw::StringView kGlossSuffix( "_gloss" );
 const wsw::StringView kDecalSuffix( "_decal" );
 const wsw::StringView kAddSuffix( "_add" );
 
+class MaterialIfEvaluator {
+public:
+	static constexpr size_t Capacity = 32;
+private:
+	enum class Tag: uint8_t {
+		Value,
+		UnaryNot,
+		LogicOp,
+		CmpOp,
+		LParen,
+		RParen
+	};
+
+	struct alignas( 8 )TapeEntry {
+		uint8_t data[7];
+		Tag tag;
+	};
+
+	TapeEntry m_tape[Capacity];
+	int m_numEntries { 0 };
+	int m_tapeCursor { 0 };
+	bool m_hadError { false };
+
+#pragma pack( push, 2 )
+	struct Value {
+		union {
+			int32_t i;
+			bool b;
+		} u;
+
+		bool isBool;
+		bool isInputValue { false };
+
+		explicit Value( bool b ) : isBool( true ) {
+			u.b = b;
+		}
+		explicit Value( int32_t i ) : isBool( false ) {
+			u.i = i;
+		}
+		operator bool() const {
+			return isBool ? u.b : u.i;
+		}
+		operator int() const {
+			return isBool ? u.b : u.i;
+		}
+	};
+
+	static_assert( alignof( Value ) <= 8 );
+	static_assert( sizeof( Value ) == 6 );
+#pragma pack( pop )
+
+	auto makeEntry( Tag tag ) -> TapeEntry * {
+		assert( m_numEntries < Capacity );
+		auto *e = &m_tape[m_numEntries++];
+		e->tag = tag;
+		return e;
+	}
+
+	auto nextTokenTag() -> std::optional<Tag> {
+		return ( m_tapeCursor < m_numEntries ) ? std::optional( m_tape[m_tapeCursor++].tag ) : std::nullopt;
+	}
+
+	void ungetToken() {
+		assert( m_tapeCursor >= 0 );
+		m_tapeCursor = m_tapeCursor ? m_tapeCursor - 1 : 0;
+	}
+
+	[[nodiscard]]
+	auto lastEntry() const -> const TapeEntry & {
+		assert( m_tapeCursor - 1 < m_numEntries );
+		return m_tape[m_tapeCursor - 1];
+	}
+
+	template <typename T>
+	[[nodiscard]]
+	auto lastEntryAs() const -> T {
+		return *( ( const T *)lastEntry().data );
+	}
+
+	[[nodiscard]]
+	auto lastTag() const -> Tag {
+		assert( m_tapeCursor - 1 < m_numEntries );
+		return m_tape[m_tapeCursor - 1].tag;
+	}
+
+	[[nodiscard]]
+	auto lastValue() -> std::optional<Value> {
+		return ( lastTag() == Tag::Value ) ? std::optional( lastEntryAs<Value>() ) : std::nullopt;
+	}
+
+	[[nodiscard]]
+	auto lastLogicOp() -> std::optional<LogicOp> {
+		return ( lastTag() == Tag::LogicOp ) ? std::optional( lastEntryAs<LogicOp>() ) : std::nullopt;
+	}
+
+	[[nodiscard]]
+	auto lastCmpOp() -> std::optional<CmpOp> {
+		return ( lastTag() == Tag::CmpOp ) ? std::optional( lastEntryAs<CmpOp>() ) : std::nullopt;
+	}
+
+#ifndef _MSC_VER
+	std::nullopt_t withError( const char *fmt, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
+	void warn( const char *fmt, ... ) __attribute__( ( format( printf, 2, 3 ) ) );
+#else
+	auto withError( _Printf_format_string_ const char *fmt, ... ) -> std::nullopt_t;
+	void warn( _Printf_format_string_ const char *fmt, ... );
+#endif
+
+	void warnBooleanToIntegerConversion( const Value &value, const char *desc, const char *context );
+	void warnIntegerToBooleanConversion( const Value &value, const char *desc, const char *context );
+
+	[[nodiscard]]
+	auto evalUnaryExpr() -> std::optional<Value>;
+	[[nodiscard]]
+	auto evalCmpExpr() -> std::optional<Value>;
+	[[nodiscard]]
+	auto evalLogicExpr() -> std::optional<Value>;
+
+	[[nodiscard]]
+	auto evalExpr() -> std::optional<Value> { return evalLogicExpr(); }
+public:
+
+	void addInt( int value ) {
+		auto *v = new( makeEntry( Tag::Value ) )Value( value );
+		v->isInputValue = true;
+	}
+
+	void addBool( bool value ) {
+		auto *v = new( makeEntry( Tag::Value ) )Value( value );
+		v->isInputValue = true;
+	}
+
+	void addLogicOp( LogicOp op ) {
+		new( makeEntry( Tag::LogicOp ) )LogicOp( op );
+	}
+
+	void addCmpOp( CmpOp op ) {
+		new( makeEntry( Tag::CmpOp ) )CmpOp( op );
+	}
+
+	void addUnaryNot() { makeEntry( Tag::UnaryNot ); }
+
+	void addLeftParen() { makeEntry( Tag::LParen ); }
+	void addRightParen() { makeEntry( Tag::RParen ); }
+
+	[[nodiscard]]
+	auto exec() -> std::optional<bool>;
+};
+
 #endif

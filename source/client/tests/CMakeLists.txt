@@ -12,9 +12,11 @@ enable_testing(true)
 add_executable(
         clienttest
         "main.cpp"
+        "materialifevaluatortest.cpp"
         "materialsourcetest.cpp"
         "tokensplittertest.cpp"
         "tokenstreamtest.cpp"
+        "../../ref/materialifevaluator.cpp"
         "../../ref/materiallexer.cpp"
         "../../ref/materialsource.cpp")
 
