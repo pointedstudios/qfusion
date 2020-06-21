@@ -649,52 +649,6 @@ void SV_UpdateActivity( void ) {
 }
 
 /*
-* SV_CheckAutoUpdate
-*/
-static void SV_CheckAutoUpdate( void ) {
-	int64_t days;
-	int64_t uptimeMinute;
-
-	if( !sv_pure->integer && sv_autoUpdate->integer ) {
-		Com_Printf( "WARNING: Autoupdate is not available for unpure servers.\n" );
-		Cvar_ForceSet( "sv_autoUpdate", "0" );
-	}
-
-	if( !sv_autoUpdate->integer || !dedicated->integer ) {
-		return;
-	}
-
-	days = (unsigned int)sv_lastAutoUpdate->integer;
-	uptimeMinute = ( Sys_Milliseconds() / 60000 ) % 60;
-
-	// daily check
-	if( ( days < Com_DaysSince1900() ) && ( uptimeMinute == svc.autoUpdateMinute ) ) {
-		SV_AutoUpdateFromWeb( false );
-	}
-}
-
-/*
-* SV_CheckPostUpdateRestart
-*/
-static void SV_CheckPostUpdateRestart( void ) {
-	// do not if there has been any activity in last 5 minutes
-	if( ( svc.lastActivity + 300000 ) > Sys_Milliseconds() ) {
-		return;
-	}
-
-	// if there are any new filesystem entries, restart
-	if( FS_GetNotifications() & FS_NOTIFY_NEWPAKS ) {
-		if( sv.state != ss_dead ) {
-			// restart the current map, SV_Map also rescans the filesystem
-			Com_Printf( "The server will now restart...\n\n" );
-
-			// start the default map if current map isn't available
-			Cbuf_ExecuteText( EXEC_APPEND, va( "map %s\n", svs.mapcmd[0] ? svs.mapcmd : sv_defaultmap->string ) );
-		}
-	}
-}
-
-/*
 * SV_Frame
 */
 void SV_Frame( unsigned realmsec, unsigned gamemsec ) {
@@ -744,10 +698,6 @@ void SV_Frame( unsigned realmsec, unsigned gamemsec ) {
 
 	// handle HTTP connections
 	SV_Web_GameFrame( ge->WebRequest );
-
-	SV_CheckAutoUpdate();
-
-	SV_CheckPostUpdateRestart();
 }
 
 //============================================================================

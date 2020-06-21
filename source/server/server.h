@@ -380,7 +380,6 @@ int SV_SkinIndex( const char *name );
 
 void SV_WriteClientdataToMessage( client_t *client, msg_t *msg );
 
-void SV_AutoUpdateFromWeb( bool checkOnly );
 void SV_InitOperatorCommands( void );
 void SV_ShutdownOperatorCommands( void );
 
