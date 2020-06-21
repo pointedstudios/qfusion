@@ -56,12 +56,6 @@ pGetRawInputData _GRID;
 pGetRawInputDeviceInfoA _GRIDIA;
 pRegisterRawInputDevices _RRID;
 
-// XInput
-static bool in_xinput_initialized;
-static HINSTANCE in_xinput_dll;
-static DWORD( WINAPI * pXInputGetState )( DWORD dwUserIndex, XINPUT_STATE * pState );
-static XINPUT_GAMEPAD in_xinput_gamepad, in_xinput_oldGamepad;
-
 typedef struct {
 	HANDLE rawinputhandle;          // raw input, identify particular mice
 
@@ -89,10 +83,6 @@ cvar_t *in_mouse;
 cvar_t *in_grabinconsole;
 
 bool in_appactive;
-
-// forward-referenced functions
-static void IN_XInput_Init( void );
-static void IN_XInput_Shutdown( void );
 
 /*
 ============================================================
@@ -912,7 +902,6 @@ void IN_Init( void ) {
 	in_grabinconsole    = Cvar_Get( "in_grabinconsole", "0", CVAR_ARCHIVE );
 
 	IN_StartupMouse();
-	IN_XInput_Init();
 
 	Com_Printf( "------------------------------------\n" );
 }
@@ -928,8 +917,6 @@ void IN_Shutdown( void ) {
 	} else if( dinput_initialized ) {
 		IN_ShutdownDInput();
 	}
-
-	IN_XInput_Shutdown();
 
 	dinput_acquired = dinput_initialized = false;
 	rawinput_initialized = false;
@@ -953,9 +940,6 @@ void IN_Restart( void ) {
 void IN_Activate( bool active ) {
 	in_appactive = active;
 	mouseactive = !active;  // force a new window check or turn off
-	if( !active && in_xinput_initialized ) {
-		memset( &in_xinput_gamepad, 0, sizeof( in_xinput_gamepad ) );
-	}
 }
 
 
@@ -1008,148 +992,7 @@ void IN_Frame( void ) {
 }
 
 /*
-=========================================================================
-
-JOYSTICK
-
-=========================================================================
-*/
-
-/*
-* IN_XInput_Init
-*/
-static void IN_XInput_Init( void ) {
-	in_xinput_dll = LoadLibrary( "xinput1_4.dll" );
-	if( !in_xinput_dll ) {
-		in_xinput_dll = LoadLibrary( "xinput1_3.dll" );
-	}
-	if( !in_xinput_dll ) {
-		in_xinput_dll = LoadLibrary( "xinput9_1_0.dll" );
-	}
-	if( !in_xinput_dll ) {
-		Com_Printf( "XInput: Couldn't load XInput DLL\n" );
-		return;
-	}
-
-	pXInputGetState = (decltype( pXInputGetState ))( void * )GetProcAddress( in_xinput_dll, "XInputGetState" );
-	if( !pXInputGetState ) {
-		Com_Printf( "XInput: Couldn't load symbol XInputGetState\n" );
-		FreeLibrary( in_xinput_dll );
-		return;
-	}
-
-	in_xinput_initialized = true;
-}
-
-/*
-* IN_XInput_Shutdown
-*/
-static void IN_XInput_Shutdown( void ) {
-	if( !in_xinput_initialized ) {
-		return;
-	}
-
-	memset( &in_xinput_gamepad, 0, sizeof( in_xinput_gamepad ) );
-	FreeLibrary( in_xinput_dll );
-	in_xinput_initialized = false;
-}
-
-/*
 * IN_Commands
 */
 void IN_Commands( void ) {
-	int i;
-	int buttons, buttonsOld, buttonsDiff;
-	bool trigger, triggerOld;
-	static bool notConnected;
-	static int64_t lastConnectedCheck;
-
-	if( in_xinput_initialized && in_appactive ) {
-		XINPUT_STATE state;
-
-		if( notConnected && ( ( Sys_Milliseconds() - lastConnectedCheck ) < 2000 ) ) {
-			// gamepad not connected, and the previous null state has been applied already
-			return;
-		}
-
-		if( pXInputGetState( 0, &state ) == ERROR_SUCCESS ) {
-			notConnected = false;
-			memcpy( &in_xinput_gamepad, &( state.Gamepad ), sizeof( in_xinput_gamepad ) );
-		} else {
-			notConnected = true;
-			lastConnectedCheck = Sys_Milliseconds();
-			memset( &in_xinput_gamepad, 0, sizeof( in_xinput_gamepad ) );
-		}
-	}
-
-	buttons = in_xinput_gamepad.wButtons;
-	buttonsOld = in_xinput_oldGamepad.wButtons;
-	buttonsDiff = buttons ^ buttonsOld;
-
-	if( buttonsDiff ) {
-		const int keys[] =
-		{
-			K_DPAD_UP, K_DPAD_DOWN, K_DPAD_LEFT, K_DPAD_RIGHT, 0, 0,
-			K_LSTICK, K_RSTICK, K_LSHOULDER, K_RSHOULDER, 0, 0,
-			K_A_BUTTON, K_B_BUTTON, K_X_BUTTON, K_Y_BUTTON
-		};
-
-		int64_t time = Sys_Milliseconds();
-
-		for( i = 0; i < ( sizeof( keys ) / sizeof( keys[0] ) ); i++ ) {
-			if( !keys[i] ) {
-				continue;
-			}
-
-			if( buttonsDiff & ( 1 << i ) ) {
-				Key_Event( keys[i], ( buttons & ( 1 << i ) ) ? true : false, time );
-			}
-		}
-
-		if( buttonsDiff & ( XINPUT_GAMEPAD_START | XINPUT_GAMEPAD_BACK ) ) {
-			if( !( buttonsOld & ( XINPUT_GAMEPAD_START | XINPUT_GAMEPAD_BACK ) ) ) {
-				Key_Event( K_ESCAPE, true, time );
-			} else if( !( buttons & ( XINPUT_GAMEPAD_START | XINPUT_GAMEPAD_BACK ) ) ) {
-				Key_Event( K_ESCAPE, false, time );
-			}
-		}
-	}
-
-	trigger = ( in_xinput_gamepad.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD );
-	triggerOld = ( in_xinput_oldGamepad.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD );
-	if( trigger != triggerOld ) {
-		Key_Event( K_LTRIGGER, trigger, Sys_Milliseconds() );
-	}
-
-	trigger = ( in_xinput_gamepad.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD );
-	triggerOld = ( in_xinput_oldGamepad.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD );
-	if( trigger != triggerOld ) {
-		Key_Event( K_RTRIGGER, trigger, Sys_Milliseconds() );
-	}
-
-	memcpy( &in_xinput_oldGamepad, &in_xinput_gamepad, sizeof( in_xinput_gamepad ) );
-}
-
-/*
-* IN_XInput_AxisValue
-*/
-static float IN_XInput_ThumbstickValue( int value ) {
-	return value * ( ( value >= 0 ) ? ( 1.0f / 32767.0f ) : ( 1.0f / 32768.0f ) );
-}
-
-/*
-* IN_GetThumbsticks
-*/
-void IN_GetThumbsticks( vec4_t sticks ) {
-	sticks[0] = IN_XInput_ThumbstickValue( in_xinput_gamepad.sThumbLX );
-	sticks[1] = -IN_XInput_ThumbstickValue( in_xinput_gamepad.sThumbLY );
-	sticks[2] = IN_XInput_ThumbstickValue( in_xinput_gamepad.sThumbRX );
-	sticks[3] = -IN_XInput_ThumbstickValue( in_xinput_gamepad.sThumbRY );
-}
-
-/*
-* IN_SupportedDevices
-*/
-unsigned int IN_SupportedDevices( void ) {
-	return IN_DEVICE_KEYBOARD | IN_DEVICE_MOUSE | IN_DEVICE_JOYSTICK;
 }

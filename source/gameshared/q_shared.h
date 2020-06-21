@@ -541,10 +541,4 @@ typedef enum {
 	TEXTDRAWFLAG_KERNING    = 1 << 1
 } textdrawflag_t;
 
-typedef enum {
-	IN_DEVICE_KEYBOARD      = 1 << 0,
-	IN_DEVICE_MOUSE         = 1 << 1,
-	IN_DEVICE_JOYSTICK      = 1 << 2
-} in_devicemask_t;
-
 #endif

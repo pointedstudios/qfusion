@@ -432,151 +432,6 @@ static void CG_AddMouseViewAngles( vec3_t viewAngles ) {
 /*
 ===============================================================================
 
-GAMEPAD
-
-===============================================================================
-*/
-
-static cvar_t *cg_gamepad_moveThres;
-static cvar_t *cg_gamepad_runThres;
-static cvar_t *cg_gamepad_strafeThres;
-static cvar_t *cg_gamepad_strafeRunThres;
-static cvar_t *cg_gamepad_pitchThres;
-static cvar_t *cg_gamepad_yawThres;
-static cvar_t *cg_gamepad_pitchSpeed;
-static cvar_t *cg_gamepad_yawSpeed;
-static cvar_t *cg_gamepad_pitchInvert;
-static cvar_t *cg_gamepad_accelMax;
-static cvar_t *cg_gamepad_accelSpeed;
-static cvar_t *cg_gamepad_accelThres;
-static cvar_t *cg_gamepad_swapSticks;
-
-static float cg_gamepadAccelPitch = 1.0f, cg_gamepadAccelYaw = 1.0f;
-
-/**
- * Updates time-dependent gamepad state.
- *
- * @param frametime real frame time
- */
-static void CG_GamepadFrame( void ) {
-	// Add acceleration to the gamepad look above the acceleration threshold.
-
-	vec4_t sticks;
-	IN_GetThumbsticks( sticks );
-
-	int axes = ( cg_gamepad_swapSticks->integer ? 0 : 2 );
-
-	if( cg_gamepad_accelMax->value < 0.0f ) {
-		Cvar_SetValue( cg_gamepad_accelMax->name, 0.0f );
-	}
-	if( cg_gamepad_accelSpeed->value < 0.0f ) {
-		Cvar_SetValue( cg_gamepad_accelSpeed->name, 0.0f );
-	}
-
-	float accelMax = cg_gamepad_accelMax->value + 1.0f;
-	float accelSpeed = cg_gamepad_accelSpeed->value;
-	float accelThres = cg_gamepad_accelThres->value;
-
-	float value = fabs( sticks[axes] );
-	if( value > cg_gamepad_yawThres->value ) {
-		cg_gamepadAccelYaw += ( ( value > accelThres ) ? 1.0f : -1.0f ) * cg_inputFrameTime * 0.001f * accelSpeed;
-		Q_clamp( cg_gamepadAccelYaw, 1.0f, accelMax );
-	} else {
-		cg_gamepadAccelYaw = 1.0f;
-	}
-
-	value = fabs( sticks[axes + 1] );
-	if( value > cg_gamepad_pitchThres->value ) {
-		cg_gamepadAccelPitch += ( ( value > accelThres ) ? 1.0f : -1.0f ) * cg_inputFrameTime * 0.001f * accelSpeed;
-		Q_clamp( cg_gamepadAccelPitch, 1.0f, accelMax );
-	} else {
-		cg_gamepadAccelPitch = 1.0f;
-	}
-}
-
-/**
- * Adds view rotation from the gamepad.
- *
- * @param viewAngles view angles to modify
- */
-static void CG_AddGamepadViewAngles( vec3_t viewAngles ) {
-	vec4_t sticks;
-	IN_GetThumbsticks( sticks );
-
-	int axes = ( cg_gamepad_swapSticks->integer ? 0 : 2 );
-
-	if( ( cg_gamepad_yawThres->value <= 0.0f ) || ( cg_gamepad_yawThres->value >= 1.0f ) ) {
-		Cvar_Set( cg_gamepad_yawThres->name, cg_gamepad_yawThres->dvalue );
-	}
-	if( ( cg_gamepad_pitchThres->value <= 0.0f ) || ( cg_gamepad_pitchThres->value >= 1.0f ) ) {
-		Cvar_Set( cg_gamepad_pitchThres->name, cg_gamepad_pitchThres->dvalue );
-	}
-
-	float axisValue = sticks[axes];
-	float threshold = cg_gamepad_yawThres->value;
-	float value = ( fabs( axisValue ) - threshold ) / ( 1.0f - threshold ); // Smoothly apply the dead zone.
-	if( value > 0.0f ) {
-		// Quadratic interpolation.
-		viewAngles[YAW] -= cg_inputFrameTime * 0.001f *
-						   value * value * ( ( axisValue < 0.0f ) ? -1.0f : 1.0f ) * cg_gamepadAccelYaw *
-						   cg_gamepad_yawSpeed->value * CG_GetSensitivityScale( cg_gamepad_yawSpeed->value, 0.0f );
-	}
-
-	axisValue = sticks[axes + 1];
-	threshold = cg_gamepad_pitchThres->value;
-	value = ( fabs( axisValue ) - threshold ) / ( 1.0f - threshold );
-	if( value > 0.0f ) {
-		viewAngles[PITCH] += cg_inputFrameTime * 0.001f * ( cg_gamepad_pitchInvert->integer ? -1.0f : 1.0f ) *
-							 value * value * ( ( axisValue < 0.0f ) ? -1.0f : 1.0f ) * cg_gamepadAccelPitch *
-							 cg_gamepad_pitchSpeed->value * CG_GetSensitivityScale( cg_gamepad_pitchSpeed->value, 0.0f );
-	}
-}
-
-/**
- * Adds movement from the gamepad.
- *
- * @param movement movement vector to modify
- */
-static void CG_AddGamepadMovement( vec3_t movement ) {
-	vec4_t sticks;
-	IN_GetThumbsticks( sticks );
-
-	int axes = ( cg_gamepad_swapSticks->integer ? 2 : 0 );
-
-	float value = sticks[axes];
-	float threshold = cg_gamepad_strafeThres->value;
-	float runThreshold = cg_gamepad_strafeRunThres->value;
-	float absValue = fabs( value );
-	if( runThreshold > threshold ) {
-		absValue = ( absValue - threshold ) / ( runThreshold - threshold );
-		Q_clamp( absValue, 0.0f, 1.0f );
-		absValue *= absValue;
-	} else {
-		absValue = ( float )( absValue > threshold );
-	}
-	if( absValue > cg_gamepad_strafeThres->value ) {
-		movement[0] += absValue * ( ( value < 0.0f ) ? -1.0f : 1.0f );
-	}
-
-	value = sticks[axes + 1];
-	threshold = cg_gamepad_moveThres->value;
-	runThreshold = cg_gamepad_runThres->value;
-	absValue = fabs( value );
-	if( runThreshold > threshold ) {
-		absValue = ( absValue - threshold ) / ( runThreshold - threshold );
-		Q_clamp( absValue, 0.0f, 1.0f );
-		absValue *= absValue;
-	} else {
-		absValue = ( float )( absValue > threshold );
-	}
-	if( absValue > cg_gamepad_moveThres->value ) {
-		movement[1] -= absValue * ( ( value < 0.0f ) ? -1.0f : 1.0f );
-	}
-}
-
-/*
-===============================================================================
-
 COMMON
 
 ===============================================================================
@@ -647,20 +502,6 @@ void CG_InitInput( void ) {
 	m_pitch = Cvar_Get( "m_pitch", "0.022", CVAR_ARCHIVE );
 	m_yaw = Cvar_Get( "m_yaw", "0.022", CVAR_ARCHIVE );
 	m_sensCap = Cvar_Get( "m_sensCap", "0", CVAR_ARCHIVE );
-
-	cg_gamepad_moveThres = Cvar_Get( "cg_gamepad_moveThres", "0.239", CVAR_ARCHIVE );
-	cg_gamepad_runThres = Cvar_Get( "cg_gamepad_runThres", "0.75", CVAR_ARCHIVE );
-	cg_gamepad_strafeThres = Cvar_Get( "cg_gamepad_strafeThres", "0.239", CVAR_ARCHIVE );
-	cg_gamepad_strafeRunThres = Cvar_Get( "cg_gamepad_strafeRunThres", "0.45", CVAR_ARCHIVE );
-	cg_gamepad_pitchThres = Cvar_Get( "cg_gamepad_pitchThres", "0.265", CVAR_ARCHIVE );
-	cg_gamepad_yawThres = Cvar_Get( "cg_gamepad_yawThres", "0.265", CVAR_ARCHIVE );
-	cg_gamepad_pitchSpeed = Cvar_Get( "cg_gamepad_pitchSpeed", "240", CVAR_ARCHIVE );
-	cg_gamepad_yawSpeed = Cvar_Get( "cg_gamepad_yawSpeed", "260", CVAR_ARCHIVE );
-	cg_gamepad_pitchInvert = Cvar_Get( "cg_gamepad_pitchInvert", "0", CVAR_ARCHIVE );
-	cg_gamepad_accelMax = Cvar_Get( "cg_gamepad_accelMax", "2", CVAR_ARCHIVE );
-	cg_gamepad_accelSpeed = Cvar_Get( "cg_gamepad_accelSpeed", "3", CVAR_ARCHIVE );
-	cg_gamepad_accelThres = Cvar_Get( "cg_gamepad_accelThres", "0.9", CVAR_ARCHIVE );
-	cg_gamepad_swapSticks = Cvar_Get( "cg_gamepad_swapSticks", "0", CVAR_ARCHIVE );
 }
 
 /*
@@ -726,7 +567,6 @@ void CG_AddViewAngles( vec3_t viewAngles ) {
 	VectorClear( am );
 
 	CG_AddKeysViewAngles( am );
-	CG_AddGamepadViewAngles( am );
 	CG_AddMouseViewAngles( am );
 
 	if( flipped ) {
@@ -750,7 +590,6 @@ void CG_AddMovement( vec3_t movement ) {
 	VectorClear( dm );
 
 	CG_AddKeysMovement( dm );
-	CG_AddGamepadMovement( dm );
 
 	if( flipped ) {
 		dm[0] = dm[0] * -1.0;
@@ -764,8 +603,6 @@ void CG_AddMovement( vec3_t movement ) {
 void CG_InputFrame( int frameTime ) {
 	cg_inputTime = Sys_Milliseconds();
 	cg_inputFrameTime = frameTime;
-
-	CG_GamepadFrame();
 }
 
 /*
@@ -773,8 +610,6 @@ void CG_InputFrame( int frameTime ) {
 */
 void CG_ClearInputState( void ) {
 	cg_inputFrameTime = 0;
-	cg_gamepadAccelPitch = 1.0f;
-	cg_gamepadAccelYaw = 1.0f;
 
 	CG_ClearHUDInputState();
 }

@@ -743,10 +743,6 @@ void IN_Frame( void ) {
 	IN_Activate( m_active );
 }
 
-unsigned int IN_SupportedDevices( void ) {
-	return IN_DEVICE_KEYBOARD | IN_DEVICE_MOUSE | IN_DEVICE_JOYSTICK;
-}
-
 void IN_ShowSoftKeyboard( bool show ) {
 }
 

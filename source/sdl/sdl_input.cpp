@@ -1,6 +1,5 @@
 #include <SDL.h>
 #include "../client/client.h"
-#include "sdl_input_joy.h"
 
 cvar_t *in_grabinconsole;
 cvar_t *in_disablemacosxmouseaccel;
@@ -29,7 +28,6 @@ void IN_SetMouseScalingEnabled( bool isRestore ) {
 #endif
 
 void IN_Commands( void ) {
-	IN_SDL_JoyCommands();
 }
 
 /**
@@ -470,8 +468,6 @@ void IN_Init() {
 		IN_WarpMouseToCenter( NULL, NULL );
 	}
 
-	IN_SDL_JoyInit( true );
-
 	input_focus = true;
 	input_inited = true;
 	input_active = true; // will be activated by IN_Frame if necessary
@@ -492,7 +488,6 @@ void IN_Shutdown() {
 	input_inited = false;
 	SDL_SetRelativeMouseMode( SDL_FALSE );
 	IN_SetMouseScalingEnabled( true );
-	IN_SDL_JoyShutdown();
 }
 
 /**
@@ -541,11 +536,4 @@ void IN_Frame() {
 	}
 
 	IN_HandleEvents();
-}
-
-/**
- * The input devices supported by the system.
- */
-unsigned int IN_SupportedDevices( void ) {
-	return IN_DEVICE_KEYBOARD | IN_DEVICE_MOUSE | IN_DEVICE_JOYSTICK;
 }
