@@ -227,10 +227,6 @@ typedef struct {
 
 	bool ( *AllowDownload )( edict_t *ent, const char *requestname, const char *uploadname );
 
-	// Web requests to local HTTP server
-	http_response_code_t ( *WebRequest )( http_query_method_t method, const char *resource,
-										  const char *query_string, char **content, size_t *content_length );
-
 	// gameside rating library
 	struct clientRating_s *( *AddDefaultRating )( edict_t * ent, const char *gametype );
 	struct clientRating_s *( *AddRating )( edict_t * ent, const char *gametype, float rating, float deviation );

@@ -526,18 +526,11 @@ bool SV_IsDemoDownloadRequest( const char *request );
 void SV_MOTD_Update( void );
 void SV_MOTD_Get_f( client_t *client );
 
-//
-// sv_web.c
-//
-typedef http_response_code_t ( *http_game_query_cb )( http_query_method_t method, const char *resource,
-													  const char *query_string, char **content, size_t *content_length );
-
 void SV_Web_Init( void );
 void SV_Web_Shutdown( void );
 bool SV_Web_Running( void );
 const char *SV_Web_UpstreamBaseUrl( void );
 bool SV_Web_AddGameClient( const char *session, int clientNum, const netadr_t *netAdr );
 void SV_Web_RemoveGameClient( const char *session );
-void SV_Web_GameFrame( http_game_query_cb cb );
 
 #endif

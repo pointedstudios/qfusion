@@ -60,11 +60,8 @@ typedef struct callvotetype_s
 	void ( *execute )( callvotedata_t *vote );
 	const char *( *current )( void );
 	void ( *extraHelp )( edict_t *ent );
-	http_response_code_t ( *webRequest )( http_query_method_t method, const char *resource,
-										  const char *query_string, char **content, size_t *content_length );
 	char *argument_format;
 	char *help;
-	char *argument_type;
 	struct callvotetype_s *next;
 } callvotetype_t;
 
@@ -78,73 +75,6 @@ typedef struct
 static callvotestate_t callvoteState;
 
 static callvotetype_t *callvotesHeadNode = NULL;
-
-//==============================================
-//		Vote specifics
-//==============================================
-
-static void G_AppendString( char **pdst, const char *src, size_t *pdst_len, size_t *pdst_size ) {
-	char *dst = *pdst;
-	size_t dst_len = *pdst_len;
-	size_t dst_size = *pdst_size;
-	size_t src_len;
-
-	assert( src != NULL );
-
-	if( !dst ) {
-		dst_size = 0x1000;
-		dst_len = 0;
-		dst = ( char * )Q_malloc( dst_size );
-	}
-
-	src_len = strlen( src );
-	if( dst_len + src_len >= dst_size ) {
-		char *old_dst = dst;
-
-		dst_size = ( dst_len + src_len ) * 2;
-		dst = ( char * )Q_malloc( dst_size );
-		memcpy( dst, old_dst, dst_len );
-		dst[dst_len] = '\0';
-
-		Q_free( old_dst );
-	}
-
-	memcpy( dst + dst_len, src, src_len );
-	dst_len += src_len;
-	dst[dst_len] = '\0';
-
-	*pdst_len = dst_len;
-	*pdst_size = dst_size;
-	*pdst = dst;
-}
-
-static http_response_code_t G_PlayerlistWebRequest( http_query_method_t method, const char *resource,
-													const char *query_string, char **content, size_t *content_length ) {
-	int i;
-	char *msg = NULL;
-	size_t msg_len = 0, msg_size = 0;
-
-	if( method != HTTP_METHOD_GET && method != HTTP_METHOD_HEAD ) {
-		return HTTP_RESP_BAD_REQUEST;
-	}
-
-	for( i = 0; i < gs.maxclients; i++ ) {
-		if( trap_GetClientState( i ) >= CS_SPAWNED ) {
-			G_AppendString( &msg, va(
-								"{\n"
-								"\"value\"" " " "\"%i\"" "\n"
-								"\"name\"" " " "\"%s\"" "\n"
-								"}\n",
-								i,
-								game.clients[i].netname
-								), &msg_len, &msg_size );
-		}
-	}
-
-	*content = msg;
-	*content_length = msg_len;
-	return HTTP_RESP_OK;
-}
 
 /*
 * shuffle/rebalance
@@ -316,60 +246,6 @@ static const char *G_VoteMapCurrent( void ) {
 	return level.mapname;
 }
 
-static http_response_code_t G_VoteMapWebRequest( http_query_method_t method, const char *resource,
-												 const char *query_string, char **content, size_t *content_length ) {
-	int i;
-	char *msg = NULL;
-	size_t msg_len = 0, msg_size = 0;
-	char buffer[MAX_STRING_CHARS];
-
-	if( method != HTTP_METHOD_GET && method != HTTP_METHOD_HEAD ) {
-		return HTTP_RESP_BAD_REQUEST;
-	}
-
-	// update the maplist
-	trap_ML_Update();
-
-	if( g_enforce_map_pool->integer && strlen( g_map_pool->string ) > 2 ) {
-		char *s, *tok;
-
-		s = Q_strdup( g_map_pool->string );
-		tok = strtok( s, MAPLIST_SEPS );
-		while( tok != NULL ) {
-			const char *fullname = trap_ML_GetFullname( tok );
-
-			G_AppendString( &msg, va(
-								"{\n"
-								"\"value\"" " " "\"%s\"" "\n"
-								"\"name\"" " " "\"%s '%s'\"" "\n"
-								"}\n",
-								tok,
-								tok, fullname
-								), &msg_len, &msg_size );
-
-			tok = strtok( NULL, MAPLIST_SEPS );
-		}
-
-		Q_free( s );
-	} else {
-		for( i = 0; trap_ML_GetMapByNum( i, buffer, sizeof( buffer ) ); i++ ) {
-			G_AppendString( &msg, va(
-								"{\n"
-								"\"value\"" " " "\"%s\"" "\n"
-								"\"name\"" " " "\"%s '%s'\"" "\n"
-								"}\n",
-								buffer,
-								buffer, buffer + strlen( buffer ) + 1
-								), &msg_len, &msg_size );
-		}
-	}
-
-	*content = msg;
-	*content_length = msg_len;
-	return HTTP_RESP_OK;
-}
-
-
 /*
 * restart
 */
@@ -482,36 +358,6 @@ static void G_VoteGametypeExtraHelp( edict_t *ent ) {
 	}
 
 	G_PrintMsg( ent, "%s\n", message );
-}
-
-static http_response_code_t G_VoteGametypeWebRequest( http_query_method_t method, const char *resource,
-													  const char *query_string, char **content, size_t *content_length ) {
-	char *name; // use buffer to send only one print message
-	int count;
-	char *msg = NULL;
-	size_t msg_len = 0, msg_size = 0;
-
-	if( method != HTTP_METHOD_GET && method != HTTP_METHOD_HEAD ) {
-		return HTTP_RESP_BAD_REQUEST;
-	}
-
-	for( count = 0; ( name = COM_ListNameForPosition( g_gametypes_list->string, count, CHAR_GAMETYPE_SEPARATOR ) ) != NULL;
-		 count++ ) {
-		if( G_Gametype_IsVotable( name ) ) {
-			G_AppendString( &msg, va(
-								"{\n"
-								"\"value\"" " " "\"%s\"" "\n"
-								"\"name\"" " " "\"%s\"" "\n"
-								"}\n",
-								name,
-								name
-								), &msg_len, &msg_size );
-		}
-	}
-
-	*content = msg;
-	*content_length = msg_len;
-	return HTTP_RESP_OK;
 }
 
 static bool G_VoteGametypeValidate( callvotedata_t *vote, bool first ) {
@@ -2365,7 +2211,6 @@ void G_RegisterGametypeScriptCallvote( const char *name, const char *usage, cons
 	vote->current = NULL;
 	vote->extraHelp = NULL;
 	vote->argument_format = usage ? Q_strdup( usage ) : NULL;
-	vote->argument_type = type ? Q_strdup( type ) : NULL;
 	vote->help = help ? Q_strdup( va( "%s", help ) ) : NULL;
 }
 
@@ -2390,8 +2235,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteMapCurrent;
 	callvote->extraHelp = G_VoteMapExtraHelp;
 	callvote->argument_format = Q_strdup( "<name>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_VoteMapWebRequest;
 	callvote->help = Q_strdup( "Changes map" );
 
 	callvote = G_RegisterCallvote( "restart" );
@@ -2401,7 +2244,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
-	callvote->argument_type = NULL;
 	callvote->help = Q_strdup( "Restarts current map" );
 
 	callvote = G_RegisterCallvote( "nextmap" );
@@ -2411,7 +2253,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
-	callvote->argument_type = NULL;
 	callvote->help = Q_strdup( "Jumps to the next map" );
 
 	callvote = G_RegisterCallvote( "scorelimit" );
@@ -2421,7 +2262,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteScorelimitCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<number>" );
-	callvote->argument_type = Q_strdup( "integer" );
 	callvote->help = Q_strdup( "Sets the number of frags or caps needed to win the match\nSpecify 0 to disable" );
 
 	callvote = G_RegisterCallvote( "timelimit" );
@@ -2431,7 +2271,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteTimelimitCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<minutes>" );
-	callvote->argument_type = Q_strdup( "integer" );
 	callvote->help = Q_strdup( "Sets number of minutes after which the match ends\nSpecify 0 to disable" );
 
 	callvote = G_RegisterCallvote( "gametype" );
@@ -2441,8 +2280,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteGametypeCurrent;
 	callvote->extraHelp = G_VoteGametypeExtraHelp;
 	callvote->argument_format = Q_strdup( "<name>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_VoteGametypeWebRequest;
 	callvote->help = Q_strdup( "Changes the gametype" );
 
 	callvote = G_RegisterCallvote( "warmup_timelimit" );
@@ -2452,7 +2289,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteWarmupTimelimitCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<minutes>" );
-	callvote->argument_type = Q_strdup( "integer" );
 	callvote->help = Q_strdup( "Sets the number of minutes after which the warmup ends\nSpecify 0 to disable" );
 
 	callvote = G_RegisterCallvote( "extended_time" );
@@ -2462,7 +2298,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteExtendedTimeCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<minutes>" );
-	callvote->argument_type = Q_strdup( "integer" );
 	callvote->help = Q_strdup( "Sets the length of the overtime\nSpecify 0 to enable sudden death mode" );
 
 	callvote = G_RegisterCallvote( "maxteamplayers" );
@@ -2472,7 +2307,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteMaxTeamplayersCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<number>" );
-	callvote->argument_type = Q_strdup( "integer" );
 	callvote->help = Q_strdup( "Sets the maximum number of players in one team" );
 
 	callvote = G_RegisterCallvote( "lock" );
@@ -2482,7 +2316,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
-	callvote->argument_type = NULL;
 	callvote->help = Q_strdup( "Locks teams to disallow players joining in mid-game" );
 
 	callvote = G_RegisterCallvote( "unlock" );
@@ -2492,7 +2325,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
-	callvote->argument_type = NULL;
 	callvote->help = Q_strdup( "Unlocks teams to allow players joining in mid-game" );
 
 	callvote = G_RegisterCallvote( "allready" );
@@ -2502,7 +2334,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
-	callvote->argument_type = NULL;
 	callvote->help = Q_strdup( "Sets all players as ready so the match can start" );
 
 	callvote = G_RegisterCallvote( "remove" );
@@ -2512,8 +2343,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteRemoveExtraHelp;
 	callvote->argument_format = Q_strdup( "<player>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_PlayerlistWebRequest;
 	callvote->help = Q_strdup( "Forces player back to spectator mode" );
 
 	callvote = G_RegisterCallvote( "kick" );
@@ -2523,8 +2352,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersList;
 	callvote->argument_format = Q_strdup( "<player>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_PlayerlistWebRequest;
 	callvote->help = Q_strdup( "Removes player from the server" );
 
 	callvote = G_RegisterCallvote( "kickban" );
@@ -2534,8 +2361,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersList;
 	callvote->argument_format = Q_strdup( "<player>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_PlayerlistWebRequest;
 	callvote->help = Q_strdup( "Removes player from the server and bans his IP-address for 15 minutes" );
 
 	callvote = G_RegisterCallvote( "mute" );
@@ -2545,8 +2370,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersList;
 	callvote->argument_format = Q_strdup( "<player>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_PlayerlistWebRequest;
 	callvote->help = Q_strdup( "Disallows chat messages from the muted player" );
 
 	callvote = G_RegisterCallvote( "unmute" );
@@ -2556,8 +2379,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersList;
 	callvote->argument_format = Q_strdup( "<player>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_PlayerlistWebRequest;
 	callvote->help = Q_strdup( "Reallows chat messages from the unmuted player" );
 
 	callvote = G_RegisterCallvote( "set_antiwallhack_for" );
@@ -2567,8 +2388,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersListWithSnapFlags;
 	callvote->argument_format = Q_strdup( "<player>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_PlayerlistWebRequest;
 	callvote->help = Q_strdup( "Sends less information that can be used for a wall hack "
 										"(but might be important for gameplay) to the player" );
 
@@ -2579,8 +2398,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersListWithSnapFlags;
 	callvote->argument_format = Q_strdup( "<player>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_PlayerlistWebRequest;
 	callvote->help = Q_strdup( "Restores default wallhack-prone information sent to a player" );
 
 	callvote = G_RegisterCallvote( "set_antiradar_for" );
@@ -2590,8 +2407,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersListWithSnapFlags;
 	callvote->argument_format = Q_strdup( "<player>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_PlayerlistWebRequest;
 	callvote->help = Q_strdup( "Sends less information that can be used for a radar hack "
 										"(but might be important for gameplay) to the player" );
 
@@ -2602,8 +2417,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersListWithSnapFlags;
 	callvote->argument_format = Q_strdup( "<player>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_PlayerlistWebRequest;
 	callvote->help = Q_strdup( "Restores default radar-prone information sent to a player" );
 
 	callvote = G_RegisterCallvote( "set_anticheat_for" );
@@ -2613,8 +2426,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersListWithSnapFlags;
 	callvote->argument_format = Q_strdup( "<player>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_PlayerlistWebRequest;
 	callvote->help = Q_strdup( "Turns ON all currently implemented anticheat methods "
 										"(that might affect gameplay) for a player" );
 
@@ -2625,8 +2436,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersListWithSnapFlags;
 	callvote->argument_format = Q_strdup( "<player>" );
-	callvote->argument_type = Q_strdup( "option" );
-	callvote->webRequest = G_PlayerlistWebRequest;
 	callvote->help = Q_strdup( "Turns OFF all currently implemented anticheat methods "
 										"(that might affect gameplay) for a player" );
 
@@ -2637,7 +2446,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteEnableGlobalAntiWallhackCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<number>" );
-	callvote->argument_type = Q_strdup( "integer" );
 	callvote->help = Q_strdup( "Toggles sending less information that can be used for a wall hack "
 										"(but might be important for gameplay) for every player" );
 
@@ -2648,7 +2456,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteEnableGlobalAntiRadarCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<number>" );
-	callvote->argument_type = Q_strdup( "integer " );
 	callvote->help = Q_strdup( "Toggles sending less information that can be used for a radar hack "
 										"(but might be important for gameplay) for every player" );
 
@@ -2659,7 +2466,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteEnableGlobalAntiCheatCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<number>" );
-	callvote->argument_type = Q_strdup( "integer " );
 	callvote->help = Q_strdup( "Toggles using all implemented anticheat methods "
 										"(that might affect gameplay) for every player" );
 
@@ -2670,7 +2476,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteNumBotsCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<number>" );
-	callvote->argument_type = Q_strdup( "integer" );
 	callvote->help = Q_strdup( "Sets the number of bots to play on the server" );
 
 	callvote = G_RegisterCallvote( "allow_teamdamage" );
@@ -2680,7 +2485,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteAllowTeamDamageCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
-	callvote->argument_type = Q_strdup( "bool" );
 	callvote->help = Q_strdup( "Toggles whether shooting teammates will do damage to them" );
 
 	callvote = G_RegisterCallvote( "instajump" );
@@ -2690,7 +2494,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteAllowInstajumpCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
-	callvote->argument_type = Q_strdup( "bool" );
 	callvote->help = Q_strdup( "Toggles whether instagun can be used for weapon jumping" );
 
 	callvote = G_RegisterCallvote( "instashield" );
@@ -2700,7 +2503,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteAllowInstashieldCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
-	callvote->argument_type = Q_strdup( "bool" );
 	callvote->help = Q_strdup( "Toggles the availability of instashield in instagib" );
 
 	callvote = G_RegisterCallvote( "allow_falldamage" );
@@ -2710,7 +2512,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteAllowFallDamageCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
-	callvote->argument_type = Q_strdup( "bool" );
 	callvote->help = Q_strdup( "Toggles whether falling long distances deals damage" );
 
 	callvote = G_RegisterCallvote( "allow_selfdamage" );
@@ -2720,7 +2521,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteAllowSelfDamageCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
-	callvote->argument_type = Q_strdup( "bool" );
 	callvote->help = Q_strdup( "Toggles whether weapon splashes can damage self" );
 
 	callvote = G_RegisterCallvote( "timeout" );
@@ -2730,7 +2530,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
-	callvote->argument_type = NULL;
 	callvote->help = Q_strdup( "Pauses the game" );
 
 	callvote = G_RegisterCallvote( "timein" );
@@ -2740,7 +2539,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
-	callvote->argument_type = NULL;
 	callvote->help = Q_strdup( "Resumes the game if in timeout" );
 
 	callvote = G_RegisterCallvote( "allow_uneven" );
@@ -2750,7 +2548,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteAllowUnevenCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
-	callvote->argument_type = Q_strdup( "bool" );
 
 	callvote = G_RegisterCallvote( "shuffle" );
 	callvote->expectedargs = 0;
@@ -2759,7 +2556,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
-	callvote->argument_type = NULL;
 	callvote->help = Q_strdup( "Shuffles teams" );
 
 	callvote = G_RegisterCallvote( "rebalance" );
@@ -2769,7 +2565,6 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = NULL;
-	callvote->argument_type = NULL;
 	callvote->help = Q_strdup( "Rebalances teams" );
 
 	// wsw : pb : server admin can now disable a specific callvote command (g_disable_vote_<callvote name>)
@@ -2778,59 +2573,4 @@ void G_CallVotes_Init( void ) {
 	}
 
 	G_CallVotes_Reset();
-}
-
-/*
-* G_CallVotes_WebRequest
-*/
-http_response_code_t G_CallVotes_WebRequest( http_query_method_t method, const char *resource,
-											 const char *query_string, char **content, size_t *content_length ) {
-	char *msg = NULL;
-	size_t msg_len = 0, msg_size = 0;
-	callvotetype_t *callvote;
-
-	if( method != HTTP_METHOD_GET && method != HTTP_METHOD_HEAD ) {
-		return HTTP_RESP_BAD_REQUEST;
-	}
-
-	if( !Q_strnicmp( resource, "callvotes/", 10 ) ) {
-		// print the list of callvotes
-		for( callvote = callvotesHeadNode; callvote != NULL; callvote = callvote->next ) {
-			if( trap_Cvar_Value( va( "g_disable_vote_%s", callvote->name ) ) ) {
-				continue;
-			}
-
-			G_AppendString( &msg, va( "{\n"
-									  "\"name\"" " " "\"%s\"" "\n"
-									  "\"expected_args\"" " " "\"%i\"" "\n"
-									  "\"argument_format\"" " " "\"%s\"" "\n"
-									  "\"argument_type\"" " " "\"%s\"" "\n"
-									  "\"help\"" " " "\"%s\"" "\n"
-									  "}\n",
-									  callvote->name,
-									  callvote->expectedargs,
-									  callvote->argument_format ? callvote->argument_format : "",
-									  callvote->argument_type ? callvote->argument_type : "string",
-									  callvote->help ? callvote->help : ""
-									  ), &msg_len, &msg_size );
-		}
-
-		*content = msg;
-		*content_length = msg_len;
-		return HTTP_RESP_OK;
-	} else if( !Q_strnicmp( resource, "callvote/", 9 ) ) {
-		const char *votename = resource + 9;
-
-		// print the list of available arguments
-		for( callvote = callvotesHeadNode; callvote != NULL; callvote = callvote->next ) {
-			if( Q_stricmp( callvote->name, votename ) ) {
-				continue;
-			}
-			if( callvote->webRequest ) {
-				return callvote->webRequest( method, resource, query_string, content, content_length );
-			}
-			break;
-		}
-	}
-	return HTTP_RESP_NOT_FOUND;
 }

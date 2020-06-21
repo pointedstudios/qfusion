@@ -695,9 +695,6 @@ void SV_Frame( unsigned realmsec, unsigned gamemsec ) {
 		// clear teleport flags, etc for next frame
 		ge->ClearSnap();
 	}
-
-	// handle HTTP connections
-	SV_Web_GameFrame( ge->WebRequest );
 }
 
 //============================================================================
