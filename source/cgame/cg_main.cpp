@@ -278,13 +278,6 @@ static void CG_InitGameShared( void ) {
 }
 
 /*
-* CG_TranslateString
-*/
-const char *CG_TranslateString( const char *string ) {
-	return string;
-}
-
-/*
 * CG_TranslateColoredString
 */
 const char *CG_TranslateColoredString( const char *string, char *dst, size_t dst_size ) {

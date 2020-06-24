@@ -108,15 +108,12 @@ int scr_erase_center;
 * for a few moments
 */
 void CG_CenterPrint( const char *str ) {
-	char *s;
-	char l10n_buffer[sizeof( scr_centerstring )];
-
-	Q_strncpyz( scr_centerstring, CG_TranslateColoredString( str, l10n_buffer, sizeof( l10n_buffer ) ), sizeof( scr_centerstring ) );
+	Q_strncpyz( scr_centerstring, str, sizeof( scr_centerstring ) );
 	scr_centertime_off = cg_centerTime->value * 1000.0f;
 
 	// count the number of lines for centering
 	scr_center_lines = 1;
-	s = scr_centerstring;
+	const char *s = scr_centerstring;
 	while( *s )
 		if( *s++ == '\n' ) {
 			scr_center_lines++;
@@ -1035,7 +1032,7 @@ void CG_DrawTeamInfo( int x, int y, int align, struct qfontface_s *font, const v
 		}
 
 		Q_snprintfz( string, sizeof( string ), "%s%s %s%s (%s%i%s/%i)%s", cgs.clientInfo[teammate].name, S_COLOR_WHITE,
-					 CG_TranslateString( cgs.configStrings[CS_LOCATIONS + locationTag] ), S_COLOR_WHITE,
+					 cgs.configStrings[CS_LOCATIONS + locationTag], S_COLOR_WHITE,
 					 ( health < 25 ) ? S_COLOR_RED : "", health, S_COLOR_WHITE, armor, S_COLOR_WHITE );
 
 		// draw the head-icon in the case this player has one

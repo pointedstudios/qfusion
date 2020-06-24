@@ -102,23 +102,19 @@ static void CG_SC_CenterPrint( void ) {
 */
 static void CG_SC_CenterPrintFormat( void ) {
 	if( Cmd_Argc() == 8 ) {
-		CG_CenterPrint( va( CG_TranslateString( Cmd_Argv( 1 ) ), Cmd_Argv( 2 ), Cmd_Argv( 3 ),
-							Cmd_Argv( 4 ), Cmd_Argv( 5 ), Cmd_Argv( 6 ), Cmd_Argv( 7 ) ) );
+		CG_CenterPrint( va( Cmd_Argv( 1 ), Cmd_Argv( 2 ), Cmd_Argv( 3 ), Cmd_Argv( 4 ), Cmd_Argv( 5 ), Cmd_Argv( 6 ), Cmd_Argv( 7 ) ) );
 	} else if( Cmd_Argc() == 7 ) {
-		CG_CenterPrint( va( CG_TranslateString( Cmd_Argv( 1 ) ), Cmd_Argv( 2 ), Cmd_Argv( 3 ),
-							Cmd_Argv( 4 ), Cmd_Argv( 5 ), Cmd_Argv( 6 ) ) );
+		CG_CenterPrint( va( Cmd_Argv( 1 ), Cmd_Argv( 2 ), Cmd_Argv( 3 ), Cmd_Argv( 4 ), Cmd_Argv( 5 ), Cmd_Argv( 6 ) ) );
 	} else if( Cmd_Argc() == 6 ) {
-		CG_CenterPrint( va( CG_TranslateString( Cmd_Argv( 1 ) ), Cmd_Argv( 2 ), Cmd_Argv( 3 ),
-							Cmd_Argv( 4 ), Cmd_Argv( 5 ) ) );
+		CG_CenterPrint( va( Cmd_Argv( 1 ), Cmd_Argv( 2 ), Cmd_Argv( 3 ), Cmd_Argv( 4 ), Cmd_Argv( 5 ) ) );
 	} else if( Cmd_Argc() == 5 ) {
-		CG_CenterPrint( va( CG_TranslateString( Cmd_Argv( 1 ) ), Cmd_Argv( 2 ), Cmd_Argv( 3 ),
-							Cmd_Argv( 4 ) ) );
+		CG_CenterPrint( va( Cmd_Argv( 1 ), Cmd_Argv( 2 ), Cmd_Argv( 3 ), Cmd_Argv( 4 ) ) );
 	} else if( Cmd_Argc() == 4 ) {
-		CG_CenterPrint( va( CG_TranslateString( Cmd_Argv( 1 ) ), Cmd_Argv( 2 ), Cmd_Argv( 3 ) ) );
+		CG_CenterPrint( va( Cmd_Argv( 1 ), Cmd_Argv( 2 ), Cmd_Argv( 3 ) ) );
 	} else if( Cmd_Argc() == 3 ) {
-		CG_CenterPrint( va( CG_TranslateString( Cmd_Argv( 1 ) ), Cmd_Argv( 2 ) ) );
+		CG_CenterPrint( va( Cmd_Argv( 1 ), Cmd_Argv( 2 ) ) );
 	} else if( Cmd_Argc() == 2 ) {
-		CG_CenterPrint( CG_TranslateString( Cmd_Argv( 1 ) ) ); // theoretically, shouldn't happen
+		CG_CenterPrint( Cmd_Argv( 1 ) ); // theoretically, shouldn't happen
 	}
 }
 
@@ -508,7 +504,7 @@ static void CG_SC_MatchMessage( void ) {
 		return;
 	}
 
-	cg.matchmessage = CG_TranslateString( matchmessage );
+	cg.matchmessage = matchmessage;
 }
 
 /*
@@ -534,7 +530,7 @@ static void CG_SC_HelpMessage( void ) {
 	}
 
 	if( !helpmessage ) {
-		helpmessage = CG_TranslateString( id );
+		helpmessage = id;
 	}
 
 	while( ( c = helpmessage[0] ) && ( outlen < MAX_HELPMESSAGE_CHARS - 1 ) ) {
@@ -790,7 +786,7 @@ void CG_AddAward( const char *str, unsigned timeoutMillis ) {
 	}
 
 	int index = cg.award_head % MAX_AWARD_LINES;
-	Q_strncpyz( cg.award_lines[index], CG_TranslateString( str ), MAX_CONFIGSTRING_CHARS );
+	Q_strncpyz( cg.award_lines[index], str, MAX_CONFIGSTRING_CHARS );
 	cg.award_timestamps[index] = cg.time;
 	cg.award_timeouts[index] = cg.time + timeoutMillis;
 	cg.award_head++;

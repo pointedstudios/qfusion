@@ -21,8 +21,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #define CGAME_HARD_LINKED
 
-#define CGAME_L10N_DOMAIN   "cgame"
-
 #include "../gameshared/q_arch.h"
 #include "../gameshared/q_math.h"
 #include "../gameshared/q_shared.h"
@@ -917,7 +915,6 @@ void CG_OverrideWeapondef( int index, const char *cstring );
 
 void CG_StartBackgroundTrack( void );
 
-const char *CG_TranslateString( const char *string );
 const char *CG_TranslateColoredString( const char *string, char *dst, size_t dst_size );
 
 //

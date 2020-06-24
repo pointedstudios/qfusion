@@ -194,8 +194,7 @@ static int SCB_DrawPlayerStats( int x, int y, struct qfontface_s *font ) {
 		yoffset = SCR_FontHeight( font );
 
 		// header
-		SCR_DrawStringWidth( x + xoffset, y + yoffset, ALIGN_LEFT_TOP,
-								  CG_TranslateString( "Weapon stats" ), width, font, colorMdGrey );
+		SCR_DrawStringWidth( x + xoffset, y + yoffset, ALIGN_LEFT_TOP, "Weapon stats", width, font, colorMdGrey );
 		yoffset += SCR_FontHeight( font );
 
 		// box
@@ -289,8 +288,7 @@ static int SCR_DrawChallengers( const char **ptrptr, int x, int y, int panelWidt
 	// draw title
 	yoffset = height;
 	if( pass ) {
-		SCR_DrawString( x + xoffset, y + yoffset, ALIGN_CENTER_TOP,
-							 CG_TranslateString( "Challengers" ), font, colorCyan );
+		SCR_DrawString( x + xoffset, y + yoffset, ALIGN_CENTER_TOP, "Challengers", font, colorCyan );
 	}
 	yoffset += height;
 
@@ -415,7 +413,7 @@ static int SCR_DrawSpectators( const char **ptrptr, int x, int y, int panelWidth
 		if( !titleDrawn ) {
 			titleDrawn = true;
 			if( pass ) {
-				SCR_DrawString( x, y + yoffset, ALIGN_CENTER_TOP, CG_TranslateString( title ), font, titleColor );
+				SCR_DrawString( x, y + yoffset, ALIGN_CENTER_TOP, title, font, titleColor );
 			}
 			yoffset += height;
 		}
@@ -641,8 +639,7 @@ static int SCR_DrawTeamTab( const char **ptrptr, int *curteam, int x, int y, int
 
 		if( width ) {
 			if( pass ) {
-				SCR_DrawClampString( x + xoffset, y + yoffset, CG_TranslateString( token ),
-										  x + xoffset, y + yoffset, x + xoffset + width, y + yoffset + height, font, colorWhite );
+				SCR_DrawClampString( x + xoffset, y + yoffset, token, x + xoffset, y + yoffset, x + xoffset + width, y + yoffset + height, font, colorWhite );
 			}
 			xoffset += width;
 		}
@@ -775,10 +772,7 @@ static int SCR_DrawPlayerTab( const char **ptrptr, int team, int x, int y, int p
 				break;
 
 			case 's': // is a string
-			{
-				char l10n[MAX_STRING_CHARS];
-				Q_strncpyz( string, CG_TranslateColoredString( token, l10n, sizeof( l10n ) ), sizeof( string ) );
-			}
+				Q_strncpyz( string, token, sizeof( string ) );
 			break;
 
 			case 'n': // is a player name indicated by player number
@@ -818,7 +812,7 @@ static int SCR_DrawPlayerTab( const char **ptrptr, int team, int x, int y, int p
 
 			case 'b': // is a Y/N boolean
 				i = atoi( token );
-				Q_snprintfz( string, sizeof( string ), "%s", CG_TranslateString( ( i != 0 ) ? "Yes" : "No" ) );
+				Q_snprintfz( string, sizeof( string ), "%s", ( i != 0 ) ? "Yes" : "No" );
 				VectorCopy( i ? colorGreen : colorRed, color );
 				break;
 
@@ -835,7 +829,7 @@ static int SCR_DrawPlayerTab( const char **ptrptr, int team, int x, int y, int p
 
 				milli = (unsigned int)( atoi( token ) );
 				if( !milli ) {
-					Q_snprintfz( string, sizeof( string ), "%s", CG_TranslateString( "no time" ) );
+					Q_snprintfz( string, sizeof( string ), "%s", "no time" );
 				} else {
 					min = milli / 60000;
 					milli -= min * 60000;
