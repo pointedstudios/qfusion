@@ -557,6 +557,7 @@ void SV_InitGameProgs( void ) {
 	import.Cmd_RemoveCommand = Cmd_RemoveCommand;
 
 	import.ML_Update = ML_Update;
+	import.ML_GetListSize = ML_GetListSize;
 	import.ML_GetMapByNum = ML_GetMapByNum;
 	import.ML_FilenameExists = ML_FilenameExists;
 	import.ML_GetFullname = ML_GetFullname;

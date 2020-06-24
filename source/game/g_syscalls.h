@@ -18,6 +18,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
+#include "../qcommon/maplist.h"
+
 #ifdef GAME_HARD_LINKED
 #define GAME_IMPORT gi_imp_local
 #endif
@@ -256,8 +258,12 @@ static inline const char *trap_ML_GetFullname( const char *filename ) {
 	return GAME_IMPORT.ML_GetFullname( filename );
 }
 
-static inline size_t trap_ML_GetMapByNum( int num, char *out, size_t size ) {
-	return GAME_IMPORT.ML_GetMapByNum( num, out, size );
+static inline size_t trap_ML_GetListSize() {
+	return GAME_IMPORT.ML_GetListSize();
+}
+
+static inline std::optional<MapNamesPair> trap_ML_GetMapByNum( int num ) {
+	return GAME_IMPORT.ML_GetMapByNum( num );
 }
 
 static inline void trap_Cmd_ExecuteText( int exec_when, const char *text ) {

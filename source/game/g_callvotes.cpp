@@ -98,11 +98,7 @@ static int G_VoteCompareWeightedPlayers( const void *a, const void *b ) {
 #define MAPLIST_SEPS " ,"
 
 static void G_VoteMapExtraHelp( edict_t *ent ) {
-	char *s;
-	char buffer[MAX_STRING_CHARS];
 	char message[MAX_STRING_CHARS / 4 * 3];    // use buffer to send only one print message
-	int nummaps, i, start;
-	size_t length, msglength;
 
 	// update the maplist
 	trap_ML_Update();
@@ -118,9 +114,8 @@ static void G_VoteMapExtraHelp( edict_t *ent ) {
 	memset( message, 0, sizeof( message ) );
 	strcpy( message, "- Available maps:" );
 
-	for( nummaps = 0; trap_ML_GetMapByNum( nummaps, NULL, 0 ); nummaps++ )
-		;
-
+	int start;
+	const auto numMaps = (int)trap_ML_GetListSize();
 	if( trap_Cmd_Argc() > 2 ) {
 		start = atoi( trap_Cmd_Argv( 2 ) ) - 1;
 		if( start < 0 ) {
@@ -130,20 +125,21 @@ static void G_VoteMapExtraHelp( edict_t *ent ) {
 		start = 0;
 	}
 
-	i = start;
-	msglength = strlen( message );
-	while( trap_ML_GetMapByNum( i, buffer, sizeof( buffer ) ) ) {
+	int i = start;
+	size_t msglength = strlen( message );
+	while( auto maybeNames = trap_ML_GetMapByNum( i ) ) {
+		auto fileName = maybeNames->fileName;
 		i++;
-		s = buffer;
-		length = strlen( s );
-		if( msglength + length + 3 >= sizeof( message ) ) {
+
+		if( msglength + fileName.length() + 3 >= sizeof( message ) ) {
 			break;
 		}
 
 		strcat( message, " " );
-		strcat( message, s );
+		assert( fileName.isZeroTerminated() );
+		strcat( message, fileName.data() );
 
-		msglength += length + 1;
+		msglength += fileName.length() + 1;
 	}
 
 	if( i == start ) {
@@ -152,7 +148,7 @@ static void G_VoteMapExtraHelp( edict_t *ent ) {
 
 	G_PrintMsg( ent, "%s\n", message );
 
-	if( i < nummaps ) {
+	if( i < numMaps ) {
 		G_PrintMsg( ent, "Type 'callvote map %i' for more maps\n", i + 1 );
 	}
 }

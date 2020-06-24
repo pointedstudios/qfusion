@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // g_public.h -- game dll information visible to server
 
-#define GAME_API_VERSION    61
+#define GAME_API_VERSION    62
 
 //===============================================================
 
@@ -67,6 +67,8 @@ typedef struct {
 //===============================================================
 
 struct CMShapeList;
+
+#include "../qcommon/maplist.h"
 
 //
 // functions provided by the main engine
@@ -169,7 +171,8 @@ typedef struct {
 	bool ( *FS_RemoveDirectory )( const char *dirname );
 
 	bool ( *ML_Update )( void );
-	size_t ( *ML_GetMapByNum )( int num, char *out, size_t size );
+	size_t ( *ML_GetListSize )();
+	std::optional<MapNamesPair> ( *ML_GetMapByNum )( int num );
 	bool ( *ML_FilenameExists )( const char *filename );
 	const char *( *ML_GetFullname )( const char *filename );
 

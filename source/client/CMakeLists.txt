@@ -54,7 +54,7 @@ file(GLOB CLIENT_COMMON_SOURCES
 	"../qcommon/hash.cpp"
 	"../qcommon/library.cpp"
 	"../qcommon/md5.cpp"
-	"../qcommon/mlist.cpp"
+	"../qcommon/maplist.cpp"
 	"../qcommon/mm*.cpp"
 	"../qcommon/msg.cpp"
 	"../qcommon/net.cpp"

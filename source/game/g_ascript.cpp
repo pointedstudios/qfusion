@@ -2792,15 +2792,11 @@ static bool asFunc_ML_FilenameExists( asstring_t *filename ) {
 }
 
 static asstring_t *asFunc_ML_GetMapByNum( int num ) {
-	char mapname[MAX_QPATH];
-	asstring_t *data;
-
-	if( !trap_ML_GetMapByNum( num, mapname, sizeof( mapname ) ) ) {
-		return NULL;
+	if( const auto maybeNames = trap_ML_GetMapByNum( num ) ) {
+		const auto fileName = maybeNames->fileName;
+		return qasStringFactoryBuffer( fileName.data(), fileName.size() );
 	}
-
-	data = qasStringFactoryBuffer( (char *)mapname, strlen( mapname ) );
-	return data;
+	return nullptr;
 }
 
 static asstring_t *asFunc_LocationName( asvec3_t *origin ) {

@@ -661,47 +661,57 @@ bool ML_ValidateFullname( const char *fullname ) {
 	return true;
 }
 
-/*
-* ML_GetMapByNum
-* Prints map infostring in "mapname\0fullname" format into "out" string,
-* returns fullsize (so that out can be reallocated if there's not enough space)
-*/
-size_t ML_GetMapByNum( int num, char *out, size_t size ) {
-	static int i = 0;
-	static struct trie_dump_s *dump = NULL;
-	size_t fsize;
-	mapinfo_t *map;
+static int lastNum = 0;
+static trie_dump_s *dump = nullptr;
 
+static bool ML_CheckDumpCache( int num ) {
 	if( !ml_initialized ) {
-		return 0;
+		return false;
 	}
 
-	if( ml_flush || i > num ) {
+	if( ml_flush || lastNum > num ) {
 		if( dump ) {
 			Trie_FreeDump( dump );
-			dump = NULL;
+			dump = nullptr;
 		}
 		ml_flush = false;
 	}
 
 	if( !dump ) {
-		i = 0;
+		lastNum = 0;
 		Trie_Dump( mlist_filenames_trie, "", TRIE_DUMP_VALUES, &dump );
 	}
 
-	for( ; i < num && i < (int)dump->size; i++ )
-		;
-	if( i == (int)dump->size ) {
+	return true;
+}
+
+auto ML_GetListSize() -> size_t {
+	if( !ML_CheckDumpCache( std::numeric_limits<int>::max() ) ) {
 		return 0;
 	}
+	assert( dump );
+	return dump->size;
+}
 
-	map = ( mapinfo_t * )( dump->key_value_vector[i].value );
-	fsize = strlen( map->filename ) + 1 + strlen( map->fullname ) + 1;
-	if( out && ( fsize <= size ) ) {
-		Q_strncpyz( out, map->filename, size );
-		Q_strncpyz( out + strlen( out ) + 1,
-					strcmp( map->fullname, MLIST_UNKNOWN_MAPNAME ) ? map->fullname : map->filename, size - ( strlen( out ) + 1 ) );
+auto ML_GetMapByNum( int num ) -> std::optional<MapNamesPair> {
+	if( !ML_CheckDumpCache( num ) ) {
+		return std::nullopt;
 	}
 
-	return fsize;
+	assert( dump );
+	for( ; lastNum < num && lastNum < (int)dump->size; lastNum++ )
+		;
+
+	if( lastNum == (int)dump->size ) {
+		return std::nullopt;
+	}
+
+	const auto *mapInfo = ( mapinfo_t * )( dump->key_value_vector[num].value );
+	if( strcmp( mapInfo->fullname, MLIST_UNKNOWN_MAPNAME ) != 0 ) {
+		MapNamesPair result { wsw::StringView( mapInfo->filename ), wsw::StringView( mapInfo->fullname ) };
+		return result;
+	}
+
+	MapNamesPair result { wsw::StringView( mapInfo->filename ), std::nullopt };
+	return result;
 }

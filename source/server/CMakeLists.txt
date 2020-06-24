@@ -43,7 +43,7 @@ file(GLOB SERVER_SOURCES
 	"../qcommon/mmquery.cpp"
 	"../qcommon/mmrating.cpp"
 	"../qcommon/mmreliablepipe.cpp"
-    "../qcommon/mlist.cpp"
+    "../qcommon/maplist.cpp"
     "../qcommon/svnrev.cpp"
     "../qcommon/snap_demos.cpp"
     "../qcommon/snap_write.cpp"
