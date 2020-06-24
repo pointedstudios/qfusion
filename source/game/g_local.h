@@ -745,7 +745,6 @@ void G_ClearPlayerStateEvents( gclient_t *client );
 void G_AnnouncerSound( edict_t *targ, int soundindex, int team, bool queued, edict_t *ignore );
 edict_t *G_PlayerForText( const char *text );
 
-void G_LoadFiredefsFromDisk( void );
 void G_PrecacheWeapondef( int weapon );
 
 void G_MapLocations_Init( void );

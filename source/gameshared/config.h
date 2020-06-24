@@ -61,7 +61,6 @@ break
 
 #ifndef PUBLIC_BUILD
 #define TCP_ALLOW_CONNECT_CLIENT
-//#define WEAPONDEFS_FROM_DISK
 #endif
 
 #define DOWNSCALE_ITEMS // Ugly hack for the release. Item models are way too big
