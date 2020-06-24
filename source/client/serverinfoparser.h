@@ -2,11 +2,11 @@
 #define WSW_SERVERINFOPARSER_H
 
 #include "../qcommon/wswstdtypes.h"
+#include "../qcommon/wswstaticstring.h"
 #include "../qcommon/wswstaticvector.h"
 
 class ServerInfo;
 struct msg_s;
-template <unsigned> class StaticString;
 
 class ServerInfoParser {
 	// These fields are used to pass info during parsing
@@ -70,7 +70,7 @@ class ServerInfoParser {
 
 	template<unsigned N>
 	[[nodiscard]]
-	bool handleString( const wsw::StringView &, StaticString<N> *result ) const;
+	bool handleString( const wsw::StringView &, wsw::StaticString<N> *result ) const;
 
 	[[nodiscard]]
 	bool scanForKey();

@@ -3,104 +3,15 @@
 
 #include "../qcommon/qcommon.h"
 #include "../qcommon/wswstdtypes.h"
+#include "../qcommon/wswstaticstring.h"
 #include "../qcommon/wswstaticvector.h"
 #include "serverinfoparser.h"
 
 #include <atomic>
 
-template<unsigned N>
-class StaticString {
-private:
-	char chars[N];
-	unsigned length { 0 };
-public:
-	StaticString() {
-		chars[0] = '\0';
-	}
-
-	void clear() {
-		chars[0] = '\0';
-		length = 0;
-	}
-
-	[[nodiscard]]
-	size_t size() const { return length; }
-	[[nodiscard]]
-	const char *data() const { return chars; }
-
-	static constexpr unsigned capacity() {
-		static_assert( N > 0, "Illegal chars buffer size" );
-		return N - 1u;
-	}
-
-	template<typename Container>
-	bool equals( const Container &that ) const {
-		if( that.size() != this->length ) {
-			return false;
-		}
-		// Create an intermediate variable immediately so the type
-		// of the container data is restricted to char * by the SFINAE principle
-		const char *const thatData = that.data();
-		return !memcmp( this->chars, thatData, this->length );
-	}
-
-	template<unsigned M>
-	bool operator==( const StaticString<M> &that ) const {
-		return equals( that );
-	}
-
-	template<unsigned M>
-	bool operator!=( const StaticString<M> &that ) const {
-		return !equals( that );
-	}
-
-	[[nodiscard]]
-	bool equals( const wsw::StringView &view ) const {
-		if( view.size() != this->length ) {
-			return false;
-		}
-		return !memcmp( this->chars, view.data(), this->length );
-	}
-
-	void assign( const char *chars_, unsigned numChars ) {
-		assert( numChars < N );
-		memcpy( this->chars, chars_, numChars );
-		this->chars[numChars] = '\0';
-		this->length = (uint8_t)numChars;
-	}
-
-	void setFrom( const wsw::StringView &view ) {
-		assign( view.data(), (unsigned) view.size());
-	}
-
-	[[nodiscard]]
-	auto asView() const -> wsw::StringView { return wsw::StringView( chars, length ); }
-
-	// STL structural compatibility routines
-	char *begin() { return chars; }
-	char *end() { return chars + length; }
-
-	[[nodiscard]]
-	const char *begin() const { return chars; }
-	[[nodiscard]]
-	const char *end() const { return chars + length; }
-	[[nodiscard]]
-	const char *cbegin() const { return chars; }
-	[[nodiscard]]
-	const char *cend() const { return chars + length; }
-	char &front() { assert( length ); return chars[0]; }
-	[[nodiscard]]
-	const char &front() const { assert( length ); return chars[0]; };
-	char &back() { assert( length ); return chars[length - 1]; }
-	[[nodiscard]]
-	const char &back() const { assert( length ); return chars[length - 1]; }
-	[[nodiscard]]
-	bool empty() const { return !length; }
-};
-
 class PlayerInfo {
 public:
-	StaticString<32> name;
+	wsw::StaticString<32> name;
 	PlayerInfo *prev { nullptr };
 	PlayerInfo *next { nullptr };
 	int score { 0 };
@@ -146,7 +57,7 @@ struct MatchTime {
 struct MatchScore {
 	struct TeamScore {
 		int score { 0 };
-		StaticString<32> name;
+		wsw::StaticString<32> name;
 
 		void clear() {
 			score = 0;
@@ -174,10 +85,10 @@ class ServerInfo {
 	[[nodiscard]]
 	static bool comparePlayersList( const PlayerInfo *list1, const PlayerInfo *list2 );
 public:
-	StaticString<64> serverName;
-	StaticString<32> gametype;
-	StaticString<32> modname;
-	StaticString<32> mapname;
+	wsw::StaticString<64> serverName;
+	wsw::StaticString<32> gametype;
+	wsw::StaticString<32> modname;
+	wsw::StaticString<32> mapname;
 
 	~ServerInfo();
 

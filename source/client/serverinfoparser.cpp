@@ -148,7 +148,7 @@ bool ServerInfoParser::handleInteger( const wsw::StringView &value, T *result ) 
 }
 
 template<unsigned N>
-bool ServerInfoParser::handleString( const wsw::StringView &value, StaticString<N> *result ) const {
+bool ServerInfoParser::handleString( const wsw::StringView &value, wsw::StaticString<N> *result ) const {
 	// Its better to pass a caller name but we do not really want adding extra parameters to this method
 	constexpr const char *function = "ServerList::ServerInfoParser::HandleString()";
 
