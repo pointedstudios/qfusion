@@ -1391,7 +1391,7 @@ static unsigned int CL_LoadMap( const char *name ) {
 }
 
 void CL_RequestNextDownload( void ) {
-	char tempname[MAX_CONFIGSTRING_CHARS + 4];
+	char tempname[MAX_QPATH + 4];
 	purelist_t *purefile;
 	int i;
 

@@ -87,7 +87,7 @@ found_player:
 */
 static void SV_Map_f( void ) {
 	char *map;
-	char mapname[MAX_CONFIGSTRING_CHARS];
+	char mapname[MAX_QPATH];
 	bool found = false;
 
 	if( Cmd_Argc() < 2 ) {
@@ -105,7 +105,7 @@ static void SV_Map_f( void ) {
 	Com_DPrintf( "SV_GameMap(%s)\n", map );
 
 	// applies to fullnames and filenames (whereas + strlen( "maps/" ) wouldnt)
-	if( strlen( map ) >= MAX_CONFIGSTRING_CHARS ) {
+	if( strlen( map ) >= MAX_QPATH ) {
 		Com_Printf( "Map name too long.\n" );
 		return;
 	}

@@ -117,7 +117,7 @@ const char *_G_RegisterLevelString( const char *string, const char *filename, in
 */
 char *G_AllocCreateNamesList( const char *path, const char *extension, const char separator ) {
 	char separators[2];
-	char name[MAX_CONFIGSTRING_CHARS];
+	char name[MAX_QPATH];
 	char buffer[MAX_STRING_CHARS], *s, *list;
 	int numfiles, i, j, found, length, fulllength;
 
@@ -155,7 +155,7 @@ char *G_AllocCreateNamesList( const char *path, const char *extension, const cha
 		for( s = buffer; j > 0; j--, s += length + 1 ) {
 			length = strlen( s );
 
-			if( strlen( path ) + 1 + length >= MAX_CONFIGSTRING_CHARS ) {
+			if( strlen( path ) + 1 + length >= MAX_QPATH ) {
 				Com_Printf( "Warning: G_AllocCreateNamesList :file name too long: %s\n", s );
 				continue;
 			}
@@ -192,7 +192,7 @@ char *G_AllocCreateNamesList( const char *path, const char *extension, const cha
 		for( s = buffer; j > 0; j--, s += length + 1 ) {
 			length = strlen( s );
 
-			if( strlen( path ) + 1 + length >= MAX_CONFIGSTRING_CHARS ) {
+			if( strlen( path ) + 1 + length >= MAX_QPATH ) {
 				continue;
 			}
 
@@ -1772,7 +1772,7 @@ void G_AnnouncerSound( edict_t *targ, int soundindex, int team, bool queued, edi
 * G_PureSound
 */
 void G_PureSound( const char *sound ) {
-	assert( sound && sound[0] && strlen( sound ) < MAX_CONFIGSTRING_CHARS );
+	assert( sound && sound[0] && strlen( sound ) < MAX_QPATH );
 
 	if( sound[0] == '*' ) {
 		// sexed sounds
@@ -1788,7 +1788,7 @@ void G_PureSound( const char *sound ) {
 * G_PureModel
 */
 void G_PureModel( const char *model ) {
-	assert( model && model[0] && strlen( model ) < MAX_CONFIGSTRING_CHARS );
+	assert( model && model[0] && strlen( model ) < MAX_QPATH );
 
 	trap_PureModel( model );
 }

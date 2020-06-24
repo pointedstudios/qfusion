@@ -158,7 +158,7 @@ static void G_VoteMapExtraHelp( edict_t *ent ) {
 }
 
 static bool G_VoteMapValidate( callvotedata_t *data, bool first ) {
-	char mapname[MAX_CONFIGSTRING_CHARS];
+	char mapname[MAX_QPATH];
 
 	if( !first ) { // map can't become invalid while voting
 		return true;
@@ -167,7 +167,7 @@ static bool G_VoteMapValidate( callvotedata_t *data, bool first ) {
 		return false;
 	}
 
-	if( strlen( "maps/" ) + strlen( data->argv[0] ) + strlen( ".bsp" ) >= MAX_CONFIGSTRING_CHARS ) {
+	if( strlen( "maps/" ) + strlen( data->argv[0] ) + strlen( ".bsp" ) >= MAX_QPATH ) {
 		G_PrintMsg( data->caller, "%sToo long map name\n", S_COLOR_RED );
 		return false;
 	}

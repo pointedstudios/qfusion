@@ -402,8 +402,8 @@ bool LeafPropsCache::ComputeNewState( bool fastAndCoarse ) {
 
 	// Should be derived from metalness/smoothness of surfaces for every leaf.
 	// Currently just try using a global hardcoded value for a map or using a default one.
-	char buffer[MAX_CONFIGSTRING_CHARS];
-	memcpy( buffer, S_GetConfigString( CS_WORLDMODEL ), MAX_CONFIGSTRING_CHARS );
+	char buffer[MAX_QPATH];
+	memcpy( buffer, S_GetConfigString( CS_WORLDMODEL ), MAX_QPATH );
 	COM_StripExtension( buffer );
 	const char *map = COM_FileBase( buffer );
 	std::pair<float, float> hfRefBounds { 3000.0f, 5500.0f };

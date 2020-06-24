@@ -57,7 +57,7 @@ static bool ML_FilenameExistsExt( const char *filename, bool quick );
 static void ML_AddMap( const char *filename, const char *fullname ) {
 	mapinfo_t *map;
 	char *buffer;
-	char fullname_[MAX_CONFIGSTRING_CHARS];
+	char fullname_[MAX_QPATH];
 
 	if( !ML_ValidateFilename( filename ) ) {
 		return;
@@ -626,14 +626,14 @@ bool ML_ValidateFilename( const char *filename ) {
 
 	extension = COM_FileExtension( filename );
 	if( !extension ) {
-		if( strlen( "maps/" ) + strlen( filename ) + strlen( ".bsp" ) >= MAX_CONFIGSTRING_CHARS ) {
+		if( strlen( "maps/" ) + strlen( filename ) + strlen( ".bsp" ) >= MAX_QPATH ) {
 			return false;
 		}
 	} else {
 		if( Q_stricmp( extension, ".bsp" ) ) {
 			return false;
 		}
-		if( strlen( "maps/" ) + strlen( filename ) >= MAX_CONFIGSTRING_CHARS ) {
+		if( strlen( "maps/" ) + strlen( filename ) >= MAX_QPATH ) {
 			return false;
 		}
 	}

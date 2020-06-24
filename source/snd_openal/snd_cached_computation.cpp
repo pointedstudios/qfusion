@@ -19,7 +19,7 @@ void CachedComputation::EnsureValid() {
 
 	// These values are now expected to be actual at the moment of ResetExistingState() call
 	this->numLeafs = actualNumLeafs;
-	Q_strncpyz( this->mapName, actualMap, MAX_CONFIGSTRING_CHARS );
+	Q_strncpyz( this->mapName, actualMap, MAX_QPATH );
 	Q_strncpyz( this->mapHash, actualChecksum, MAX_CONFIGSTRING_CHARS );
 
 	isUsingValidData = false;

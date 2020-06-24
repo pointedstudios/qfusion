@@ -199,7 +199,7 @@ cmodel_t *CM_LoadMap( cmodel_state_t *cms, const char *name, bool clientload, un
 	bspFormatDesc_t *bspFormat = NULL;
 
 	assert( cms );
-	assert( name && strlen( name ) < MAX_CONFIGSTRING_CHARS );
+	assert( name && strlen( name ) < MAX_QPATH );
 	assert( checksum );
 
 	if( name && !strcmp( cms->map_name, name ) && ( clientload || !Cvar_Value( "flushmap" ) ) ) {

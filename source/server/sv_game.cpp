@@ -333,13 +333,13 @@ static const char *PF_GetConfigString( int index ) {
 */
 static void PF_PureSound( const char *name ) {
 	const char *extension;
-	char tempname[MAX_CONFIGSTRING_CHARS];
+	char tempname[MAX_QPATH];
 
 	if( sv.state != ss_loading ) {
 		return;
 	}
 
-	if( !name || !name[0] || strlen( name ) >= MAX_CONFIGSTRING_CHARS ) {
+	if( !name || !name[0] || strlen( name ) >= MAX_QPATH ) {
 		return;
 	}
 
@@ -364,13 +364,13 @@ static void PF_PureSound( const char *name ) {
 */
 static void SV_AddPureShader( const char *name ) {
 	const char *extension;
-	char tempname[MAX_CONFIGSTRING_CHARS];
+	char tempname[MAX_QPATH];
 
 	if( !name || !name[0] ) {
 		return;
 	}
 
-	assert( name && name[0] && strlen( name ) < MAX_CONFIGSTRING_CHARS );
+	assert( name && name[0] && strlen( name ) < MAX_QPATH );
 
 	if( !Q_strnicmp( name, "textures/common/", strlen( "textures/common/" ) ) ) {
 		return;
@@ -409,7 +409,7 @@ static void PF_PureModel( const char *name ) {
 	if( sv.state != ss_loading ) {
 		return;
 	}
-	if( !name || !name[0] || strlen( name ) >= MAX_CONFIGSTRING_CHARS ) {
+	if( !name || !name[0] || strlen( name ) >= MAX_QPATH ) {
 		return;
 	}
 

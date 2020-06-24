@@ -320,7 +320,7 @@ static const char *CG_SC_AutoRecordName( void ) {
 	time_t long_time;
 	struct tm *newtime;
 	static char name[MAX_STRING_CHARS];
-	char mapname[MAX_CONFIGSTRING_CHARS];
+	char mapname[MAX_QPATH];
 	const char *cleanplayername, *cleanplayername2;
 
 	// get date from system

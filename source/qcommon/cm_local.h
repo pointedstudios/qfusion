@@ -127,7 +127,7 @@ struct cmodel_state_s {
 
 	const bspFormatDesc_t *cmap_bspFormat;
 
-	char map_name[MAX_CONFIGSTRING_CHARS];
+	char map_name[MAX_QPATH];
 	unsigned int checksum;
 
 	int numbrushsides;

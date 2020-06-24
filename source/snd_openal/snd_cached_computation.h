@@ -10,7 +10,7 @@ class CachedComputation {
 	const char *const logTag;
 	const char *const fileExtension;
 	const char *const fileVersion;
-	char mapName[MAX_CONFIGSTRING_CHARS];
+	char mapName[MAX_QPATH];
 	char mapHash[MAX_CONFIGSTRING_CHARS];
 	mutable int numLeafs { -1 };
 	/**

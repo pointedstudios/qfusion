@@ -819,7 +819,7 @@ static void G_SpawnEntities( void ) {
 */
 void G_InitLevel( char *mapname, char *entities, int entstrlen, int64_t levelTime, int64_t serverTime, int64_t realTime ) {
 	char *mapString = NULL;
-	char name[MAX_CONFIGSTRING_CHARS];
+	char name[MAX_QPATH];
 	int i;
 
 	G_asGarbageCollect( true );
