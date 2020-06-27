@@ -1009,6 +1009,8 @@ void Qcommon_ShutdownCommands( void ) {
 * Qcommon_Init
 */
 void Qcommon_Init( int argc, char **argv ) {
+	(void)std::setlocale( LC_ALL, "C" );
+
 	if( setjmp( abortframe ) ) {
 		Sys_Error( "Error during initialization: %s", com_errormsg );
 	}

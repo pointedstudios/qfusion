@@ -2,8 +2,9 @@
 #include "stringviewtest.h"
 #include <QCoreApplication>
 
-int main(int argc, char **argv) {
-	QCoreApplication app(argc, argv);
+int main( int argc, char **argv ) {
+	QCoreApplication app( argc, argv );
+	(void)std::setlocale( LC_ALL, "C" );
 
 	int result = 0;
 

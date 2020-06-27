@@ -340,6 +340,8 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 	int fakeArgc = 0;
 	char *fakeArgv[] = { nullptr };
 	m_application = new QGuiApplication( fakeArgc, fakeArgv );
+	// Fix the overwritten locale, if any
+	(void)std::setlocale( LC_ALL, "C" );
 
 	QSurfaceFormat format;
 	format.setDepthBufferSize( 24 );
