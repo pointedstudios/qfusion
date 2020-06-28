@@ -20,6 +20,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "g_local.h"
+#include "../qcommon/wswstringsplitter.h"
+#include "../qcommon/wswstaticstring.h"
 
 // The only sane implementation among 40 y/o garbage
 #include <chrono>
@@ -194,9 +196,13 @@ static void G_UpdateServerInfo( void ) {
 
 			len = 0;
 
-			for( count = 0; ( name = COM_ListNameForPosition( g_gametypes_list->string, count, CHAR_GAMETYPE_SEPARATOR ) ) != NULL; count++ ) {
-				if( G_Gametype_IsVotable( name ) ) {
-					len += strlen( name ) + 1;
+			const wsw::StringView viewOfGametypesList( g_gametypes_list->string );
+			{
+				wsw::StringSplitter splitter( viewOfGametypesList );
+				while( const auto maybeName = splitter.getNext( CHAR_GAMETYPE_SEPARATOR ) ) {
+					if( G_Gametype_IsVotable( *maybeName ) ) {
+						len += maybeName->length() + 1;
+					}
 				}
 			}
 
@@ -204,9 +210,11 @@ static void G_UpdateServerInfo( void ) {
 			votable = ( char * )Q_malloc( len );
 			votable[0] = 0;
 
-			for( count = 0; ( name = COM_ListNameForPosition( g_gametypes_list->string, count, CHAR_GAMETYPE_SEPARATOR ) ) != NULL; count++ ) {
-				if( G_Gametype_IsVotable( name ) ) {
-					Q_strncatz( votable, name, len );
+			wsw::StringSplitter splitter( viewOfGametypesList );
+			while( const auto maybeName = splitter.getNext( CHAR_GAMETYPE_SEPARATOR ) ) {
+				if( G_Gametype_IsVotable( *maybeName ) ) {
+					wsw::StaticString<256> name( *maybeName );
+					Q_strncatz( votable, name.data(), len );
 					Q_strncatz( votable, " ", len );
 				}
 			}

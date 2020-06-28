@@ -10,6 +10,19 @@ uint32_t GetHashForLength( const char *s, size_t length );
 
 namespace wsw {
 
+class StringView;
+
+class CharLookup {
+	bool m_data[std::numeric_limits<unsigned char>::max()];
+public:
+	CharLookup( const wsw::StringView &chars );
+
+	[[nodiscard]]
+	bool operator()( char ch ) const {
+		return m_data[(unsigned char)ch];
+	}
+};
+
 class StringView {
 protected:
 	const char *m_s;
@@ -30,20 +43,7 @@ protected:
 		return (unsigned)( p - m_s );
 	}
 
-	struct Lookup {
-		bool m_data[std::numeric_limits<unsigned char>::max()];
 
-		Lookup( const wsw::StringView &chars ) {
-			memset( m_data, 0, sizeof( m_data ) );
-			for( char ch: chars ) {
-				m_data[(unsigned char)ch] = true;
-			}
-		}
-
-		bool operator()( char ch ) const {
-			return m_data[(unsigned char)ch];
-		}
-	};
 public:
 	enum Terminated {
 		Unspecified,
@@ -175,6 +175,27 @@ public:
 	}
 
 	[[nodiscard]]
+	auto indexOf( const wsw::CharLookup &lookup ) const -> std::optional<unsigned> {
+		for( unsigned i = 0; i < m_len; ++i ) {
+			if( lookup( m_s[i] ) ) {
+				return i;
+			}
+		}
+		return std::nullopt;
+	}
+
+	[[nodiscard]]
+	auto lastIndexOf( const wsw::CharLookup &lookup ) const -> std::optional<unsigned> {
+		auto iLast = m_len;
+		for( unsigned i = m_len; i <= iLast; iLast = i, i-- ) {
+			if( lookup( m_s[i] ) ) {
+				return i;
+			}
+		}
+		return std::nullopt;
+	}
+
+	[[nodiscard]]
 	bool contains( char ch ) const {
 		return indexOf( ch ).has_value();
 	}
@@ -186,13 +207,13 @@ public:
 
 	[[nodiscard]]
 	bool containsAny( const wsw::StringView &chars ) const {
-		Lookup lookup( chars );
+		CharLookup lookup( chars );
 		return std::find_if( m_s, m_s + m_len, lookup ) != m_s + m_len;
 	}
 
 	[[nodiscard]]
 	bool containsOnly( const wsw::StringView &chars ) const {
-		Lookup lookup( chars );
+		CharLookup lookup( chars );
 		return std::find_if_not( m_s, m_s + m_len, lookup ) == m_s + m_len;
 	}
 
@@ -235,7 +256,7 @@ public:
 
 	[[nodiscard]]
 	auto trimLeft( const wsw::StringView &chars ) const -> wsw::StringView {
-		Lookup lookup( chars );
+		CharLookup lookup( chars );
 		const char *p = std::find_if_not( m_s, m_s + m_len, lookup );
 		return wsw::StringView( p, m_len - ( p - m_s ), (Terminated)m_terminated );
 	}
@@ -260,7 +281,7 @@ public:
 
 	[[nodiscard]]
 	auto trimRight( const wsw::StringView &chars ) const -> wsw::StringView {
-		Lookup lookup( chars );
+		CharLookup lookup( chars );
 		auto begin = std::make_reverse_iterator( m_s + m_len ), end = std::make_reverse_iterator( m_s );
 		auto it = std::find_if_not( begin, end, lookup );
 		Terminated terminated = ( m_terminated && it == begin ) ? ZeroTerminated : Unspecified;
@@ -268,18 +289,18 @@ public:
 	}
 
 	[[nodiscard]]
-	auto trim() -> wsw::StringView {
+	auto trim() const -> wsw::StringView {
 		return trimLeft().trimRight();
 	}
 
 	[[nodiscard]]
-	auto trim( char ch ) -> wsw::StringView {
+	auto trim( char ch ) const -> wsw::StringView {
 		return trimLeft( ch ).trimRight( ch );
 	}
 
 	[[nodiscard]]
-	auto trim( const wsw::StringView &chars ) -> wsw::StringView {
-		Lookup lookup( chars );
+	auto trim( const wsw::StringView &chars ) const -> wsw::StringView {
+		CharLookup lookup( chars );
 		const char *left = std::find_if_not( m_s, m_s + m_len, lookup );
 		if( left == m_s + m_len ) {
 			return wsw::StringView();
@@ -395,6 +416,13 @@ public:
 		copyTo( buffer, N );
 	}
 };
+
+inline CharLookup::CharLookup( const wsw::StringView &chars ) {
+	std::memset( m_data, 0, sizeof( m_data ) );
+	for( char ch: chars ) {
+		m_data[(unsigned char)ch] = true;
+	}
+}
 
 /**
  * An extension of {@code StringView} that stores a value of a case-insensitive hash code in addition.

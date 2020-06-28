@@ -33,6 +33,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "addon/addon_cvar.h"
 #include "addon/addon_stringutils.h"
 #include "../../qcommon/qcommon.h"
+#include "../../qcommon/wswstringsplitter.h"
+#include "../../qcommon/wswstaticstring.h"
 
 #define QAS_SECTIONS_SEPARATOR ';'
 #define QAS_FILE_EXTENSION     ".as"
@@ -246,26 +248,21 @@ asIScriptContext *qasGetActiveContext( void ) {
 /*
 * qasLoadScriptSection
 */
-static char *qasLoadScriptSection( const char *rootDir, const char *dir, const char *script, int sectionNum ) {
+static char *qasLoadScriptSection( const char *rootDir, const char *dir, const wsw::StringView &sectionName ) {
+	assert( !sectionName.empty() );
+
 	char filename[MAX_QPATH];
 	uint8_t *data;
 	int length, filenum;
-	char *sectionName;
 
-	sectionName = COM_ListNameForPosition( script, sectionNum, QAS_SECTIONS_SEPARATOR );
-	if( !sectionName ) {
-		return NULL;
-	}
+	char nameBuffer[MAX_QPATH];
+	Q_strncpyz( nameBuffer, sectionName.data(), sectionName.size() );
+	COM_StripExtension( nameBuffer );
 
-	COM_StripExtension( sectionName );
-
-	while( *sectionName == '\n' || *sectionName == ' ' || *sectionName == '\r' )
-		sectionName++;
-
-	if( sectionName[0] == '/' ) {
-		Q_snprintfz( filename, sizeof( filename ), "%s%s%s", rootDir, sectionName, QAS_FILE_EXTENSION );
+	if( nameBuffer[0] == '/' ) {
+		Q_snprintfz( filename, sizeof( filename ), "%s%s%s", rootDir, nameBuffer, QAS_FILE_EXTENSION );
 	} else {
-		Q_snprintfz( filename, sizeof( filename ), "%s/%s/%s%s", rootDir, dir, sectionName, QAS_FILE_EXTENSION );
+		Q_snprintfz( filename, sizeof( filename ), "%s/%s/%s%s", rootDir, dir, nameBuffer, QAS_FILE_EXTENSION );
 	}
 	Q_strlwr( filename );
 
@@ -289,11 +286,6 @@ static char *qasLoadScriptSection( const char *rootDir, const char *dir, const c
 * qasBuildScriptProject
 */
 static asIScriptModule *qasBuildScriptProject( asIScriptEngine *asEngine, const char *moduleName, const char *rootDir, const char *dir, const char *scriptName, const char *script ) {
-	int error;
-	int numSections, sectionNum;
-	char *section;
-	asIScriptModule *asModule;
-
 	if( asEngine == NULL ) {
 		Com_Printf( S_COLOR_RED "qasBuildGameScript: Angelscript API unavailable\n" );
 		return NULL;
@@ -301,39 +293,44 @@ static asIScriptModule *qasBuildScriptProject( asIScriptEngine *asEngine, const 
 
 	Com_Printf( "* Initializing script '%s'\n", scriptName );
 
+	const wsw::StringView scriptView( script );
 	// count referenced script sections
-	for( numSections = 0; ( section = COM_ListNameForPosition( script, numSections, QAS_SECTIONS_SEPARATOR ) ) != NULL; numSections++ ) ;
-
-	if( !numSections ) {
-		Com_Printf( S_COLOR_RED "* Error: script '%s' has no sections\n", scriptName );
-		return NULL;
+	{
+		wsw::StringSplitter splitter( scriptView );
+		if( !splitter.getNext( QAS_SECTIONS_SEPARATOR ) ) {
+			Com_Printf( S_COLOR_RED "* Error: script '%s' has no sections\n", scriptName );
+			return nullptr;
+		}
 	}
 
 	// load up the script sections
 
-	asModule = asEngine->GetModule( moduleName, asGM_CREATE_IF_NOT_EXISTS );
+	asIScriptModule *asModule = asEngine->GetModule( moduleName, asGM_CREATE_IF_NOT_EXISTS );
 	if( asModule == NULL ) {
 		Com_Printf( S_COLOR_RED "qasBuildGameScript: GetModule '%s' failed\n", moduleName );
 		return NULL;
 	}
 
-	for( sectionNum = 0; ( section = qasLoadScriptSection( rootDir, dir, script, sectionNum ) ) != NULL; sectionNum++ ) {
-		const char *sectionName = COM_ListNameForPosition( script, sectionNum, QAS_SECTIONS_SEPARATOR );
-		error = asModule->AddScriptSection( sectionName, section, strlen( section ) );
+	int error;
+	wsw::StringSplitter splitter( scriptView );
+	while( const auto maybeSectionName = splitter.getNext( QAS_SECTIONS_SEPARATOR ) ) {
+		wsw::StringView trimmedName( maybeSectionName->trim() );
+		if( trimmedName.empty() ) {
+			continue;
+		}
+
+		const wsw::StaticString<MAX_QPATH> nameBuffer( trimmedName );
+
+		char *section = qasLoadScriptSection( rootDir, dir, trimmedName );
+		error = asModule->AddScriptSection( nameBuffer.data(), section, strlen( section ) );
 
 		qasFree( section );
 
 		if( error ) {
-			Com_Printf( S_COLOR_RED "* Failed to add the script section %s with error %i\n", sectionName, error );
+			Com_Printf( S_COLOR_RED "* Failed to add the script section %s with error %i\n", nameBuffer.data(), error );
 			asEngine->DiscardModule( moduleName );
 			return NULL;
 		}
-	}
-
-	if( sectionNum != numSections ) {
-		Com_Printf( S_COLOR_RED "* Error: couldn't load all script sections.\n" );
-		asEngine->DiscardModule( moduleName );
-		return NULL;
 	}
 
 	error = asModule->Build();

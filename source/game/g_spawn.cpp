@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "g_local.h"
+#include "../qcommon/wswstringsplitter.h"
 
 const field_t fields[] = {
 	{ "classname", FOFS( classname ), F_LSTRING },
@@ -190,22 +191,15 @@ static gsitem_t *G_ItemForEntity( edict_t *ent ) {
 * Returns true if there's a direct match
 */
 static bool G_GametypeFilterMatch( const char *filter ) {
-	const char *list_separators = ", ";
-	char *tok, *temp;
-	bool match = false;
-
-	temp = Q_strdup( filter );
-	tok = strtok( temp, list_separators );
-	while( tok ) {
-		if( !Q_stricmp( tok, gs.gametypeName ) ) {
-			match = true;
-			break;
+	const wsw::CharLookup separators( ( wsw::StringView( ", " ) ) );
+	wsw::StringSplitter splitter( ( wsw::StringView( filter ) ) );
+	const wsw::StringView gametypeView( gs.gametypeName );
+	while( const auto maybeToken = splitter.getNext( separators ) ) {
+		if( maybeToken->equalsIgnoreCase( gametypeView ) ) {
+			return true;
 		}
-		tok = strtok( NULL, list_separators );
 	}
-	Q_free( temp );
-
-	return match;
+	return false;
 }
 
 /*

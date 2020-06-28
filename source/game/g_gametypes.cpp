@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "g_local.h"
 #include "../qcommon/hash.h"
+#include "../qcommon/wswstringsplitter.h"
 
 GVariousStats::~GVariousStats() {
 	Clear();
@@ -1070,27 +1071,25 @@ void G_Match_FreeBodyQueue( void ) {
 /*
 * G_Gametype_IsVotable
 */
-bool G_Gametype_IsVotable( const char *name ) {
-	char *ptr = g_votable_gametypes->string;
-	char *validname;
-
-	if( !name ) {
+bool G_Gametype_IsVotable( const wsw::StringView &name ) {
+	if( name.empty() ) {
 		return false;
 	}
 
 	// if the votable gametypes list is empty, allow all but SP
+	const char *ptr = g_votable_gametypes->string;
 	if( ptr == NULL || ptr[0] == 0 ) {
 		return true;
 	}
 
 	// check for the gametype being in the votable gametypes list
 	while( ptr && *ptr ) {
-		validname = COM_Parse( &ptr );
+		const char *validname = COM_Parse( &ptr );
 		if( !validname[0] ) {
 			break;
 		}
 
-		if( !Q_stricmp( validname, name ) ) {
+		if( name.equalsIgnoreCase( wsw::StringView( validname ) ) ) {
 			return true;
 		}
 	}
@@ -1455,15 +1454,14 @@ void G_RunGametype( void ) {
 * G_Gametype_Exists
 */
 bool G_Gametype_Exists( const char *name ) {
-	char *str;
-	int count;
-
 	if( !name ) {
 		return false;
 	}
 
-	for( count = 0; ( str = COM_ListNameForPosition( g_gametypes_list->string, count, CHAR_GAMETYPE_SEPARATOR ) ) != NULL; count++ ) {
-		if( !Q_stricmp( name, str ) ) {
+	const wsw::StringView nameView( name );
+	wsw::StringSplitter splitter( wsw::StringView( g_gametypes_list->string ) );
+	while( const auto maybeName = splitter.getNext( CHAR_GAMETYPE_SEPARATOR ) ) {
+		if( maybeName->equalsIgnoreCase( nameView ) ) {
 			return true;
 		}
 	}

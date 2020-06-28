@@ -94,6 +94,48 @@ void StringViewTest::test_lastIndexOf_char() {
 	QVERIFY( sv1.lastIndexOf( '?' ) == std::nullopt && sv2.lastIndexOf( '?' ) == std::nullopt );
 }
 
+void StringViewTest::test_indexOf_charLookup() {
+	const char *s = "Hello, world!";
+	const wsw::StringView sv1( s ), sv2( s, std::strlen( s ) );
+	{
+		const wsw::CharLookup lookup( ",!"_asView );
+		QVERIFY( sv1.indexOf( lookup ) == std::optional( 5 ) && sv2.indexOf( lookup ) == std::optional( 5 ) );
+	}
+	{
+		const wsw::CharLookup lookup( "hHG"_asView );
+		QVERIFY( sv1.indexOf( lookup ) == std::optional( 0 ) && sv2.indexOf( lookup ) == std::optional( 0 ) );
+	}
+	{
+		const wsw::CharLookup lookup( "!D?"_asView );
+		QVERIFY( sv1.indexOf( lookup ) == std::optional( 12 ) && sv2.indexOf( lookup ) == std::optional( 12 ) );
+	}
+	{
+		const wsw::CharLookup lookup( "X"_asView );
+		QVERIFY( sv1.indexOf( lookup ) == std::nullopt && sv2.indexOf( lookup ) == std::nullopt );
+	}
+}
+
+void StringViewTest::test_lastIndexOf_charLookup() {
+	const char *s = "Hello, world!";
+	const wsw::StringView sv1( s ), sv2( s, std::strlen( s ) );
+	{
+		const wsw::CharLookup lookup( ",!"_asView );
+		QVERIFY( sv1.lastIndexOf( lookup ) == std::optional( 12 ) && sv1.lastIndexOf( lookup ) == std::optional( 12 ) );
+	}
+	{
+		const wsw::CharLookup lookup( "hHG"_asView );
+		QVERIFY( sv1.lastIndexOf( lookup ) == std::optional( 0 ) && sv2.lastIndexOf( lookup ) == std::optional( 0 ) );
+	}
+	{
+		const wsw::CharLookup lookup( "oX"_asView );
+		QVERIFY( sv1.lastIndexOf( lookup ) == std::optional( 8 ) && sv2.lastIndexOf( lookup ) == std::optional( 8 ) );
+	}
+	{
+		const wsw::CharLookup lookup( "X"_asView );
+		QVERIFY( sv1.lastIndexOf( lookup ) == std::nullopt && sv2.lastIndexOf( lookup ) == std::nullopt );
+	}
+}
+
 void StringViewTest::test_indexOf_view() {
 	const char *s = "Hello, world!";
 	const wsw::StringView sv1( s ), sv2( s, std::strlen( s ) );

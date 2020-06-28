@@ -15,6 +15,13 @@ public:
 		m_data[0] = '\0';
 	}
 
+	StaticString( const wsw::StringView &view ) {
+		assert( view.size() < N );
+		::memcpy( m_data, view.data(), view.size() );
+		m_data[view.size()] = '\0';
+		m_len = view.size();
+	}
+
 	void clear() {
 		m_data[0] = '\0';
 		m_len = 0;

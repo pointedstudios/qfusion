@@ -21,6 +21,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "g_local.h"
 #include "../qcommon/snap.h"
+#include "../qcommon/wswstringsplitter.h"
+#include "../qcommon/wswstaticstring.h"
 
 //===================================================================
 
@@ -192,24 +194,20 @@ static bool G_VoteMapValidate( callvotedata_t *data, bool first ) {
 
 		// check if valid map is in map pool when on
 		if( g_enforce_map_pool->integer ) {
-			char *s, *tok;
-
 			// if map pool is empty, basically turn it off
 			if( strlen( g_map_pool->string ) < 2 ) {
 				return true;
 			}
 
-			s = Q_strdup( g_map_pool->string );
-			tok = strtok( s, MAPLIST_SEPS );
-			while( tok != NULL ) {
-				if( !Q_stricmp( tok, mapname ) ) {
-					Q_free( s );
+			const wsw::StringView mapNameView( mapname );
+			wsw::StringSplitter splitter( wsw::StringView( g_map_pool->string ) );
+			const wsw::CharLookup separators( wsw::StringView( MAPLIST_SEPS ) );
+			while( const auto maybeToken = splitter.getNext( separators ) ) {
+				if( maybeToken->equalsIgnoreCase( mapNameView ) ) {
 					goto valid_map;
-				} else {
-					tok = strtok( NULL, MAPLIST_SEPS );
 				}
 			}
-			Q_free( s );
+
 			G_PrintMsg( data->caller, "%sMap is not in map pool.\n", S_COLOR_RED );
 			return false;
 		}
@@ -331,10 +329,8 @@ static const char *G_VoteTimelimitCurrent( void ) {
 */
 
 static void G_VoteGametypeExtraHelp( edict_t *ent ) {
-	char message[2048], *name; // use buffer to send only one print message
-	int count;
-
-	message[0] = 0;
+	char message[1024];
+	message[0] = '\0';
 
 	if( g_gametype->latched_string && g_gametype->latched_string[0] != '\0' &&
 		G_Gametype_Exists( g_gametype->latched_string ) ) {
@@ -345,11 +341,12 @@ static void G_VoteGametypeExtraHelp( edict_t *ent ) {
 
 	Q_strncatz( message, "- Available gametypes:", sizeof( message ) );
 
-	for( count = 0; ( name = COM_ListNameForPosition( g_gametypes_list->string, count, CHAR_GAMETYPE_SEPARATOR ) ) != NULL;
-		 count++ ) {
-		if( G_Gametype_IsVotable( name ) ) {
+	wsw::StringSplitter splitter( wsw::StringView( g_gametypes_list->string ) );
+	while( const auto maybeName = splitter.getNext( CHAR_GAMETYPE_SEPARATOR ) ) {
+		if( G_Gametype_IsVotable( *maybeName ) ) {
 			Q_strncatz( message, " ", sizeof( message ) );
-			Q_strncatz( message, name, sizeof( message ) );
+			wsw::StaticString<256> name( *maybeName );
+			Q_strncatz( message, name.data(), sizeof( message ) );
 		}
 	}
 
@@ -383,7 +380,7 @@ static bool G_VoteGametypeValidate( callvotedata_t *vote, bool first ) {
 	}
 
 	// if the g_votable_gametypes is empty, allow all gametypes
-	if( !G_Gametype_IsVotable( vote->argv[0] ) ) {
+	if( !G_Gametype_IsVotable( wsw::StringView( vote->argv[0] ) ) ) {
 		if( first ) {
 			G_PrintMsg( vote->caller, "%sVoting gametype %s is not allowed on this server\n",
 						S_COLOR_RED, vote->argv[0] );

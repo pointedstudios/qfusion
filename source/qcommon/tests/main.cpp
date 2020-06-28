@@ -1,4 +1,5 @@
 #include "boundsbuildertest.h"
+#include "stringsplittertest.h"
 #include "stringviewtest.h"
 #include <QCoreApplication>
 
@@ -11,6 +12,11 @@ int main( int argc, char **argv ) {
 	{
 		StringViewTest stringViewTest;
 		result |= QTest::qExec( &stringViewTest, argc, argv );
+	}
+
+	{
+		StringSplitterTest stringSplitterTest;
+		result |= QTest::qExec( &stringSplitterTest, argc, argv );
 	}
 
 	{

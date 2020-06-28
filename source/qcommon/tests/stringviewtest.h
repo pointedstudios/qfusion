@@ -19,6 +19,8 @@ private slots:
 
 	void test_indexOf_char();
 	void test_lastIndexOf_char();
+	void test_indexOf_charLookup();
+	void test_lastIndexOf_charLookup();
 	void test_indexOf_view();
 	void test_lastIndexOf_view();
 

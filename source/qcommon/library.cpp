@@ -20,6 +20,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "qcommon.h"
 #include "sys_library.h"
+#include "wswstringsplitter.h"
+#include "wswstaticstring.h"
 
 /*
 * Com_UnloadLibrary
@@ -87,27 +89,15 @@ void *Com_LoadLibraryExt( const char *name, dllfunc_t *funcs, bool sys ) {
 * Com_LoadSysLibrary
 */
 void *Com_LoadSysLibrary( const char *name, dllfunc_t *funcs ) {
-	char *names;
-	size_t names_size;
-	char *s, *saveptr;
-	void *lib = NULL;
-
-	names_size = strlen( name ) + 1;
-	names = (char *)Q_malloc( names_size );
-	memcpy( names, name, names_size );
-
-	s = strtok_r( names, "|", &saveptr );
-	while( s != NULL ) {
-		lib = Com_LoadLibraryExt( s, funcs, true );
-		if( lib ) {
-			Com_Printf( "Loaded %s\n", s );
-			break;
+	wsw::StringSplitter splitter( ( wsw::StringView( name ) ) );
+	while( const auto maybeName = splitter.getNext( '|' ) ) {
+		const wsw::StaticString<1024> s( *maybeName );
+		if( void *lib = Com_LoadLibraryExt( s.data(), funcs, true ) ) {
+			Com_Printf( "Loaded %s\n", s.data() );
+			return lib;
 		}
-		s = strtok_r( NULL, "|", &saveptr );
 	}
-
-	free( names );
-	return lib;
+	return nullptr;
 }
 
 /*
