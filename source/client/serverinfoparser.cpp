@@ -163,7 +163,7 @@ bool ServerInfoParser::handleString( const wsw::StringView &value, wsw::StaticSt
 		return false;
 	}
 
-	result->setFrom( value );
+	result->assign( value );
 	return true;
 }
 

@@ -13,6 +13,7 @@ add_executable(
         qcommontest
         main.cpp
         boundsbuildertest.cpp
+        staticstringtest.cpp
         stringsplittertest.cpp
         stringviewtest.cpp)
 
