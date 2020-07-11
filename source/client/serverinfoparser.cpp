@@ -1,5 +1,6 @@
 #include "../qcommon/hash.h"
 #include "../qcommon/qcommon.h"
+#include "../qcommon/wswtonum.h"
 #include "serverinfoparser.h"
 #include "serverlist.h"
 
@@ -137,12 +138,9 @@ bool ServerInfoParser::handleKVPair() {
 
 template <typename T>
 bool ServerInfoParser::handleInteger( const wsw::StringView &value, T *result ) const {
-	const char *endPtr = nullptr;
-	if( auto maybeResult = Q_tonum<T>( value.data(), &endPtr ) ) {
-		if( endPtr - value.data() == value.size() ) {
-			*result = *maybeResult;
-			return true;
-		}
+	if( auto maybeResult = wsw::toNum<T>( value ) ) {
+		*result = *maybeResult;
+		return true;
 	}
 	return false;
 }

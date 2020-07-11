@@ -2,6 +2,7 @@
 #include "staticstringtest.h"
 #include "stringsplittertest.h"
 #include "stringviewtest.h"
+#include "tonumtest.h"
 #include <QCoreApplication>
 
 int main( int argc, char **argv ) {
@@ -28,6 +29,11 @@ int main( int argc, char **argv ) {
 	{
 		BoundsBuilderTest boundsBuilderTest;
 		result |= QTest::qExec( &boundsBuilderTest, argc, argv );
+	}
+
+	{
+		ToNumTest toNumTest;
+		result |= QTest::qExec( &toNumTest, argc, argv );
 	}
 
 	return result;

@@ -3,6 +3,7 @@
 
 #include "../gameshared/q_shared.h"
 #include "../qcommon/wswstdtypes.h"
+#include "../qcommon/wswtonum.h"
 #include "../qcommon/qcommon.h"
 
 #include "vattribs.h"
@@ -329,15 +330,9 @@ class MaterialLexer {
 
 	template <typename T>
 	auto getNumber() -> std::optional<T> {
-		if( auto token = getNextTokenInLine() ) {
-			// Unfortunately we're forced to make a copy as multiple consequent tokens are glued together
-			if( token->size() < 31 ) {
-				char buffer[32];
-				memcpy( buffer, token->data(), token->size());
-				buffer[token->size()] = '\0';
-				if ( auto number = Q_tonum<T>( buffer )) {
-					return number;
-				}
+		if( auto maybeToken = getNextTokenInLine() ) {
+			if( auto maybeNumber = wsw::toNum<T>( *maybeToken ) ) {
+				return maybeNumber;
 			}
 			unGetToken();
 		}
@@ -346,15 +341,9 @@ class MaterialLexer {
 
 	template <typename T>
 	auto getNumberOr( T defaultValue ) -> T {
-		if( auto token = getNextTokenInLine() ) {
-			if( token->size() < 31 ) {
-				char buffer[32];
-				memcpy( buffer, token->data(), token->size());
-				buffer[token->size()] = '\0';
-				// Just to avoid a lint warning
-				if( auto number = Q_tonum<T>( buffer ) ) {
-					return *number;
-				}
+		if( auto maybeToken = getNextTokenInLine() ) {
+			if( auto maybeNumber = wsw::toNum<T>( *maybeToken ) ) {
+				return *maybeNumber;
 			}
 			unGetToken();
 		}

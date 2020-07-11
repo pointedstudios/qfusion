@@ -2,6 +2,7 @@
 #define WSW_STRINGVIEW_H
 
 #include <algorithm>
+#include <cassert>
 #include <cstdlib>
 #include <cstring>
 

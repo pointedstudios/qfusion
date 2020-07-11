@@ -15,7 +15,8 @@ add_executable(
         boundsbuildertest.cpp
         staticstringtest.cpp
         stringsplittertest.cpp
-        stringviewtest.cpp)
+        stringviewtest.cpp
+        tonumtest.cpp)
 
 add_test(NAME qcommontest COMMAND qcommontest)
 set_property(TARGET qcommontest PROPERTY CXX_STANDARD 17)
