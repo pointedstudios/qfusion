@@ -7,31 +7,24 @@ class LeafPropsSampler;
 class LeafPropsReader;
 
 struct alignas( 4 )LeafProps {
-	uint8_t roomSizeFactor;
-	uint8_t skyFactor;
-	uint8_t waterFactor;
-	uint8_t metalFactor;
-
-	uint16_t minHfRef;
-	uint16_t maxHfRef;
+	uint8_t m_roomSizeFactor;
+	uint8_t m_skyFactor;
+	uint8_t m_smoothnessFactor;
+	uint8_t m_metalnessFactor;
 
 	static float PackValue( float value ) { return (uint8_t)( value * 255 ); }
 	static float UnpackValue( uint8_t packed ) { return packed / 255.0f; }
 
 #define MK_ACCESSORS( accessorName, fieldName )                                             \
-	float accessorName() const { return UnpackValue( fieldName ); }                         \
-	void Set##accessorName( float fieldName##_ ) { fieldName = PackValue( fieldName##_ ); }
+	float get##accessorName() const { return UnpackValue( m_##fieldName ); }                \
+	void set##accessorName( float fieldName ) { m_##fieldName = PackValue( fieldName ); }
 
 	MK_ACCESSORS( RoomSizeFactor, roomSizeFactor );
 	MK_ACCESSORS( SkyFactor, skyFactor );
-	MK_ACCESSORS( WaterFactor, waterFactor );
-	MK_ACCESSORS( MetalFactor, metalFactor );
+	MK_ACCESSORS( SmoothnessFactor, smoothnessFactor );
+	MK_ACCESSORS( MetallnessFactor, metalnessFactor );
 
 #undef MK_ACCESSORS
-
-	// Provide custom getters as well for consistency with packed fields
-	float MinHfRef() const { return minHfRef; }
-	float MaxHfRef() const { return maxHfRef; }
 };
 
 struct EfxPresetEntry;
@@ -52,7 +45,7 @@ private:
 	bool ComputeNewState( bool fastAndCoarse ) override;
 	bool SaveToCache() override;
 
-	LeafPropsCache(): CachedComputation( "LeafPropsCache", ".leafprops", "LeafProps@v1338" ) {}
+	LeafPropsCache(): CachedComputation( "LeafPropsCache", ".leafprops", "LeafProps@v1339" ) {}
 public:
 	static LeafPropsCache *Instance();
 	static void Init();

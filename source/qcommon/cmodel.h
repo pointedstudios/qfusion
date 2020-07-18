@@ -32,7 +32,7 @@ int CM_NumAreas( const cmodel_state_t *cms );
 int CM_NumInlineModels( const cmodel_state_t *cms );
 char *CM_EntityString( cmodel_state_t *cms );
 int CM_EntityStringLen( const cmodel_state_t *cms );
-const char *CM_ShaderrefName( cmodel_state_t *cms, int ref );
+const char *CM_ShaderrefName( const cmodel_state_t *cms, int ref );
 
 // creates a clipping hull for an arbitrary bounding box
 struct cmodel_s *CM_ModelForBBox( cmodel_state_t *cms, const vec3_t mins, const vec3_t maxs );

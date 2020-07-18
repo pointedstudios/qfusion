@@ -9,14 +9,11 @@ class GenericRaycastSampler {
 	mutable float *primaryHitDistances;
 
 protected:
-	unsigned numRaysHitSky;
-	unsigned numRaysHitWater;
-	unsigned numRaysHitMetal;
-	unsigned numPrimaryRays;
-	unsigned numPrimaryHits;
-	float averageDistance;
+	unsigned numPrimaryRays { 0 };
+	unsigned numPrimaryHits { 0 };
+	float averageDistance { 0.0f };
 
-	vec3_t emissionOrigin;
+	vec3_t emissionOrigin { 0.0f, 0.0f, 0.0f };
 
 	virtual float GetEmissionRadius() const {
 		return 999999.9f;
@@ -26,23 +23,15 @@ protected:
 
 	void EmitPrimaryRays();
 
-	inline float ComputeGenericHitFactor( float value ) const {
-		assert( value <= numPrimaryRays );
-		return sqrtf( value / (float)numPrimaryRays );
-	}
+	[[nodiscard]]
+	virtual bool CheckAndAddHitSurfaceProps( const trace_t &trace );
 
-	inline float ComputeMetalFactor() const { return ComputeGenericHitFactor( numRaysHitMetal ); }
-	inline float ComputeWaterFactor() const { return ComputeGenericHitFactor( numRaysHitWater ); }
-	inline float ComputeSkyFactor() const { return ComputeGenericHitFactor( numRaysHitSky ); }
 	float ComputeRoomSizeFactor() const;
 
 	void ResetMutableState( vec3_t *primaryRayDirs_,
 							vec3_t *primaryHitPoints_,
 							float *primaryHitDistances_,
 							const vec3_t emissionOrigin_ ) {
-		numRaysHitSky = 0;
-		numRaysHitWater = 0;
-		numRaysHitMetal = 0;
 		numPrimaryHits = 0;
 		averageDistance = 0.0f;
 

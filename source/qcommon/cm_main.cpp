@@ -406,7 +406,7 @@ void CM_InlineModelBounds( const cmodel_state_t *cms, const cmodel_t *cmodel, ve
 /*
 * CM_ShaderrefName
 */
-const char *CM_ShaderrefName( cmodel_state_t *cms, int ref ) {
+const char *CM_ShaderrefName( const cmodel_state_t *cms, int ref ) {
 	if( ref < 0 || ref >= cms->numshaderrefs ) {
 		return NULL;
 	}

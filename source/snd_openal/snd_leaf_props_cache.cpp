@@ -2,12 +2,19 @@
 #include "snd_effect_sampler.h"
 #include "snd_computation_host.h"
 #include "snd_presets_registry.h"
+#include "../qcommon/glob.h"
 #include "../qcommon/singletonholder.h"
+#include "../qcommon/wswstringview.h"
+#include "../qcommon/wswstringsplitter.h"
+#include "../qcommon/wswstaticstring.h"
+#include "../qcommon/wswstdtypes.h"
 
 #include <algorithm>
 #include <new>
 #include <limits>
 #include <cstdlib>
+
+using wsw::operator""_asView;
 
 class LeafPropsIOHelper {
 protected:
@@ -118,8 +125,8 @@ bool LeafPropsReader::ParseLine( char *line, unsigned lineLength, LeafProps *pro
 	// Save for recovery in case of leaf props scanning failure
 	const char *maybePresetName = linePtr;
 	int lastPartNum = 0;
-	float parts[6];
-	for(; lastPartNum < 6; ++lastPartNum ) {
+	float parts[4];
+	for(; lastPartNum < 4; ++lastPartNum ) {
 		double v = ::strtod( linePtr, &endPtr );
 		if( endPtr == linePtr ) {
 			break;
@@ -134,7 +141,7 @@ bool LeafPropsReader::ParseLine( char *line, unsigned lineLength, LeafProps *pro
 		} else if( v < 1000.0f || v > 20000.0f ) {
 			return false;
 		}
-		if( lastPartNum != 5 ) {
+		if( lastPartNum != 3 ) {
 			if( !isspace( *endPtr ) ) {
 				return false;
 			}
@@ -154,22 +161,16 @@ bool LeafPropsReader::ParseLine( char *line, unsigned lineLength, LeafProps *pro
 		return false;
 	}
 
-	// There should be 6 parts
-	if( lastPartNum != 6 ) {
+	// There should be 4 parts
+	if( lastPartNum != 4 ) {
 		return false;
 	}
 
 	// The HF reference range must be valid
-	if( parts[4] > parts[5] ) {
-		return false;
-	}
-
-	props->SetRoomSizeFactor( parts[0] );
-	props->SetSkyFactor( parts[1] );
-	props->SetWaterFactor( parts[2] );
-	props->SetMetalFactor( parts[3] );
-	props->minHfRef = (uint16_t)parts[4];
-	props->maxHfRef = (uint16_t)parts[5];
+	props->setRoomSizeFactor( parts[0] );
+	props->setSkyFactor( parts[1] );
+	props->setSmoothnessFactor( parts[2] );
+	props->setMetallnessFactor( parts[3] );
 	return true;
 }
 
@@ -180,10 +181,12 @@ bool LeafPropsWriter::WriteProps( const LeafProps &props ) {
 
 	char buffer[MAX_STRING_CHARS];
 	int charsPrinted = Q_snprintfz( buffer, sizeof( buffer ),
-									"%d %.2f %.2f %.2f %.2f %d %d\r\n", leafCounter,
-									props.RoomSizeFactor(), props.SkyFactor(),
-									props.WaterFactor(), props.MetalFactor(),
-									(int)props.MinHfRef(), (int)props.MaxHfRef() );
+									"%d %.2f %.2f %.2f %.2f\r\n",
+									leafCounter,
+									props.getRoomSizeFactor(),
+									props.getSkyFactor(),
+									props.getSmoothnessFactor(),
+									props.getMetallnessFactor());
 
 	int charsWritten = FS_Write( buffer, (size_t)charsPrinted, fd );
 	if( charsWritten != charsPrinted ) {
@@ -262,15 +265,15 @@ bool LeafPropsCache::SaveToCache() {
 struct LeafPropsBuilder {
 	float roomSizeFactor { 0.0f };
 	float skyFactor { 0.0f };
-	float waterFactor { 0.0f };
-	float metalFactor { 0.0f };
+	float smoothnessFactor { 0.0f };
+	float metalnessFactor { 0.0f };
 	int numProps { 0 };
 
 	void operator+=( const LeafProps &propsToAdd ) {
-		roomSizeFactor += propsToAdd.RoomSizeFactor();
-		skyFactor += propsToAdd.SkyFactor();
-		waterFactor += propsToAdd.WaterFactor();
-		metalFactor += propsToAdd.MetalFactor();
+		roomSizeFactor += propsToAdd.getRoomSizeFactor();
+		skyFactor += propsToAdd.getSkyFactor();
+		smoothnessFactor += propsToAdd.getSmoothnessFactor();
+		metalnessFactor += propsToAdd.getMetallnessFactor();
 		++numProps;
 	}
 
@@ -280,15 +283,133 @@ struct LeafPropsBuilder {
 			float scale = 1.0f / numProps;
 			roomSizeFactor *= scale;
 			skyFactor *= scale;
-			waterFactor *= scale;
-			metalFactor *= scale;
+			smoothnessFactor *= scale;
+			metalnessFactor *= scale;
 		}
-		result.SetRoomSizeFactor( roomSizeFactor );
-		result.SetSkyFactor( skyFactor );
-		result.SetWaterFactor( waterFactor );
-		result.SetMetalFactor( metalFactor );
+		result.setRoomSizeFactor( roomSizeFactor );
+		result.setSkyFactor( skyFactor );
+		result.setSmoothnessFactor( smoothnessFactor );
+		result.setMetallnessFactor( metalnessFactor );
 		return result;
 	}
+};
+
+// Using TreeMaps/HashMaps with strings as keys is an anti-pattern.
+// This is a hack to get things done.
+// TODO: Replace by a sane trie implementation.
+
+namespace std {
+	template<>
+	struct hash<wsw::StringView> {
+		auto operator()( const wsw::StringView &s ) const noexcept -> std::size_t {
+			std::string_view stdView( s.data(), s.size() );
+			std::hash<std::string_view> hash;
+			return hash.operator()( stdView );
+		}
+	};
+}
+
+/**
+ * An immutable part, safe to refer from multiple threads
+ */
+class SurfaceClassData {
+	wsw::String m_namesData;
+	wsw::HashSet<wsw::StringView> m_simpleNames;
+	wsw::Vector<wsw::StringView> m_patterns;
+
+	[[nodiscard]]
+	bool loadDataFromFile( const wsw::StringView &prefix );
+public:
+	explicit SurfaceClassData( const wsw::StringView &prefix );
+
+	[[nodiscard]]
+	bool isThisKindOfSurface( const wsw::StringView &name ) const;
+};
+
+SurfaceClassData::SurfaceClassData( const wsw::StringView &prefix ) {
+	if( !loadDataFromFile( prefix ) ) {
+		Com_Printf( S_COLOR_YELLOW "Failed to load a class data for \"%s\" surfaces\n", prefix.data() );
+		return;
+	}
+
+	wsw::CharLookup separators( wsw::StringView( "\r\n" ) );
+	wsw::StringSplitter splitter( wsw::StringView( m_namesData.data(), m_namesData.size() ) );
+	while( auto maybeToken = splitter.getNext( separators ) ) {
+		auto rawToken = maybeToken->trim();
+		if( rawToken.empty() ) {
+			continue;
+		}
+		// Ensure that tokens are zero-terminated
+		auto offset = ( rawToken.data() - m_namesData.data() );
+		m_namesData[offset + rawToken.length()] = '\0';
+		wsw::StringView token( rawToken.data(), rawToken.size(), wsw::StringView::ZeroTerminated );
+		if( token.indexOf( '*' ) != std::nullopt ) {
+			m_patterns.push_back( token );
+		} else {
+			m_simpleNames.insert( token );
+		}
+	}
+}
+
+bool SurfaceClassData::loadDataFromFile( const wsw::StringView &prefix ) {
+	wsw::StaticString<MAX_QPATH> path;
+	path << "sounds/surfaces/"_asView << prefix << ".txt"_asView;
+
+	// TODO: Use sane RAII wrappers
+
+	int handle = 0;
+	int size = FS_FOpenFile( path.data(), &handle, FS_READ );
+	if( size <= 0 ) {
+		return false;
+	}
+
+	m_namesData.resize( (size_t)( size + 1 ) );
+	int bytesRead = FS_Read( m_namesData.data(), (size_t)size, handle );
+	FS_FCloseFile( handle );
+	return bytesRead == size;
+}
+
+bool SurfaceClassData::isThisKindOfSurface( const wsw::StringView &name ) const {
+	assert( name.isZeroTerminated() );
+	if( m_simpleNames.find( name ) != m_simpleNames.end() ) {
+		return true;
+	}
+	for( const wsw::StringView &pattern: m_patterns ) {
+		assert( pattern.isZeroTerminated() );
+		if( glob_match( pattern.data(), name.data(), 0 ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * An mutable part, one per thread.
+ */
+class SurfaceClassCache {
+	const SurfaceClassData *const m_surfaceClassData;
+	mutable wsw::HashMap<int, bool> m_isThisKindOfSurface;
+public:
+	explicit SurfaceClassCache( const SurfaceClassData *surfaceClassData )
+		: m_surfaceClassData( surfaceClassData ) {}
+
+	[[nodiscard]]
+	bool isThisKindOfSurface( int shaderRef, const wsw::StringView &shaderName ) const {
+		auto it = m_isThisKindOfSurface.find( shaderRef );
+		if( it != m_isThisKindOfSurface.end() ) {
+			return it->second;
+		}
+
+		bool result = m_surfaceClassData->isThisKindOfSurface( shaderName );
+		m_isThisKindOfSurface.insert( std::make_pair( shaderRef, result ) );
+		return result;
+	}
+};
+
+struct SurfaceClasses {
+	const SurfaceClassData smoothSurfaces { "smooth"_asView };
+	const SurfaceClassData absorptiveSurfaces { "absorptive"_asView };
+	const SurfaceClassData metallicSurfaces { "metallic"_asView };
 };
 
 class LeafPropsSampler: public GenericRaycastSampler {
@@ -299,13 +420,29 @@ class LeafPropsSampler: public GenericRaycastSampler {
 	vec3_t dirs[MAX_RAYS];
 	float distances[MAX_RAYS];
 	const unsigned maxRays;
+
+	unsigned numRaysHitSky { 0 };
+	unsigned numRaysHitSmoothSurface { 0 };
+	unsigned numRaysHitAbsorptiveSurface { 0 };
+	unsigned numRaysHitMetal { 0 };
+
+	SurfaceClassCache m_smoothSurfaces;
+	SurfaceClassCache m_absorptiveSurfaces;
+	SurfaceClassCache m_metallicSurfaces;
 public:
-	explicit LeafPropsSampler( bool fastAndCoarse = false )
-		: maxRays( fastAndCoarse ? MAX_RAYS / 2 : MAX_RAYS ) {
+	explicit LeafPropsSampler( const SurfaceClasses *classes, bool fastAndCoarse )
+		: maxRays( fastAndCoarse ? MAX_RAYS / 2 : MAX_RAYS )
+		, m_smoothSurfaces( &classes->smoothSurfaces )
+		, m_absorptiveSurfaces( &classes->absorptiveSurfaces )
+		, m_metallicSurfaces( &classes->metallicSurfaces ) {
 		SetupSamplingRayDirs( dirs, maxRays );
 	}
 
-	bool ComputeLeafProps( const vec3_t origin, LeafProps *props );
+	[[nodiscard]]
+	bool CheckAndAddHitSurfaceProps( const trace_t &trace ) override;
+
+	[[nodiscard]]
+	auto ComputeLeafProps( const vec3_t origin ) -> std::optional<LeafProps>;
 };
 
 class LeafPropsComputationTask: public ParallelComputationHost::PartialTask {
@@ -319,42 +456,16 @@ class LeafPropsComputationTask: public ParallelComputationHost::PartialTask {
 
 	LeafProps ComputeLeafProps( int leafNum );
 public:
-	explicit LeafPropsComputationTask( LeafProps *leafProps_, bool fastAndCoarse_ )
-		: leafProps( leafProps_ ), sampler( fastAndCoarse_ ), fastAndCoarse( fastAndCoarse_ ) {}
+	explicit LeafPropsComputationTask( LeafProps *leafProps_, const SurfaceClasses *classes, bool fastAndCoarse_ )
+		: leafProps( leafProps_ ), sampler( classes, fastAndCoarse_ ), fastAndCoarse( fastAndCoarse_ ) {}
 
 	void Exec() override;
 };
 
-struct {
-	const char *map;
-	float min, max;
-} hardcodedHfReferenceBounds[] = {
-	{ "wdm2",  4500.0f, 10000.0f },
-	{ "wdm3",  3000.0f, 5000.0f },
-	{ "wdm4",  5000.0f, 15000.0f },
-	{ "wdm6",  4500.0f, 10000.0f },
-	{ "wdm8",  5000.0f, 12500.0f },
-	{ "wdm9",  4000.0f, 10000.0f },
-	{ "wdm11", 3000.0f, 4000.0f },
-	{ "wdm12", 3000.0f, 5000.0f },
-	{ "wdm13", 4500.0f, 10000.0f },
-	{ "wdm14", 4500.0f, 10000.0f },
-	{ "wdm15", 5000.0f, 12500.0f },
-	{ "wdm16", 5000.0f, 10000.0f },
-	{ "wdm17", 5000.0f, 10000.0f },
-	{ "wbomb1", 3000.0f, 4000.0f },
-	{ "wbomb2", 4000.0f, 10000.0f },
-	{ "wbomb3", 3000.0f, 5000.0f },
-	{ "wca1", 5000.0f, 12500.0f },
-	{ "wamphi1", 3500.0f, 7500.0f },
-	{ "wda1", 3500.0f, 7500.0f },
-	{ "wda2", 4500.0f, 7500.0f },
-	{ "wda3", 3000.0f, 5000.0f },
-	{ "wda4", 5000.0f, 9000.0f }
-};
-
 bool LeafPropsCache::ComputeNewState( bool fastAndCoarse ) {
 	leafProps[0] = LeafProps();
+
+	const SurfaceClasses surfaceClasses;
 
 	const int actualNumLeafs = NumLeafs();
 
@@ -373,7 +484,7 @@ bool LeafPropsCache::ComputeNewState( bool fastAndCoarse ) {
 		if( !taskMem ) {
 			break;
 		}
-		auto *const task = new( taskMem )LeafPropsComputationTask( leafProps, fastAndCoarse );
+		auto *const task = new( taskMem )LeafPropsComputationTask( leafProps, &surfaceClasses, fastAndCoarse );
 		if( !computationHost->TryAddTask( task ) ) {
 			break;
 		}
@@ -400,30 +511,6 @@ bool LeafPropsCache::ComputeNewState( bool fastAndCoarse ) {
 
 	computationHost->Exec();
 
-	// Should be derived from metalness/smoothness of surfaces for every leaf.
-	// Currently just try using a global hardcoded value for a map or using a default one.
-	char buffer[MAX_QPATH];
-	memcpy( buffer, S_GetConfigString( CS_WORLDMODEL ), MAX_QPATH );
-	COM_StripExtension( buffer );
-	const char *map = COM_FileBase( buffer );
-	std::pair<float, float> hfRefBounds { 3000.0f, 5500.0f };
-	for( const auto &hardcoded: hardcodedHfReferenceBounds ) {
-		if( !Q_stricmp( map, hardcoded.map ) ) {
-			hfRefBounds = std::make_pair( hardcoded.min, hardcoded.max );
-			break;
-		}
-	}
-
-	// Set values for the zero leaf as well.
-	// Otherwise the file loading fails at illegal value and we do not want to complicate the loader code.
-	for( int i = 0; i < actualNumLeafs; ++i ) {
-		float minHfRef = hfRefBounds.first - 1000.0f * leafProps->SkyFactor();
-		float maxHfRef = hfRefBounds.second - 3000.0f * leafProps->SkyFactor();
-		Q_clamp( minHfRef, 1500.0f, 5000.0f );
-		Q_clamp( maxHfRef, minHfRef, 20000.0f );
-		std::tie( leafProps[i].minHfRef, leafProps[i].maxHfRef ) = std::make_pair( minHfRef, maxHfRef );
-	}
-
 	return true;
 }
 
@@ -437,20 +524,74 @@ void LeafPropsComputationTask::Exec() {
 	}
 }
 
-bool LeafPropsSampler::ComputeLeafProps( const vec3_t origin, LeafProps *props ) {
-	ResetMutableState( dirs, nullptr, distances, origin );
+auto LeafPropsSampler::ComputeLeafProps( const vec3_t origin ) -> std::optional<LeafProps> {
+	GenericRaycastSampler::ResetMutableState( dirs, nullptr, distances, origin );
+	this->numRaysHitAbsorptiveSurface = 0;
+	this->numRaysHitSmoothSurface = 0;
+	this->numRaysHitMetal = 0;
+	this->numRaysHitSky = 0;
+
 	this->numPrimaryRays = maxRays;
 
 	EmitPrimaryRays();
 	// Happens mostly if rays outgoing from origin start in solid
 	if( !numPrimaryHits ) {
+		return std::nullopt;
+	}
+
+	const float invNumHits = 1.0f / (float)numPrimaryHits;
+
+	// These kinds of surfaces are mutually exclusive
+	assert( numRaysHitSmoothSurface + numRaysHitAbsorptiveSurface <= numPrimaryHits );
+	// A neutral leaf is either surrounded by fully neutral surfaces or numbers of smooth and absorptive surfaces match
+	// 0.5 for a neutral leaf
+	// 0.0 for a leaf that is surrounded with absorptive surfaces
+	// 1.0 for a leaf that is surrounded with smooth surfaces
+	float smoothness = 0.5f;
+	smoothness += ( 0.5f * invNumHits ) * (float)( (int)numRaysHitSmoothSurface - (int)numRaysHitAbsorptiveSurface );
+
+	LeafProps props;
+	props.setSmoothnessFactor( smoothness );
+	props.setRoomSizeFactor( ComputeRoomSizeFactor() );
+	props.setSkyFactor( Q_Sqrt( (float)numRaysHitSky * invNumHits ) );
+	props.setMetallnessFactor( Q_Sqrt( (float)numRaysHitMetal * invNumHits ) );
+
+	return props;
+}
+
+bool LeafPropsSampler::CheckAndAddHitSurfaceProps( const trace_t &trace ) {
+	const auto contents = trace.contents;
+	if( contents & ( CONTENTS_WATER | CONTENTS_SLIME ) ) {
+		numRaysHitSmoothSurface++;
+	} else if( contents & CONTENTS_LAVA ) {
+		numRaysHitAbsorptiveSurface++;
+	}
+
+	const auto surfFlags = trace.surfFlags;
+	if( surfFlags & ( SURF_SKY | SURF_NOIMPACT | SURF_NOMARKS | SURF_FLESH | SURF_NOSTEPS ) ) {
+		if( surfFlags & SURF_SKY ) {
+			numRaysHitSky++;
+		}
 		return false;
 	}
 
-	props->SetRoomSizeFactor( ComputeRoomSizeFactor() );
-	props->SetWaterFactor( ComputeWaterFactor() );
-	props->SetSkyFactor( ComputeSkyFactor() );
-	props->SetMetalFactor( ComputeMetalFactor() );
+	// Already tested for smoothness / absorption
+	if( contents & MASK_WATER ) {
+		return false;
+	}
+
+	const auto shaderNum = trace.shaderNum;
+	const wsw::StringView shaderName( S_ShaderrefName( shaderNum ) );
+	if( m_smoothSurfaces.isThisKindOfSurface( shaderNum, shaderName ) ) {
+		numRaysHitSmoothSurface++;
+	} else if( m_absorptiveSurfaces.isThisKindOfSurface( shaderNum, shaderName ) ) {
+		numRaysHitAbsorptiveSurface++;
+	}
+
+	if( m_metallicSurfaces.isThisKindOfSurface( shaderNum, shaderName ) ) {
+		numRaysHitMetal++;
+	}
+
 	return true;
 }
 
@@ -463,7 +604,6 @@ LeafProps LeafPropsComputationTask::ComputeLeafProps( int leafNum ) {
 	VectorSubtract( leafMaxs, leafMins, extent );
 	const float squareExtent = VectorLengthSquared( extent );
 
-	LeafProps tmpProps;
 	LeafPropsBuilder propsBuilder;
 
 	int maxSamples;
@@ -507,8 +647,8 @@ LeafProps LeafPropsComputationTask::ComputeLeafProps( int leafNum ) {
 		}
 
 		// Might fail if the rays outgoing from the point start in solid
-		if( sampler.ComputeLeafProps( point, &tmpProps ) ) {
-			propsBuilder += tmpProps;
+		if( const auto maybeProps = sampler.ComputeLeafProps( point ) ) {
+			propsBuilder += *maybeProps;
 			numSamples++;
 			// Invalidate previous point used for sampling
 			hasValidPoint = false;

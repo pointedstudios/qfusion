@@ -379,6 +379,8 @@ public:
 void S_Trace( trace_s *tr, const float *start, const float *end, const float *mins,
 			  const float *maxs, int mask, int topNodeHint = 0 );
 
+wsw::StringView S_ShaderrefName( int shaderNum );
+
 int S_PointContents( const float *p, int topNodeHint = 0 );
 int S_PointLeafNum( const float *p, int topNodeHint = 0 );
 

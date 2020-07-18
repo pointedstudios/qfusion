@@ -47,6 +47,10 @@ void RayDirsHolder::ComputeDirs( unsigned numRays ) {
 	}
 }
 
+bool GenericRaycastSampler::CheckAndAddHitSurfaceProps( const trace_t &trace ) {
+	return !( trace.surfFlags & ( SURF_SKY | SURF_NOIMPACT | SURF_NOMARKS | SURF_FLESH | SURF_NOSTEPS ) );
+}
+
 void GenericRaycastSampler::EmitPrimaryRays() {
 	const float primaryEmissionRadius = GetEmissionRadius();
 	// Using top node hints is quite beneficial for small emission radii.
@@ -54,9 +58,6 @@ void GenericRaycastSampler::EmitPrimaryRays() {
 
 	// These values must be reset at this stage
 	assert( !averageDistance );
-	assert( !numRaysHitSky );
-	assert( !numRaysHitMetal );
-	assert( !numRaysHitWater );
 	assert( !numPrimaryHits );
 
 	// Check whether sampling params have been set
@@ -82,23 +83,8 @@ void GenericRaycastSampler::EmitPrimaryRays() {
 			continue;
 		}
 
-		// Check it before surf flags, otherwise a water gets cut off in almost all cases
-		if( trace.contents & CONTENTS_WATER ) {
-			numRaysHitWater++;
-		}
-
-		// Skip surfaces non-reflective for sounds
-		int surfFlags = trace.surfFlags;
-		if( surfFlags & ( SURF_SKY | SURF_NOIMPACT | SURF_NOMARKS | SURF_FLESH | SURF_NOSTEPS ) ) {
-			// Go even further for sky. Simulate an "absorption" of sound by the void.
-			if( surfFlags & SURF_SKY ) {
-				numRaysHitSky++;
-			}
+		if( !CheckAndAddHitSurfaceProps( trace ) ) {
 			continue;
-		}
-
-		if( surfFlags & SURF_METALSTEPS ) {
-			numRaysHitMetal++;
 		}
 
 		if( DistanceSquared( emissionOrigin, trace.endpos ) < 2 * 2 ) {

@@ -467,6 +467,15 @@ void S_Trace( trace_t *tr, const vec3_t start,
 	tr->fraction = 1.0f;
 }
 
+wsw::StringView S_ShaderrefName( int shaderNum ) {
+	const char *s = nullptr;
+	if( const auto *cms = SoundSystem::Instance()->GetClient()->cms ) {
+		s = CM_ShaderrefName( cms, shaderNum );
+	}
+	// Should really always return a valid name ref
+	return s ? wsw::StringView( s ) : wsw::StringView();
+}
+
 int S_PointContents( const float *p, int topNodeHint ) {
 	if( const auto *cms = SoundSystem::Instance()->GetClient()->cms ) {
 		return CM_TransformedPointContents( cms, p, nullptr, nullptr, nullptr, topNodeHint );

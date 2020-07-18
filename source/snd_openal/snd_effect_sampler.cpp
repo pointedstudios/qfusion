@@ -278,9 +278,9 @@ void ReverbEffectSampler::ProcessPrimaryEmissionResults() {
 
 	const LeafProps &leafProps = leafPropsCache->GetPropsForLeaf( src->envUpdateState.leafNum );
 
-	const float roomSizeFactor = leafProps.RoomSizeFactor();
-	const float metalFactor = leafProps.MetalFactor();
-	const float skyFactor = leafProps.SkyFactor();
+	const float roomSizeFactor = leafProps.getRoomSizeFactor();
+	const float metallnessFactor = leafProps.getMetallnessFactor();
+	const float skyFactor = leafProps.getSkyFactor();
 
 	// It should be default.
 	// Secondary rays obstruction is the only modulation we apply.
@@ -289,15 +289,16 @@ void ReverbEffectSampler::ProcessPrimaryEmissionResults() {
 
 	// The density must be within [0.0, 1.0] range.
 	// Lower the density is, more tinny and metallic a sound appear.
-	// Values below 0.3 behave way too artificial.
-	effect->density = 1.0f - 0.7f * metalFactor;
+	effect->density = 1.0f - metallnessFactor;
 
 	// The diffusion must be within [0.0, 1.0] range.
 	// Lowering diffusing has an effect that is similar to echoes that quickly change their panning from left to right.
 	// (its probably uses some phase modulation as well).
 	effect->diffusion = 1.0f;
+
 	// Apply a non-standard diffusion only for an outdoor environment
-	if( skyFactor ) {
+	const bool hasSky = skyFactor > 0;
+	if( hasSky ) {
 		// Make sure the diffusion kicks in only for a really huge space
 		effect->diffusion -= roomSizeFactor * roomSizeFactor;
 	}
@@ -332,7 +333,7 @@ void ReverbEffectSampler::ProcessPrimaryEmissionResults() {
 	// This is an early reverberation gain and it should decay quickly with increasing room size.
 	// The values must be within [0.0, 3.16] range.
 	// Lets raise early reverberation for metal environment to simulate "live" surfaces.
-	effect->reflectionsGain = 0.05f + ( 0.25f + 0.25f * metalFactor ) * gainFactorForRoomSize;
+	effect->reflectionsGain = 0.05f + ( 0.25f + 0.25f * metallnessFactor ) * gainFactorForRoomSize;
 
 	// Must be within [0.0, 0.3] range.
 	// Keep it default... it's hard to tweak
@@ -352,12 +353,18 @@ void ReverbEffectSampler::ProcessPrimaryEmissionResults() {
 	effect->lateReverbDelay = 0.011f + 0.088f * roomSizeFactor;
 
 	if( auto *eaxEffect = Effect::Cast<EaxReverbEffect *>( effect ) ) {
-		const float minHfRef = leafProps.MinHfRef();
-		const float maxHfRef = leafProps.MaxHfRef();
-		eaxEffect->hfReference = minHfRef + ( maxHfRef - minHfRef ) * roomSizeFactor;
+		// 0.5 is the value of a neutral surface
+		const float smoothness = leafProps.getSmoothnessFactor();
+		if( smoothness <= 0.5f ) {
+			// [1000, 2500]
+			eaxEffect->hfReference = 1000.0f + ( 2.0f * smoothness ) * 1500.0f;
+		} else {
+			// [2500, 10000]
+			eaxEffect->hfReference = 2500.0f + ( 2.0f * ( smoothness - 0.5f ) ) * 7500.0f;
+		}
 
 		// Apply an echo but only for open spaces
-		if( !skyFactor ) {
+		if( !hasSky ) {
 			eaxEffect->echoTime = 0.25f;
 			// Efficiently disable the echo
 			eaxEffect->echoDepth = 0.0f;
@@ -443,7 +450,7 @@ void ReverbEffectSampler::EmitSecondaryRays() {
 		if( !leafPropsCache->GetPresetForLeaf( src->envUpdateState.leafNum ) ) {
 			// A absence of a HF attenuation sounds poor, metallic/reflective environments should be the only exception.
 			const LeafProps &leafProps = leafPropsCache->GetPropsForLeaf( src->envUpdateState.leafNum );
-			effect->gainHf = ( 0.4f + 0.5f * leafProps.MetalFactor() ) * frac;
+			effect->gainHf = ( 0.4f + 0.5f * leafProps.getMetallnessFactor() ) * frac;
 		}
 		// We also modify effect gain by a fraction of secondary rays passed to listener.
 		// This is not right in theory, but is inevitable in the current game sound model
