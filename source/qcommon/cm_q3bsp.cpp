@@ -210,7 +210,7 @@ static int CM_CreateFacetFromPoints( cmodel_state_t *cms, cbrush_t *facet, vec3_
 /*
 * CM_CreatePatch
 */
-static void CM_CreatePatch( cmodel_state_t *cms, cface_t *patch, cshaderref_t *shaderref, vec3_t *verts, int *patch_cp ) {
+static void CM_CreatePatch( cmodel_state_t *cms, cface_t *patch, int shadernum, cshaderref_t *shaderref, vec3_t *verts, int *patch_cp ) {
 	int step[2], size[2], flat[2];
 	vec3_t *patchpoints;
 	int i, j, k,u, v;
@@ -307,6 +307,7 @@ static void CM_CreatePatch( cmodel_state_t *cms, cface_t *patch, cshaderref_t *s
 				CategorizePlane( &planes[j] );
 				CM_CopyRawToCMPlane( &planes[j], &s->plane );
 				s->surfFlags = shaderref->flags;
+				s->shaderNum = shadernum;
 			}
 		}
 
@@ -469,7 +470,7 @@ static inline void CMod_LoadFace( cmodel_state_t *cms, cface_t *out, int shadern
 		return;
 	}
 
-	CM_CreatePatch( cms, out, shaderref, cms->map_verts + firstvert, patch_cp );
+	CM_CreatePatch( cms, out, shadernum, shaderref, cms->map_verts + firstvert, patch_cp );
 }
 
 /*
@@ -856,6 +857,7 @@ static void CMod_LoadBrushSides( cmodel_state_t *cms, lump_t *l ) {
 			Com_Error( ERR_DROP, "Bad brushside texinfo" );
 		}
 		out->surfFlags = cms->map_shaderrefs[j].flags;
+		out->shaderNum = j;
 	}
 }
 
@@ -887,6 +889,7 @@ static void CMod_LoadBrushSides_RBSP( cmodel_state_t *cms, lump_t *l ) {
 			Com_Error( ERR_DROP, "Bad brushside texinfo" );
 		}
 		out->surfFlags = cms->map_shaderrefs[j].flags;
+		out->shaderNum = j;
 	}
 }
 

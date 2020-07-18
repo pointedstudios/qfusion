@@ -62,6 +62,7 @@ typedef cplane_t cm_plane_t;
 typedef struct {
 	cm_plane_t plane;
 	int surfFlags;
+	int shaderNum;
 } cbrushside_t;
 
 #ifdef CM_TRY_SIMD

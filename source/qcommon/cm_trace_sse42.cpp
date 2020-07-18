@@ -214,6 +214,7 @@ void CMSse42TraceComputer::ClipBoxToBrush( CMTraceContext *tlc, const cbrush_t *
 			CM_CopyCMToRawPlane( clipplane, &tlc->trace->plane );
 			tlc->trace->surfFlags = leadside->surfFlags;
 			tlc->trace->contents = brush->contents;
+			tlc->trace->shaderNum = leadside->shaderNum;
 		}
 	}
 }

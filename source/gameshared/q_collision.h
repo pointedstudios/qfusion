@@ -97,6 +97,7 @@ typedef struct trace_s {
 	cplane_t plane;             // surface normal at impact
 	int surfFlags;              // surface hit
 	int contents;               // contents on other side of surface hit
+	int shaderNum;              // allows a detailed surface info retrieval if needed
 	int ent;                    // not set by CM_*() functions
 	bool allsolid;          // if true, plane is not valid
 	bool startsolid;        // if true, the initial point was in a solid area
