@@ -18,35 +18,35 @@ using wsw::operator""_asView;
 
 class LeafPropsIOHelper {
 protected:
-	int leafCounter { 0 };
+	int m_leafCounter { 0 };
 public:
 	virtual ~LeafPropsIOHelper() = default;
 };
 
 struct EfxPresetEntry;
 
-class LeafPropsReader final: public CachedComputationReader, public LeafPropsIOHelper {
+class LeafPropsReader final: public wsw::snd::CachedComputation::Reader, public LeafPropsIOHelper {
 public:
 	using PresetHandle = const EfxPresetEntry *;
 private:
 	bool ParseLine( char *line, unsigned lineLength, LeafProps *props, PresetHandle *presetHandle );
 public:
-	explicit LeafPropsReader( const LeafPropsCache *parent_, int fileFlags )
-		: CachedComputationReader( parent_, fileFlags, true ) {}
+	explicit LeafPropsReader( const LeafPropsCache *parent, wsw::fs::CacheUsage cacheUsage )
+		: wsw::snd::CachedComputation::Reader( parent, parent->getFullPath().value(), cacheUsage ) {}
 
 	enum Status {
-		OK,
-		DONE,
-		ERROR
+		Ok,
+		Done,
+		Error
 	};
 
-	Status ReadNextProps( LeafProps *props, PresetHandle *presetRef );
+	auto readNextProps( LeafProps *props, PresetHandle *presetRef ) -> Status;
 };
 
-class LeafPropsWriter final: public CachedComputationWriter, public LeafPropsIOHelper {
+class LeafPropsWriter final: public wsw::snd::CachedComputation::Writer, public LeafPropsIOHelper {
 public:
-	explicit LeafPropsWriter( const LeafPropsCache *parent_ )
-		: CachedComputationWriter( parent_ ) {}
+	explicit LeafPropsWriter( const LeafPropsCache *parent )
+		: wsw::snd::CachedComputation::Writer( parent, parent->getFullPath().value() ) {}
 
 	bool WriteProps( const LeafProps &props );
 };

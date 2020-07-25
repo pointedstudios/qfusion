@@ -1,7 +1,9 @@
 #ifndef QFUSION_SND_LEAF_PROPS_CACHE_H
 #define QFUSION_SND_LEAF_PROPS_CACHE_H
 
-#include "snd_cached_computation.h"
+#include "cachedcomputation.h"
+#include "../qcommon/wswstdtypes.h"
+#include <memory>
 
 class LeafPropsSampler;
 class LeafPropsReader;
@@ -29,45 +31,51 @@ struct alignas( 4 )LeafProps {
 
 struct EfxPresetEntry;
 
-class LeafPropsCache: public CachedComputation {
+class LeafPropsCache: public wsw::snd::CachedComputation {
 	template <typename> friend class SingletonHolder;
 
-	LeafProps *leafProps { nullptr };
+	std::unique_ptr<LeafProps[]> m_leafProps;
 public:
 	using PresetHandle = const EfxPresetEntry *;
 private:
-	PresetHandle *leafPresets { nullptr };
+	std::unique_ptr<PresetHandle[]> m_leafPresets;
 
 	bool TryReadFromFile( LeafPropsReader *reader );
 
-	void ResetExistingState() override;
-	bool TryReadFromFile( int fsFlags ) override;
-	bool ComputeNewState( bool fastAndCoarse ) override;
-	bool SaveToCache() override;
+	void resetExistingState() override;
+	[[nodiscard]]
+	bool tryReadingFromFile( wsw::fs::CacheUsage cacheUsage ) override;
+	[[nodiscard]]
+	bool computeNewState() override;
+	[[nodiscard]]
+	bool saveToCache() override;
 
-	LeafPropsCache(): CachedComputation( "LeafPropsCache", ".leafprops", "LeafProps@v1339" ) {}
+	LeafPropsCache()
+		: wsw::snd::CachedComputation(
+			  wsw::StringView( "LeafPropsCache" )
+			, wsw::StringView( ".leafprops" )
+			, wsw::StringView( "LeafProps@v1340" ) ) {}
 public:
 	static LeafPropsCache *Instance();
 	static void Init();
 	static void Shutdown();
 
-	~LeafPropsCache() override {
-		if( leafProps ) {
-			Q_free( leafProps );
-		}
-		if( leafPresets ) {
-			Q_free( leafPresets );
-		}
-	}
-
 	// TODO: Merge with GetPresetForLeaf() and use Either as a return type
-	const LeafProps &GetPropsForLeaf( int leafNum ) const {
-		return leafProps[leafNum];
+
+	[[nodiscard]]
+	auto getPropsForLeaf( int leafNum ) const -> std::optional<const LeafProps> {
+		if( !m_leafPresets.get()[leafNum] ) {
+			return m_leafProps.get()[leafNum];
+		}
+		return std::nullopt;
 	}
 
-	// TODO: Merge with GetPropsForLeaf() and use Either as a return type
-	const PresetHandle GetPresetForLeaf( int leafNum ) const {
-		return leafPresets[leafNum];
+	[[nodiscard]]
+	auto getPresetForLeaf( int leafNum ) const -> std::optional<PresetHandle> {
+		if( PresetHandle handle = m_leafPresets.get()[leafNum] ) {
+			return handle;
+		}
+		return std::nullopt;
 	}
 };
 

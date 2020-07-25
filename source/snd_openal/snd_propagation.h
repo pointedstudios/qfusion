@@ -2,7 +2,7 @@
 #define QFUSION_SND_PROPAGATION_H
 
 #include "snd_local.h"
-#include "snd_cached_computation.h"
+#include "cachedcomputation.h"
 
 #include <limits>
 
@@ -52,7 +52,7 @@ public:
 	}
 };
 
-class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
+class CachedLeafsGraph: public wsw::snd::CachedComputation, public GraphLike<int, float> {
 	typedef GraphLike<int, float> ParentGraphType;
 
 	friend class PropagationTable;
@@ -76,14 +76,20 @@ class CachedLeafsGraph: public CachedComputation, public GraphLike<int, float> {
 
 	int leafListsDataSize { -1 };
 
-	void ResetExistingState() override;
-	bool TryReadFromFile( int fsFlags ) override;
-	bool ComputeNewState( bool fastAndCoarse ) override;
-	void ProvideDummyData() override;
-	bool SaveToCache() override;
+	void resetExistingState() override;
+	[[nodiscard]]
+	bool tryReadingFromFile( wsw::fs::CacheUsage cacheUsage ) override;
+	[[nodiscard]]
+	bool computeNewState() override;
+	void provideDummyData() override;
+	[[nodiscard]]
+	bool saveToCache() override;
 
 	CachedLeafsGraph()
-		: CachedComputation( "CachedLeafsGraph", ".graph", "CachedLeafsGraph@v1337" )
+		: wsw::snd::CachedComputation(
+			  wsw::StringView( "CachedLeafsGraph" )
+			, wsw::StringView( ".graph" )
+			, wsw::StringView( "CachedLeafsGraph@v1337" ) )
 		, GraphLike<int, float>( -1 ) {}
 
 	~CachedLeafsGraph() override;
@@ -107,7 +113,7 @@ public:
 	static void Shutdown();
 };
 
-class PropagationTable: public CachedComputation {
+class PropagationTable: public wsw::snd::CachedComputation {
 	friend class PropagationIOHelper;
 	friend class PropagationTableReader;
 	friend class PropagationTableWriter;
@@ -179,30 +185,38 @@ class PropagationTable: public CachedComputation {
 	static_assert( sizeof( PropagationProps ) == 2, "" );
 
 	PropagationProps *table { nullptr };
+	int m_numLeafs { 0 };
 
 	const PropagationProps &GetProps( int fromLeafNum, int toLeafNum ) const {
 		assert( table );
-		const auto numLeafs = NumLeafs();
-		assert( numLeafs );
-		assert( fromLeafNum > 0 && fromLeafNum < numLeafs );
-		assert( toLeafNum > 0 && toLeafNum < numLeafs );
-		return table[numLeafs * fromLeafNum + toLeafNum];
+		assert( m_numLeafs );
+		assert( fromLeafNum > 0 && fromLeafNum < m_numLeafs );
+		assert( toLeafNum > 0 && toLeafNum < m_numLeafs );
+		return table[m_numLeafs * fromLeafNum + toLeafNum];
 	}
 
 	void Clear() {
 		FreeIfNeeded( &table );
+		m_numLeafs = S_NumLeafs();
 	}
 
-	void ResetExistingState() override {
+	void resetExistingState() override {
 		Clear();
 	}
 
-	bool TryReadFromFile( int fsFlags ) override;
-	bool ComputeNewState( bool fastAndCoarse ) override;
-	void ProvideDummyData() override;
-	bool SaveToCache() override;
+	[[nodiscard]]
+	bool tryReadingFromFile( wsw::fs::CacheUsage cacheUsage ) override;
+	[[nodiscard]]
+	bool computeNewState() override;
+	void provideDummyData() override;
+	[[nodiscard]]
+	bool saveToCache() override;
 public:
-	PropagationTable(): CachedComputation( "PropagationTable", ".table", "PropagationTable@v1337" ) {}
+	PropagationTable()
+		: wsw::snd::CachedComputation(
+			  wsw::StringView( "PropagationTable" )
+			, wsw::StringView( ".table" )
+			, wsw::StringView( "PropagationTable@v1337" ) ) {}
 
 	~PropagationTable() override {
 		Clear();
