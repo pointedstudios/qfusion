@@ -53,8 +53,6 @@ static bgTrack_t *S_AllocTrack( const char *filename ) {
 	track->ignore = false;
 	track->filename = (char *)( (uint8_t *)track + sizeof( *track ) );
 	strcpy( track->filename, filename );
-	track->isUrl = FS_IsUrl( filename );
-	track->muteOnPause = track->isUrl;
 	track->anext = s_bgTrackHead;
 	s_bgTrackHead = track;
 
@@ -65,7 +63,7 @@ static bgTrack_t *S_AllocTrack( const char *filename ) {
 * S_ValidMusicFile
 */
 static bool S_ValidMusicFile( bgTrack_t *track ) {
-	return ( track->stream != NULL ) && ( !track->isUrl || !S_EoStream( track->stream ) );
+	return track->stream && !S_EoStream( track->stream );
 }
 
 /*
@@ -280,27 +278,23 @@ static bgTrack_t *S_ReadPlaylistFile( const char *filename, bool shuffle, bool l
 			continue;
 		}
 
-		if( FS_IsUrl( entry ) ) {
-			items[numItems].track = S_AllocTrack( entry );
-		} else {
-			// append the entry name to playlist path
-			s = strlen( filename ) + 1 + strlen( entry ) + 1;
-			if( s > tmpname_size ) {
-				if( tmpname ) {
-					Q_free( tmpname );
-				}
-				tmpname_size = s;
-				tmpname = (char *)Q_malloc( tmpname_size );
+		// append the entry name to playlist path
+		s = strlen( filename ) + 1 + strlen( entry ) + 1;
+		if( s > tmpname_size ) {
+			if( tmpname ) {
+				Q_free( tmpname );
 			}
-
-			Q_strncpyz( tmpname, filename, tmpname_size );
-			COM_StripFilename( tmpname );
-			Q_strncatz( tmpname, "/", tmpname_size );
-			Q_strncatz( tmpname, entry, tmpname_size );
-			COM_SanitizeFilePath( tmpname );
-
-			items[numItems].track = S_AllocTrack( tmpname );
+			tmpname_size = s;
+			tmpname = (char *)Q_malloc( tmpname_size );
 		}
+
+		Q_strncpyz( tmpname, filename, tmpname_size );
+		COM_StripFilename( tmpname );
+		Q_strncatz( tmpname, "/", tmpname_size );
+		Q_strncatz( tmpname, entry, tmpname_size );
+		COM_SanitizeFilePath( tmpname );
+
+		items[numItems].track = S_AllocTrack( tmpname );
 
 		if( ++numItems == MAX_PLAYLIST_ITEMS ) {
 			break;
@@ -467,7 +461,7 @@ void S_StartBackgroundTrack( const char *intro, const char *loop, int mode ) {
 	// the intro track loops unless another loop track has been specified
 	introTrack = S_AllocTrack( intro );
 	introTrack->next = introTrack->prev = introTrack;
-	introTrack->muteOnPause = introTrack->isUrl || mode & 4 ? true : false;
+	introTrack->muteOnPause = mode & 4 ? true : false;
 
 	if( loop && loop[0] && Q_stricmp( intro, loop ) ) {
 		loopTrack = S_AllocTrack( loop );
@@ -478,7 +472,7 @@ void S_StartBackgroundTrack( const char *intro, const char *loop, int mode ) {
 			introTrack->loop = false;
 
 			loopTrack->loop = true;
-			loopTrack->muteOnPause = loopTrack->isUrl || mode & 4 ? true : false;
+			loopTrack->muteOnPause = mode & 4 ? true : false;
 			loopTrack->next = loopTrack->prev = loopTrack;
 		}
 	}
@@ -555,7 +549,7 @@ void S_PauseBackgroundTrack( void ) {
 * S_LockBackgroundTrack
 */
 void S_LockBackgroundTrack( bool lock ) {
-	if( s_bgTrack && !s_bgTrack->isUrl ) {
+	if( s_bgTrack ) {
 		s_bgTrackLocked += lock ? 1 : -1;
 	} else {
 		s_bgTrackLocked = 0;

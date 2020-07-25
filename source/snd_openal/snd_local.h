@@ -286,7 +286,6 @@ typedef struct snd_stream_s {
 typedef struct bgTrack_s {
 	char *filename;
 	bool ignore;
-	bool isUrl;
 	bool loop;
 	bool muteOnPause;
 	snd_stream_t *stream;

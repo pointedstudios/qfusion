@@ -208,11 +208,6 @@ void *decoder_ogg_load( const char *filename, snd_info_t *info ) {
 		return NULL;
 	}
 
-	if( FS_IsUrl( filename ) ) {
-		callbacks.seek_func = NULL;
-		callbacks.tell_func = NULL;
-	}
-
 	if( qov_open_callbacks( (void *) (intptr_t) filenum, &vorbisfile, NULL, 0, callbacks ) < 0 ) {
 		Com_Printf( "Could not open %s for reading\n", filename );
 		FS_FCloseFile( filenum );
@@ -273,7 +268,6 @@ snd_stream_t *decoder_ogg_open( const char *filename, bool *delay ) {
 		return NULL;
 	}
 
-	stream->isUrl = FS_IsUrl( filename );
 	stream->ptr = Q_malloc( sizeof( snd_ogg_stream_t ) );
 
 	ogg_stream = (snd_ogg_stream_t *)stream->ptr;

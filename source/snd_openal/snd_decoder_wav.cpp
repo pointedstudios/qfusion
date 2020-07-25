@@ -192,10 +192,6 @@ void *decoder_wav_load( const char *filename, snd_info_t *info ) {
 	int read;
 	void *buffer;
 
-	if( FS_IsUrl( filename ) ) {
-		return NULL;
-	}
-
 	FS_FOpenFile( filename, &filenum, FS_READ | FS_NOSIZE );
 	if( !filenum ) {
 		return NULL;
@@ -229,11 +225,6 @@ snd_stream_t *decoder_wav_open( const char *filename, bool *delay ) {
 
 	stream = decoder_stream_init( &wav_decoder );
 	if( !stream ) {
-		return NULL;
-	}
-
-	stream->isUrl = FS_IsUrl( filename );
-	if( stream->isUrl ) {
 		return NULL;
 	}
 
