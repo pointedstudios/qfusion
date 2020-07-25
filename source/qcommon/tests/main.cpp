@@ -1,4 +1,5 @@
 #include "boundsbuildertest.h"
+#include "bufferedreadertest.h"
 #include "staticstringtest.h"
 #include "stringsplittertest.h"
 #include "stringviewtest.h"
@@ -29,6 +30,11 @@ int main( int argc, char **argv ) {
 	{
 		BoundsBuilderTest boundsBuilderTest;
 		result |= QTest::qExec( &boundsBuilderTest, argc, argv );
+	}
+
+	{
+		BufferedReaderTest bufferedReaderTest;
+		result |= QTest::qExec( &bufferedReaderTest, argc, argv );
 	}
 
 	{

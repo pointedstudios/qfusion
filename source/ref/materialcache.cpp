@@ -24,8 +24,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "local.h"
 #include "../qcommon/hash.h"
 #include "../qcommon/links.h"
-#include "../qcommon/qcommon.h"
 #include "../qcommon/singletonholder.h"
+#include "../qcommon/wswfs.h"
 #include "materiallocal.h"
 
 #include <algorithm>
@@ -759,26 +759,20 @@ auto MaterialCache::readRawContents( const char *filename ) -> const wsw::String
 		Com_Printf( "...loading '%s'\n", pathName.data() );
 	}
 
-	int fhandle = 0;
-	// look for it in the filesystem or pack files
-	// TODO: Use sane RAII wrappers
-	int contentLength = FS_FOpenFile( pathName.data(), &fhandle, FS_READ );
-	if( contentLength < 0 ) {
+	auto maybeHandle = wsw::fs::openAsReadHandle( wsw::StringView( pathName.data(), pathName.size() ) );
+	if( !maybeHandle ) {
 		return nullptr;
 	}
 
-	fileContentsBuffer.resize( contentLength + 1 );
-
-	if( FS_Read( fileContentsBuffer.data(), contentLength, fhandle ) != contentLength ) {
-		FS_FCloseFile( fhandle );
+	const auto size = maybeHandle->getInitialFileSize();
+	fileContentsBuffer.resize( size + 1 );
+	if( !maybeHandle->readExact( fileContentsBuffer.data(), size ) ) {
 		return nullptr;
 	}
-
-	FS_FCloseFile( fhandle );
 
 	// Put the terminating zero, this is not mandatory as tokens aren't supposed
 	// to be zero terminated but allows printing contents using C-style facilities
-	fileContentsBuffer[contentLength] = '\0';
+	fileContentsBuffer[size] = '\0';
 	return &fileContentsBuffer;
 }
 

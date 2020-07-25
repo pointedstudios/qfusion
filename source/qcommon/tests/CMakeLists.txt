@@ -12,7 +12,9 @@ enable_testing(true)
 add_executable(
         qcommontest
         main.cpp
+        "../wswfs.cpp"
         boundsbuildertest.cpp
+        bufferedreadertest.cpp
         staticstringtest.cpp
         stringsplittertest.cpp
         stringviewtest.cpp

@@ -8,6 +8,7 @@
 #include "../qcommon/wswstringsplitter.h"
 #include "../qcommon/wswstaticstring.h"
 #include "../qcommon/wswstdtypes.h"
+#include "../qcommon/wswfs.h"
 
 #include <algorithm>
 #include <new>
@@ -355,18 +356,12 @@ bool SurfaceClassData::loadDataFromFile( const wsw::StringView &prefix ) {
 	wsw::StaticString<MAX_QPATH> path;
 	path << "sounds/surfaces/"_asView << prefix << ".txt"_asView;
 
-	// TODO: Use sane RAII wrappers
-
-	int handle = 0;
-	int size = FS_FOpenFile( path.data(), &handle, FS_READ );
-	if( size <= 0 ) {
-		return false;
+	if( auto maybeHandle = wsw::fs::openAsReadHandle( path.asView() ) ) {
+		const auto size = maybeHandle->getInitialFileSize();
+		m_namesData.resize( size );
+		return maybeHandle->readExact( m_namesData.data(), size );
 	}
-
-	m_namesData.resize( (size_t)( size + 1 ) );
-	int bytesRead = FS_Read( m_namesData.data(), (size_t)size, handle );
-	FS_FCloseFile( handle );
-	return bytesRead == size;
+	return false;
 }
 
 bool SurfaceClassData::isThisKindOfSurface( const wsw::StringView &name ) const {
