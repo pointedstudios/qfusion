@@ -25,28 +25,6 @@ static void CL_InitServerDownload( const char *filename, size_t size, unsigned c
 								   const char *url, bool initial );
 void CL_StopServerDownload( void );
 
-//=============================================================================
-
-/*
-* CL_CanDownloadModules
-*
-* The user has to give permission for modules to be downloaded
-*/
-bool CL_CanDownloadModules( void ) {
-#if 0
-	if( !Q_stricmp( FS_GameDirectory(), FS_BaseGameDirectory() ) ) {
-		Com_Error( ERR_DROP, "Can not download modules to the base directory" );
-		return false;
-	}
-#endif
-	if( !cl_download_allow_modules->integer ) {
-		Com_Error( ERR_DROP, "Downloading of modules disabled." );
-		return false;
-	}
-
-	return true;
-}
-
 /*
 * CL_DownloadRequest
 *
@@ -73,9 +51,7 @@ bool CL_DownloadRequest( const char *filename, bool requestpak ) {
 		}
 
 		if( !Q_strnicmp( COM_FileBase( filename ), "modules", strlen( "modules" ) ) ) {
-			if( !CL_CanDownloadModules() ) {
-				return false;
-			}
+			return false;
 		}
 	} else {
 		if( FS_FOpenFile( filename, NULL, FS_READ ) != -1 ) {
@@ -393,16 +369,12 @@ static void CL_InitServerDownload( const char *filename, size_t size, unsigned c
 	}
 
 	// check that it is in game or basegame dir
-	if( strlen( filename ) < strlen( FS_GameDirectory() ) + 1 ||
-		strncmp( filename, FS_GameDirectory(), strlen( FS_GameDirectory() ) ) ||
-		filename[strlen( FS_GameDirectory() )] != '/' ) {
-		if( strlen( filename ) < strlen( FS_BaseGameDirectory() ) + 1 ||
-			strncmp( filename, FS_BaseGameDirectory(), strlen( FS_BaseGameDirectory() ) ) ||
-			filename[strlen( FS_BaseGameDirectory() )] != '/' ) {
-			Com_Printf( "Can't download, invalid game directory: %s\n", filename );
-			CL_DownloadDone();
-			return;
-		}
+	const wsw::StringView fileNameView( filename );
+	if( !fileNameView.startsWith( kDataDirectory ) ||
+	    fileNameView.maybeAt( kDataDirectory.size() ) != std::optional( '/' ) ) {
+		Com_Printf( "Can't download, invalid game directory: %s\n", filename );
+		CL_DownloadDone();
+		return;
 	}
 
 	if( FS_CheckPakExtension( filename ) ) {
@@ -415,10 +387,8 @@ static void CL_InitServerDownload( const char *filename, size_t size, unsigned c
 		modules_download = !Q_strnicmp( COM_FileBase( filename ), "modules", strlen( "modules" ) );
 
 		if( modules_download ) {
-			if( !CL_CanDownloadModules() ) {
-				CL_DownloadDone();
-				return;
-			}
+			CL_DownloadDone();
+			return;
 		}
 
 		if( FS_PakFileExists( filename ) ) {
@@ -805,7 +775,6 @@ SERVER CONNECTING MESSAGES
 * CL_ParseServerData
 */
 static void CL_ParseServerData( msg_t *msg ) {
-	const char *str, *gamedir;
 	int i, sv_bitflags, numpure;
 	int http_portnum;
 	bool old_sv_pure;
@@ -831,40 +800,6 @@ static void CL_ParseServerData( msg_t *msg ) {
 	// set extrapolation time to half snapshot time
 	Cvar_ForceSet( "cl_extrapolationTime", va( "%i", (unsigned int)( cl.snapFrameTime * 0.5 ) ) );
 	cl_extrapolationTime->modified = false;
-
-	// base game directory
-	str = MSG_ReadString( msg );
-	if( !str || !str[0] ) {
-		Com_Error( ERR_DROP, "Server sent an empty base game directory" );
-	}
-	if( !COM_ValidateRelativeFilename( str ) || strchr( str, '/' ) ) {
-		Com_Error( ERR_DROP, "Server sent an invalid base game directory: %s", str );
-	}
-	if( strcmp( FS_BaseGameDirectory(), str ) ) {
-		Com_Error( ERR_DROP, "Server has different base game directory (%s) than the client (%s)", str,
-				   FS_BaseGameDirectory() );
-	}
-
-	// game directory
-	str = MSG_ReadString( msg );
-	if( !str || !str[0] ) {
-		Com_Error( ERR_DROP, "Server sent an empty game directory" );
-	}
-	if( !COM_ValidateRelativeFilename( str ) || strchr( str, '/' ) ) {
-		Com_Error( ERR_DROP, "Server sent an invalid game directory: %s", str );
-	}
-	gamedir = FS_GameDirectory();
-	if( strcmp( str, gamedir ) ) {
-		// shutdown the cgame module first in case it is running for whatever reason
-		// (happens on wswtv in lobby), otherwise precaches that are going to follow
-		// will probably fuck up (like models trying to load before the world model)
-		CL_GameModule_Shutdown();
-
-		if( !FS_SetGameDirectory( str, true ) ) {
-			Com_Error( ERR_DROP, "Failed to load game directory set by server: %s", str );
-		}
-		ML_Restart( true );
-	}
 
 	// parse player entity number
 	cl.playernum = MSG_ReadInt16( msg );

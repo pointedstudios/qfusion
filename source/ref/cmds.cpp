@@ -154,9 +154,9 @@ void R_ScreenShot_f( void ) {
 		path = (char *)alloca( path_size );
 		Q_snprintfz( path, path_size, "%s/%s/", mediadir, glConfig.applicationName );
 	} else {
-		path_size = strlen( FS_WriteDirectory() ) + 1 /* '/' */ + strlen( FS_GameDirectory() ) + strlen( "/screenshots/" ) + 1;
+		path_size = strlen( FS_WriteDirectory() ) + 1 /* '/' */ + strlen( "/screenshots/" ) + 1;
 		path = (char *)alloca( path_size );
-		Q_snprintfz( path, path_size, "%s/%s/screenshots/", FS_WriteDirectory(), FS_GameDirectory() );
+		Q_snprintfz( path, path_size, "%s/screenshots/", FS_WriteDirectory() );
 	}
 
 	// validate timestamp string
@@ -268,10 +268,9 @@ void R_EnvShot_f( void ) {
 	}
 
 	writedir = FS_WriteDirectory();
-	gamedir = FS_GameDirectory();
-	path_size = strlen( writedir ) + 1 + strlen( gamedir ) + 1 + strlen( "env/" ) + 1;
+	path_size = strlen( writedir ) + 1 + strlen( "env/" ) + 1;
 	path = (char *)alloca( path_size );
-	Q_snprintfz( path, path_size, "%s/%s/env/", writedir, gamedir );
+	Q_snprintfz( path, path_size, "%s/env/", writedir, gamedir );
 
 	RF_EnvShot( path, Cmd_Argv( 1 ), atoi( Cmd_Argv( 2 ) ) );
 }

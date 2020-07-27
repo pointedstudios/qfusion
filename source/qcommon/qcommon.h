@@ -548,18 +548,15 @@ FILESYSTEM
 
 #define FS_NOTIFY_NEWPAKS   0x01
 
-typedef void (*fs_read_cb)( int filenum, const void *buf, size_t numb, float progress, void *customp );
-typedef void (*fs_done_cb)( int filenum, int status, void *customp );
-
 void        FS_Init( void );
 int         FS_Rescan( void );
 void        FS_Frame( void );
 void        FS_Shutdown( void );
 
-const char *FS_GameDirectory( void );
-const char *FS_BaseGameDirectory( void );
-bool        FS_SetGameDirectory( const char *dir, bool force );
-int         FS_GetGameDirectoryList( char *buf, size_t bufsize );
+#include "wswstringview.h"
+
+static inline const wsw::StringView kDataDirectory( "basewsw" );
+
 int         FS_GetExplicitPurePakList( char ***paknames );
 bool        FS_IsExplicitPurePak( const char *pakname, bool *wrongver );
 

@@ -267,12 +267,6 @@ static cvar_t *Cvar_Set2( const char *var_name, const char *value, bool force ) 
 					Com_Printf( "%s will be changed upon restarting sound.\n", var->name );
 					var->latched_string = Q_strdup( (char *) value );
 				} else {
-					if( !strcmp( var->name, "fs_game" ) ) {
-						char *new_dir = Q_strdup( value );
-						FS_SetGameDirectory( new_dir, false );
-						Q_free( new_dir );
-						return var;
-					}
 					Q_free( var->string ); // free the old value string
 					var->string = Q_strdup( value );
 					var->value = atof( var->string );
@@ -367,7 +361,6 @@ void Cvar_GetLatchedVars( cvar_flag_t flags ) {
 	unsigned int i;
 	struct trie_dump_s *dump = NULL;
 	cvar_flag_t latchFlags;
-	cvar_t *changedGameDir = NULL;
 
 	Cvar_FlagsClear( &latchFlags );
 	Cvar_FlagSet( &latchFlags, CVAR_LATCH );
@@ -384,9 +377,6 @@ void Cvar_GetLatchedVars( cvar_flag_t flags ) {
 	QMutex_Unlock( cvar_mutex );
 	for( i = 0; i < dump->size; ++i ) {
 		cvar_t *const var = (cvar_t *) dump->key_value_vector[i].value;
-		if( !strcmp( var->name, "fs_game" ) ) {
-			changedGameDir = var;
-		}
 		Q_free( var->string );
 		var->string = var->latched_string;
 		var->latched_string = NULL;
@@ -394,10 +384,6 @@ void Cvar_GetLatchedVars( cvar_flag_t flags ) {
 		var->integer = Q_rint( var->value );
 	}
 	Trie_FreeDump( dump );
-
-	if( changedGameDir ) {
-		FS_SetGameDirectory( changedGameDir->string, false );
-	}
 }
 
 /*

@@ -357,7 +357,7 @@ void RF_BeginAviDemo( void ) {
 
 void RF_WriteAviFrame( int frame, bool scissor ) {
 	int x, y, w, h;
-	const char *writedir, *gamedir;
+	const char *writedir;
 	size_t path_size;
 	char *path;
 	char name[32];
@@ -379,10 +379,9 @@ void RF_WriteAviFrame( int frame, bool scissor ) {
 	}
 
 	writedir = FS_WriteDirectory();
-	gamedir = FS_GameDirectory();
-	path_size = strlen( writedir ) + 1 + strlen( gamedir ) + strlen( "/avi/" ) + 1;
+	path_size = strlen( writedir ) + 1 + strlen( "/avi/" ) + 1;
 	path = (char *)alloca( path_size );
-	Q_snprintfz( path, path_size, "%s/%s/avi/", writedir, gamedir );
+	Q_snprintfz( path, path_size, "%s/avi/", writedir );
 	Q_snprintfz( name, sizeof( name ), "%06i", frame );
 
 	R_TakeScreenShot( path, name, "", x, y, w, h, true );

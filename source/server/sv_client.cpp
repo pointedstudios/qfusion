@@ -293,8 +293,6 @@ static void SV_New_f( client_t *client ) {
 	MSG_WriteInt32( &tmpMessage, APP_PROTOCOL_VERSION );
 	MSG_WriteInt32( &tmpMessage, svs.spawncount );
 	MSG_WriteInt16( &tmpMessage, (unsigned short)svc.snapFrameTime );
-	MSG_WriteString( &tmpMessage, FS_BaseGameDirectory() );
-	MSG_WriteString( &tmpMessage, FS_GameDirectory() );
 
 	playernum = client - svs.clients;
 	MSG_WriteInt16( &tmpMessage, playernum );
