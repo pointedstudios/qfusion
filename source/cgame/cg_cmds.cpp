@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../client/snd_public.h"
 #include "../client/client.h"
 #include "../ref/frontend.h"
+#include "../ui/uisystem.h"
 
 /*
 ==========================================================================
@@ -45,18 +46,21 @@ static void CG_SC_Print( void ) {
 * CG_SC_ChatPrint
 */
 static void CG_SC_ChatPrint( void ) {
-	const bool teamonly = ( !Q_stricmp( Cmd_Argv( 0 ), "tch" ) ? true : false );
+	const bool teamonly = !Q_stricmp( Cmd_Argv( 0 ), "tch" );
 	const int who = atoi( Cmd_Argv( 1 ) );
-	const char *name = ( who && who == bound( 1, who, MAX_CLIENTS ) ? cgs.clientInfo[who - 1].name : NULL );
+	const char *name = ( who && who == bound( 1, who, MAX_CLIENTS ) ? cgs.clientInfo[who - 1].name : "console" );
 	const char *text = Cmd_Argv( 2 );
 
-	if( !name ) {
-		CG_LocalPrint( S_COLOR_GREEN "console: %s\n", text );
-	} else if( teamonly ) {
+	const wsw::StringView nameView( name );
+	const wsw::StringView textView( text );
+
+	if( teamonly ) {
 		CG_LocalPrint( S_COLOR_YELLOW "[%s]" S_COLOR_WHITE "%s" S_COLOR_YELLOW ": %s\n",
 					   cg.frame.playerState.stats[STAT_REALTEAM] == TEAM_SPECTATOR ? "SPEC" : "TEAM", name, text );
+		UISystem::instance()->addToTeamChat( nameView, cg.realTime, textView );
 	} else {
 		CG_LocalPrint( "%s" S_COLOR_GREEN ": %s\n", name, text );
+		UISystem::instance()->addToChat( nameView, cg.realTime, textView );
 	}
 
 	if( cg_chatBeep->integer ) {

@@ -4,6 +4,7 @@
 #include "../qcommon/wswstaticvector.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
+#include "chatmodel.h"
 #include "nativelydrawnitems.h"
 #include "serverlistmodel.h"
 #include "keysandbindingsmodel.h"
@@ -50,6 +51,9 @@ public:
 	void forceMenuOff() override {};
 
 	void toggleInGameMenu() override;
+
+	void addToChat( const wsw::StringView &name, int64_t frameTimestamp, const wsw::StringView &message ) override;
+	void addToTeamChat( const wsw::StringView &name, int64_t frameTimestamp, const wsw::StringView &message ) override;
 
 	[[nodiscard]]
 	bool hasRespectMenu() const override {
@@ -134,6 +138,9 @@ private:
 	bool m_skipDrawingSelf { false };
 
 	ServerListModel *m_serverListModel { nullptr };
+
+	wsw::ui::ChatModelProxy m_chatModel;
+	wsw::ui::ChatModelProxy m_teamChatModel;
 
 	// A copy of last frame client properties for state change detection without intrusive changes to client code.
 	// Use a separate scope for clarity and for avoiding name conflicts.
@@ -405,6 +412,7 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 
 	const QString reason( "This type is a native code bridge and cannot be instantiated" );
 	qmlRegisterUncreatableType<QWswUISystem>( "net.warsow", 2, 6, "Wsw", reason );
+	qmlRegisterUncreatableType<wsw::ui::ChatModel>( "net.warsow", 2, 6, "ChatModel", reason );
 	qmlRegisterUncreatableType<KeysAndBindingsModel>( "net.warsow", 2, 6, "KeysAndBindings", reason );
 	qmlRegisterUncreatableType<ServerListModel>( "net.warsow", 2, 6, "ServerListModel", reason );
 	qmlRegisterType<NativelyDrawnImage>( "net.warsow", 2, 6, "NativelyDrawnImage_Native" );
@@ -414,8 +422,14 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 	m_engine->rootContext()->setContextProperty( "wsw", this );
 
 	m_serverListModel = new ServerListModel;
-	m_engine->rootContext()->setContextProperty( "serverListModel", m_serverListModel );
-	m_engine->rootContext()->setContextProperty( "keysAndBindings", new KeysAndBindingsModel );
+
+	QQmlContext *context = m_engine->rootContext();
+	context->setContextProperty( "serverListModel", m_serverListModel );
+	context->setContextProperty( "keysAndBindings", new KeysAndBindingsModel );
+	context->setContextProperty( "compactChatModel", m_chatModel.getCompactModel() );
+	context->setContextProperty( "richChatModel", m_chatModel.getRichModel() );
+	context->setContextProperty( "compactTeamChatModel", m_teamChatModel.getCompactModel() );
+	context->setContextProperty( "richTeamChatModel", m_teamChatModel.getRichModel() );
 
 	m_component = new QQmlComponent( m_engine );
 
@@ -686,6 +700,8 @@ void QWswUISystem::checkPropertyChanges() {
 	if( m_lastFrameState.clientState != lastClientState ) {
 		if( actualClientState == CA_DISCONNECTED ) {
 			setActiveMenuMask( MainMenu, 0 );
+			m_chatModel.clear();
+			m_teamChatModel.clear();
 		} else if( actualClientState == CA_ACTIVE ) {
 			setActiveMenuMask( InGameMenu, 0 );
 		}
@@ -1099,6 +1115,14 @@ void QWswUISystem::startServerListUpdates() {
 
 void QWswUISystem::stopServerListUpdates() {
 	ServerList::instance()->stopPushingUpdates();
+}
+
+void QWswUISystem::addToChat( const wsw::StringView &name, int64_t frameTimestamp, const wsw::StringView &message ) {
+	m_chatModel.addMessage( name, frameTimestamp, message );
+}
+
+void QWswUISystem::addToTeamChat( const wsw::StringView &name, int64_t frameTimestamp, const wsw::StringView &message ) {
+	m_teamChatModel.addMessage( name, frameTimestamp, message );
 }
 
 #include "uisystem.moc"
