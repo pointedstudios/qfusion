@@ -259,21 +259,6 @@ const char *Sys_FS_GetCacheDirectory( void ) {
 }
 
 /*
-* Sys_FS_GetSecureDirectory
-*/
-const char *Sys_FS_GetSecureDirectory( void ) {
-	return NULL;
-}
-
-/*
-* Sys_FS_GetMediaDirectory
-*/
-const char *Sys_FS_GetMediaDirectory( fs_mediatype_t type ) {
-	// TODO: Libraries / My Pictures?
-	return NULL;
-}
-
-/*
 * Sys_FS_GetRuntimeDirectory
 */
 const char *Sys_FS_GetRuntimeDirectory( void ) {

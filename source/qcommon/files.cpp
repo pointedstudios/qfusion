@@ -986,10 +986,6 @@ static int _FS_FOpenPakFile( packfile_t *pakFile, int *filenum ) {
 static int _FS_FOpenFile( const char *filename, int *filenum, int mode, bool base ) {
 	searchpath_t *search;
 	filehandle_t *file;
-	bool gz;
-	bool update;
-	bool secure;
-	bool cache;
 	packfile_t *pakFile = NULL;
 	gzFile gzf = NULL;
 	int realmode;
@@ -999,10 +995,9 @@ static int _FS_FOpenFile( const char *filename, int *filenum, int mode, bool bas
 	// probably useful for streamed URLS
 
 	realmode = mode;
-	gz = mode & FS_GZ ? true : false;
-	update = mode & FS_UPDATE ? true : false;
-	secure = mode & FS_SECURE ? true : false;
-	cache = mode & FS_CACHE ? true : false;
+	const bool gz = ( mode & FS_GZ ) != 0;
+	const bool update = ( mode & FS_UPDATE ) != 0;
+	const bool cache = ( mode & FS_CACHE ) != 0;
 	mode = mode & FS_RWA_MASK;
 
 	assert( mode == FS_READ || mode == FS_WRITE || mode == FS_APPEND );
@@ -1019,17 +1014,16 @@ static int _FS_FOpenFile( const char *filename, int *filenum, int mode, bool bas
 		return -1;
 	}
 
-	if( ( mode == FS_WRITE || mode == FS_APPEND ) || update || secure || cache ) {
+	if( ( mode == FS_WRITE || mode == FS_APPEND ) || update || cache ) {
 		int end;
 		char modestr[4] = { 0, 0, 0, 0 };
 		FILE *f = NULL;
 		const char *dir;
 
-		dir = FS_WriteDirectory();
-		if( secure ) {
-			dir = FS_SecureDirectory();
-		} else if( cache ) {
+		if( cache ) {
 			dir = FS_CacheDirectory();
+		} else {
+			dir = FS_WriteDirectory();
 		}
 
 		if( base ) {
@@ -2964,25 +2958,6 @@ const char *FS_WriteDirectory( void ) {
 const char *FS_CacheDirectory( void ) {
 	const char *dir = Sys_FS_GetCacheDirectory();
 	return dir ? dir : FS_WriteDirectory();
-}
-
-/*
-* FS_SecureDirectory
-*
-* Returns directory with higher security (for instance, not accessible for other apps)
-*/
-const char *FS_SecureDirectory( void ) {
-	const char *dir = Sys_FS_GetSecureDirectory();
-	return dir ? dir : FS_WriteDirectory();
-}
-
-/*
-* FS_MediaDirectory
-*
-* Returns the external directory for media files
-*/
-const char *FS_MediaDirectory( fs_mediatype_t type ) {
-	return Sys_FS_GetMediaDirectory( type );
 }
 
 /*

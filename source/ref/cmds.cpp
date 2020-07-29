@@ -138,7 +138,6 @@ void R_TakeScreenShot( const char *path, const char *name, const char *fmtString
 void R_ScreenShot_f( void ) {
 	int i;
 	const char *name;
-	const char *mediadir;
 	size_t path_size;
 	char *path;
 	char timestamp_str[MAX_QPATH];
@@ -148,16 +147,9 @@ void R_ScreenShot_f( void ) {
 
 	name = Cmd_Argv( 1 );
 
-	mediadir = FS_MediaDirectory( FS_MEDIA_IMAGES );
-	if( mediadir ) {
-		path_size = strlen( mediadir ) + 1 /* '/' */ + strlen( glConfig.applicationName ) + 1 /* '/' */ + 1;
-		path = (char *)alloca( path_size );
-		Q_snprintfz( path, path_size, "%s/%s/", mediadir, glConfig.applicationName );
-	} else {
-		path_size = strlen( FS_WriteDirectory() ) + 1 /* '/' */ + strlen( "/screenshots/" ) + 1;
-		path = (char *)alloca( path_size );
-		Q_snprintfz( path, path_size, "%s/screenshots/", FS_WriteDirectory() );
-	}
+	path_size = strlen( FS_WriteDirectory() ) + 1 /* '/' */ + strlen( "/screenshots/" ) + 1;
+	path = (char *)alloca( path_size );
+	Q_snprintfz( path, path_size, "%s/screenshots/", FS_WriteDirectory() );
 
 	// validate timestamp string
 	for( i = 0; i < 2; i++ ) {

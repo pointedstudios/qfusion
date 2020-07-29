@@ -564,8 +564,6 @@ bool        FS_IsExplicitPurePak( const char *pakname, bool *wrongver );
 // only to be used if necessary (library not supporting custom file handling functions etc.)
 const char *FS_WriteDirectory( void );
 const char *FS_CacheDirectory( void );
-const char *FS_SecureDirectory( void );
-const char *FS_MediaDirectory( fs_mediatype_t type );
 const char *FS_DownloadsDirectory( void );
 const char *FS_RuntimeDirectory( void );
 void        FS_CreateAbsolutePath( const char *path );

@@ -365,7 +365,6 @@ __declspec( noreturn ) void Com_Error( com_error_code_t code, _Printf_format_str
 #define FS_GZ               0x100   // compress on write and decompress on read automatically
 // doesn't work for pk3 files
 #define FS_UPDATE           0x200
-#define FS_SECURE           0x400
 #define FS_CACHE            0x800
 
 #define FS_RWA_MASK         ( FS_READ | FS_WRITE | FS_APPEND )
@@ -373,12 +372,6 @@ __declspec( noreturn ) void Com_Error( com_error_code_t code, _Printf_format_str
 #define FS_SEEK_CUR         0
 #define FS_SEEK_SET         1
 #define FS_SEEK_END         2
-
-typedef enum {
-	FS_MEDIA_IMAGES,
-
-	FS_MEDIA_NUM_TYPES
-} fs_mediatype_t;
 
 //==============================================================
 //
