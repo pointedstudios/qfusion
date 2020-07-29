@@ -1458,7 +1458,7 @@ void Con_KeyDown( int key ) {
 		return;
 	}
 
-	if( ( key == K_ENTER ) || ( key == KP_ENTER ) || ( key == K_RSHOULDER ) || ( key == K_RTRIGGER ) ) {
+	if( ( key == K_ENTER ) || ( key == KP_ENTER ) ) {
 		Con_Key_Enter();
 		return;
 	}
@@ -1546,7 +1546,7 @@ void Con_KeyDown( int key ) {
 		return;
 	}
 
-	if( ( key == K_PGUP ) || ( key == KP_PGUP ) || ( key == K_MWHEELUP ) || ( key == K_DPAD_UP ) ) { // wsw : pb : support mwheel in console
+	if( ( key == K_PGUP ) || ( key == KP_PGUP ) || ( key == K_MWHEELUP ) ) { // wsw : pb : support mwheel in console
 		if( ( key == K_MWHEELUP ) && ctrl_is_down ) {
 			Con_ChangeFontSize( 1 );
 			return;
@@ -1557,7 +1557,7 @@ void Con_KeyDown( int key ) {
 		return;
 	}
 
-	if( ( key == K_PGDN ) || ( key == KP_PGDN ) || ( key == K_MWHEELDOWN ) || ( key == K_DPAD_DOWN ) ) { // wsw : pb : support mwheel in console
+	if( ( key == K_PGDN ) || ( key == KP_PGDN ) || ( key == K_MWHEELDOWN ) ) { // wsw : pb : support mwheel in console
 		if( ( key == K_MWHEELDOWN ) && ctrl_is_down ) {
 			Con_ChangeFontSize( -1 );
 			return;
@@ -1594,11 +1594,6 @@ void Con_KeyDown( int key ) {
 			Con_ResetFontSize();
 			return;
 		}
-	}
-
-	if( key == K_B_BUTTON ) {
-		Con_ToggleConsole_f();
-		return;
 	}
 
 	// key is a normal printable key normal which wil be HANDLE later in response to WM_CHAR event
@@ -1855,7 +1850,7 @@ void Con_MessageKeyDown( int key ) {
 
 	key = Con_NumPadValue( key );
 
-	if( ( key == K_ENTER ) || ( key == KP_ENTER ) || ( key == K_RSHOULDER ) || ( key == K_RTRIGGER ) ) {
+	if( ( key == K_ENTER ) || ( key == KP_ENTER ) ) {
 		if( chat_bufferlen > 0 ) {
 			Con_SendChatMessage( chat_buffer, chat_team || ctrl_is_down );
 			chat_bufferlen = 0;
@@ -1946,12 +1941,7 @@ void Con_MessageKeyDown( int key ) {
 		return;
 	}
 
-	if( key == K_Y_BUTTON ) {
-		chat_team = !chat_team && Cmd_Exists( "say_team" );
-		return;
-	}
-
-	if( ( key == K_ESCAPE ) || ( key == K_B_BUTTON ) ) {
+	if( key == K_ESCAPE ) {
 		CL_SetKeyDest( key_game );
 		chat_bufferlen = 0;
 		chat_linepos = 0;
