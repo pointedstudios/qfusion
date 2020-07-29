@@ -508,15 +508,6 @@ typedef struct {
 	char text[GAMECHAT_STRING_SIZE];
 } cg_gamemessage_t;
 
-typedef struct {
-	int64_t nextMsg;
-	int64_t lastMsgTime;
-	bool lastActive;
-	int64_t lastActiveChangeTime;
-	float activeFrac;
-	cg_gamemessage_t messages[GAMECHAT_STACK_SIZE];
-} cg_gamechat_t;
-
 #define MAX_HELPMESSAGE_CHARS 4096
 
 typedef struct {
@@ -625,8 +616,6 @@ typedef struct {
 
 	cg_viewweapon_t weapon;
 	cg_viewdef_t view;
-
-	cg_gamechat_t chat;
 } cg_state_t;
 
 extern cg_static_t cgs;
@@ -1109,14 +1098,6 @@ void CG_ClearAnnouncerEvents( void );
 void CG_WeaponBeamEffect( centity_t *cent );
 void CG_LaserBeamEffect( centity_t *cent );
 
-
-//
-// cg_chat.cpp
-//
-void CG_InitChat( cg_gamechat_t *chat );
-void CG_StackChatString( cg_gamechat_t *chat, const char *str );
-void CG_DrawChat( cg_gamechat_t *chat, int x, int y, char *fontName, struct qfontface_s *font, int fontSize,
-				  int width, int height, int padding_x, int padding_y, vec4_t backColor, struct shader_s *backShader );
 
 //
 // cg_input.cpp

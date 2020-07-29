@@ -182,8 +182,6 @@ void CG_LocalPrint( const char *format, ... ) {
 	va_end( argptr );
 
 	Con_PrintSilent( msg );
-
-	CG_StackChatString( &cg.chat, msg );
 }
 
 /*
@@ -1021,8 +1019,6 @@ void CG_Init( const char *serverName, unsigned int playerNum,
 	CG_ClearEffects();
 
 	CG_ClearChaseCam();
-
-	CG_InitChat( &cg.chat );
 
 	// start up announcer events queue from clean
 	CG_ClearAnnouncerEvents();
