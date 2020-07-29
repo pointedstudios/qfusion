@@ -475,9 +475,6 @@ void Key_CharEvent( int key, wchar_t charkey ) {
 	}
 
 	switch( CL_GetKeyDest() ) {
-		case key_message:
-			Con_MessageCharEvent( charkey );
-			break;
 		case key_menu:
 			UISystem::instance()->handleCharEvent( charkey );
 			break;
@@ -638,9 +635,6 @@ void Key_Event( int key, bool down, int64_t time ) {
 		}
 
 		switch( keyDest ) {
-			case key_message:
-				Con_MessageKeyDown( key );
-				break;
 			case key_menu:
 				UISystem::instance()->handleKeyEvent( key, true, UISystem::MainContext );
 				break;
@@ -661,8 +655,7 @@ void Key_Event( int key, bool down, int64_t time ) {
 	//
 	if( ( keyDest == key_menu && menubound[key] )
 		|| ( keyDest == key_console && !consolekeys[key] )
-		|| ( keyDest == key_game && ( cls.state == CA_ACTIVE || !consolekeys[key] ) && ( !have_quickmenu || !numeric ) )
-		|| ( keyDest == key_message && ( key >= K_F1 && key <= K_F15 ) ) ) {
+		|| ( keyDest == key_game && ( cls.state == CA_ACTIVE || !consolekeys[key] ) && ( !have_quickmenu || !numeric ) ) ) {
 		kb = keybindings[key];
 
 		if( kb ) {
@@ -709,9 +702,6 @@ void Key_Event( int key, bool down, int64_t time ) {
 
 	}
 	switch( keyDest ) {
-		case key_message:
-			Con_MessageKeyDown( key );
-			break;
 		case key_game:
 			if( have_quickmenu && numeric ) {
 				UISystem::instance()->handleKeyEvent( numkey, down, UISystem::RespectContext );
@@ -785,7 +775,6 @@ void CL_SetKeyDest( keydest_t key_dest ) {
 
 	if( oldDest && *oldDest != key_dest ) {
 		CL_ClearInputState();
-		Con_SetMessageMode();
 	}
 }
 
@@ -806,7 +795,6 @@ void CL_PushKeyDest( keydest_t key_dest ) {
 	keyDestStack.push_back( key_dest );
 	if( oldDest != key_dest ) {
 		CL_ClearInputState();
-		Con_SetMessageMode();
 	}
 }
 
