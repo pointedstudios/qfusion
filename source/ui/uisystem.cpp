@@ -117,6 +117,7 @@ public slots:
 
 	Q_SLOT void onComponentStatusChanged( QQmlComponent::Status status );
 private:
+	int64_t m_lastActiveMaskTime { 0 };
 	QGuiApplication *m_application { nullptr };
 	QOpenGLContext *m_externalContext { nullptr };
 	QOpenGLContext *m_sharedContext { nullptr };
@@ -130,6 +131,7 @@ private:
 	bool m_hasPendingRedraw { false };
 	bool m_isInUIRenderingMode { false };
 	bool m_isValidAndReady { false };
+	bool m_skipDrawingSelf { false };
 
 	ServerListModel *m_serverListModel { nullptr };
 
@@ -491,7 +493,7 @@ void RF_DrawStretchPic( int x, int y, int w, int h, float s1, float t1, float s2
 	                    const vec4_t color, const shader_t *shader );
 
 void QWswUISystem::drawSelfInMainContext() {
-	if( !m_isValidAndReady ) {
+	if( !m_isValidAndReady || m_skipDrawingSelf ) {
 		return;
 	}
 
@@ -713,6 +715,16 @@ void QWswUISystem::checkPropertyChanges() {
 	}
 
 	updateCVarAwareControls();
+
+	if( m_activeMenuMask ) {
+		m_skipDrawingSelf = false;
+		m_lastActiveMaskTime = Sys_Milliseconds();
+	} else if( !m_skipDrawingSelf ) {
+		// Give a second for fade-out animations (if any)
+		if( m_lastActiveMaskTime + 1000 < Sys_Milliseconds() ) {
+			m_skipDrawingSelf = true;
+		}
+	}
 }
 
 void QWswUISystem::handleMouseMove( int frameTime, int dx, int dy ) {
