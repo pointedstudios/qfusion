@@ -526,13 +526,6 @@ bool SCR_IsQuickMenuShown( void ) {
 	return cls.quickmenu && UISystem::instance()->hasRespectMenu();
 }
 
-/*
-* SCR_DrawConsole
-*/
-void SCR_DrawChat( int x, int y, int width, struct qfontface_s *font ) {
-	Con_DrawChat( x, y, width, font );
-}
-
 //=============================================================================
 
 /*

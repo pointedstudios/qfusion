@@ -47,11 +47,6 @@ static cvar_t *con_drawNotify;
 static cvar_t *con_chatmode;
 cvar_t *con_printText;
 
-// keep these around from previous Con_DrawChat call
-static int con_chatX, con_chatY;
-static int con_chatWidth;
-static struct qfontface_s *con_chatFont;
-
 // console input line editing
 #define     MAXCMDLINE  256
 static char key_lines[32][MAXCMDLINE];
@@ -65,7 +60,6 @@ static char search_text[MAXCMDLINE * 2 + 4];
 // messagemode[2]
 static bool chat_team;
 static char chat_buffer[MAXCMDLINE];
-static int chat_prestep = 0;
 static unsigned int chat_linepos = 0;
 static unsigned int chat_bufferlen = 0;
 
@@ -726,15 +720,6 @@ static void Con_DrawInput( int vislines ) {
 }
 
 /*
-* Con_ChatPrompt
-*
-* Returns the prompt for the chat input
-*/
-static const char *Con_ChatPrompt( void ) {
-	return ( chat_team || ctrl_is_down ) ? "say (to team):" : "say:";
-}
-
-/*
 * Con_DrawNotify
 *
 * Draws the last few lines of output transparently over the game top
@@ -773,124 +758,6 @@ void Con_DrawNotify( void ) {
 			QMutex_Unlock( con.mutex );
 		}
 	}
-}
-
-/*
-* Con_DrawChat
-*/
-void Con_DrawChat( int x, int y, int width, struct qfontface_s *font ) {
-	const char *say;
-	char *s;
-	int swidth, totalwidth, prewidth = 0;
-	int promptwidth, spacewidth;
-	int fontHeight;
-	int underlineThickness;
-	char oldchar;
-	int cursorcolor = ColorIndex( COLOR_WHITE );
-
-	if( cls.state != CA_ACTIVE || CL_GetKeyDest() != key_message ) {
-		return;
-	}
-
-	QMutex_Lock( con.mutex );
-
-	if( !font ) {
-		font = cls.consoleFont;
-	}
-
-	con_chatX = x;
-	con_chatY = y;
-	con_chatWidth = width;
-	con_chatFont = font;
-
-	fontHeight = SCR_FontHeight( font );
-
-	// 48 is an arbitrary offset for not overlapping the FPS and clock prints
-	width -= 48 * viddef.height / 600;
-
-	say = Con_ChatPrompt();
-	SCR_DrawString( x, y, ALIGN_LEFT_TOP, say, font, colorWhite, 0 );
-	spacewidth = SCR_strWidth( " ", font, 0, 0 );
-	promptwidth = SCR_strWidth( say, font, 0, 0 ) + spacewidth;
-	x += promptwidth;
-	width -= promptwidth;
-
-	(void)SCR_FontUnderline( font, &underlineThickness );
-	width -= underlineThickness;
-
-	s = chat_buffer;
-	swidth = SCR_strWidth( s, font, 0, 0 );
-
-	totalwidth = swidth;
-
-	if( chat_linepos ) {
-		if( chat_linepos == chat_bufferlen ) {
-			prewidth += swidth;
-		} else {
-			prewidth += SCR_strWidth( s, font, chat_linepos, 0 );
-		}
-	}
-
-	if( totalwidth > width ) {
-		// don't let the cursor go beyond the left screen edge
-		clamp_high( chat_prestep, prewidth );
-
-		// don't let it go beyond the right screen edge
-		clamp_low( chat_prestep, prewidth - width );
-
-		// don't leave an empty space after the string when deleting a character
-		if( ( totalwidth - chat_prestep ) < width ) {
-			chat_prestep = totalwidth - width;
-		}
-	} else {
-		chat_prestep = 0;
-	}
-
-	SCR_DrawClampString( x - chat_prestep, y, s, x, y,
-						 x + width, y + fontHeight, font, colorWhite, 0 );
-	oldchar = s[chat_linepos];
-	s[chat_linepos] = '\0';
-	cursorcolor = Q_ColorStrLastColor( ColorIndex( COLOR_WHITE ), s, -1 );
-	s[chat_linepos] = oldchar;
-
-	if( (int)( cls.realtime >> 8 ) & 1 ) {
-		SCR_DrawFillRect( x + prewidth - chat_prestep, y, underlineThickness, fontHeight, color_table[cursorcolor] );
-	}
-
-	QMutex_Unlock( con.mutex );
-}
-
-/*
-* Con_GetMessageArea
-*/
-static bool Con_GetMessageArea( int *x1, int *y1, int *x2, int *y2, int *promptwidth ) {
-	int x, y;
-	int width;
-	struct qfontface_s *font = NULL;
-
-	QMutex_Lock( con.mutex );
-
-	x = con_chatX;
-	y = con_chatY;
-	width = con_chatWidth;
-	font = con_chatFont;
-
-	if( font ) {
-		// 48 is an arbitrary offset for not overlapping the FPS and clock prints
-		width -= 48 * viddef.height / 600;
-
-		*x1 = x;
-		*y1 = y;
-		*x2 = x + width;
-		*y2 = y + SCR_FontHeight( font );
-		if( promptwidth ) {
-			*promptwidth = SCR_strWidth( Con_ChatPrompt(), font, 0, 0 );
-		}
-	}
-
-	QMutex_Unlock( con.mutex );
-
-	return font ? true : false;
 }
 
 /*
