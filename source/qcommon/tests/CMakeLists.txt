@@ -6,15 +6,19 @@ find_package(Qt5Test REQUIRED)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_BUILD_TYPE DEBUG)
+set(CMAKE_CXX_FLAGS "-O0 -g -fno-omit-frame-pointer -fsanitize=address")
 
 enable_testing(true)
 
 add_executable(
         qcommontest
         main.cpp
+        "../configstringstorage.cpp"
         "../wswfs.cpp"
         boundsbuildertest.cpp
         bufferedreadertest.cpp
+        configstringstoragetest.cpp
         staticstringtest.cpp
         stringsplittertest.cpp
         stringviewtest.cpp

@@ -47,6 +47,7 @@ file(GLOB CLIENT_COMMON_SOURCES
 	"../qcommon/cmd.cpp"
 	"../qcommon/common.cpp"
 	"../qcommon/compression.cpp"
+	"../qcommon/configstringstorage.cpp"
 	"../qcommon/cvar.cpp"
 	"../qcommon/files.cpp"
 	"../qcommon/glob.cpp"

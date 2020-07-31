@@ -1,5 +1,6 @@
 #include "boundsbuildertest.h"
 #include "bufferedreadertest.h"
+#include "configstringstoragetest.h"
 #include "staticstringtest.h"
 #include "stringsplittertest.h"
 #include "stringviewtest.h"
@@ -35,6 +36,11 @@ int main( int argc, char **argv ) {
 	{
 		BufferedReaderTest bufferedReaderTest;
 		result |= QTest::qExec( &bufferedReaderTest, argc, argv );
+	}
+
+	{
+		ConfigStringStorageTest configStringStorageTest;
+		result |= QTest::qExec( &configStringStorageTest, argc, argv );
 	}
 
 	{

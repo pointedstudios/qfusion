@@ -22,6 +22,7 @@ file(GLOB SERVER_SOURCES
 	"../qcommon/cm_trace.cpp"
 	"../qcommon/cm_trace_sse42.cpp"
 	"../qcommon/compression.cpp"
+	"../qcommon/configstringstorage.cpp"
 	"../qcommon/base64.cpp"
     "../qcommon/bsp.cpp"
     "../qcommon/patch.cpp"
