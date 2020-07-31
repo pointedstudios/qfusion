@@ -713,13 +713,6 @@ void CG_Predict_TouchTriggers( pmove_t *pm, const vec3_t previous_origin );
 //
 extern vrect_t scr_vrect;
 
-extern cvar_t *cg_scoreboardFontFamily;
-extern cvar_t *cg_scoreboardMonoFontFamily;
-extern cvar_t *cg_scoreboardTitleFontFamily;
-extern cvar_t *cg_scoreboardFontSize;
-extern cvar_t *cg_scoreboardTitleFontSize;
-extern cvar_t *cg_scoreboardStats;
-extern cvar_t *cg_scoreboardWidthScale;
 extern cvar_t *cg_showFPS;
 extern cvar_t *cg_showAwards;
 extern cvar_t *cg_showZoomEffect;
@@ -789,14 +782,14 @@ void CG_DamageIndicatorAdd( int damage, const vec3_t dir );
 //
 // cg_scoreboard.c
 //
-void CG_DrawScoreboard( void );
-void CG_ToggleScores_f( void );
-void CG_ScoresOn_f( void );
-void CG_ScoresOff_f( void );
-bool CG_ExecuteScoreboardTemplateLayout( char *s );
-void SCR_UpdateScoreboardMessage( const char *string );
-void SCR_UpdatePlayerStatsMessage( const char *string );
-bool CG_IsScoreboardShown( void );
+inline void CG_DrawScoreboard( void ) {}
+inline void CG_ToggleScores_f( void ) {}
+inline void CG_ScoresOn_f( void ) {}
+inline void CG_ScoresOff_f( void ) {}
+inline bool CG_ExecuteScoreboardTemplateLayout( char *s ) { return false; }
+inline void SCR_UpdateScoreboardMessage( const char *string ) {}
+inline void SCR_UpdatePlayerStatsMessage( const char *string ) {}
+inline bool CG_IsScoreboardShown( void ) { return false; }
 
 //
 // cg_main.c

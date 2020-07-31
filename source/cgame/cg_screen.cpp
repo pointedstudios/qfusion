@@ -75,14 +75,6 @@ cvar_t *cg_showPressedKeys;
 
 cvar_t *cg_showChasers;
 
-cvar_t *cg_scoreboardFontFamily;
-cvar_t *cg_scoreboardMonoFontFamily;
-cvar_t *cg_scoreboardTitleFontFamily;
-cvar_t *cg_scoreboardFontSize;
-cvar_t *cg_scoreboardTitleFontSize;
-cvar_t *cg_scoreboardWidthScale;
-cvar_t *cg_scoreboardStats;
-
 cvar_t *cg_showTeamLocations;
 cvar_t *cg_showViewBlends;
 
@@ -300,14 +292,6 @@ void CG_ScreenInit( void ) {
 
 	cg_showPressedKeys = Cvar_Get( "cg_showPressedKeys", "0", CVAR_ARCHIVE );
 	cg_showChasers = Cvar_Get( "cg_showChasers", "1", CVAR_ARCHIVE );
-
-	cg_scoreboardFontFamily = Cvar_Get( "cg_scoreboardFontFamily", DEFAULT_SCOREBOARD_FONT_FAMILY, CVAR_ARCHIVE );
-	cg_scoreboardMonoFontFamily = Cvar_Get( "cg_scoreboardMonoFontFamily", DEFAULT_SCOREBOARD_MONO_FONT_FAMILY, CVAR_ARCHIVE );
-	cg_scoreboardTitleFontFamily = Cvar_Get( "cg_scoreboardTitleFontFamily", DEFAULT_SCOREBOARD_TITLE_FONT_FAMILY, CVAR_ARCHIVE );
-	cg_scoreboardFontSize = Cvar_Get( "cg_scoreboardFontSize", STR_TOSTR( DEFAULT_SCOREBOARD_FONT_SIZE ), CVAR_ARCHIVE );
-	cg_scoreboardTitleFontSize = Cvar_Get( "cg_scoreboardTitleFontSize", STR_TOSTR( DEFAULT_SCOREBOARD_TITLE_FONT_SIZE ), CVAR_ARCHIVE );
-	cg_scoreboardWidthScale = Cvar_Get( "cg_scoreboardWidthScale", "1.0", CVAR_ARCHIVE );
-	cg_scoreboardStats =    Cvar_Get( "cg_scoreboardStats", "1", CVAR_ARCHIVE );
 
 	//
 	// register our commands

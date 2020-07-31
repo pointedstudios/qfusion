@@ -82,13 +82,6 @@ extern float ( *LittleFloat )( float l );
 #define DEFAULT_SYSTEM_FONT_BIG_SIZE        24
 #define DEFAULT_SYSTEM_FONT_STYLE           0
 
-#define DEFAULT_SCOREBOARD_FONT_FAMILY      "Droid Sans"
-#define DEFAULT_SCOREBOARD_MONO_FONT_FAMILY "Droid Sans Mono"
-#define DEFAULT_SCOREBOARD_TITLE_FONT_FAMILY "Hemi Head"
-#define DEFAULT_SCOREBOARD_FONT_SIZE        12
-#define DEFAULT_SCOREBOARD_TITLE_FONT_SIZE  24
-#define DEFAULT_SCOREBOARD_FONT_STYLE       0
-
 #define ALIGN_LEFT_TOP              0
 #define ALIGN_CENTER_TOP            1
 #define ALIGN_RIGHT_TOP             2
