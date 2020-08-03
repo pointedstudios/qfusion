@@ -156,49 +156,12 @@ void SV_AddPureFile( const char *filename ) {
 * SV_ReloadPureList
 */
 static void SV_ReloadPureList( void ) {
-	char **paks;
-	int i, numpaks;
-
 	Com_FreePureList( &svs.purelist );
 
-	// game modules
-	if( sv_pure_forcemodulepk3->string[0] ) {
-		if( Q_strnicmp( COM_FileBase( sv_pure_forcemodulepk3->string ), "modules", strlen( "modules" ) ) ||
-			!FS_IsPakValid( sv_pure_forcemodulepk3->string, NULL ) ) {
-			Com_Printf( "Warning: Invalid value for sv_pure_forcemodulepk3, disabling\n" );
-			Cvar_ForceSet( "sv_pure_forcemodulepk3", "" );
-		} else {
-			SV_AddPurePak( sv_pure_forcemodulepk3->string );
-		}
-	}
-
-	if( !sv_pure_forcemodulepk3->string[0] ) {
-		char *libname;
-		int libname_size;
-
-		libname_size = strlen( LIB_PREFIX ) + 5 + strlen( ARCH ) + strlen( LIB_SUFFIX ) + 1;
-		libname = (char *)Q_malloc( libname_size );
-		Q_snprintfz( libname, libname_size, LIB_PREFIX "game_" ARCH LIB_SUFFIX );
-
-		if( !FS_PakNameForFile( libname ) ) {
-			if( sv_pure->integer ) {
-				Com_Printf( "Warning: Game module not in pk3, disabling pure mode\n" );
-				Com_Printf( "sv_pure_forcemodulepk3 can be used to force the pure system to use a different module\n" );
-				Cvar_ForceSet( "sv_pure", "0" );
-			}
-		} else {
-			SV_AddPureFile( libname );
-		}
-
-		Q_free( libname );
-		libname = NULL;
-	}
-
 	// *pure.(pk3|pak)
-	paks = NULL;
-	numpaks = FS_GetExplicitPurePakList( &paks );
-	if( numpaks ) {
-		for( i = 0; i < numpaks; i++ ) {
+	char **paks = NULL;
+	if( int numpaks = FS_GetExplicitPurePakList( &paks ) ) {
+		for( int i = 0; i < numpaks; i++ ) {
 			SV_AddPurePak( paks[i] );
 			Q_free( paks[i] );
 		}

@@ -45,7 +45,6 @@ cvar_t *sv_uploads_demos;
 cvar_t *sv_uploads_demos_baseurl;
 
 cvar_t *sv_pure;
-cvar_t *sv_pure_forcemodulepk3;
 
 cvar_t *sv_maxclients;
 cvar_t *sv_maxmvclients;
@@ -863,7 +862,6 @@ void SV_Init( void ) {
 	sv_iplimit = Cvar_Get( "sv_iplimit", "3", CVAR_ARCHIVE );
 
 	sv_lastAutoUpdate = Cvar_Get( "sv_lastAutoUpdate", "0", CVAR_READONLY | CVAR_ARCHIVE );
-	sv_pure_forcemodulepk3 =    Cvar_Get( "sv_pure_forcemodulepk3", "", CVAR_LATCH );
 
 	sv_defaultmap =         Cvar_Get( "sv_defaultmap", "wdm1", CVAR_ARCHIVE );
 	sv_reconnectlimit =     Cvar_Get( "sv_reconnectlimit", "3", CVAR_ARCHIVE );
