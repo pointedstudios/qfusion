@@ -372,11 +372,11 @@ void SV_WriteFrameSnapToClient( client_t *client, msg_t *msg ) {
 void SV_BuildClientFrameSnap( client_t *client, int snapHintFlags ) {
 	vec_t *skyorg = NULL, origin[3];
 
-	if( sv.configstrings[CS_SKYBOX][0] != '\0' ) {
+	if( auto maybeSkyBoxString = sv.configStrings.getSkyBox() ) {
 		int noents = 0;
 		float f1 = 0, f2 = 0;
 
-		if( sscanf( sv.configstrings[CS_SKYBOX], "%f %f %f %f %f %i", &origin[0], &origin[1], &origin[2], &f1, &f2, &noents ) >= 3 ) {
+		if( sscanf( maybeSkyBoxString->data(), "%f %f %f %f %f %i", &origin[0], &origin[1], &origin[2], &f1, &f2, &noents ) >= 3 ) {
 			if( !noents ) {
 				skyorg = origin;
 			}

@@ -106,7 +106,7 @@ public:
 
 		query->SetAuthKey( parent->sv_mm_authkey->string );
 		query->SetPort( sv_port->integer );
-		query->SetServerName( sv.configstrings[CS_HOSTNAME] );
+		query->SetServerName( sv.configStrings.getHostName().value().data() );
 		query->SetServerAddress( sv_ip->string );
 		query->SetDemosBaseUrl( sv_uploads_demos_baseurl->string );
 	}
@@ -250,7 +250,7 @@ void SVStatsowFacade::EnqueueMatchReport( QueryObject *query ) {
 }
 
 void SVStatsowFacade::CheckMatchUuid() {
-	if( sv.configstrings[CS_MATCHUUID][0] != '\0' ) {
+	if( sv.configStrings.getMatchUuid() != std::nullopt ) {
 		// Cancel tasks if any
 		continueFetchUuidTask = false;
 		return;
@@ -267,8 +267,9 @@ void SVStatsowFacade::CheckMatchUuid() {
 
 		// Set another dummy UUID (aside from zero one that is always used at server spawn)
 		// so we do not confuse valid UUIDs supplied by the Statsow server and dummy ones
-		Q_snprintfz( sv.configstrings[CS_MATCHUUID], MAX_CONFIGSTRING_CHARS, "ffffffff-ffff-ffff-ffff-ffffffffffff" );
-		Com_Printf( "SVStatsowFacade::CheckMatchUuid(): Using dummy UUID %s\n", sv.configstrings[CS_MATCHUUID] );
+		wsw::StringView dummyUuid( "ffffffff-ffff-ffff-ffff-ffffffffffff" );
+		sv.configStrings.setMatchUuid( dummyUuid );
+		Com_Printf( "SVStatsowFacade::CheckMatchUuid(): Using dummy UUID %s\n", dummyUuid.data() );
 		return;
 	}
 
@@ -308,7 +309,7 @@ void SVFetchMatchUuidTask::OnQuerySuccess() {
 		return;
 	}
 
-	Q_strncpyz( sv.configstrings[CS_MATCHUUID], idString, sizeof( sv.configstrings[CS_MATCHUUID] ) );
+	sv.configStrings.setMatchUuid( wsw::StringView( idString ) );
 }
 
 void SVFetchMatchUuidTask::OnQueryFailure() {

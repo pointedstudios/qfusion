@@ -23,6 +23,7 @@
 #define QFUSION_SERVER_H
 
 #include "../qcommon/qcommon.h"
+#include "../qcommon/configstringstorage.h"
 #include "../qcommon/mmrating.h"
 #include "../game/g_public.h"
 
@@ -68,7 +69,8 @@ typedef struct {
 
 	char mapname[MAX_QPATH];               // map name
 
-	char configstrings[MAX_CONFIGSTRINGS][MAX_CONFIGSTRING_CHARS];
+	wsw::ConfigStringStorage configStrings;
+
 	entity_state_t baselines[MAX_EDICTS];
 	int num_mv_clients;     // current number, <= sv_maxmvclients
 
@@ -76,6 +78,19 @@ typedef struct {
 	// global variables shared between game and server
 	//
 	ginfo_t gi;
+
+	void clear() {
+		memset( &state, 0, sizeof( state ) );
+		nextSnapTime = 0;
+		framenum = 0;
+		mapname[0] = '\0';
+
+		configStrings.clear();
+
+		memset( &baselines, 0, sizeof( baselines ) );
+		num_mv_clients = 0;
+		memset( &gi, 0, sizeof( gi ) );
+	}
 } server_t;
 
 struct gclient_s {
@@ -407,7 +422,7 @@ void SV_InitGame( void );
 void SV_Map( const char *level, bool devmap );
 void SV_SetServerConfigStrings( void );
 
-void SV_AddPureFile( const char *filename );
+void SV_AddPureFile( const wsw::StringView &fileName );
 void SV_PureList_f( void );
 
 //
@@ -514,8 +529,6 @@ void SV_Demo_Purge_f( void );
 
 void SV_DemoList_f( client_t *client );
 void SV_DemoGet_f( client_t *client );
-
-#define SV_SetDemoMetaKeyValue( k,v ) svs.demo.meta_data_realsize = SNAP_SetDemoMetaKeyValue( svs.demo.meta_data, sizeof( svs.demo.meta_data ), svs.demo.meta_data_realsize, k, v )
 
 bool SV_IsDemoDownloadRequest( const char *request );
 

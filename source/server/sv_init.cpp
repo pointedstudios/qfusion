@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "server.h"
 
 #include "../qcommon/sys_library.h"
+#include "../qcommon/wswstaticstring.h"
 
 server_constant_t svc;              // constant server info (trully persistant since sv_init)
 server_static_t svs;                // persistant server info
@@ -40,8 +41,14 @@ static int SV_FindIndex( const char *name, int start, int max, bool create ) {
 		Com_Error( ERR_DROP, "Configstring too long: %s\n", name );
 	}
 
-	for( i = 1; i < max && sv.configstrings[start + i][0]; i++ ) {
-		if( !strncmp( sv.configstrings[start + i], name, sizeof( sv.configstrings[start + i] ) ) ) {
+	const wsw::StringView nameView( name );
+	for( i = 1; i < max; i++ ) {
+		const auto maybeConfigString = sv.configStrings.get( start + i );
+		if( !maybeConfigString ) {
+			break;
+		}
+
+		if( maybeConfigString->equals( nameView ) ) {
 			return i;
 		}
 	}
@@ -54,7 +61,7 @@ static int SV_FindIndex( const char *name, int start, int max, bool create ) {
 		Com_Error( ERR_DROP, "*Index: overflow" );
 	}
 
-	Q_strncpyz( sv.configstrings[start + i], name, sizeof( sv.configstrings[i] ) );
+	sv.configStrings.set( start + i, nameView );
 
 	// send the update to everyone
 	if( sv.state != ss_loading ) {
@@ -137,17 +144,15 @@ static void SV_AddPurePak( const char *pakname ) {
 /*
 * SV_AddPureFile
 */
-void SV_AddPureFile( const char *filename ) {
-	const char *pakname;
+void SV_AddPureFile( const wsw::StringView &fileName ) {
+	assert( fileName.isZeroTerminated() );
 
-	if( !filename || !strlen( filename ) ) {
+	if( fileName.empty() ) {
 		return;
 	}
 
-	pakname = FS_PakNameForFile( filename );
-
-	if( pakname ) {
-		Com_DPrintf( "Pure file: %s (%s)\n", pakname, filename );
+	if( const char *pakname = FS_PakNameForFile( fileName.data() ) ) {
+		Com_DPrintf( "Pure file: %s (%s)\n", pakname, fileName.data() );
 		SV_AddPurePak( pakname );
 	}
 }
@@ -173,13 +178,15 @@ static void SV_ReloadPureList( void ) {
 * SV_SetServerConfigStrings
 */
 void SV_SetServerConfigStrings( void ) {
-	Q_snprintfz( sv.configstrings[CS_MAXCLIENTS], sizeof( sv.configstrings[0] ), "%i", sv_maxclients->integer );
-	Q_strncpyz( sv.configstrings[CS_TVSERVER], "0", sizeof( sv.configstrings[0] ) );
-	Q_strncpyz( sv.configstrings[CS_HOSTNAME], Cvar_String( "sv_hostname" ), sizeof( sv.configstrings[0] ) );
-	Q_strncpyz( sv.configstrings[CS_MODMANIFEST], Cvar_String( "sv_modmanifest" ), sizeof( sv.configstrings[0] ) );
+	wsw::StaticString<16> tmp;
+
+	(void)tmp.assignf( "%d\n", sv_maxclients->integer );
+	sv.configStrings.setMaxClients( tmp.asView() );
+
+	sv.configStrings.setHostName( wsw::StringView( Cvar_String( "sv_hostname" ) ) );
 	// Set a zero UUID at server spawn so no attempt to fetch a match UUID is performed
 	// until the game module actually requests doing this by clearing the config string.
-	Q_snprintfz( sv.configstrings[CS_MATCHUUID], sizeof( sv.configstrings[0] ), "00000000-0000-0000-0000-000000000000" );
+	sv.configStrings.setMatchUuid( wsw::StringView( "00000000-0000-0000-0000-000000000000" ) );
 }
 
 /*
@@ -187,9 +194,6 @@ void SV_SetServerConfigStrings( void ) {
 * Change the server to a new map, taking all connected clients along with it.
 */
 static void SV_SpawnServer( const char *server, bool devmap ) {
-	unsigned checksum;
-	int i;
-
 	if( devmap ) {
 		Cvar_ForceSet( "sv_cheats", "1" );
 	}
@@ -203,7 +207,7 @@ static void SV_SpawnServer( const char *server, bool devmap ) {
 	Com_SetServerState( ss_dead );
 
 	// wipe the entire per-level structure
-	memset( &sv, 0, sizeof( sv ) );
+	sv.clear();
 	SV_ResetClientFrameCounters();
 	svs.realtime = 0;
 	svs.gametime = 0;
@@ -215,14 +219,21 @@ static void SV_SpawnServer( const char *server, bool devmap ) {
 
 	sv.nextSnapTime = 1000;
 
-	Q_snprintfz( sv.configstrings[CS_WORLDMODEL], sizeof( sv.configstrings[CS_WORLDMODEL] ), "maps/%s.bsp", server );
-	CM_LoadMap( svs.cms, sv.configstrings[CS_WORLDMODEL], false, &checksum );
+	wsw::StaticString<1024> tmp;
+	(void)tmp.assignf( "maps/%s.bsp", server );
+	sv.configStrings.setWorldModel( tmp.asView() );
 
-	Q_snprintfz( sv.configstrings[CS_MAPCHECKSUM], sizeof( sv.configstrings[CS_MAPCHECKSUM] ), "%i", checksum );
+	unsigned checksum;
+	CM_LoadMap( svs.cms, tmp.data(), false, &checksum );
+
+	(void)tmp.assignf( "%d", checksum );
+	sv.configStrings.setMapCheckSum( tmp.asView() );
 
 	// reserve the first modelIndexes for inline models
-	for( i = 1; i < CM_NumInlineModels( svs.cms ); i++ )
-		Q_snprintfz( sv.configstrings[CS_MODELS + i], sizeof( sv.configstrings[CS_MODELS + i] ), "*%i", i );
+	for( unsigned i = 1; i < CM_NumInlineModels( svs.cms ); i++ ) {
+		(void)tmp.assignf( "*%d", i );
+		sv.configStrings.setModel( tmp.asView(), i );
+	}
 
 	// set serverinfo variable
 	Cvar_FullSet( "mapname", sv.mapname, CVAR_SERVERINFO | CVAR_READONLY, true );

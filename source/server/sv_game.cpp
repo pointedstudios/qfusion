@@ -280,8 +280,6 @@ static void PF_error( const char *msg ) {
 * PF_Configstring
 */
 static void PF_ConfigString( int index, const char *val ) {
-	size_t len;
-
 	if( !val ) {
 		return;
 	}
@@ -295,25 +293,23 @@ static void PF_ConfigString( int index, const char *val ) {
 		return;
 	}
 
-	len = strlen( val );
-	if( len >= sizeof( sv.configstrings[0] ) ) {
-		const char *format = "WARNING: 'PF_Configstring', configstring %i overflowed (%" PRIu64 ")\n";
-		Com_Printf( format, index, strlen( val ) );
-		len = sizeof( sv.configstrings[0] ) - 1;
-	}
-
 	if( !COM_ValidateConfigstring( val ) ) {
 		Com_Printf( "WARNING: 'PF_Configstring' invalid configstring %i: %s\n", index, val );
 		return;
 	}
 
+	const wsw::StringView stringView( val );
+
+	wsw::ConfigStringStorage &storage = sv.configStrings;
 	// ignore if no changes
-	if( !strncmp( sv.configstrings[index], val, len ) && sv.configstrings[index][len] == '\0' ) {
-		return;
+	if( auto maybeExistingString = storage.get( index ) ) {
+		if( maybeExistingString->equals( stringView ) ) {
+			return;
+		}
 	}
 
 	// change the string in sv
-	Q_strncpyz( sv.configstrings[index], val, sizeof( sv.configstrings[index] ) );
+	storage.set( index, stringView );
 
 	if( sv.state != ss_loading ) {
 		SV_SendServerCommand( NULL, "cs %i \"%s\"", index, val );
@@ -325,7 +321,7 @@ static const char *PF_GetConfigString( int index ) {
 		return NULL;
 	}
 
-	return sv.configstrings[ index ];
+	return sv.configStrings.get( index ).value_or( wsw::StringView() ).data();
 }
 
 /*
@@ -354,7 +350,7 @@ static void PF_PureSound( const char *name ) {
 		COM_ReplaceExtension( tempname, extension, sizeof( tempname ) );
 	}
 
-	SV_AddPureFile( tempname );
+	SV_AddPureFile( wsw::StringView( tempname ) );
 }
 
 /*
@@ -387,7 +383,7 @@ static void SV_AddPureShader( const char *name ) {
 		COM_ReplaceExtension( tempname, extension, sizeof( tempname ) );
 	}
 
-	SV_AddPureFile( tempname );
+	SV_AddPureFile( wsw::StringView( tempname ) );
 }
 
 /*
@@ -397,7 +393,7 @@ static void SV_AddPureBSP( void ) {
 	int i;
 	const char *shader;
 
-	SV_AddPureFile( sv.configstrings[CS_WORLDMODEL] );
+	SV_AddPureFile( sv.configStrings.getWorldModel().value() );
 	for( i = 0; ( shader = CM_ShaderrefName( svs.cms, i ) ); i++ )
 		SV_AddPureShader( shader );
 }
@@ -418,7 +414,7 @@ static void PF_PureModel( const char *name ) {
 			SV_AddPureBSP(); // world
 		}
 	} else {
-		SV_AddPureFile( name );
+		SV_AddPureFile( wsw::StringView( name ) );
 	}
 }
 

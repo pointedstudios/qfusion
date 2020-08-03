@@ -389,9 +389,9 @@ static void SV_Configstrings_f( client_t *client ) {
 
 	// write a packet full of data
 	while( start < MAX_CONFIGSTRINGS &&
-		   client->reliableSequence - client->reliableAcknowledge < MAX_RELIABLE_COMMANDS - 8 ) {
-		if( sv.configstrings[start][0] ) {
-			SV_SendServerCommand( client, "cs %i \"%s\"", start, sv.configstrings[start] );
+		client->reliableSequence - client->reliableAcknowledge < MAX_RELIABLE_COMMANDS - 8 ) {
+		if( const auto maybeConfigString = sv.configStrings.get( start ) ) {
+			SV_SendServerCommand( client, "cs %i \"%s\"", start, maybeConfigString->data() );
 		}
 		start++;
 	}

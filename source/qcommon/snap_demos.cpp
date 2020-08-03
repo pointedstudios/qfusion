@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "qcommon.h"
+#include "configstringstorage.h"
 
 #include <algorithm>
 
@@ -142,6 +143,83 @@ static void SNAP_RecordDemoMetaDataMessage( int demofile, msg_t *msg ) {
 	FS_SetCompressionLevel( demofile, complevel );
 
 	FS_Flush( demofile );
+}
+
+/*
+* SNAP_BeginDemoRecording
+*/
+void SNAP_BeginDemoRecording( int demofile, unsigned int spawncount, unsigned int snapFrameTime,
+							  const char *sv_name, unsigned int sv_bitflags, purelist_t *purelist,
+							  const wsw::ConfigStringStorage &configStrings, entity_state_t *baselines ) {
+	unsigned int i;
+	msg_t msg;
+	uint8_t msg_buffer[MAX_MSGLEN];
+	purelist_t *purefile;
+	entity_state_t nullstate;
+	entity_state_t *base;
+
+	MSG_Init( &msg, msg_buffer, sizeof( msg_buffer ) );
+
+	SNAP_DemoMetaDataMessage( &msg, "", 0 );
+
+	SNAP_RecordDemoMetaDataMessage( demofile, &msg );
+
+	// serverdata message
+	MSG_WriteUint8( &msg, svc_serverdata );
+	MSG_WriteInt32( &msg, APP_DEMO_PROTOCOL_VERSION );
+	MSG_WriteInt32( &msg, spawncount );
+	MSG_WriteInt16( &msg, (unsigned short)snapFrameTime );
+	MSG_WriteInt16( &msg, -1 ); // playernum
+	MSG_WriteString( &msg, sv_name ); // level name
+	MSG_WriteUint8( &msg, sv_bitflags & ~SV_BITFLAGS_HTTP ); // sv_bitflags
+
+	// pure files
+	i = Com_CountPureListFiles( purelist );
+	if( i > (short)0x7fff ) {
+		Com_Error( ERR_DROP, "Error: Too many pure files." );
+	}
+
+	MSG_WriteInt16( &msg, i );
+
+	purefile = purelist;
+	while( purefile ) {
+		MSG_WriteString( &msg, purefile->filename );
+		MSG_WriteInt32( &msg, purefile->checksum );
+		purefile = purefile->next;
+
+		DEMO_SAFEWRITE( demofile, &msg, false );
+	}
+
+	// config strings
+	for( i = 0; i < MAX_CONFIGSTRINGS; i++ ) {
+		if( auto maybeConfigString = configStrings.get( i ) ) {
+			MSG_WriteUint8( &msg, svc_servercs );
+			MSG_WriteString( &msg, va( "cs %i \"%s\"", i, maybeConfigString->data() ) );
+
+			DEMO_SAFEWRITE( demofile, &msg, false );
+		}
+	}
+
+	// baselines
+	memset( &nullstate, 0, sizeof( nullstate ) );
+
+	for( i = 0; i < MAX_EDICTS; i++ ) {
+		base = &baselines[i];
+		if( base->modelindex || base->sound || base->effects ) {
+			MSG_WriteUint8( &msg, svc_spawnbaseline );
+			MSG_WriteDeltaEntity( &msg, &nullstate, base, true );
+
+			DEMO_SAFEWRITE( demofile, &msg, false );
+		}
+	}
+
+	// client expects the server data to be in a separate packet
+	DEMO_SAFEWRITE( demofile, &msg, true );
+
+	MSG_WriteUint8( &msg, svc_servercs );
+	MSG_WriteString( &msg, "precache" );
+
+	DEMO_SAFEWRITE( demofile, &msg, true );
 }
 
 /*
