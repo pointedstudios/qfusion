@@ -256,7 +256,7 @@ static const char *CG_GS_GetConfigString( int index ) {
 static void CG_InitGameShared( void ) {
 	memset( &gs, 0, sizeof( gs_state_t ) );
 	gs.module = GS_MODULE_CGAME;
-	gs.maxclients = atoi( cl.configstrings[CS_MAXCLIENTS] );
+	gs.maxclients = atoi( cl.configStrings.getMaxClients()->data() );
 	if( gs.maxclients < 1 || gs.maxclients > MAX_CLIENTS ) {
 		gs.maxclients = MAX_CLIENTS;
 	}
@@ -844,7 +844,12 @@ static void CG_RegisterConfigStrings( void ) {
 
 	for( i = 0; i < MAX_CONFIGSTRINGS; i++ ) {
 		// TODO: Just share configstring values?
-		memcpy( cgs.configStrings[i], cl.configstrings[i], MAX_CONFIGSTRING_CHARS );
+		if( auto maybeClientString = cl.configStrings.get( i ) ) {
+			memcpy( cgs.configStrings[i], maybeClientString->data(), maybeClientString->size() );
+			cgs.configStrings[i][maybeClientString->size()] = '\0';
+		} else {
+			cgs.configStrings[i][0] = '\0';
+		}
 
 		cs = cgs.configStrings[i];
 		if( !cs[0] ) {

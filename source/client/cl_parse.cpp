@@ -917,7 +917,7 @@ static void CL_ParseFrame( msg_t *msg ) {
 				// write out messages to hold the startup information
 				SNAP_BeginDemoRecording( cls.demo.file, 0x10000 + cl.servercount, cl.snapFrameTime,
 										 cl.servermessage, cls.reliable ? SV_BITFLAGS_RELIABLE : 0, cls.purelist,
-										 cl.configstrings[0], cl_baselines );
+										 cl.configStrings, cl_baselines );
 
 				// the rest of the demo file will be individual frames
 			}
@@ -1043,7 +1043,7 @@ static void CL_UpdateConfigString( int idx, const char *s ) {
 		return;
 	}
 
-	Q_strncpyz( cl.configstrings[idx], s, sizeof( cl.configstrings[idx] ) );
+	cl.configStrings.set( idx, wsw::StringView( s ) );
 
 	// allow cgame to update it too
 	CL_GameModule_ConfigString( idx, s );

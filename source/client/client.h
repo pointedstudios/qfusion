@@ -20,6 +20,7 @@
 // client.h -- primary header for client
 
 #include "../qcommon/qcommon.h"
+#include "../qcommon/configstringstorage.h"
 #include "../cgame/ref.h"
 #include "../cgame/cg_public.h"
 #include "../ftlib/ftlib.h"
@@ -124,7 +125,8 @@ typedef struct client_state_s {
 	bool gamestart;
 
 	char servermessage[MAX_STRING_CHARS];
-	char configstrings[MAX_CONFIGSTRINGS][MAX_CONFIGSTRING_CHARS];
+
+	wsw::ConfigStringStorage configStrings;
 } client_state_t;
 
 extern client_state_t cl;

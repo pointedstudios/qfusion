@@ -526,8 +526,5 @@ int S_FindTopNodeForSphere( const vec3_t center, float radius ) {
 }
 
 const char *S_GetConfigString( int index ) {
-	if( (unsigned)index >= MAX_CONFIGSTRINGS ) {
-		Com_Error( ERR_FATAL, "CL_SoundModule_GetConfigString: Illegal configstring index %d\n", index );
-	}
-	return cl.configstrings[index];
+	return cl.configStrings.get( index ).value_or( wsw::StringView() ).data();
 }

@@ -71,16 +71,16 @@ void CL_Stop_f( void ) {
 	SNAP_StopDemoRecording( cls.demo.file );
 
 	// write some meta information about the match/demo
-	CL_SetDemoMetaKeyValue( "hostname", cl.configstrings[CS_HOSTNAME] );
+	CL_SetDemoMetaKeyValue( "hostname", cl.configStrings.getHostName()->data() );
 	CL_SetDemoMetaKeyValue( "localtime", va( "%" PRIu64, (uint64_t)cls.demo.localtime ) );
 	CL_SetDemoMetaKeyValue( "multipov", "0" );
 	CL_SetDemoMetaKeyValue( "duration", va( "%u", (int)ceil( cls.demo.duration / 1000.0f ) ) );
-	CL_SetDemoMetaKeyValue( "mapname", cl.configstrings[CS_MAPNAME] );
-	CL_SetDemoMetaKeyValue( "gametype", cl.configstrings[CS_GAMETYPENAME] );
-	CL_SetDemoMetaKeyValue( "levelname", cl.configstrings[CS_MESSAGE] );
-	CL_SetDemoMetaKeyValue( "matchname", cl.configstrings[CS_MATCHNAME] );
-	CL_SetDemoMetaKeyValue( "matchscore", cl.configstrings[CS_MATCHSCORE] );
-	CL_SetDemoMetaKeyValue( "matchuuid", cl.configstrings[CS_MATCHUUID] );
+	CL_SetDemoMetaKeyValue( "mapname", cl.configStrings.getMapName()->data() );
+	CL_SetDemoMetaKeyValue( "gametype", cl.configStrings.getGametypeName()->data() );
+	CL_SetDemoMetaKeyValue( "levelname", cl.configStrings.getMessage()->data() );
+	CL_SetDemoMetaKeyValue( "matchname", cl.configStrings.getMatchName()->data() );
+	CL_SetDemoMetaKeyValue( "matchscore", cl.configStrings.getMatchScore()->data() );
+	CL_SetDemoMetaKeyValue( "matchuuid", cl.configStrings.getMatchUuid()->data() );
 
 	FS_FCloseFile( cls.demo.file );
 

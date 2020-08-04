@@ -376,7 +376,7 @@ static void CL_Connect( const char *servername, socket_type_t type, netadr_t *ad
 	}
 	cls.servername = Q_strdup( servername );
 
-	memset( cl.configstrings, 0, sizeof( cl.configstrings ) );
+	cl.configStrings.clear();
 
 	// If the server supports matchmaking and that we are authenticated, try getting a matchmaking ticket before joining the server
 	newstate = CA_CONNECTING;
@@ -690,7 +690,13 @@ void CL_ClearState( void ) {
 	}
 
 	// wipe the entire cl structure
-	memset( &cl, 0, sizeof( client_state_t ) );
+
+	// Hacks just to avoid writing redundant clear() methods
+	// for stuff that must be eventually rewritten.
+	cl.~client_state_t();
+	memset( (void *)&cl, 0, sizeof( client_state_t ) );
+	new( &cl )client_state_t;
+
 	memset( cl_baselines, 0, sizeof( cl_baselines ) );
 
 	cl.cmds = (usercmd_t *)Q_malloc( sizeof( *cl.cmds ) * CMD_BACKUP );
@@ -930,7 +936,7 @@ void CL_Changing_f( void ) {
 
 	Com_DPrintf( "CL:Changing\n" );
 
-	memset( cl.configstrings, 0, sizeof( cl.configstrings ) );
+	cl.configStrings.clear();
 
 	// ignore snapshots from previous connection
 	cl.pendingSnapNum = cl.currentSnapNum = cl.receivedSnapNum = 0;
@@ -977,7 +983,8 @@ void CL_ServerReconnect_f( void ) {
 	cls.connect_time = Sys_Milliseconds() - 1500;
 #endif
 
-	memset( cl.configstrings, 0, sizeof( cl.configstrings ) );
+	cl.configStrings.clear();
+
 	CL_SetClientState( CA_HANDSHAKE );
 	CL_AddReliableCommand( "new" );
 }
@@ -1072,7 +1079,7 @@ static void CL_ConnectionlessPacket( const socket_t *socket, const netadr_t *add
 		Q_strncpyz( cls.session, MSG_ReadStringLine( msg ), sizeof( cls.session ) );
 
 		Netchan_Setup( &cls.netchan, socket, address, Netchan_GamePort() );
-		memset( cl.configstrings, 0, sizeof( cl.configstrings ) );
+		cl.configStrings.clear();
 		CL_SetClientState( CA_HANDSHAKE );
 		CL_AddReliableCommand( "new" );
 		return;
@@ -1458,22 +1465,32 @@ void CL_RequestNextDownload( void ) {
 	if( precache_check == CS_WORLDMODEL ) { // confirm map
 		precache_check = CS_MODELS; // 0 isn't used
 
-		if( !CL_CheckOrDownloadFile( cl.configstrings[CS_WORLDMODEL] ) ) {
+		if( !CL_CheckOrDownloadFile( cl.configStrings.getWorldModel()->data() ) ) {
 			return; // started a download
 		}
 	}
 
 	if( precache_check >= CS_MODELS && precache_check < CS_MODELS + MAX_MODELS ) {
-		while( precache_check < CS_MODELS + MAX_MODELS && cl.configstrings[precache_check][0] ) {
-			if( cl.configstrings[precache_check][0] == '*' ||
-				cl.configstrings[precache_check][0] == '$' || // disable playermodel downloading for now
-				cl.configstrings[precache_check][0] == '#' ) {
-				precache_check++;
+		for(;; ) {
+			if( precache_check >= CS_MODELS + MAX_MODELS ) {
+				break;
+			}
+			const auto maybeConfigString = cl.configStrings.get( precache_check );
+			if( maybeConfigString ) {
+				break;
+			}
+
+			const auto string = *maybeConfigString;
+			precache_check++;
+
+			// disable playermodel downloading for now
+			if( string.startsWith( '*' ) || string.startsWith( '$' ) || string.startsWith( '#' ) ) {
 				continue;
 			}
 
-			if( !CL_CheckOrDownloadFile( cl.configstrings[precache_check++] ) ) {
-				return; // started a download
+			// started a download
+			if( !CL_CheckOrDownloadFile( string.data() ) ) {
+				return;
 			}
 		}
 		precache_check = CS_SOUNDS;
@@ -1482,14 +1499,25 @@ void CL_RequestNextDownload( void ) {
 	if( precache_check >= CS_SOUNDS && precache_check < CS_SOUNDS + MAX_SOUNDS ) {
 		if( precache_check == CS_SOUNDS ) {
 			precache_check++; // zero is blank
-
 		}
-		while( precache_check < CS_SOUNDS + MAX_SOUNDS && cl.configstrings[precache_check][0] ) {
-			if( cl.configstrings[precache_check][0] == '*' ) { // sexed sounds
-				precache_check++;
+		for(;; ) {
+			if( precache_check >= CS_SOUNDS + MAX_SOUNDS ) {
+				break;
+			}
+			const auto maybeConfigString = cl.configStrings.get( precache_check );
+			if( !maybeConfigString ) {
+				break;
+			}
+
+			const auto string = *maybeConfigString;
+			precache_check++;
+
+			// sexed sounds
+			if( string.startsWith( '*' ) ) {
 				continue;
 			}
-			Q_strncpyz( tempname, cl.configstrings[precache_check++], sizeof( tempname ) );
+
+			Q_strncpyz( tempname, string.data(), sizeof( tempname ) );
 			if( !COM_FileExtension( tempname ) ) {
 				if( !FS_FirstExtension( tempname, SOUND_EXTENSIONS, NUM_SOUND_EXTENSIONS ) ) {
 					COM_DefaultExtension( tempname, ".wav", sizeof( tempname ) );
@@ -1553,10 +1581,10 @@ void CL_RequestNextDownload( void ) {
 
 		cls.download.successCount = 0;
 
-		map_checksum = CL_LoadMap( cl.configstrings[CS_WORLDMODEL] );
-		if( map_checksum != (unsigned)atoi( cl.configstrings[CS_MAPCHECKSUM] ) ) {
-			Com_Error( ERR_DROP, "Local map version differs from server: %u != '%u'",
-					   map_checksum, (unsigned)atoi( cl.configstrings[CS_MAPCHECKSUM] ) );
+		map_checksum = CL_LoadMap( cl.configStrings.getWorldModel()->data() );
+		if( map_checksum != (unsigned)atoi( cl.configStrings.getMapCheckSum()->data() ) ) {
+			Com_Error( ERR_DROP, "Local map version differs from server: %u != '%s'",
+					   map_checksum, cl.configStrings.getMapCheckSum()->data() );
 			return;
 		}
 
@@ -1589,7 +1617,7 @@ void CL_Precache_f( void ) {
 
 	if( cls.demo.playing ) {
 		if( !cls.demo.play_jump ) {
-			CL_LoadMap( cl.configstrings[CS_WORLDMODEL] );
+			CL_LoadMap( cl.configStrings.getWorldModel()->data() );
 
 			CL_GameModule_Init();
 		} else {

@@ -581,7 +581,7 @@ void SCR_BeginLoadingPlaque( void ) {
 
 	SoundSystem::Instance()->StopAllSounds( SoundSystem::StopAndClear | SoundSystem::StopMusic );
 
-	memset( cl.configstrings, 0, sizeof( cl.configstrings ) );
+	cl.configStrings.clear();
 
 	scr_conlines = 0;       // none visible
 	scr_draw_loading = 2;   // clear to black first
