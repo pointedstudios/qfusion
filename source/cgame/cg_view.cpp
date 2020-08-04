@@ -509,11 +509,12 @@ int CG_SkyPortal( void ) {
 	float pitchspeed = 0, yawspeed = 0, rollspeed = 0;
 	skyportal_t *sp = &cg.view.refdef.skyportal;
 
-	if( cgs.configStrings[CS_SKYBOX][0] == '\0' ) {
+	auto maybeConfigString = cgs.configStrings.getSkyBox();
+	if( !maybeConfigString ) {
 		return 0;
 	}
 
-	if( sscanf( cgs.configStrings[CS_SKYBOX], "%f %f %f %f %f %i %f %f %f",
+	if( sscanf( maybeConfigString->data(), "%f %f %f %f %f %i %f %f %f",
 				&sp->vieworg[0], &sp->vieworg[1], &sp->vieworg[2], &fov, &scale,
 				&noents,
 				&pitchspeed, &yawspeed, &rollspeed ) >= 3 ) {
@@ -1018,7 +1019,7 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 	Q_clamp( cg.lerpfrac, 0.0f, 1.0f );
 
 	const bool dumpAudio = CL_WriteAvi() && cls.demo.avi_audio;
-	if( !cgs.configStrings[CS_WORLDMODEL][0] ) {
+	if( cgs.configStrings.getWorldModel() == std::nullopt ) {
 		CG_AddLocalSounds();
 
 		RF_DrawStretchPic( 0, 0, cgs.vidWidth, cgs.vidHeight, 0, 0, 1, 1, colorBlack, cgs.shaderWhite );

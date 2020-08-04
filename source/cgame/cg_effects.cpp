@@ -76,19 +76,14 @@ void CG_RunLightStyles( void ) {
 /*
 * CG_SetLightStyle
 */
-void CG_SetLightStyle( int i ) {
-	int j, k;
-	char *s;
-
-	s = cgs.configStrings[i + CS_LIGHTS];
-
-	j = strlen( s );
-	if( j >= MAX_QPATH ) {
-		CG_Error( "CL_SetLightstyle length = %i", j );
+void CG_SetLightStyle( unsigned i, const wsw::StringView &s ) {
+	const auto length = s.length();
+	if( length >= MAX_QPATH ) {
+		CG_Error( "CL_SetLightstyle length = %i", (int)length );
 	}
-	cg_lightStyle[i].length = j;
 
-	for( k = 0; k < j; k++ )
+	cg_lightStyle[i].length = length;
+	for( unsigned k = 0; k < length; k++ )
 		cg_lightStyle[i].map[k] = (float)( s[k] - 'a' ) / (float)( 'm' - 'a' );
 }
 

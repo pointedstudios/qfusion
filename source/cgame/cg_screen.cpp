@@ -1015,8 +1015,9 @@ void CG_DrawTeamInfo( int x, int y, int align, struct qfontface_s *font, const v
 			continue;
 		}
 
+		const wsw::StringView s = cgs.configStrings.getLocation( locationTag ).value_or( wsw::StringView() );
 		Q_snprintfz( string, sizeof( string ), "%s%s %s%s (%s%i%s/%i)%s", cgs.clientInfo[teammate].name, S_COLOR_WHITE,
-					 cgs.configStrings[CS_LOCATIONS + locationTag], S_COLOR_WHITE,
+					 s.data(), S_COLOR_WHITE,
 					 ( health < 25 ) ? S_COLOR_RED : "", health, S_COLOR_WHITE, armor, S_COLOR_WHITE );
 
 		// draw the head-icon in the case this player has one

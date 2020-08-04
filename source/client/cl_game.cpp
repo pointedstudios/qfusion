@@ -171,9 +171,9 @@ void CL_GameModule_GetEntitySpatilization( int entNum, vec3_t origin, vec3_t vel
 /*
 * CL_GameModule_ConfigString
 */
-void CL_GameModule_ConfigString( int number, const char *value ) {
+void CL_GameModule_ConfigString( int number, const wsw::StringView &string ) {
 	if( cge ) {
-		CG_ConfigString( number, value );
+		CG_ConfigString( number, string );
 	}
 }
 

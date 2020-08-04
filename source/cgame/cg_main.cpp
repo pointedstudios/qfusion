@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "cg_local.h"
 #include "../qcommon/qcommon.h"
+#include "../qcommon/wswstaticstring.h"
 #include "../ref/frontend.h"
 #include "../client/snd_public.h"
 #include "../client/client.h"
@@ -245,7 +246,11 @@ static const char *CG_GS_GetConfigString( int index ) {
 		return NULL;
 	}
 
-	return cgs.configStrings[ index ];
+	if( auto maybeConfigString = cgs.configStrings.get( index ) ) {
+		return maybeConfigString->data();
+	}
+
+	return nullptr;
 }
 
 /*
@@ -303,21 +308,19 @@ static void CG_RegisterWeaponModels( void ) {
 * CG_RegisterModels
 */
 static void CG_RegisterModels( void ) {
-	int i;
-	const char *name;
-
 	if( cgs.precacheModelsStart == MAX_MODELS ) {
 		return;
 	}
 
 	if( cgs.precacheModelsStart == 0 ) {
-		name = cgs.configStrings[CS_WORLDMODEL];
-		if( name[0] ) {
-			if( !CG_LoadingItemName( name ) ) {
+		const auto maybeName = cgs.configStrings.getWorldModel();
+		if( maybeName ) {
+			const auto name = *maybeName;
+			if( !CG_LoadingItemName( name.data() ) ) {
 				return;
 			}
-			CG_LoadingString( name );
-			R_RegisterWorldModel( name );
+			CG_LoadingString( name.data() );
+			R_RegisterWorldModel( name.data() );
 		}
 
 		CG_LoadingString( "models" );
@@ -328,40 +331,40 @@ static void CG_RegisterModels( void ) {
 		cgs.precacheModelsStart = 1;
 	}
 
-	for( i = cgs.precacheModelsStart; i < MAX_MODELS; i++ ) {
-		name = cgs.configStrings[CS_MODELS + i];
-
-		if( !name[0] ) {
+	for( unsigned i = cgs.precacheModelsStart; i < MAX_MODELS; i++ ) {
+		const auto maybeName = cgs.configStrings.getModel( i );
+		if( !maybeName ) {
 			cgs.precacheModelsStart = MAX_MODELS;
 			break;
 		}
 
+		const auto name = *maybeName;
 		cgs.precacheModelsStart = i;
 
-		if( name[0] == '#' ) {
+		if( name.startsWith( '#' ) ) {
 			// special player weapon model
 			if( cgs.numWeaponModels >= WEAP_TOTAL ) {
 				continue;
 			}
 
-			if( !CG_LoadingItemName( name ) ) {
+			if( !CG_LoadingItemName( name.data() ) ) {
 				return;
 			}
 
-			Q_strncpyz( cgs.weaponModels[cgs.numWeaponModels], name + 1, sizeof( cgs.weaponModels[cgs.numWeaponModels] ) );
+			Q_strncpyz( cgs.weaponModels[cgs.numWeaponModels], name.data() + 1, sizeof( cgs.weaponModels[cgs.numWeaponModels] ) );
 			cgs.numWeaponModels++;
-		} else if( name[0] == '$' ) {
-			if( !CG_LoadingItemName( name ) ) {
+		} else if( name.startsWith( '$' ) ) {
+			if( !CG_LoadingItemName( name.data() ) ) {
 				return;
 			}
 
 			// indexed pmodel
-			cgs.pModelsIndex[i] = CG_RegisterPlayerModel( name + 1 );
+			cgs.pModelsIndex[i] = CG_RegisterPlayerModel( name.data() + 1 );
 		} else {
-			if( !CG_LoadingItemName( name ) ) {
+			if( !CG_LoadingItemName( name.data() ) ) {
 				return;
 			}
-			cgs.modelDraw[i] = CG_RegisterModel( name );
+			cgs.modelDraw[i] = CG_RegisterModel( name.data() );
 		}
 	}
 
@@ -386,9 +389,6 @@ static void CG_RegisterModels( void ) {
 * CG_RegisterSounds
 */
 static void CG_RegisterSounds( void ) {
-	int i;
-	const char *name;
-
 	if( cgs.precacheSoundsStart == MAX_SOUNDS ) {
 		return;
 	}
@@ -399,20 +399,21 @@ static void CG_RegisterSounds( void ) {
 		cgs.precacheSoundsStart = 1;
 	}
 
-	for( i = cgs.precacheSoundsStart; i < MAX_SOUNDS; i++ ) {
-		name = cgs.configStrings[CS_SOUNDS + i];
-		if( !name[0] ) {
+	for( unsigned i = cgs.precacheSoundsStart; i < MAX_SOUNDS; i++ ) {
+		const auto maybeName = cgs.configStrings.getSound( i );
+		if( !maybeName ) {
 			cgs.precacheSoundsStart = MAX_SOUNDS;
 			break;
 		}
 
+		const auto name = *maybeName;
 		cgs.precacheSoundsStart = i;
 
-		if( name[0] != '*' ) {
-			if( !CG_LoadingItemName( name ) ) {
+		if( !name.startsWith( '*' ) ) {
+			if( !CG_LoadingItemName( name.data() ) ) {
 				return;
 			}
-			cgs.soundPrecache[i] = SoundSystem::Instance()->RegisterSound( name );
+			cgs.soundPrecache[i] = SoundSystem::Instance()->RegisterSound( name.data() );
 		}
 	}
 
@@ -427,9 +428,6 @@ static void CG_RegisterSounds( void ) {
 * CG_RegisterShaders
 */
 static void CG_RegisterShaders( void ) {
-	int i;
-	const char *name;
-
 	if( cgs.precacheShadersStart == MAX_IMAGES ) {
 		return;
 	}
@@ -440,23 +438,24 @@ static void CG_RegisterShaders( void ) {
 		cgs.precacheShadersStart = 1;
 	}
 
-	for( i = cgs.precacheShadersStart; i < MAX_IMAGES; i++ ) {
-		name = cgs.configStrings[CS_IMAGES + i];
-		if( !name[0] ) {
+	for( unsigned i = cgs.precacheShadersStart; i < MAX_IMAGES; i++ ) {
+		const auto maybeName = cgs.configStrings.getImage( i );
+		if( !maybeName ) {
 			cgs.precacheShadersStart = MAX_IMAGES;
 			break;
 		}
 
+		const auto name = *maybeName;
 		cgs.precacheShadersStart = i;
 
-		if( !CG_LoadingItemName( name ) ) {
+		if( !CG_LoadingItemName( name.data() ) ) {
 			return;
 		}
 
-		if( strstr( name, "correction/" ) ) { // HACK HACK HACK -- for color correction LUTs
-			cgs.imagePrecache[i] = R_RegisterLinearPic( name );
+		if( strstr( name.data(), "correction/" ) ) { // HACK HACK HACK -- for color correction LUTs
+			cgs.imagePrecache[i] = R_RegisterLinearPic( name.data() );
 		} else {
-			cgs.imagePrecache[i] = R_RegisterPic( name );
+			cgs.imagePrecache[i] = R_RegisterPic( name.data() );
 		}
 	}
 
@@ -471,9 +470,6 @@ static void CG_RegisterShaders( void ) {
 * CG_RegisterSkinfiles
 */
 static void CG_RegisterSkinFiles( void ) {
-	int i;
-	const char *name;
-
 	if( cgs.precacheSkinsStart == MAX_SKINFILES ) {
 		return;
 	}
@@ -484,20 +480,21 @@ static void CG_RegisterSkinFiles( void ) {
 		cgs.precacheSkinsStart = 1;
 	}
 
-	for( i = cgs.precacheSkinsStart; i < MAX_SKINFILES; i++ ) {
-		name = cgs.configStrings[CS_SKINFILES + i];
-		if( !name[0] ) {
+	for( unsigned i = cgs.precacheSkinsStart; i < MAX_SKINFILES; i++ ) {
+		const auto maybeName = cgs.configStrings.getSkinFile( i );
+		if( !maybeName ) {
 			cgs.precacheSkinsStart = MAX_SKINFILES;
 			break;
 		}
 
+		const auto name = *maybeName;
 		cgs.precacheSkinsStart = i;
 
-		if( !CG_LoadingItemName( name ) ) {
+		if( !CG_LoadingItemName( name.data() ) ) {
 			return;
 		}
 
-		cgs.skinPrecache[i] = R_RegisterSkinFile( name );
+		cgs.skinPrecache[i] = R_RegisterSkinFile( name.data() );
 	}
 
 	cgs.precacheSkinsStart = MAX_SKINFILES;
@@ -507,9 +504,6 @@ static void CG_RegisterSkinFiles( void ) {
 * CG_RegisterClients
 */
 static void CG_RegisterClients( void ) {
-	int i;
-	const char *name;
-
 	if( cgs.precacheClientsStart == MAX_CLIENTS ) {
 		return;
 	}
@@ -518,18 +512,18 @@ static void CG_RegisterClients( void ) {
 		CG_LoadingString( "clients" );
 	}
 
-	for( i = cgs.precacheClientsStart; i < MAX_CLIENTS; i++ ) {
-		name = cgs.configStrings[CS_PLAYERINFOS + i];
+	for( unsigned i = cgs.precacheClientsStart; i < MAX_CLIENTS; i++ ) {
+		const auto maybeString = cgs.configStrings.getPlayerInfo( i );
 		cgs.precacheClientsStart = i;
 
-		if( !name[0] ) {
+		if( !maybeString ) {
 			continue;
 		}
-		if( !CG_LoadingItemName( name ) ) {
+		if( !CG_LoadingItemName( maybeString->data() ) ) {
 			return;
 		}
 
-		CG_LoadClientInfo( i );
+		CG_LoadClientInfo( i, *maybeString );
 	}
 
 	cgs.precacheClientsStart = MAX_CLIENTS;
@@ -539,16 +533,12 @@ static void CG_RegisterClients( void ) {
 * CG_RegisterLightStyles
 */
 static void CG_RegisterLightStyles( void ) {
-	int i;
-	const char *name;
-
-	for( i = 0; i < MAX_LIGHTSTYLES; i++ ) {
-		name = cgs.configStrings[CS_LIGHTS + i];
-		if( !name[0] ) {
-			continue;
+	for( unsigned i = 0; i < MAX_LIGHTSTYLES; i++ ) {
+		if( auto maybeString = cgs.configStrings.getLightStyle( i ) ) {
+			CG_SetLightStyle( i, *maybeString );
+		} else {
+			break;
 		}
-
-		CG_SetLightStyle( i );
 	}
 }
 
@@ -718,7 +708,7 @@ static void CG_RegisterVariables( void ) {
 *
 * Compares name and tag against the itemlist to make sure cgame and game lists match
 */
-void CG_ValidateItemDef( int tag, char *name ) {
+void CG_ValidateItemDef( int tag, const char *name ) {
 	gsitem_t *item;
 
 	item = GS_FindItemByName( name );
@@ -776,20 +766,15 @@ void CG_OverrideWeapondef( int index, const char *cstring ) {
 * CG_ValidateItemList
 */
 static void CG_ValidateItemList( void ) {
-	int i;
-	int cs;
-
-	for( i = 0; i < MAX_ITEMS; i++ ) {
-		cs = CS_ITEMS + i;
-		if( cgs.configStrings[cs][0] ) {
-			CG_ValidateItemDef( i, cgs.configStrings[cs] );
+	for( unsigned i = 0; i < MAX_ITEMS; i++ ) {
+		if( const auto s = cgs.configStrings.getItem( i ) ) {
+			CG_ValidateItemDef( i, s->data() );
 		}
 	}
 
-	for( i = 0; i < MAX_WEAPONDEFS; i++ ) {
-		cs = CS_WEAPONDEFS + i;
-		if( cgs.configStrings[cs][0] ) {
-			CG_OverrideWeapondef( i, cgs.configStrings[cs] );
+	for( unsigned i = 0; i < MAX_WEAPONDEFS; i++ ) {
+		if( const auto s = cgs.configStrings.getWeaponDef( i ) ) {
+			CG_OverrideWeapondef( i, s->data() );
 		}
 	}
 }
@@ -837,22 +822,15 @@ void CG_Precache( void ) {
 * CG_RegisterConfigStrings
 */
 static void CG_RegisterConfigStrings( void ) {
-	int i;
-	const char *cs;
-
 	cgs.precacheCount = cgs.precacheTotal = 0;
 
-	for( i = 0; i < MAX_CONFIGSTRINGS; i++ ) {
-		// TODO: Just share configstring values?
-		if( auto maybeClientString = cl.configStrings.get( i ) ) {
-			memcpy( cgs.configStrings[i], maybeClientString->data(), maybeClientString->size() );
-			cgs.configStrings[i][maybeClientString->size()] = '\0';
+	for( unsigned i = 0; i < MAX_CONFIGSTRINGS; i++ ) {
+		const auto maybeString = cl.configStrings.get( i );
+		if( maybeString ) {
+			cgs.configStrings.set( i, *maybeString );
 		} else {
-			cgs.configStrings[i][0] = '\0';
-		}
-
-		cs = cgs.configStrings[i];
-		if( !cs[0] ) {
+			// TODO: Add clear() call or set( unsinged, std::optional... ) call?
+			cgs.configStrings.set( i, wsw::StringView() );
 			continue;
 		}
 
@@ -872,29 +850,34 @@ static void CG_RegisterConfigStrings( void ) {
 	}
 
 	// backup initial configstrings for CG_Reset
-	memcpy( &cgs.baseConfigStrings[0][0], &cgs.configStrings[0][0], MAX_CONFIGSTRINGS*MAX_CONFIGSTRING_CHARS );
+	cgs.baseConfigStrings.copyFrom( cgs.configStrings );
 
-	GS_SetGametypeName( cgs.configStrings[CS_GAMETYPENAME] );
+	GS_SetGametypeName( cgs.configStrings.getGametypeName()->data() );
 
 	Cbuf_ExecuteText( EXEC_NOW, va( "exec configs/client/%s.cfg silent", gs.gametypeName ) );
 
-	CG_SC_AutoRecordAction( cgs.configStrings[CS_AUTORECORDSTATE] );
+	CG_SC_AutoRecordAction( cgs.configStrings.getAutoRecordState()->data() );
 }
 
 /*
 * CG_StartBackgroundTrack
 */
 void CG_StartBackgroundTrack( void ) {
-	char *string;
-	char intro[MAX_QPATH], loop[MAX_QPATH];
+	if( const auto maybeConfigString = cgs.configStrings.getAudioTrack() ) {
+		if( const auto configString = *maybeConfigString; configString.length() < 256 ) {
+			wsw::StaticString<256> buffer( configString );
+			char intro[MAX_QPATH], loop[MAX_QPATH];
+			char *string = buffer.data();
+			Q_strncpyz( intro, COM_Parse( &string ), sizeof( intro ) );
+			Q_strncpyz( loop, COM_Parse( &string ), sizeof( loop ) );
+			if( intro[0] ) {
+				SoundSystem::Instance()->StartBackgroundTrack( intro, loop, 0 );
+				return;
+			}
+		}
+	}
 
-	string = cgs.configStrings[CS_AUDIOTRACK];
-	Q_strncpyz( intro, COM_Parse( &string ), sizeof( intro ) );
-	Q_strncpyz( loop, COM_Parse( &string ), sizeof( loop ) );
-
-	if( intro[0] ) {
-		SoundSystem::Instance()->StartBackgroundTrack( intro, loop, 0 );
-	} else if( cg_playList->string[0] ) {
+	if( cg_playList->string[0] ) {
 		SoundSystem::Instance()->StartBackgroundTrack( cg_playList->string, NULL, cg_playListShuffle->integer ? 1 : 0 );
 	}
 }
@@ -903,7 +886,7 @@ void CG_StartBackgroundTrack( void ) {
 * CG_Reset
 */
 void CG_Reset( void ) {
-	memcpy( &cgs.configStrings[0][0], &cgs.baseConfigStrings[0][0], MAX_CONFIGSTRINGS*MAX_CONFIGSTRING_CHARS );
+	cgs.configStrings.copyFrom( cgs.baseConfigStrings );
 
 	CG_ResetClientInfos();
 
@@ -956,7 +939,11 @@ void CG_Init( const char *serverName, unsigned int playerNum,
 	CG_InitGameShared();
 
 	memset( &cg, 0, sizeof( cg_state_t ) );
-	memset( &cgs, 0, sizeof( cg_static_t ) );
+
+	// Hacks, see a related comment in the client/ code
+	cgs.~cg_static_t();
+	memset( (void *)&cgs, 0, sizeof( cg_static_t ) );
+	new( &cgs )cg_static_t;
 
 	memset( cg_entities, 0, sizeof( cg_entities ) );
 
@@ -1033,7 +1020,7 @@ void CG_Init( const char *serverName, unsigned int playerNum,
 	cg.firstFrame = true; // think of the next frame in CG_NewFrameSnap as of the first one
 
 	// now that we're done with precaching, let the autorecord actions do something
-	CG_ConfigString( CS_AUTORECORDSTATE, cgs.configStrings[CS_AUTORECORDSTATE] );
+	CG_ConfigString( CS_AUTORECORDSTATE, cgs.configStrings.get( CS_AUTORECORDSTATE ).value_or( wsw::StringView() ) );
 
 	CG_DemocamInit();
 }

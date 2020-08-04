@@ -1043,10 +1043,9 @@ static void CL_UpdateConfigString( int idx, const char *s ) {
 		return;
 	}
 
-	cl.configStrings.set( idx, wsw::StringView( s ) );
-
-	// allow cgame to update it too
-	CL_GameModule_ConfigString( idx, s );
+	const wsw::StringView string( s );
+	cl.configStrings.set( idx, string );
+	CL_GameModule_ConfigString( idx, string );
 }
 
 /*

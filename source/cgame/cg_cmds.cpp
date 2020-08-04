@@ -122,66 +122,56 @@ static void CG_SC_CenterPrintFormat( void ) {
 	}
 }
 
+static const wsw::StringView kCorrectionSubstring( "correction/" );
+static const wsw::StringView kGametypeMenu( "gametypemenu" );
+
 /*
 * CG_ConfigString
 */
-void CG_ConfigString( int i, const char *s ) {
-	size_t len;
-
-	// wsw : jal : warn if configstring overflow
-	len = strlen( s );
-	if( len >= MAX_CONFIGSTRING_CHARS ) {
-		Com_Printf( "%sWARNING:%s Configstring %i overflowed\n", S_COLOR_YELLOW, S_COLOR_WHITE, i );
-	}
-
-	if( i < 0 || i >= MAX_CONFIGSTRINGS ) {
-		CG_Error( "configstring > MAX_CONFIGSTRINGS" );
-		return;
-	}
-
-	Q_strncpyz( cgs.configStrings[i], s, sizeof( cgs.configStrings[i] ) );
+void CG_ConfigString( int i, const wsw::StringView &string ) {
+	cgs.configStrings.set( i, string );
 
 	// do something apropriate
 	if( i == CS_MAPNAME ) {
 		CG_RegisterLevelMinimap();
 	} else if( i == CS_GAMETYPETITLE ) {
 	} else if( i == CS_GAMETYPENAME ) {
-		GS_SetGametypeName( cgs.configStrings[CS_GAMETYPENAME] );
+		GS_SetGametypeName( string.data() );
 	} else if( i == CS_AUTORECORDSTATE ) {
-		CG_SC_AutoRecordAction( cgs.configStrings[i] );
+		CG_SC_AutoRecordAction( string.data() );
 	} else if( i >= CS_MODELS && i < CS_MODELS + MAX_MODELS ) {
-		if( cgs.configStrings[i][0] == '$' ) {  // indexed pmodel
-			cgs.pModelsIndex[i - CS_MODELS] = CG_RegisterPlayerModel( cgs.configStrings[i] + 1 );
+		if( string.startsWith( '$' ) ) {  // indexed pmodel
+			cgs.pModelsIndex[i - CS_MODELS] = CG_RegisterPlayerModel( string.data() + 1 );
 		} else {
-			cgs.modelDraw[i - CS_MODELS] = CG_RegisterModel( cgs.configStrings[i] );
+			cgs.modelDraw[i - CS_MODELS] = CG_RegisterModel( string.data() );
 		}
 	} else if( i >= CS_SOUNDS && i < CS_SOUNDS + MAX_SOUNDS ) {
-		if( cgs.configStrings[i][0] != '*' ) {
-			cgs.soundPrecache[i - CS_SOUNDS] = SoundSystem::Instance()->RegisterSound( cgs.configStrings[i] );
+		if( !string.startsWith( '*' ) ) {
+			cgs.soundPrecache[i - CS_SOUNDS] = SoundSystem::Instance()->RegisterSound( string.data() );
 		}
 	} else if( i >= CS_IMAGES && i < CS_IMAGES + MAX_IMAGES ) {
-		if( strstr( cgs.configStrings[i], "correction/" ) ) { // HACK HACK HACK -- for color correction LUTs
-			cgs.imagePrecache[i - CS_IMAGES] = R_RegisterLinearPic( cgs.configStrings[i] );
+		if( string.indexOf( kCorrectionSubstring ) != std::nullopt ) { // HACK HACK HACK -- for color correction LUTs
+			cgs.imagePrecache[i - CS_IMAGES] = R_RegisterLinearPic( string.data() );
 		} else {
-			cgs.imagePrecache[i - CS_IMAGES] = R_RegisterPic( cgs.configStrings[i] );
+			cgs.imagePrecache[i - CS_IMAGES] = R_RegisterPic( string.data() );
 		}
 	} else if( i >= CS_SKINFILES && i < CS_SKINFILES + MAX_SKINFILES ) {
-		cgs.skinPrecache[i - CS_SKINFILES] = R_RegisterSkinFile( cgs.configStrings[i] );
+		cgs.skinPrecache[i - CS_SKINFILES] = R_RegisterSkinFile( string.data() );
 	} else if( i >= CS_LIGHTS && i < CS_LIGHTS + MAX_LIGHTSTYLES ) {
-		CG_SetLightStyle( i - CS_LIGHTS );
+		CG_SetLightStyle( i - CS_LIGHTS, string );
 	} else if( i >= CS_ITEMS && i < CS_ITEMS + MAX_ITEMS ) {
-		CG_ValidateItemDef( i - CS_ITEMS, cgs.configStrings[i] );
+		CG_ValidateItemDef( i - CS_ITEMS, string.data() );
 	} else if( i >= CS_PLAYERINFOS && i < CS_PLAYERINFOS + MAX_CLIENTS ) {
-		CG_LoadClientInfo( i - CS_PLAYERINFOS );
+		CG_LoadClientInfo( i - CS_PLAYERINFOS, string );
 	} else if( i >= CS_GAMECOMMANDS && i < CS_GAMECOMMANDS + MAX_GAMECOMMANDS ) {
 		if( !cgs.demoPlaying ) {
-			Cmd_AddCommand( cgs.configStrings[i], NULL );
-			if( !Q_stricmp( cgs.configStrings[i], "gametypemenu" ) ) {
+			Cmd_AddCommand( string.data(), NULL );
+			if( string.equalsIgnoreCase( kGametypeMenu ) ) {
 				cgs.hasGametypeMenu = true;
 			}
 		}
 	} else if( i >= CS_WEAPONDEFS && i < CS_WEAPONDEFS + MAX_WEAPONDEFS ) {
-		CG_OverrideWeapondef( i - CS_WEAPONDEFS, cgs.configStrings[i] );
+		CG_OverrideWeapondef( i - CS_WEAPONDEFS, string.data() );
 	}
 }
 
@@ -342,7 +332,7 @@ static const char *CG_SC_AutoRecordName( void ) {
 	}
 
 	// lowercase mapname
-	Q_strncpyz( mapname, cgs.configStrings[CS_MAPNAME], sizeof( mapname ) );
+	Q_strncpyz( mapname, cgs.configStrings.getMapName()->data(), sizeof( mapname ) );
 	Q_strlwr( mapname );
 
 	// make file name
@@ -515,28 +505,21 @@ static void CG_SC_MatchMessage( void ) {
 * CG_SC_HelpMessage
 */
 static void CG_SC_HelpMessage( void ) {
-	unsigned index;
-	const char *id;
-	const char *helpmessage = NULL;
-	unsigned outlen = 0;
-	int c;
-
 	cg.helpmessage[0] = '\0';
 
-	index = atoi( Cmd_Argv( 1 ) );
+	unsigned index = atoi( Cmd_Argv( 1 ) );
 	if( !index || index > MAX_HELPMESSAGES ) {
 		return;
 	}
 
-	id = cgs.configStrings[CS_HELPMESSAGES + index - 1];
-	if( !id[0] ) {
+	const auto maybeConfigString = cgs.configStrings.getHelpMessage( index - 1 );
+	if( !maybeConfigString ) {
 		return;
 	}
 
-	if( !helpmessage ) {
-		helpmessage = id;
-	}
-
+	unsigned outlen = 0;
+	int c;
+	const char *helpmessage = maybeConfigString->data();
 	while( ( c = helpmessage[0] ) && ( outlen < MAX_HELPMESSAGE_CHARS - 1 ) ) {
 		helpmessage++;
 
@@ -1243,23 +1226,22 @@ static const cgcmd_t cgcmds[] =
 * CG_RegisterCGameCommands
 */
 void CG_RegisterCGameCommands( void ) {
-	int i;
-	char *name;
-	const cgcmd_t *cmd;
-
 	if( !cgs.demoPlaying ) {
 		const svcmd_t *svcmd;
 
 		// add game side commands
-		for( i = 0; i < MAX_GAMECOMMANDS; i++ ) {
-			name = cgs.configStrings[CS_GAMECOMMANDS + i];
-			if( !name[0] ) {
+		for( unsigned i = 0; i < MAX_GAMECOMMANDS; i++ ) {
+			const auto maybeName = cgs.configStrings.getGameCommand( i );
+			if( !maybeName ) {
 				continue;
 			}
 
+			const auto name = *maybeName;
+
 			// check for local command overrides
+			const cgcmd_t *cmd;
 			for( cmd = cgcmds; cmd->name; cmd++ ) {
-				if( !Q_stricmp( cmd->name, name ) ) {
+				if( !Q_stricmp( cmd->name, name.data() ) ) {
 					break;
 				}
 			}
@@ -1267,11 +1249,11 @@ void CG_RegisterCGameCommands( void ) {
 				continue;
 			}
 
-			Cmd_AddCommand( name, NULL );
+			Cmd_AddCommand( name.data(), NULL );
 
 			// check for server commands we might want to do some special things for..
 			for( svcmd = cg_consvcmds; svcmd->name; svcmd++ ) {
-				if( !Q_stricmp( svcmd->name, name ) ) {
+				if( !Q_stricmp( svcmd->name, name.data() ) ) {
 					if( svcmd->func ) {
 						svcmd->func();
 					}
@@ -1282,7 +1264,7 @@ void CG_RegisterCGameCommands( void ) {
 	}
 
 	// add local commands
-	for( cmd = cgcmds; cmd->name; cmd++ ) {
+	for( const auto *cmd = cgcmds; cmd->name; cmd++ ) {
 		if( cgs.demoPlaying && !cmd->allowdemo ) {
 			continue;
 		}
@@ -1294,22 +1276,20 @@ void CG_RegisterCGameCommands( void ) {
 * CG_UnregisterCGameCommands
 */
 void CG_UnregisterCGameCommands( void ) {
-	int i;
-	char *name;
-	const cgcmd_t *cmd;
-
 	if( !cgs.demoPlaying ) {
 		// remove game commands
-		for( i = 0; i < MAX_GAMECOMMANDS; i++ ) {
-			name = cgs.configStrings[CS_GAMECOMMANDS + i];
-			if( !name[0] ) {
+		for( unsigned i = 0; i < MAX_GAMECOMMANDS; i++ ) {
+			const auto maybeName = cgs.configStrings.getGameCommand( i );
+			if( !maybeName ) {
 				continue;
 			}
 
+			const auto name = *maybeName;
 			// check for local command overrides so we don't try
 			// to unregister them twice
+			const cgcmd_t *cmd;
 			for( cmd = cgcmds; cmd->name; cmd++ ) {
-				if( !Q_stricmp( cmd->name, name ) ) {
+				if( !Q_stricmp( cmd->name, name.data() ) ) {
 					break;
 				}
 			}
@@ -1317,14 +1297,14 @@ void CG_UnregisterCGameCommands( void ) {
 				continue;
 			}
 
-			Cmd_RemoveCommand( name );
+			Cmd_RemoveCommand( name.data() );
 		}
 
 		cgs.hasGametypeMenu = false;
 	}
 
 	// remove local commands
-	for( cmd = cgcmds; cmd->name; cmd++ ) {
+	for( const auto *cmd = cgcmds; cmd->name; cmd++ ) {
 		if( cgs.demoPlaying && !cmd->allowdemo ) {
 			continue;
 		}

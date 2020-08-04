@@ -382,11 +382,11 @@ void CG_RegisterMediaShaders( void ) {
 void CG_RegisterLevelMinimap( void ) {
 	size_t i;
 	int file;
-	char *name, minimap[MAX_QPATH];
+	char minimap[MAX_QPATH];
 
 	cgs.shaderMiniMap = NULL;
 
-	name = cgs.configStrings[CS_MAPNAME];
+	const char *name = cgs.configStrings.getMapName()->data();
 
 	for( i = 0; i < NUM_IMAGE_EXTENSIONS; i++ ) {
 		Q_snprintfz( minimap, sizeof( minimap ), "minimaps/%s%s", name, IMAGE_EXTENSIONS[i] );

@@ -1690,9 +1690,9 @@ void CG_SoundEntityNewState( centity_t *cent ) {
 	// sexed sounds are not in the sound index and ignore attenuation
 	if( !cgs.soundPrecache[soundindex] ) {
 		if( owner ) {
-			char *cstring = cgs.configStrings[CS_SOUNDS + soundindex];
-			if( cstring && cstring[0] == '*' ) {
-				CG_SexedSound( owner, channel | ( fixed ? CHAN_FIXED : 0 ), cstring, 1.0f, attenuation );
+			auto string = cgs.configStrings.getSound( soundindex );
+			if( string && string->startsWith( '*' ) ) {
+				CG_SexedSound( owner, channel | ( fixed ? CHAN_FIXED : 0 ), string->data(), 1.0f, attenuation );
 			}
 		}
 		return;

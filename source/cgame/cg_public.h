@@ -79,7 +79,11 @@ void CG_Init( const char *serverName, unsigned int playerNum,
 			  int protocol, const char *demoExtension, int sharedSeed, bool gameStart );
 void CG_Shutdown();
 void CG_Reset();
-void CG_ConfigString( int i, const char *s );
+
+namespace wsw { class StringView; }
+
+void CG_ConfigString( int i, const wsw::StringView &string );
+
 void CG_GameCommand( const char *command );
 void CG_EscapeKey();
 void CG_GetEntitySpatilization( int entNum, vec3_t origin, vec3_t velocity );

@@ -422,6 +422,8 @@ typedef struct {
 
 #include "cg_democams.h"
 
+#include "../qcommon/configstringstorage.h"
+
 // this is not exactly "static" but still...
 typedef struct {
 	const char *serverName;
@@ -464,8 +466,8 @@ typedef struct {
 	//
 	// locally derived information from server state
 	//
-	char configStrings[MAX_CONFIGSTRINGS][MAX_CONFIGSTRING_CHARS];
-	char baseConfigStrings[MAX_CONFIGSTRINGS][MAX_CONFIGSTRING_CHARS];
+	wsw::ConfigStringStorage configStrings;
+	wsw::ConfigStringStorage baseConfigStrings;
 
 	bool hasGametypeMenu;
 
@@ -687,7 +689,7 @@ extern cvar_t *cg_skin;
 extern cvar_t *cg_hand;
 
 void CG_ResetClientInfos( void );
-void CG_LoadClientInfo( int client );
+void CG_LoadClientInfo( unsigned client, const wsw::StringView &configString );
 void CG_UpdateSexedSoundsRegistration( pmodelinfo_t *pmodelinfo );
 void CG_SexedSound( int entnum, int entchannel, const char *name, float fvol, float attn );
 struct sfx_s *CG_RegisterSexedSound( int entnum, const char *name );
@@ -877,7 +879,7 @@ extern cvar_t *cg_flashWindowCount;
 
 extern cvar_t *cg_autoRespectMenu;
 
-void CG_ValidateItemDef( int tag, char *name );
+void CG_ValidateItemDef( int tag, const char *name );
 
 #ifndef _MSC_VER
 void CG_Error( const char *format, ... ) __attribute__( ( format( printf, 1, 2 ) ) ) __attribute__( ( noreturn ) );
@@ -1035,7 +1037,9 @@ void CG_ClearEffects( void );
 
 void CG_ClearLightStyles( void );
 void CG_RunLightStyles( void );
-void CG_SetLightStyle( int i );
+
+void CG_SetLightStyle( unsigned i, const wsw::StringView &s );
+
 void CG_AddLightStyles( void );
 
 void CG_ClearFragmentedDecals( void );

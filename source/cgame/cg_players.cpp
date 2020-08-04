@@ -112,8 +112,6 @@ static struct sfx_s *CG_RegisterPmodelSexedSound( pmodelinfo_t *pmodelinfo, cons
 */
 void CG_UpdateSexedSoundsRegistration( pmodelinfo_t *pmodelinfo ) {
 	cg_sexedSfx_t *sexedSfx, *next;
-	const char *name;
-	int i;
 
 	if( !pmodelinfo ) {
 		return;
@@ -127,8 +125,8 @@ void CG_UpdateSexedSoundsRegistration( pmodelinfo_t *pmodelinfo ) {
 	pmodelinfo->sexedSfx = NULL;
 
 	// load default sounds
-	for( i = 0;; i++ ) {
-		name = cg_defaultSexedSounds[i];
+	for( unsigned i = 0;; i++ ) {
+		const char *name = cg_defaultSexedSounds[i];
 		if( !name ) {
 			break;
 		}
@@ -136,13 +134,14 @@ void CG_UpdateSexedSoundsRegistration( pmodelinfo_t *pmodelinfo ) {
 	}
 
 	// load sounds server told us
-	for( i = 1; i < MAX_SOUNDS; i++ ) {
-		name = cgs.configStrings[CS_SOUNDS + i];
-		if( !name[0] ) {
+	for( unsigned i = 1; i < MAX_SOUNDS; i++ ) {
+		auto maybeConfigString = cgs.configStrings.get( i );
+		if( !maybeConfigString ) {
 			break;
 		}
-		if( name[0] == '*' ) {
-			CG_RegisterPmodelSexedSound( pmodelinfo, name );
+		auto string = *maybeConfigString;
+		if( string.startsWith( '*' ) ) {
+			CG_RegisterPmodelSexedSound( pmodelinfo, string.data() );
 		}
 	}
 }
@@ -212,22 +211,20 @@ static void CG_ParseClientInfo( cg_clientInfo_t *ci, const char *info ) {
 * CG_LoadClientInfo
 * Updates cached client info from the current CS_PLAYERINFOS configstring value
 */
-void CG_LoadClientInfo( int client ) {
-	assert( client >= 0 && client < gs.maxclients );
-	CG_ParseClientInfo( &cgs.clientInfo[client], cgs.configStrings[CS_PLAYERINFOS + client] );
+void CG_LoadClientInfo( unsigned client, const wsw::StringView &s ) {
+	assert( client < gs.maxclients );
+	CG_ParseClientInfo( &cgs.clientInfo[client], s.data() );
 }
 
 /*
 * CG_ResetClientInfos
 */
 void CG_ResetClientInfos( void ) {
-	int i, cs;
-
 	memset( cgs.clientInfo, 0, sizeof( cgs.clientInfo ) );
 
-	for( i = 0, cs = CS_PLAYERINFOS + i; i < MAX_CLIENTS; i++, cs++ ) {
-		if( cgs.configStrings[cs][0] ) {
-			CG_LoadClientInfo( i );
+	for( unsigned i = 0; i < MAX_CLIENTS; ++i ) {
+		if( auto cs = cgs.configStrings.getPlayerInfo( i ) ) {
+			CG_LoadClientInfo( i, *cs );
 		}
 	}
 }
