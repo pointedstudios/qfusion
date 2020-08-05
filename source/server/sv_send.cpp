@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // sv_main.c -- server main program
 
 #include "server.h"
+#include "../qcommon/wswstaticstring.h"
 
 // shared message buffer to be used for occasional messages
 msg_t tmpMessage;
@@ -75,10 +76,7 @@ void SV_AddGameCommand( client_t *client, const char *cmd ) {
 * The given command will be transmitted to the client, and is guaranteed to
 * not have future snapshot_t executed before it is executed
 */
-void SV_AddServerCommand( client_t *client, const char *cmd ) {
-	int index;
-	unsigned int i;
-
+void SV_AddServerCommand( client_t *client, const wsw::StringView &cmd ) {
 	if( !client ) {
 		return;
 	}
@@ -87,28 +85,31 @@ void SV_AddServerCommand( client_t *client, const char *cmd ) {
 		return;
 	}
 
-	if( !cmd || !cmd[0] || !strlen( cmd ) ) {
+	const auto len = cmd.length();
+	if( !len ) {
 		return;
+	}
+
+	if( len + 1 > sizeof( client->reliableCommands[0] ) ) {
+		// This is an server error, not the client one.
+		Com_Error( ERR_DROP, "A server command %s is too long\n", cmd.data() );
 	}
 
 	// ch : To avoid overflow of messages from excessive amount of configstrings
 	// we batch them here. On incoming "cs" command, we'll trackback the queue
 	// to find a pending "cs" command that has space in it. If we'll find one,
 	// we'll batch this there, if not, we'll create a new one.
-	if( !strncmp( cmd, "cs ", 3 ) ) {
-		// length of the index/value (leave room for one space and null char)
-		size_t len = strlen( cmd ) - 1;
-		for( i = client->reliableSequence; i > client->reliableSent; i-- ) {
-			size_t otherLen;
-			char *otherCmd;
-
-			otherCmd = client->reliableCommands[i & ( MAX_RELIABLE_COMMANDS - 1 )];
+	if( cmd.startsWith( wsw::StringView( "cs ", 3 ) ) ) {
+		for( auto i = client->reliableSequence; i > client->reliableSent; i-- ) {
+			// TODO: Should store commands as wsw::StaticString's
+			char *otherCmd = client->reliableCommands[i & ( MAX_RELIABLE_COMMANDS - 1 )];
 			if( !strncmp( otherCmd, "cs ", 3 ) ) {
-				otherLen = strlen( otherCmd );
-				// is there any room? (should check for sizeof client->reliableCommands[0]?)
-				if( ( otherLen + len ) < MAX_STRING_CHARS ) {
+				size_t otherLen = strlen( otherCmd );
+				if( ( otherLen + len ) < sizeof( client->reliableCommands[0] ) ) {
 					// yahoo, put it in here
-					Q_strncatz( otherCmd, cmd + 2, MAX_STRING_CHARS - 1 );
+					std::memcpy( otherCmd + otherLen, cmd.data() + 2, len - 2 );
+					otherCmd[otherLen + len - 2] = '\0';
+					assert( wsw::StringView( otherCmd ).endsWith( cmd.drop( 2 ) ) );
 					return;
 				}
 			}
@@ -119,16 +120,12 @@ void SV_AddServerCommand( client_t *client, const char *cmd ) {
 	// if we would be losing an old command that hasn't been acknowledged, we must drop the connection
 	// we check == instead of >= so a broadcast print added by SV_DropClient() doesn't cause a recursive drop client
 	if( client->reliableSequence - client->reliableAcknowledge == MAX_RELIABLE_COMMANDS + 1 ) {
-		//Com_Printf( "===== pending server commands =====\n" );
-		for( i = client->reliableAcknowledge + 1; i <= client->reliableSequence; i++ ) {
-			Com_DPrintf( "cmd %5d: %s\n", i, client->reliableCommands[i & ( MAX_RELIABLE_COMMANDS - 1 )] );
-		}
-		Com_DPrintf( "cmd %5d: %s\n", i, cmd );
-		SV_DropClient( client, DROP_TYPE_GENERAL, "%s", "Error: Server command overflow" );
+		SV_DropClient( client, DROP_TYPE_GENERAL, "%s", "Error: Too many pending reliable server commands" );
 		return;
 	}
-	index = client->reliableSequence & ( MAX_RELIABLE_COMMANDS - 1 );
-	Q_strncpyz( client->reliableCommands[index], cmd, sizeof( client->reliableCommands[index] ) );
+
+	const auto index = client->reliableSequence & ( MAX_RELIABLE_COMMANDS - 1 );
+	cmd.copyTo( client->reliableCommands[index], sizeof( client->reliableCommands[index] ) );
 }
 
 /*
@@ -139,34 +136,100 @@ void SV_AddServerCommand( client_t *client, const char *cmd ) {
 * A NULL client will broadcast to all clients
 */
 void SV_SendServerCommand( client_t *cl, const char *format, ... ) {
-	va_list argptr;
-	char message[MAX_MSGLEN];
-	client_t *client;
-	int i;
+	char buffer[MAX_MSGLEN];
 
+	va_list argptr;
 	va_start( argptr, format );
-	Q_vsnprintfz( message, sizeof( message ), format, argptr );
+	int charsWritten = Q_vsnprintfz( buffer, sizeof( buffer ), format, argptr );
 	va_end( argptr );
 
+	if( (size_t)charsWritten >= sizeof( buffer ) ) {
+		Com_Error( ERR_DROP, "Server command overflow" );
+	}
+
+	const wsw::StringView cmd( buffer, (size_t)charsWritten );
 	if( cl != NULL ) {
 		if( cl->state < CS_CONNECTING ) {
 			return;
 		}
-		SV_AddServerCommand( cl, message );
+		SV_AddServerCommand( cl, cmd );
 		return;
 	}
 
 	// send the data to all relevant clients
-	for( i = 0, client = svs.clients; i < sv_maxclients->integer; i++, client++ ) {
+	const auto maxClients = sv_maxclients->integer;
+	for( int i = 0; i < maxClients; ++i ) {
+		auto *const client = svs.clients + i;
 		if( client->state < CS_CONNECTING ) {
 			continue;
 		}
-		SV_AddServerCommand( client, message );
+		SV_AddServerCommand( client, cmd );
 	}
 
 	// add to demo
 	if( svs.demo.file ) {
-		SV_AddServerCommand( &svs.demo.client, message );
+		SV_AddServerCommand( &svs.demo.client, cmd );
+	}
+}
+
+static_assert( sizeof( client_t::reliableCommands[0] ) == MAX_STRING_CHARS );
+static_assert( kMaxNonFragmentedConfigStringLen < MAX_STRING_CHARS );
+static_assert( kMaxNonFragmentedConfigStringLen > kMaxConfigStringFragmentLen );
+
+static void SV_AddFragmentedConfigString( client_t *cl, int index, const wsw::StringView &string ) {
+	wsw::StaticString<MAX_STRING_CHARS> buffer;
+
+	const size_t len = string.length();
+	// Don't use for transmission of shorter config strings
+	assert( len >= kMaxNonFragmentedConfigStringLen );
+
+	const size_t numFragments = len / kMaxConfigStringFragmentLen + ( len % kMaxConfigStringFragmentLen ? 1 : 0 );
+	assert( numFragments >= 2 );
+
+	wsw::StringView view( string );
+	for( size_t i = 0; i < numFragments; ++i ) {
+		wsw::StringView fragment = view.take( kMaxConfigStringFragmentLen );
+		assert( ( i + 1 != numFragments && fragment.length() == kMaxConfigStringFragmentLen ) || !fragment.empty() );
+
+		buffer.clear();
+		buffer << wsw::StringView( "csf ", 4 );
+		buffer << index << ' ' << i << ' ' << numFragments << ' ' << fragment.length() << ' ';
+		buffer << '"' << fragment << '"';
+		SV_AddServerCommand( cl, buffer.asView() );
+
+		view = view.drop( fragment.length() );
+		assert( !view.empty() || i + 1 == numFragments );
+	}
+}
+
+void SV_SendConfigString( client_t *cl, int index, const wsw::StringView &string ) {
+	if( string.length() + 16 > MAX_MSGLEN ) {
+		Com_Error( ERR_DROP, "Configstring overflow: #%d len=%d\n", index, (int)string.length() );
+	}
+
+	if( string.length() < kMaxNonFragmentedConfigStringLen ) {
+		assert( string.isZeroTerminated() );
+		SV_SendServerCommand( cl, "cs %i \"%s\"", index, string.data() );
+		return;
+	}
+
+	if( cl ) {
+		if( cl->state >= CS_CONNECTING ) {
+			SV_AddFragmentedConfigString( cl, index, string );
+		}
+		return;
+	}
+
+	const auto maxClients = sv_maxclients->integer;
+	for( int i = 0; i < maxClients; ++i ) {
+		auto *const client = svs.clients + i;
+		if( client->state >= CS_CONNECTING ) {
+			SV_AddFragmentedConfigString( client, index, string );
+		}
+	}
+
+	if( svs.demo.file ) {
+		SV_AddFragmentedConfigString( &svs.demo.client, index, string );
 	}
 }
 

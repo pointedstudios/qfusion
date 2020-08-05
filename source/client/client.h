@@ -126,6 +126,12 @@ typedef struct client_state_s {
 
 	char servermessage[MAX_STRING_CHARS];
 
+	int configStringFragmentIndex;
+	int configStringFragmentNum;
+	int configStringNumFragments;
+
+	char configStringFragmentsBuffer[MAX_MSGLEN];
+
 	wsw::ConfigStringStorage configStrings;
 } client_state_t;
 

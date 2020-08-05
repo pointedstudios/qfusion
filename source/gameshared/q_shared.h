@@ -137,6 +137,10 @@ bool COM_ValidateConfigstring( const char *string );
 #define MAX_TOKEN_CHARS             1024        // max length of an individual token
 #define MAX_CONFIGSTRING_CHARS      MAX_QPATH   // max length of a configstring string
 
+constexpr const size_t kMaxNonFragmentedConfigStringLen  = MAX_STRING_CHARS - 16;
+constexpr const size_t kMaxConfigStringFragmentLen       = MAX_STRING_CHARS - 48;
+constexpr const size_t kMaxConfigStringFragments         = 32;
+
 #define MAX_NAME_BYTES              32          // max length of a player name, including trailing \0
 #define MAX_NAME_CHARS              15          // max visible characters in a name (color tokens and \0 not counted)
 

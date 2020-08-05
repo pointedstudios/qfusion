@@ -1048,25 +1048,82 @@ static void CL_UpdateConfigString( int idx, const char *s ) {
 	CL_GameModule_ConfigString( idx, string );
 }
 
-/*
-* CL_ParseConfigstringCommand
-*/
-static void CL_ParseConfigstringCommand( void ) {
-	int i, argc, idx;
-	char *s;
+static void CL_AddConfigStringFragment( int index, int fragmentNum, int numFragments, int specifiedLen, const char *s ) {
+	if( (unsigned)index >= (unsigned)MAX_CONFIGSTRINGS ) {
+		Com_Error( ERR_DROP, "A configstring fragment index > MAX_CONFIGSTRINGS" );
+	}
 
-	if( Cmd_Argc() < 3 ) {
+	if( (unsigned)numFragments >= kMaxConfigStringFragments ) {
+		Com_Error( ERR_DROP, "A configstring fragment numFragments >= kMaxConfigStringFragments" );
+	}
+
+	if( (unsigned)fragmentNum >= (unsigned)numFragments ) {
+		Com_Error( ERR_DROP, "configstring fragment fragmentNum is out of a valid range" );
+	}
+
+	// TODO: We should accept a string view parameter
+
+	const size_t actualLen = std::strlen( s );
+	if( (size_t)specifiedLen != actualLen ) {
+		Com_Error( ERR_DROP, "A configstring fragment len mismatches the specified one" );
+	}
+
+	if( cl.configStringFragmentIndex && cl.configStringFragmentIndex != index ) {
+		Com_Error( ERR_DROP, "Got a configstring fragment while the current one is incompletely assembled" );
+	}
+
+	if( cl.configStringFragmentNum && cl.configStringFragmentNum + 1 != fragmentNum ) {
+		Com_Error( ERR_DROP, "Got an illegal configstring fragments sequence" );
+	}
+
+	const size_t fragmentOffset = fragmentNum * kMaxConfigStringFragmentLen;
+	std::memcpy( cl.configStringFragmentsBuffer + fragmentOffset, s, specifiedLen );
+
+	if( fragmentNum + 1 != numFragments ) {
+		cl.configStringFragmentIndex = index;
+		cl.configStringFragmentNum = fragmentNum;
+		return;
+	}
+
+	cl.configStringFragmentIndex = 0;
+	cl.configStringFragmentNum = 0;
+
+	const size_t combinedLen = fragmentOffset + specifiedLen;
+	cl.configStringFragmentsBuffer[combinedLen] = '\0';
+
+	const wsw::StringView view( cl.configStringFragmentsBuffer, combinedLen, wsw::StringView::ZeroTerminated );
+
+	cl.configStrings.set( index, view );
+	CL_GameModule_ConfigString( index, view );
+}
+
+static void CL_ParseConfigstringCommand() {
+	const int argc = Cmd_Argc();
+	if( argc < 3 ) {
 		return;
 	}
 
 	// ch : configstrings may come batched now, so lets loop through them
-	argc = Cmd_Argc();
-	for( i = 1; i < argc - 1; i += 2 ) {
-		idx = atoi( Cmd_Argv( i ) );
-		s = Cmd_Argv( i + 1 );
+	for( int i = 1; i < argc - 1; i += 2 ) {
+		const int idx = atoi( Cmd_Argv( i ) );
+		const char *s = Cmd_Argv( i + 1 );
 
 		CL_UpdateConfigString( idx, s );
 	}
+}
+
+static void CL_ParseConfigStringFragmentCommand() {
+	const int argc = Cmd_Argc();
+	if( argc != 6 ) {
+		return;
+	}
+
+	const int index = atoi( Cmd_Argv( 1 ) );
+	const int fragmentNum = atoi( Cmd_Argv( 2 ) );
+	const int numFragments = atoi( Cmd_Argv( 3 ) );
+	const int specifiedLen = atoi( Cmd_Argv( 4 ) );
+
+	CL_AddConfigStringFragment( index, fragmentNum, numFragments, specifiedLen, Cmd_Argv( 5 ) );
 }
 
 typedef struct {
@@ -1082,6 +1139,7 @@ svcmd_t svcmds[] =
 	{ "precache", CL_Precache_f },
 	{ "cmd", CL_ForwardToServer_f },
 	{ "cs", CL_ParseConfigstringCommand },
+	{ "csf", CL_ParseConfigStringFragmentCommand },
 	{ "disconnect", CL_ServerDisconnect_f },
 	{ "initdownload", CL_InitDownload_f },
 	{ "multiview", CL_Multiview_f },
