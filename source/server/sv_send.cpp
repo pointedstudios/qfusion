@@ -90,7 +90,7 @@ void SV_AddServerCommand( client_t *client, const wsw::StringView &cmd ) {
 		return;
 	}
 
-	if( len + 1 > sizeof( client->reliableCommands[0] ) ) {
+	if( len + 1 > client->reliableCommands[0].capacity() ) {
 		// This is an server error, not the client one.
 		Com_Error( ERR_DROP, "A server command %s is too long\n", cmd.data() );
 	}
@@ -99,17 +99,13 @@ void SV_AddServerCommand( client_t *client, const wsw::StringView &cmd ) {
 	// we batch them here. On incoming "cs" command, we'll trackback the queue
 	// to find a pending "cs" command that has space in it. If we'll find one,
 	// we'll batch this there, if not, we'll create a new one.
-	if( cmd.startsWith( wsw::StringView( "cs ", 3 ) ) ) {
+	const wsw::StringView csPrefix( "cs ", 3 );
+	if( cmd.startsWith( csPrefix ) ) {
 		for( auto i = client->reliableSequence; i > client->reliableSent; i-- ) {
-			// TODO: Should store commands as wsw::StaticString's
-			char *otherCmd = client->reliableCommands[i & ( MAX_RELIABLE_COMMANDS - 1 )];
-			if( !strncmp( otherCmd, "cs ", 3 ) ) {
-				size_t otherLen = strlen( otherCmd );
-				if( ( otherLen + len ) < sizeof( client->reliableCommands[0] ) ) {
-					// yahoo, put it in here
-					std::memcpy( otherCmd + otherLen, cmd.data() + 2, len - 2 );
-					otherCmd[otherLen + len - 2] = '\0';
-					assert( wsw::StringView( otherCmd ).endsWith( cmd.drop( 2 ) ) );
+			auto &otherCmd = client->reliableCommands[i & ( MAX_RELIABLE_COMMANDS - 1 )];
+			if( otherCmd.startsWith( csPrefix ) ) {
+				if( ( otherCmd.length() + len ) < otherCmd.capacity() ) {
+					otherCmd.append( cmd.drop( 2 ) );
 					return;
 				}
 			}
@@ -125,7 +121,7 @@ void SV_AddServerCommand( client_t *client, const wsw::StringView &cmd ) {
 	}
 
 	const auto index = client->reliableSequence & ( MAX_RELIABLE_COMMANDS - 1 );
-	cmd.copyTo( client->reliableCommands[index], sizeof( client->reliableCommands[index] ) );
+	client->reliableCommands[index].assign( cmd );
 }
 
 /*
@@ -172,7 +168,6 @@ void SV_SendServerCommand( client_t *cl, const char *format, ... ) {
 	}
 }
 
-static_assert( sizeof( client_t::reliableCommands[0] ) == MAX_STRING_CHARS );
 static_assert( kMaxNonFragmentedConfigStringLen < MAX_STRING_CHARS );
 static_assert( kMaxNonFragmentedConfigStringLen > kMaxConfigStringFragmentLen );
 
@@ -252,17 +247,17 @@ void SV_AddReliableCommandsToMessage( client_t *client, msg_t *msg ) {
 
 	// write any unacknowledged serverCommands
 	for( i = client->reliableAcknowledge + 1; i <= client->reliableSequence; i++ ) {
-		if( !strlen( client->reliableCommands[i & ( MAX_RELIABLE_COMMANDS - 1 )] ) ) {
+		const auto &cmd = client->reliableCommands[i & ( MAX_RELIABLE_COMMANDS - 1 )];
+		if( cmd.empty() ) {
 			continue;
 		}
 		MSG_WriteUint8( msg, svc_servercmd );
 		if( !client->reliable ) {
 			MSG_WriteInt32( msg, i );
 		}
-		MSG_WriteString( msg, client->reliableCommands[i & ( MAX_RELIABLE_COMMANDS - 1 )] );
+		MSG_WriteString( msg, cmd.data() );
 		if( sv_debug_serverCmd->integer ) {
-			Com_Printf( "SV_AddServerCommandsToMessage(%i):%s\n", i,
-						client->reliableCommands[i & ( MAX_RELIABLE_COMMANDS - 1 )] );
+			Com_Printf( "SV_AddServerCommandsToMessage(%i):%s\n", i, cmd.data() );
 		}
 	}
 	client->reliableSent = client->reliableSequence;

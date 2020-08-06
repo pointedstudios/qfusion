@@ -35,7 +35,9 @@ void SV_ClientResetCommandBuffers( client_t *client ) {
 	client->reliableAcknowledge = 0;
 	client->reliableSequence = 0;
 	client->reliableSent = 0;
-	memset( client->reliableCommands, 0, sizeof( client->reliableCommands ) );
+	for( auto &cmd: client->reliableCommands ) {
+		cmd.clear();
+	}
 
 	// reset the usercommands buffer(clc_move)
 	client->UcmdTime = 0;

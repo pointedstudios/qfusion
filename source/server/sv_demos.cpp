@@ -98,7 +98,9 @@ static void SV_Demo_InitClient( void ) {
 	svs.demo.client.reliableAcknowledge = 0;
 	svs.demo.client.reliableSequence = 0;
 	svs.demo.client.reliableSent = 0;
-	memset( svs.demo.client.reliableCommands, 0, sizeof( svs.demo.client.reliableCommands ) );
+	for( auto &cmd: svs.demo.client.reliableCommands ) {
+		cmd.clear();
+	}
 
 	svs.demo.client.lastframe = sv.framenum - 1;
 	svs.demo.client.nodelta = false;

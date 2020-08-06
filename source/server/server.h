@@ -24,6 +24,7 @@
 
 #include "../qcommon/qcommon.h"
 #include "../qcommon/configstringstorage.h"
+#include "../qcommon/wswstaticstring.h"
 #include "../qcommon/mmrating.h"
 #include "../game/g_public.h"
 
@@ -154,7 +155,7 @@ typedef struct client_s {
 
 	socket_t socket;
 
-	char reliableCommands[MAX_RELIABLE_COMMANDS][MAX_STRING_CHARS];
+	wsw::StaticString<MAX_STRING_CHARS> reliableCommands[MAX_RELIABLE_COMMANDS];
 	int64_t reliableSequence;      // last added reliable message, not necesarily sent or acknowledged yet
 	int64_t reliableAcknowledge;   // last acknowledged reliable message
 	int64_t reliableSent;          // last sent reliable message, not necesarily acknowledged yet
