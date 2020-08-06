@@ -896,13 +896,14 @@ void G_InitLevel( char *mapname, char *entities, int entstrlen, int64_t levelTim
 	ClientCommandsHandler::shutdown();
 	ClientCommandsHandler::init();
 	G_MapLocations_Init();
-	G_CallVotes_Init();
 	G_SpawnQueue_Init();
 	G_Teams_Init();
 
 	// load map script
 	G_asLoadMapScript( level.mapname );
 	G_Gametype_Init();
+
+	G_CallVotes_Init();
 
 	// ch : this would be the location to "transfer ratings"
 	G_PrecacheItems(); // set configstrings for items (gametype must be initialized)

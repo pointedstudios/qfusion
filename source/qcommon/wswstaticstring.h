@@ -102,10 +102,10 @@ public:
 
 	[[nodiscard]]
 	bool equals( const wsw::StringView &view ) const {
-		if( view.size() != this->length ) {
+		if( view.size() != this->m_len ) {
 			return false;
 		}
-		return !std::memcmp( this->chars, view.data(), this->length );
+		return !std::memcmp( this->m_data, view.data(), this->m_len );
 	}
 
 	void assign( const char *chars, size_t numChars ) {

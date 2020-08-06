@@ -187,7 +187,6 @@ typedef struct {
 #define CS_MATCHUUID        24
 
 #define CS_ACTIVE_CALLVOTE  25
-#define CS_ACTIVE_CALLVOTE_VOTES 26
 
 #define CS_WORLDMODEL       30
 #define CS_MAPCHECKSUM      31      // for catching cheater maps
@@ -204,7 +203,8 @@ typedef struct {
 #define CS_LOCATIONS        ( CS_GAMECOMMANDS + MAX_GAMECOMMANDS )
 #define CS_WEAPONDEFS       ( CS_LOCATIONS + MAX_LOCATIONS )
 #define CS_GENERAL          ( CS_WEAPONDEFS + MAX_WEAPONDEFS )
-#define CS_MMPLAYERINFOS    ( CS_GENERAL + MAX_GENERAL )
+#define CS_CALLVOTEINFOS    ( CS_GENERAL + MAX_GENERAL )
+#define CS_MMPLAYERINFOS    ( CS_CALLVOTEINFOS + MAX_CALLVOTEINFOS )
 #define CS_HELPMESSAGES     ( CS_MMPLAYERINFOS + MAX_MMPLAYERINFOS ) // for localizable messages, that got a special place on the HUD
 
 #define MAX_CONFIGSTRINGS   ( CS_HELPMESSAGES + MAX_HELPMESSAGES )

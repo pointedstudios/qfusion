@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "server.h"
 #include "sv_mm.h"
+#include "../qcommon/compression.h"
 
 game_export_t *ge;
 
@@ -425,6 +426,15 @@ static bool PF_inPVS( const vec3_t p1, const vec3_t p2 ) {
 	return CM_InPVS( svs.cms, p1, p2 );
 }
 
+static bool PF_Compress( void *dst, size_t *const dstSize, const void *src, size_t srcSize ) {
+	unsigned long compressedSize = *dstSize;
+	if( qzcompress( (Bytef *)dst, &compressedSize, (unsigned char*)src, srcSize ) == Z_OK ) {
+		*dstSize = compressedSize;
+		return true;
+	}
+	return false;
+}
+
 //==============================================
 
 /*
@@ -556,6 +566,8 @@ void SV_InitGameProgs( void ) {
 	import.ML_GetMapByNum = ML_GetMapByNum;
 	import.ML_FilenameExists = ML_FilenameExists;
 	import.ML_GetFullname = ML_GetFullname;
+
+	import.Compress = PF_Compress;
 
 	import.Cmd_ExecuteText = Cbuf_ExecuteText;
 	import.Cbuf_Execute = Cbuf_Execute;

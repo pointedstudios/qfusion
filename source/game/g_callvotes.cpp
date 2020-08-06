@@ -20,9 +20,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "g_local.h"
+#include "../qcommon/base64.h"
+#include "../qcommon/configstringstorage.h"
 #include "../qcommon/snap.h"
 #include "../qcommon/wswstringsplitter.h"
 #include "../qcommon/wswstaticstring.h"
+
+using wsw::operator""_asView;
 
 //===================================================================
 
@@ -62,8 +66,13 @@ typedef struct callvotetype_s
 	void ( *execute )( callvotedata_t *vote );
 	const char *( *current )( void );
 	void ( *extraHelp )( edict_t *ent );
+	void ( *describeClientArgs )( int configStringIndex );
 	char *argument_format;
 	char *help;
+	int registrationNum;
+	bool isVotingEnabled;
+	bool isOpcallEnabled;
+	wsw::StaticString<MAX_STRING_CHARS> lastCurrent;
 	struct callvotetype_s *next;
 } callvotetype_t;
 
@@ -77,6 +86,8 @@ typedef struct
 static callvotestate_t callvoteState;
 
 static callvotetype_t *callvotesHeadNode = NULL;
+
+static int registrationNum = 0;
 
 /*
 * shuffle/rebalance
@@ -93,66 +104,142 @@ static int G_VoteCompareWeightedPlayers( const void *a, const void *b ) {
 	return pb->weight - pa->weight;
 }
 
+static void G_DescribeBooleanArg( int configStringIndex ) {
+	trap_ConfigString( configStringIndex, "boolean" );
+}
+
+static void G_DescribeNumberArg( int configStringIndex ) {
+	trap_ConfigString( configStringIndex, "number" );
+}
+
+static void G_DescribePlayerArg( int configStringIndex ) {
+	trap_ConfigString( configStringIndex, "player" );
+}
+
+static void G_DescribeMinutesArg( int configStringIndex ) {
+	trap_ConfigString( configStringIndex, "minutes" );
+}
+
 /*
 * map
 */
 
-#define MAPLIST_SEPS " ,"
+const wsw::CharLookup kMapListSeparators( ", "_asView );
 
 static void G_VoteMapExtraHelp( edict_t *ent ) {
-	char message[MAX_STRING_CHARS / 4 * 3];    // use buffer to send only one print message
-
-	// update the maplist
-	trap_ML_Update();
-
 	if( g_enforce_map_pool->integer && strlen( g_map_pool->string ) > 2 ) {
 		G_PrintMsg( ent, "Maps available [map pool enforced]:\n %s\n", g_map_pool->string );
 		return;
 	}
 
-	// don't use Q_strncatz and Q_strncpyz below because we
-	// check length of the message string manually
-
-	memset( message, 0, sizeof( message ) );
-	strcpy( message, "- Available maps:" );
-
-	int start;
+	wsw::StaticString<3 * MAX_STRING_CHARS / 4> message;
+	// update the maplist
+	trap_ML_Update();
 	const auto numMaps = (int)trap_ML_GetListSize();
-	if( trap_Cmd_Argc() > 2 ) {
-		start = atoi( trap_Cmd_Argv( 2 ) ) - 1;
-		if( start < 0 ) {
-			start = 0;
-		}
-	} else {
-		start = 0;
-	}
+
+	message << "- Available maps:"_asView;
+
+	const int start = std::max( 0, atoi( trap_Cmd_Argv( 2 ) - 1 ) );
 
 	int i = start;
-	size_t msglength = strlen( message );
 	while( auto maybeNames = trap_ML_GetMapByNum( i ) ) {
 		auto fileName = maybeNames->fileName;
 		i++;
 
-		if( msglength + fileName.length() + 3 >= sizeof( message ) ) {
+		if( message.size() + fileName.length() + 3 >= message.capacity() ) {
 			break;
 		}
 
-		strcat( message, " " );
-		assert( fileName.isZeroTerminated() );
-		strcat( message, fileName.data() );
-
-		msglength += fileName.length() + 1;
+		message << ' ' << fileName;
 	}
 
 	if( i == start ) {
-		strcat( message, "\nNone" );
+		message << "\nNone"_asView;
 	}
 
-	G_PrintMsg( ent, "%s\n", message );
-
+	G_PrintMsg( ent, "%s\n", message.data() );
 	if( i < numMaps ) {
 		G_PrintMsg( ent, "Type 'callvote map %i' for more maps\n", i + 1 );
 	}
+}
+
+class StringListEncoder {
+	wsw::String m_rawStrings;
+	wsw::Vector<uint8_t> m_zipBuffer;
+	wsw::String m_base64;
+public:
+	void reserve( size_t size ) {
+		m_rawStrings.reserve( size );
+	}
+
+	void add( const wsw::StringView &string ) {
+		if( !m_rawStrings.empty() ) {
+			m_rawStrings.push_back( ' ' );
+		}
+		m_rawStrings.append( string.data(), string.size() );
+	}
+
+	auto encode() -> const wsw::String & {
+		m_zipBuffer.resize( 1u << 15u );
+		size_t compressedSize = m_zipBuffer.size();
+		if( !GAME_IMPORT.Compress( m_zipBuffer.data(), &compressedSize, m_rawStrings.data(), m_rawStrings.size() ) ) {
+			G_Error( "Failed to compress the map list raw strings buffer (size=%d)", (int)m_rawStrings.size() );
+		}
+		size_t base64Size;
+		auto *rawBase64 = base64_encode( m_zipBuffer.data(), compressedSize, &base64Size );
+		if( !rawBase64 ) {
+			G_Error( "Failed to base64-encode the compressed map list data" );
+		}
+		m_base64.assign( (const char *)rawBase64, base64Size );
+		free( rawBase64 );
+		return m_base64;
+	}
+};
+
+static void addMapListToEncode( StringListEncoder &encoder ) {
+	trap_ML_Update();
+
+	if( g_enforce_map_pool->integer ) {
+		if( const auto len = std::strlen( g_enforce_map_pool->string ); len > 2 ) {
+			encoder.reserve( len );
+			wsw::StringSplitter splitter( wsw::StringView( g_enforce_map_pool->string, len ) );
+			while( auto maybeToken = splitter.getNext( kMapListSeparators ) ) {
+				if( maybeToken->length() >= MAX_QPATH ) {
+					continue;
+				}
+				// A token is very likely not zero-terminated...
+				wsw::StaticString<MAX_QPATH> buffer( *maybeToken );
+				if( !trap_ML_FilenameExists( buffer.data() ) ) {
+					continue;
+				}
+				encoder.add( *maybeToken );
+			}
+			return;
+		}
+	}
+
+	// Assume that an average map name is of this size in this case.
+	// This is a quite realistic estimation for race maps
+	encoder.reserve( ( MAX_QPATH / 3 ) * trap_ML_GetListSize() );
+
+	int num = 0;
+	while( auto maybeMapNames = trap_ML_GetMapByNum( num++ ) ) {
+		encoder.add( maybeMapNames->fileName );
+	}
+}
+
+static void G_VoteMapDescribeClientArgs( int configStringIndex ) {
+	// TODO: Allow specifying string prefix to reduce the redundant copying?
+	StringListEncoder encoder;
+	addMapListToEncode( encoder );
+
+	const wsw::String &base64 = encoder.encode();
+	wsw::String buffer;
+	buffer.reserve( base64.length() + 16 );
+	buffer.append( "options " );
+	buffer.append( base64 );
+
+	trap_ConfigString( configStringIndex, buffer.data() );
 }
 
 static bool G_VoteMapValidate( callvotedata_t *data, bool first ) {
@@ -201,8 +288,7 @@ static bool G_VoteMapValidate( callvotedata_t *data, bool first ) {
 
 			const wsw::StringView mapNameView( mapname );
 			wsw::StringSplitter splitter( wsw::StringView( g_map_pool->string ) );
-			const wsw::CharLookup separators( wsw::StringView( MAPLIST_SEPS ) );
-			while( const auto maybeToken = splitter.getNext( separators ) ) {
+			while( const auto maybeToken = splitter.getNext( kMapListSeparators ) ) {
 				if( maybeToken->equalsIgnoreCase( mapNameView ) ) {
 					goto valid_map;
 				}
@@ -329,28 +415,43 @@ static const char *G_VoteTimelimitCurrent( void ) {
 */
 
 static void G_VoteGametypeExtraHelp( edict_t *ent ) {
-	char message[1024];
-	message[0] = '\0';
+	wsw::StaticString<MAX_STRING_CHARS> message;
 
-	if( g_gametype->latched_string && g_gametype->latched_string[0] != '\0' &&
-		G_Gametype_Exists( g_gametype->latched_string ) ) {
-		Q_strncatz( message, "- Will be changed to: ", sizeof( message ) );
-		Q_strncatz( message, g_gametype->latched_string, sizeof( message ) );
-		Q_strncatz( message, "\n", sizeof( message ) );
-	}
-
-	Q_strncatz( message, "- Available gametypes:", sizeof( message ) );
-
-	wsw::StringSplitter splitter( wsw::StringView( g_gametypes_list->string ) );
-	while( const auto maybeName = splitter.getNext( CHAR_GAMETYPE_SEPARATOR ) ) {
-		if( G_Gametype_IsVotable( *maybeName ) ) {
-			Q_strncatz( message, " ", sizeof( message ) );
-			wsw::StaticString<256> name( *maybeName );
-			Q_strncatz( message, name.data(), sizeof( message ) );
+	if( const auto *latched = g_gametype->latched_string ) {
+		if( latched && G_Gametype_Exists( latched ) ) {
+			message << "- Will be changed to: "_asView << wsw::StringView( latched ) << '\n';
 		}
 	}
 
-	G_PrintMsg( ent, "%s\n", message );
+	message << "- Available gametypes:"_asView;
+
+	wsw::StringSplitter splitter( wsw::StringView( g_gametypes_list->string ) );
+	while( const auto maybeName = splitter.getNext( CHAR_GAMETYPE_SEPARATOR ) ) {
+		const auto name = *maybeName;
+		if( G_Gametype_IsVotable( name ) ) {
+			if( name.size() + 1 >= message.capacity() ) {
+				break;
+			}
+			message << ' ' << name;
+		}
+	}
+
+	G_PrintMsg( ent, "%s\n", message.data() );
+}
+
+static void G_VoteGametypeDescribeClientArgs( int configStringIndex ) {
+	StringListEncoder encoder;
+	wsw::StringSplitter splitter( wsw::StringView( g_gametypes_list->string ) );
+	while( const auto maybeName = splitter.getNext( CHAR_GAMETYPE_SEPARATOR ) ) {
+		if( G_Gametype_IsVotable( *maybeName ) ) {
+			encoder.add( *maybeName );
+		}
+	}
+
+	wsw::String configString;
+	configString.append( "options " );
+	configString.append( encoder.encode() );
+	trap_ConfigString( configStringIndex, configString.data() );
 }
 
 static bool G_VoteGametypeValidate( callvotedata_t *vote, bool first ) {
@@ -1324,17 +1425,21 @@ static bool G_VoteRebalanceValidate( callvotedata_t *vote, bool first ) {
 
 
 callvotetype_t *G_RegisterCallvote( const char *name ) {
-	callvotetype_t *callvote;
-
-	for( callvote = callvotesHeadNode; callvote != NULL; callvote = callvote->next ) {
+	for( auto *callvote = callvotesHeadNode; callvote != NULL; callvote = callvote->next ) {
 		if( !Q_stricmp( callvote->name, name ) ) {
 			return callvote;
 		}
 	}
 
+	if( registrationNum >= MAX_CALLVOTES ) {
+		G_Printf( S_COLOR_YELLOW "Failed to register `%s`: too many callvotes\n", name );
+		return nullptr;
+	}
+
 	// create a new callvote
-	callvote = ( callvotetype_t * )Q_malloc( sizeof( callvotetype_t ) );
+	auto *callvote = ( callvotetype_t * )Q_malloc( sizeof( callvotetype_t ) );
 	memset( callvote, 0, sizeof( callvotetype_t ) );
+	callvote->registrationNum = registrationNum++;
 	callvote->next = callvotesHeadNode;
 	callvotesHeadNode = callvote;
 
@@ -1363,6 +1468,7 @@ void G_FreeCallvotes( void ) {
 	}
 
 	callvotesHeadNode = NULL;
+	registrationNum = 0;
 }
 
 //===================================================================
@@ -1409,7 +1515,6 @@ void G_CallVotes_Reset( void ) {
 	}
 
 	trap_ConfigString( CS_ACTIVE_CALLVOTE, "" );
-	trap_ConfigString( CS_ACTIVE_CALLVOTE_VOTES, "" );
 
 	memset( &callvoteState, 0, sizeof( callvoteState ) );
 }
@@ -1628,33 +1733,38 @@ void G_CallVotes_CmdVote( edict_t *ent ) {
 	G_CallVotes_CheckState();
 }
 
-/*
-* G_CallVotes_UpdateVotesConfigString
-*
-* For clients that have already votes, sets and encodes
-* appropriate bits in the configstring.
-*/
-static void G_CallVotes_UpdateVotesConfigString( void ) {
-#define NUM_VOTEINTS ( ( MAX_CLIENTS + 31 ) / 32 )
-	int i, n;
-	int votebits[NUM_VOTEINTS];
-	char cs[MAX_CONFIGSTRING_CHARS + 1];
+void G_CallVotes_UpdateCurrentStatus() {
+	for( auto *callvote = callvotesHeadNode; callvote; callvote = callvote->next ) {
+		if( !callvote->isVotingEnabled && !callvote->isOpcallEnabled ) {
+			continue;
+		}
 
-	memset( votebits, 0, sizeof( votebits ) );
-	for( i = 0; i < gs.maxclients; i++ ) {
-		votebits[i >> 5] |= clientVoteChanges[i] == 0 ? ( 1 << ( i & 31 ) ) : 0;
+		bool modified = false;
+		if( auto method = callvote->current ) {
+			const wsw::StringView current( method() );
+			if( !callvote->lastCurrent.equals( current ) ) {
+				callvote->lastCurrent.assign( current );
+				modified = true;
+			}
+		}
+		if( !modified ) {
+			continue;
+		}
+
+		wsw::StaticString<MAX_STRING_CHARS> status;
+		if( callvote->isVotingEnabled ) {
+			status << 'v';
+		}
+		if( callvote->isOpcallEnabled ) {
+			status << 'o';
+		}
+		if( !callvote->lastCurrent.empty() ) {
+			status << ' ' << callvote->lastCurrent;
+		}
+
+		int index = CS_CALLVOTEINFOS + callvote->registrationNum * 4 + wsw::ConfigStringStorage::kCallvoteFieldStatus;
+		trap_ConfigString( index, status.data() );
 	}
-
-	// find the last bitvector that isn't 0
-	for( n = NUM_VOTEINTS; n > 0 && !votebits[n - 1]; n-- ) ;
-
-	cs[0] = cs[1] = '\0';
-	for( i = 0; i < n; i++ ) {
-		Q_strncatz( cs, va( " %x", votebits[i] ), sizeof( cs ) );
-	}
-	cs[MAX_CONFIGSTRING_CHARS] = '\0';
-
-	trap_ConfigString( CS_ACTIVE_CALLVOTE_VOTES, cs + 1 );
 }
 
 /*
@@ -1663,13 +1773,8 @@ static void G_CallVotes_UpdateVotesConfigString( void ) {
 void G_CallVotes_Think( void ) {
 	static int64_t callvotethinktimer = 0;
 
-	if( !callvoteState.vote.callvote ) {
-		callvotethinktimer = 0;
-		return;
-	}
-
 	if( callvotethinktimer < game.realtime ) {
-		G_CallVotes_UpdateVotesConfigString();
+		G_CallVotes_UpdateCurrentStatus();
 
 		G_CallVotes_CheckState();
 		callvotethinktimer = game.realtime + 1000;
@@ -1756,13 +1861,13 @@ static void G_CallVote( edict_t *ent, bool isopcall ) {
 
 	// wsw : pb : server admin can now disable a specific vote command (g_disable_vote_<vote name>)
 	// check if vote is disabled
-	if( !isopcall && trap_Cvar_Value( va( "g_disable_vote_%s", callvote->name ) ) ) {
+	if( !isopcall && !callvote->isVotingEnabled ) {
 		G_PrintMsg( ent, "%sCallvote %s is disabled on this server\n", S_COLOR_RED, callvote->name );
 		return;
 	}
 
 	// allow a second cvar specific for opcall
-	if( isopcall && trap_Cvar_Value( va( "g_disable_opcall_%s", callvote->name ) ) ) {
+	if( isopcall && !callvote->isOpcallEnabled ) {
 		G_PrintMsg( ent, "%sOpcall %s is disabled on this server\n", S_COLOR_RED, callvote->name );
 		return;
 	}
@@ -1980,13 +2085,15 @@ static void G_VoteFromScriptPassed( callvotedata_t *vote ) {
 * G_RegisterGametypeScriptCallvote
 */
 void G_RegisterGametypeScriptCallvote( const char *name, const char *usage, const char *type, const char *help ) {
-	callvotetype_t *vote;
-
 	if( !name ) {
 		return;
 	}
 
-	vote = G_RegisterCallvote( name );
+	auto *vote = G_RegisterCallvote( name );
+	if( !vote ) {
+		return;
+	}
+
 	vote->expectedargs = -1;
 	vote->validate = G_VoteFromScriptValidate;
 	vote->execute = G_VoteFromScriptPassed;
@@ -2016,6 +2123,7 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteMapPassed;
 	callvote->current = G_VoteMapCurrent;
 	callvote->extraHelp = G_VoteMapExtraHelp;
+	callvote->describeClientArgs = G_VoteMapDescribeClientArgs;
 	callvote->argument_format = Q_strdup( "<name>" );
 	callvote->help = Q_strdup( "Changes map" );
 
@@ -2044,6 +2152,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteScorelimitCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<number>" );
+	callvote->describeClientArgs = G_DescribeNumberArg;
 	callvote->help = Q_strdup( "Sets the number of frags or caps needed to win the match\nSpecify 0 to disable" );
 
 	callvote = G_RegisterCallvote( "timelimit" );
@@ -2053,6 +2162,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteTimelimitCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<minutes>" );
+	callvote->describeClientArgs = G_DescribeMinutesArg;
 	callvote->help = Q_strdup( "Sets number of minutes after which the match ends\nSpecify 0 to disable" );
 
 	callvote = G_RegisterCallvote( "gametype" );
@@ -2062,6 +2172,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteGametypeCurrent;
 	callvote->extraHelp = G_VoteGametypeExtraHelp;
 	callvote->argument_format = Q_strdup( "<name>" );
+	callvote->describeClientArgs = G_VoteGametypeDescribeClientArgs;
 	callvote->help = Q_strdup( "Changes the gametype" );
 
 	callvote = G_RegisterCallvote( "warmup_timelimit" );
@@ -2071,6 +2182,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteWarmupTimelimitCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<minutes>" );
+	callvote->describeClientArgs = G_DescribeMinutesArg;
 	callvote->help = Q_strdup( "Sets the number of minutes after which the warmup ends\nSpecify 0 to disable" );
 
 	callvote = G_RegisterCallvote( "extended_time" );
@@ -2080,6 +2192,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteExtendedTimeCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<minutes>" );
+	callvote->describeClientArgs = G_DescribeMinutesArg;
 	callvote->help = Q_strdup( "Sets the length of the overtime\nSpecify 0 to enable sudden death mode" );
 
 	callvote = G_RegisterCallvote( "maxteamplayers" );
@@ -2089,6 +2202,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteMaxTeamplayersCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<number>" );
+	callvote->describeClientArgs = G_DescribeNumberArg;
 	callvote->help = Q_strdup( "Sets the maximum number of players in one team" );
 
 	callvote = G_RegisterCallvote( "lock" );
@@ -2125,6 +2239,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteRemoveExtraHelp;
 	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->describeClientArgs = G_DescribePlayerArg;
 	callvote->help = Q_strdup( "Forces player back to spectator mode" );
 
 	callvote = G_RegisterCallvote( "kick" );
@@ -2134,6 +2249,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersList;
 	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->describeClientArgs = G_DescribePlayerArg;
 	callvote->help = Q_strdup( "Removes player from the server" );
 
 	callvote = G_RegisterCallvote( "kickban" );
@@ -2143,6 +2259,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersList;
 	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->describeClientArgs = G_DescribePlayerArg;
 	callvote->help = Q_strdup( "Removes player from the server and bans his IP-address for 15 minutes" );
 
 	callvote = G_RegisterCallvote( "mute" );
@@ -2152,6 +2269,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersList;
 	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->describeClientArgs = G_DescribePlayerArg;
 	callvote->help = Q_strdup( "Disallows chat messages from the muted player" );
 
 	callvote = G_RegisterCallvote( "unmute" );
@@ -2161,6 +2279,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = NULL;
 	callvote->extraHelp = G_VoteHelp_ShowPlayersList;
 	callvote->argument_format = Q_strdup( "<player>" );
+	callvote->describeClientArgs = G_DescribePlayerArg;
 	callvote->help = Q_strdup( "Reallows chat messages from the unmuted player" );
 
 	callvote = G_RegisterCallvote( "numbots" );
@@ -2170,6 +2289,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteNumBotsCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<number>" );
+	callvote->describeClientArgs = G_DescribeNumberArg;
 	callvote->help = Q_strdup( "Sets the number of bots to play on the server" );
 
 	callvote = G_RegisterCallvote( "allow_teamdamage" );
@@ -2179,6 +2299,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteAllowTeamDamageCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
+	callvote->describeClientArgs = G_DescribeBooleanArg;
 	callvote->help = Q_strdup( "Toggles whether shooting teammates will do damage to them" );
 
 	callvote = G_RegisterCallvote( "instajump" );
@@ -2188,6 +2309,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteAllowInstajumpCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
+	callvote->describeClientArgs = G_DescribeBooleanArg;
 	callvote->help = Q_strdup( "Toggles whether instagun can be used for weapon jumping" );
 
 	callvote = G_RegisterCallvote( "instashield" );
@@ -2197,6 +2319,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteAllowInstashieldCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
+	callvote->describeClientArgs = G_DescribeBooleanArg;
 	callvote->help = Q_strdup( "Toggles the availability of instashield in instagib" );
 
 	callvote = G_RegisterCallvote( "allow_falldamage" );
@@ -2206,6 +2329,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteAllowFallDamageCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
+	callvote->describeClientArgs = G_DescribeBooleanArg;
 	callvote->help = Q_strdup( "Toggles whether falling long distances deals damage" );
 
 	callvote = G_RegisterCallvote( "allow_selfdamage" );
@@ -2215,6 +2339,7 @@ void G_CallVotes_Init( void ) {
 	callvote->current = G_VoteAllowSelfDamageCurrent;
 	callvote->extraHelp = NULL;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
+	callvote->describeClientArgs = G_DescribeBooleanArg;
 	callvote->help = Q_strdup( "Toggles whether weapon splashes can damage self" );
 
 	callvote = G_RegisterCallvote( "timeout" );
@@ -2241,6 +2366,7 @@ void G_CallVotes_Init( void ) {
 	callvote->execute = G_VoteAllowUnevenPassed;
 	callvote->current = G_VoteAllowUnevenCurrent;
 	callvote->extraHelp = NULL;
+	callvote->describeClientArgs = G_DescribeBooleanArg;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
 
 	callvote = G_RegisterCallvote( "shuffle" );
@@ -2261,9 +2387,45 @@ void G_CallVotes_Init( void ) {
 	callvote->argument_format = NULL;
 	callvote->help = Q_strdup( "Rebalances teams" );
 
+	unsigned configStringIndex = CS_CALLVOTEINFOS;
 	// wsw : pb : server admin can now disable a specific callvote command (g_disable_vote_<callvote name>)
 	for( callvote = callvotesHeadNode; callvote != NULL; callvote = callvote->next ) {
-		trap_Cvar_Get( va( "g_disable_vote_%s", callvote->name ), "0", CVAR_ARCHIVE );
+		wsw::StaticString<256> votingVarName( "g_disable_voting_%s", callvote->name );
+		wsw::StaticString<256> opcallVarName( "g_disable_opcall_%s", callvote->name );
+		callvote->isVotingEnabled = !trap_Cvar_Get( votingVarName.data(), "0", CVAR_ARCHIVE )->integer;
+		callvote->isOpcallEnabled = !trap_Cvar_Get( opcallVarName.data(), "0", CVAR_ARCHIVE )->integer;
+		if( !callvote->isVotingEnabled && !callvote->isOpcallEnabled ) {
+			continue;
+		}
+
+		using Storage = wsw::ConfigStringStorage;
+		assert( configStringIndex < CS_CALLVOTEINFOS + MAX_CALLVOTEINFOS );
+
+		trap_ConfigString( configStringIndex + Storage::kCallvoteFieldName, callvote->name );
+		trap_ConfigString( configStringIndex + Storage::kCallvoteFieldDesc, callvote->help );
+
+		if( auto method = callvote->describeClientArgs ) {
+			method( configStringIndex + Storage::kCallvoteFieldArgs );
+		} else {
+			trap_ConfigString( configStringIndex + Storage::kCallvoteFieldArgs, "" );
+		}
+
+		wsw::StaticString<MAX_STRING_CHARS> status;
+		if( callvote->isVotingEnabled ) {
+			status << 'v';
+		}
+		if( callvote->isOpcallEnabled ) {
+			status << 'o';
+		}
+
+		if( auto method = callvote->current ) {
+			status << ' ' << wsw::StringView( method() );
+		}
+
+		trap_ConfigString( configStringIndex + Storage::kCallvoteFieldStatus, status.data() );
+
+		configStringIndex += 4;
+		assert( configStringIndex <= CS_CALLVOTEINFOS + MAX_CALLVOTEINFOS );
 	}
 
 	G_CallVotes_Reset();

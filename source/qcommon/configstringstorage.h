@@ -61,6 +61,14 @@ protected:
 		}
 		return num + startNum;
 	}
+
+	[[nodiscard]]
+	static auto callvoteNumToIndex( unsigned num, unsigned field ) -> unsigned {
+		if( num >= MAX_CALLVOTEINFOS / 4 || CS_CALLVOTEINFOS + num * 4 + field >= kMaxStrings ) {
+			throw std::out_of_range( "The num is out of range" );
+		}
+		return CS_CALLVOTEINFOS + num * 4 + field;
+	}
 public:
 	ConfigStringStorage();
 
@@ -80,7 +88,8 @@ public:
 	}
 
 #define DEFINE_CONFIGSTRING_ACCESSORS( index, name )                                               \
-	[[nodiscard]] auto get##name() const -> std::optional<wsw::StringView> {                       \
+	[[nodiscard]]                                                                                  \
+	auto get##name() const -> std::optional<wsw::StringView> {                                     \
 		return getNoCheck( index );                                                                \
 	}                                                                                              \
 	void set##name( const wsw::StringView &string ) {                                              \
@@ -115,7 +124,8 @@ public:
 #undef DEFINE_CONFIGSTRING_ACCESSORS
 
 #define DEFINE_CONFIGSTRING_GROUP_ACCESSORS( startIndex, maxGroupStrings, name )                   \
-	[[nodiscard]] auto get##name( unsigned num ) const -> std::optional<wsw::StringView> {         \
+	[[nodiscard]]                                                                                  \
+	auto get##name( unsigned num ) const -> std::optional<wsw::StringView> {                       \
 		return getNoCheck( groupNumToIndex( num, startIndex, maxGroupStrings ) );                  \
 	}                                                                                              \
 	void set##name( const wsw::StringView &string, unsigned num ) {                                \
@@ -133,11 +143,33 @@ public:
 	DEFINE_CONFIGSTRING_GROUP_ACCESSORS( CS_LOCATIONS, MAX_LOCATIONS, Location )
 	DEFINE_CONFIGSTRING_GROUP_ACCESSORS( CS_WEAPONDEFS, MAX_WEAPONDEFS, WeaponDef )
 	DEFINE_CONFIGSTRING_GROUP_ACCESSORS( CS_GENERAL, MAX_GENERAL, General )
+	DEFINE_CONFIGSTRING_GROUP_ACCESSORS( CS_CALLVOTEINFOS, MAX_CALLVOTEINFOS, CallvoteInfo )
 	DEFINE_CONFIGSTRING_GROUP_ACCESSORS( CS_MMPLAYERINFOS, MAX_MMPLAYERINFOS, MMPlayerInfo )
 	DEFINE_CONFIGSTRING_GROUP_ACCESSORS( CS_HELPMESSAGES, MAX_HELPMESSAGES, HelpMessage )
 
 #undef DEFINE_CONFIGSTRING_GROUP_ACCESSORS
 
+	static constexpr const unsigned kCallvoteFieldName = 0;
+	static constexpr const unsigned kCallvoteFieldDesc = 1;
+	static constexpr const unsigned kCallvoteFieldArgs = 2;
+	static constexpr const unsigned kCallvoteFieldStatus = 3;
+
+	[[nodiscard]]
+	auto getCallvoteName( unsigned num ) const -> std::optional<wsw::StringView> {
+		return getNoCheck( callvoteNumToIndex( num, kCallvoteFieldName ) );
+	}
+	[[nodiscard]]
+	auto getCallvoteDesc( unsigned num ) const -> std::optional<wsw::StringView> {
+		return getNoCheck( callvoteNumToIndex( num, kCallvoteFieldDesc ) );
+	}
+	[[nodiscard]]
+	auto getCallvoteArgs( unsigned num ) const -> std::optional<wsw::StringView> {
+		return getNoCheck( callvoteNumToIndex( num, kCallvoteFieldArgs ) );
+	}
+	[[nodiscard]]
+	auto getCallvoteStatus( unsigned num ) const -> std::optional<wsw::StringView> {
+		return getNoCheck( callvoteNumToIndex( num, kCallvoteFieldStatus ) );
+	}
 };
 
 }
