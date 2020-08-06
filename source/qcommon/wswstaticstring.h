@@ -128,6 +128,9 @@ public:
 #endif
 
 	[[nodiscard]]
+	bool assignfv( const char *format, va_list va );
+
+	[[nodiscard]]
 	auto asView() const -> wsw::StringView { return wsw::StringView( m_data, m_len ); }
 
 	[[nodiscard]]
@@ -302,6 +305,9 @@ public:
 	bool appendf( _Printf_format_string_ const char *format, ... );
 #endif
 
+	[[nodiscard]]
+	bool appendfv( const char *format, va_list va );
+
 	void push_back( char ch ) {
 		(void)append( ch );
 	}
@@ -351,6 +357,9 @@ public:
 	[[nodiscard]]
 	bool insertf( size_type index, _Printf_format_string_ const char *format, ... );
 #endif
+
+	[[nodiscard]]
+	bool insertfv( size_type index, const char *format, va_list va );
 
 	auto erase( size_type index, size_type count = npos ) -> decltype( *this ) {
 		assert( index <= m_len );
@@ -462,13 +471,17 @@ StaticString<N>::StaticString( const char *format, ... ) {
 
 template <unsigned N>
 bool StaticString<N>::assignf( const char *format, ... ) {
-	char buffer[N + 1];
-
 	va_list va;
 	va_start( va, format );
-	const auto res = Q_vsnprintfz( buffer, N + 1, format, va );
+	bool res = assignfv( format, va );
 	va_end( va );
+	return res;
+}
 
+template <unsigned N>
+bool StaticString<N>::assignfv( const char *format, va_list va ) {
+	char buffer[N + 1];
+	const auto res = Q_vsnprintfz( buffer, N + 1, format, va );
 	if( (unsigned)res > N ) {
 		return false;
 	}
@@ -481,13 +494,18 @@ bool StaticString<N>::assignf( const char *format, ... ) {
 
 template <unsigned N>
 bool StaticString<N>::appendf( const char *format, ... ) {
-	char buffer[N + 1];
-
 	va_list va;
 	va_start( va, format );
-	const auto res = Q_vsnprintfz( buffer, N + 1, format, va );
+	bool res = appendfv( format, va );
 	va_end( va );
+	return res;
+}
 
+template <unsigned N>
+bool StaticString<N>::appendfv( const char *format, va_list va ) {
+	char buffer[N + 1];
+
+	const auto res = Q_vsnprintfz( buffer, N + 1, format, va );
 	if( (unsigned)res > N - m_len ) {
 		return false;
 	}
@@ -500,13 +518,18 @@ bool StaticString<N>::appendf( const char *format, ... ) {
 
 template <unsigned N>
 bool StaticString<N>::insertf( size_type index, const char *format, ... ) {
-	char buffer[N + 1];
-
 	va_list va;
 	va_start( va, format );
-	const auto res = Q_vsnprintfz( buffer, N, format, va );
+	bool res = insertfv( index, format, va );
 	va_end( va );
+	return res;
+}
 
+template <unsigned N>
+bool StaticString<N>::insertfv( size_type index, const char *format, va_list va ) {
+	char buffer[N + 1];
+
+	const auto res = Q_vsnprintfz( buffer, N, format, va );
 	if( (unsigned)res > N - m_len ) {
 		return false;
 	}
