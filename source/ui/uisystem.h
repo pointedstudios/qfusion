@@ -49,6 +49,8 @@ public:
 
 	virtual void addToChat( const wsw::StringView &name, int64_t frameTimestamp, const wsw::StringView &message ) = 0;
 	virtual void addToTeamChat( const wsw::StringView &name, int64_t frameTimestamp, const wsw::StringView &message ) = 0;
+
+	virtual void handleConfigString( unsigned configStringNum, const wsw::StringView &string ) = 0;
 };
 
 #endif

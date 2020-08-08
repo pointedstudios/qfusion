@@ -2368,6 +2368,7 @@ void G_CallVotes_Init( void ) {
 	callvote->extraHelp = NULL;
 	callvote->describeClientArgs = G_DescribeBooleanArg;
 	callvote->argument_format = Q_strdup( "<1 or 0>" );
+	callvote->help = Q_strdup( "Allows uneven number of players in teams" );
 
 	callvote = G_RegisterCallvote( "shuffle" );
 	callvote->expectedargs = 0;
@@ -2387,7 +2388,6 @@ void G_CallVotes_Init( void ) {
 	callvote->argument_format = NULL;
 	callvote->help = Q_strdup( "Rebalances teams" );
 
-	unsigned configStringIndex = CS_CALLVOTEINFOS;
 	// wsw : pb : server admin can now disable a specific callvote command (g_disable_vote_<callvote name>)
 	for( callvote = callvotesHeadNode; callvote != NULL; callvote = callvote->next ) {
 		wsw::StaticString<256> votingVarName( "g_disable_voting_%s", callvote->name );
@@ -2397,6 +2397,8 @@ void G_CallVotes_Init( void ) {
 		if( !callvote->isVotingEnabled && !callvote->isOpcallEnabled ) {
 			continue;
 		}
+
+		const auto configStringIndex = CS_CALLVOTEINFOS + callvote->registrationNum * 4;
 
 		using Storage = wsw::ConfigStringStorage;
 		assert( configStringIndex < CS_CALLVOTEINFOS + MAX_CALLVOTEINFOS );
@@ -2424,7 +2426,6 @@ void G_CallVotes_Init( void ) {
 
 		trap_ConfigString( configStringIndex + Storage::kCallvoteFieldStatus, status.data() );
 
-		configStringIndex += 4;
 		assert( configStringIndex <= CS_CALLVOTEINFOS + MAX_CALLVOTEINFOS );
 	}
 

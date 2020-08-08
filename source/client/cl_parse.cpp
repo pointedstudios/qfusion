@@ -1032,12 +1032,6 @@ static void CL_UpdateConfigString( int idx, const char *s ) {
 		Com_Error( ERR_DROP, "configstring > MAX_CONFIGSTRINGS" );
 	}
 
-	// wsw : jal : warn if configstring overflow
-	if( strlen( s ) >= MAX_CONFIGSTRING_CHARS ) {
-		Com_Printf( "%sWARNING:%s Configstring %i overflowed\n", S_COLOR_YELLOW, S_COLOR_WHITE, idx );
-		Com_Printf( "%s%s\n", S_COLOR_WHITE, s );
-	}
-
 	if( !COM_ValidateConfigstring( s ) ) {
 		Com_Printf( "%sWARNING:%s Invalid Configstring (%i): %s\n", S_COLOR_YELLOW, S_COLOR_WHITE, idx, s );
 		return;
