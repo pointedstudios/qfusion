@@ -13,41 +13,34 @@ Rectangle {
     readonly property real heightFrac: (Math.min(1080, rootItem.height - 720)) / (1080 - 720)
 
     Rectangle {
-        anchors { left: parent.left; right: parent.right }
-        height: tabBar.implicitHeight
-        color: Material.backgroundColor
-
-        TabBar {
-            id: tabBar
-            width: 1024
-            anchors.horizontalCenter: parent.horizontalCenter
-            background: null
-
-            TabButton { text: "General" }
-            TabButton { text: "Players" }
-            TabButton { text: "Callvotes" }
-        }
-    }
-
-    Rectangle {
+        focus: true
         width: 480 + 120 * heightFrac
         height: 560 + 210 * heightFrac
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: +0.5 * tabBar.implicitHeight
         color: Material.backgroundColor
         radius: 3
 
         layer.enabled: parent.enabled
-        layer.effect: ElevationEffect { elevation: 32 }
+        layer.effect: ElevationEffect { elevation: 64 }
 
-        StackLayout {
+        StackView {
+            id: stackView
             anchors.fill: parent
-            currentIndex: tabBar.currentIndex
+            anchors.margins: 16
+            focus: true
+            initialItem: selectorComponent
+        }
 
-            InGameGeneralPage {}
-            InGamePlayersPage {}
-            InGameCallvotesPage {}
+        Component {
+            id: selectorComponent
+            InGameSelectorPage {}
+        }
+    }
+
+    onVisibleChanged: {
+        if (visible) {
+            stackView.forceActiveFocus()
         }
     }
 
@@ -55,12 +48,24 @@ Rectangle {
         if (!visible) {
             return
         }
+
         if (event.key !== Qt.Key_Escape) {
             return
         }
 
         event.accepted = true
-        wsw.returnFromInGameMenu()
-        mainMenu.forceActiveFocus()
+        if (stackView.depth === 1) {
+            wsw.returnFromInGameMenu()
+            mainMenu.forceActiveFocus()
+            return
+        }
+
+        let handler = stackView.currentItem.handleKeyBack
+        if (handler && handler()) {
+            return
+        }
+
+        // .pop() API quirks
+        stackView.pop(stackView.get(stackView.depth - 2))
     }
 }

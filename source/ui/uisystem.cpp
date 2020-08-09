@@ -74,6 +74,11 @@ public:
 	Q_PROPERTY( bool isShowingDemoPlaybackMenu READ isShowingDemoPlaybackMenu NOTIFY isShowingDemoPlaybackMenuChanged );
 	Q_PROPERTY( bool isDebuggingNativelyDrawnItems READ isDebuggingNativelyDrawnItems NOTIFY isDebuggingNativelyDrawnItemsChanged );
 
+	Q_PROPERTY( bool isSpectator READ isSpectator NOTIFY isSpectatorChanged );
+	Q_PROPERTY( bool hasTwoTeams READ hasTwoTeams NOTIFY hasTwoTeamsChanged );
+	Q_PROPERTY( QString teamAlphaName READ teamAlphaName NOTIFY teamAlphaNameChanged );
+	Q_PROPERTY( QString teamBetaName READ teamBetaName NOTIFY teamBetaNameChanged );
+
 	Q_INVOKABLE void registerNativelyDrawnItem( QQuickItem *item );
 	Q_INVOKABLE void unregisterNativelyDrawnItem( QQuickItem *item );
 
@@ -92,9 +97,13 @@ public:
 	Q_INVOKABLE void showMainMenu();
 	Q_INVOKABLE void returnFromInGameMenu();
 	Q_INVOKABLE void returnFromMainMenu();
+
 	Q_INVOKABLE void quit();
+	Q_INVOKABLE void disconnect();
 
 	Q_INVOKABLE QVariant colorFromRgbString( const QString &string ) const;
+
+	Q_INVOKABLE QMatrix4x4 makeSkewXMatrix( qreal height ) const;
 
 	Q_INVOKABLE void startServerListUpdates();
 	Q_INVOKABLE void stopServerListUpdates();
@@ -111,6 +120,11 @@ public:
 	Q_PROPERTY( QColor grey MEMBER m_colorGrey CONSTANT );
 	Q_PROPERTY( QVariantList consoleColors MEMBER m_consoleColors CONSTANT );
 signals:
+	Q_SIGNAL void isSpectatorChanged( bool isSpectator );
+	Q_SIGNAL void hasTwoTeamsChanged( bool hasTwoTeams );
+	Q_SIGNAL void teamAlphaNameChanged( QString teamAlphaName );
+	Q_SIGNAL void teamBetaNameChanged( QString teamBetaName );
+
 	Q_SIGNAL void isShowingMainMenuChanged( bool isShowingMainMenu );
 	Q_SIGNAL void isShowingInGameMenuChanged( bool isShowingInGameMenu );
 	Q_SIGNAL void isShowingRespectMenuChanged( bool isShowingRespectMenu );
@@ -150,8 +164,12 @@ private:
 	// A copy of last frame client properties for state change detection without intrusive changes to client code.
 	// Use a separate scope for clarity and for avoiding name conflicts.
 	struct {
-		bool isPlayingADemo { false };
+		wsw::StaticString<32> teamAlphaName;
+		wsw::StaticString<32> teamBetaName;
 		connstate_t clientState { CA_UNINITIALIZED };
+		bool isSpectator { false };
+		bool hasTwoTeams { false };
+		bool isPlayingADemo { false };
 	} m_lastFrameState;
 
 	enum ActiveMenuMask : unsigned {
@@ -232,6 +250,17 @@ private:
 
 	[[nodiscard]]
 	bool hasPendingCVarChanges() const { return !m_pendingCVarChanges.isEmpty(); }
+
+	[[nodiscard]]
+	bool isSpectator() const { return m_lastFrameState.isSpectator; }
+	[[nodiscard]]
+	bool hasTwoTeams() const { return m_lastFrameState.hasTwoTeams; }
+	[[nodiscard]]
+	auto teamAlphaName() const -> QString;
+	[[nodiscard]]
+	auto teamBetaName() const -> QString;
+	[[nodiscard]]
+	auto convertName( const wsw::StringView &rawName ) const -> QString;
 
 	explicit QWswUISystem( int width, int height );
 
@@ -701,6 +730,10 @@ void QWswUISystem::setActiveMenuMask( unsigned activeMask, std::optional<unsigne
 	}
 }
 
+// Hacks
+bool CG_IsSpectator();
+bool CG_HasTwoTeams();
+
 void QWswUISystem::checkPropertyChanges() {
 	const auto lastClientState = m_lastFrameState.clientState;
 	const auto actualClientState = cls.state;
@@ -731,6 +764,31 @@ void QWswUISystem::checkPropertyChanges() {
 			} else {
 				setActiveMenuMask( m_activeMenuMask | ~DemoPlaybackMenu, 0 );
 			}
+		}
+	}
+
+	const bool wasSpectator = m_lastFrameState.isSpectator;
+	const bool isSpectator = m_lastFrameState.isSpectator = CG_IsSpectator();
+	if( isSpectator != wasSpectator ) {
+		Q_EMIT isSpectatorChanged( isSpectator );
+	}
+
+	const bool hadTwoTeams = m_lastFrameState.hasTwoTeams;
+	const bool hasTwoTeams = m_lastFrameState.hasTwoTeams = CG_HasTwoTeams();
+	if( hasTwoTeams != hadTwoTeams ) {
+		Q_EMIT hasTwoTeamsChanged( hasTwoTeams );
+	}
+
+	if( hasTwoTeams ) {
+		const auto alphaName( cl.configStrings.getTeamAlphaName().value_or( wsw::StringView() ) );
+		if( !m_lastFrameState.teamAlphaName.equals( alphaName ) ) {
+			m_lastFrameState.teamAlphaName.assign( alphaName );
+			Q_EMIT teamAlphaNameChanged( teamAlphaName() );
+		}
+		const auto betaName( cl.configStrings.getTeamBetaName().value_or( wsw::StringView() ) );
+		if( !m_lastFrameState.teamBetaName.equals( betaName ) ) {
+			m_lastFrameState.teamBetaName.assign( betaName );
+			Q_EMIT teamBetaNameChanged( teamBetaName() );
 		}
 	}
 
@@ -1107,8 +1165,29 @@ void QWswUISystem::updateCVarAwareControls() {
 	}
 }
 
+QString QWswUISystem::teamAlphaName() const {
+	return convertName( m_lastFrameState.teamAlphaName.asView() );
+}
+
+QString QWswUISystem::teamBetaName() const {
+	return convertName( m_lastFrameState.teamBetaName.asView() );
+}
+
+auto QWswUISystem::convertName( const wsw::StringView &rawName ) const -> QString {
+	char buffer[64];
+	assert( rawName.size() < sizeof( buffer ) );
+	rawName.copyTo( buffer, sizeof( buffer ) );
+	// TODO: Sanitize rich text input, parse color tokens
+	COM_RemoveColorTokens( buffer );
+	return QString::fromLatin1( buffer );
+}
+
 void QWswUISystem::quit() {
 	Cbuf_AddText( "quit" );
+}
+
+void QWswUISystem::disconnect() {
+	Cbuf_AddText( "disconnect" );
 }
 
 auto QWswUISystem::colorFromRgbString( const QString &string ) const -> QVariant {
@@ -1116,6 +1195,23 @@ auto QWswUISystem::colorFromRgbString( const QString &string ) const -> QVariant
 		return QColor::fromRgb( COLOR_R( color ), COLOR_G( color ), COLOR_B( color ), 255 );
 	}
 	return QVariant();
+}
+
+static constexpr const float kShearAngle = DEG2RAD( 20.0f );
+static const float kSin = -std::sin( kShearAngle );
+static const float kTan = std::tan( kShearAngle );
+
+static const QMatrix4x4 kShearMatrix {
+	+1.0, kSin, +0.0, +0.0,
+	+0.0, +1.0, +0.0, +0.0,
+	+0.0, +0.0, +1.0, +0.0,
+	+0.0, +0.0, +0.0, +1.0
+};
+
+auto QWswUISystem::makeSkewXMatrix( qreal height ) const -> QMatrix4x4 {
+	QMatrix4x4 result( kShearMatrix );
+	result.translate( kTan * (float)height, 0.0f );
+	return result;
 }
 
 void QWswUISystem::startServerListUpdates() {

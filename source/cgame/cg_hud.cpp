@@ -67,3 +67,11 @@ void CG_DrawHUD() {
 		hud->modified = false;
 	}
 }
+
+bool CG_IsSpectator() {
+	return ISREALSPECTATOR();
+}
+
+bool CG_HasTwoTeams() {
+	return GS_TeamBasedGametype() && !GS_InvidualGameType();
+}
