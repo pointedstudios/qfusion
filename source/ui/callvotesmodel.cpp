@@ -69,7 +69,7 @@ void CallvotesModelProxy::reload() {
 	m_options.clear();
 
 	using Storage = wsw::ConfigStringStorage;
-	const Storage &storage = cl.configStrings;
+	const Storage &storage = ::cl.configStrings;
 	static_assert( Storage::kCallvoteFieldName == 0, "The name is assumed to come first" );
 
 	unsigned num = 0;

@@ -619,16 +619,20 @@ void CG_ClearInputState( void ) {
 */
 void CG_GetBoundKeysString( const char *cmd, char *keys, size_t keysSize ) {
 	int key;
-	const char *bind;
 	int numKeys = 0;
 	const char *keyNames[2];
 	char charKeys[2][2];
 
+	const wsw::StringView cmdView( cmd );
 	memset( charKeys, 0, sizeof( charKeys ) );
 
+	const auto *const bindingsSystem = wsw::cl::KeyBindingsSystem::instance();
+	// TODO: If the routine turns to be really useful,
+	// implement such functionality at the bindings system level
+	// in an optimized fashion instead of doing a loop over all keys here.
 	for( key = 0; key < 256; key++ ) {
-		bind = Key_GetBindingBuf( key );
-		if( !bind || Q_stricmp( bind, cmd ) ) {
+		auto maybeBinding = bindingsSystem->getBindingForKey( key );
+		if( !maybeBinding || !maybeBinding->equalsIgnoreCase( cmdView ) ) {
 			continue;
 		}
 
@@ -636,7 +640,7 @@ void CG_GetBoundKeysString( const char *cmd, char *keys, size_t keysSize ) {
 			charKeys[numKeys][0] = key - ( 'a' - 'A' );
 			keyNames[numKeys] = charKeys[numKeys];
 		} else {
-			keyNames[numKeys] = Key_KeynumToString( key );
+			keyNames[numKeys] = bindingsSystem->getNameForKey( key )->data();
 		}
 
 		numKeys++;

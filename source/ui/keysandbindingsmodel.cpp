@@ -285,39 +285,45 @@ void KeysAndBindingsModel::reloadKeyBindings( QJsonArray *rowsBegin, QJsonArray 
 static const QString kGroupKey( "group" );
 
 bool KeysAndBindingsModel::reloadRowKeyBindings( QJsonArray &row ) {
+	const auto *const bindingsSystem = wsw::cl::KeyBindingsSystem::instance();
+
 	bool wasRowModified = false;
 	for( QJsonValueRef ref : row ) {
 		QJsonObject obj( ref.toObject() );
 		const int quakeKey = obj["quakeKey"].toInt();
-		const char *currBinding = Key_GetBindingBuf( quakeKey );
-		currBinding = currBinding ? currBinding : "";
+		const auto maybeCurrBinding = bindingsSystem->getBindingForKey( quakeKey );
 		auto it = m_oldKeyBindings.find( quakeKey );
 		if( it == m_oldKeyBindings.end() ) {
-			if( !*currBinding ) {
+			if( !maybeCurrBinding ) {
 				continue;
 			}
 			//
 			// TODO: Set the current binding num as a field
 			//
-			if( auto maybeNum = getCommandNum( wsw::StringView( currBinding ) ) ) {
+			if( auto maybeNum = getCommandNum( *maybeCurrBinding ) ) {
 				obj[kGroupKey] = (int)m_commandBindingGroups[*maybeNum];
 			} else {
 				obj[kGroupKey] = (int)UnknownGroup;
 			}
 			ref = obj;
 		} else {
-			if( it->second.compare( currBinding ) == 0 ) {
-				continue;
-			}
-			if( !*currBinding ) {
+			if( !maybeCurrBinding ) {
+				if( it->second.empty() ) {
+					continue;
+				}
 				obj.remove( kGroupKey );
 			} else {
+				const auto binding = *maybeCurrBinding;
+				wsw::StringView iterValueView( it->second.data(), it->second.size() );
+				if( iterValueView.equals( binding ) ) {
+					continue;
+				}
 				//
 				// TODO: Set the current binding num as a field
 				//
 
 				// TODO: Generalize
-				if( auto maybeNum = getCommandNum( wsw::StringView( currBinding ) ) ) {
+				if( auto maybeNum = getCommandNum( binding ) ) {
 					obj[kGroupKey] = (int)m_commandBindingGroups[*maybeNum];
 				} else {
 					obj[kGroupKey] = (int)UnknownGroup;
@@ -325,8 +331,13 @@ bool KeysAndBindingsModel::reloadRowKeyBindings( QJsonArray &row ) {
 			}
 			ref = obj;
 		}
-		// TODO: Use a hint in the "already-present" branch
-		m_oldKeyBindings.insert( std::make_pair( quakeKey, currBinding ) );
+		// TODO: Use an insertion hint based on an iterator (if any)
+		if( maybeCurrBinding ) {
+			const auto binding = *maybeCurrBinding;
+			m_oldKeyBindings.insert( std::make_pair( quakeKey, wsw::String( binding.data(), binding.size() ) ) );
+		} else {
+			m_oldKeyBindings.insert( std::make_pair( quakeKey, wsw::String() ) );
+		}
 		wasRowModified = true;
 	}
 
@@ -439,7 +450,7 @@ auto KeysAndBindingsModel::registerKnownBindings( wsw::HashMap<wsw::String, int>
 		int num = startFromNum + (int)( view - begin );
 		dest.insert( std::make_pair( wsw::String( view->data(), view->size() ), num ) );
 		assert( (size_t)num < sizeof( m_commandBindingGroups ) );
-		assert( m_commandBindingGroups[num] == 0 );
+		assert( m_commandBindingGroups[num] == UnknownGroup );
 		m_commandBindingGroups[num] = bindingGroup;
 	}
 	return startFromNum + (int)( end - begin );

@@ -20,6 +20,94 @@
 
 #include "../gameshared/q_keycodes.h"
 
+#include "../qcommon/wswstaticvector.h"
+#include "../qcommon/wswstdtypes.h"
+
+template <typename> class SingletonHolder;
+
+namespace wsw::cl {
+
+class KeyBindingsSystem {
+	template <typename> friend class ::SingletonHolder;
+
+	class KeysAndNames {
+		struct Entry {
+			Entry *next;
+			const wsw::StringView name;
+			const int key;
+		};
+
+		struct PrintableKeyName {
+			char data[2];
+
+			[[nodiscard]]
+			auto asView() const -> wsw::StringView {
+				return wsw::StringView( data, 1, wsw::StringView::ZeroTerminated );
+			}
+		};
+
+		static constexpr unsigned kNumPrintableKeys = 127u - 33u;
+		PrintableKeyName m_printableKeyNames[kNumPrintableKeys];
+
+		// Exactly as needed... (the number of named keys is known by design)
+		// Use the minimal capacity that does not trigger an overflow assertion.
+		wsw::StaticVector<Entry, 74> m_keysAndNamesStorage;
+
+		static constexpr unsigned kMaxBindings = 256u;
+		Entry *m_keyToNameTable[kMaxBindings] {};
+
+		static constexpr size_t kNumHashBins = 17;
+		Entry *m_nameToKeyHashBins[kNumHashBins] {};
+
+		void addKeyName( int key, const wsw::StringView &name );
+	public:
+		KeysAndNames();
+
+		[[nodiscard]]
+		auto getNameForKey( int key ) const -> std::optional<wsw::StringView>;
+		[[nodiscard]]
+		auto getKeyForName( const wsw::StringView &name ) const -> std::optional<int>;
+	};
+
+	KeysAndNames m_keysAndNames;
+
+	static constexpr unsigned kMaxBindings = 256u;
+	// This is fine to have as a small string optimization is used by every sane implementation.
+	wsw::String m_bindings[kMaxBindings];
+
+	int m_numConsoleBindings { 0 };
+public:
+	static void init();
+	static void shutdown();
+	static auto instance() -> KeyBindingsSystem *;
+
+	void setBinding( int key, const wsw::StringView &binding );
+	void unbindAll();
+
+	[[nodiscard]]
+	auto getBindingForKey( int key ) const -> std::optional<wsw::StringView>;
+
+	[[nodiscard]]
+	auto getBindingAndNameForKey( int key ) const -> std::optional<std::pair<wsw::StringView, wsw::StringView>>;
+
+	[[nodiscard]]
+	auto getNameForKey( int key ) const -> std::optional<wsw::StringView> {
+		return m_keysAndNames.getNameForKey( key );
+	}
+
+	[[nodiscard]]
+	auto getKeyForName( const wsw::StringView &name ) const -> std::optional<int> {
+		return m_keysAndNames.getKeyForName( name );
+	}
+
+	[[nodiscard]]
+	auto isConsoleBound() const { return m_numConsoleBindings > 0; }
+};
+
+}
+
+void Key_WriteBindings( int file );
+
 extern int anykeydown;
 
 void Key_CharEvent( int key, wchar_t charkey );
@@ -27,12 +115,6 @@ void Key_Event( int key, bool down, int64_t time );
 void Key_MouseEvent( int key, bool down, int64_t time );
 void Key_Init( void );
 void Key_Shutdown( void );
-void Key_WriteBindings( int file );
-void Key_SetBinding( int keynum, const char *binding );
 void Key_ClearStates( void );
-const char *Key_GetBindingBuf( int binding );
 
-const char *Key_KeynumToString( int keynum );
-
-int Key_StringToKeynum( const char *str );
 bool Key_IsDown( int keynum );

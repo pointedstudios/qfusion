@@ -20,6 +20,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "client.h"
 #include "../ui/uisystem.h"
 #include "../qcommon/wswstaticvector.h"
+#include "../qcommon/wswstaticstring.h"
+#include "../qcommon/singletonholder.h"
+
+using wsw::operator""_asView;
 
 /*
 
@@ -27,13 +31,10 @@ key up events are sent even if in console mode
 
 */
 
-#define SEMICOLON_BINDNAME  "SEMICOLON"
-
 int anykeydown;
 
 static wsw::StaticVector<keydest_t, 8> keyDestStack;
 
-static char *keybindings[256];
 static bool consolekeys[256];   // if true, can't be rebound while in console
 static bool menubound[256];     // if true, can't be rebound while in menu
 static int key_repeats[256];   // if > 1, it is autorepeating
@@ -43,245 +44,265 @@ static bool key_initialized = false;
 
 static cvar_t *in_debug;
 
-typedef struct {
-	const char *name;
-	int keynum;
-} keyname_t;
+static const wsw::StringView kToggleConsole( "toggleconsole"_asView );
 
-const keyname_t keynames[] =
-{
-	{ "TAB", K_TAB },
-	{ "ENTER", K_ENTER },
-	{ "ESCAPE", K_ESCAPE },
-	{ "SPACE", K_SPACE },
-	{ "CAPSLOCK", K_CAPSLOCK },
-	{ "SCROLLLOCK", K_SCROLLLOCK },
-	{ "SCROLLOCK", K_SCROLLLOCK },
-	{ "NUMLOCK", K_NUMLOCK },
-	{ "KP_NUMLOCK", K_NUMLOCK },
-	{ "BACKSPACE", K_BACKSPACE },
-	{ "UPARROW", K_UPARROW },
-	{ "DOWNARROW", K_DOWNARROW },
-	{ "LEFTARROW", K_LEFTARROW },
-	{ "RIGHTARROW", K_RIGHTARROW },
+static SingletonHolder<wsw::cl::KeyBindingsSystem> keyBindingsSystemHolder;
 
-	{ "LALT", K_LALT },
-	{ "RALT", K_RALT },
-	{ "LCTRL", K_LCTRL },
-	{ "RCTRL", K_RCTRL },
-	{ "LSHIFT", K_LSHIFT },
-	{ "RSHIFT", K_RSHIFT },
+namespace wsw::cl {
 
-	{ "F1", K_F1 },
-	{ "F2", K_F2 },
-	{ "F3", K_F3 },
-	{ "F4", K_F4 },
-	{ "F5", K_F5 },
-	{ "F6", K_F6 },
-	{ "F7", K_F7 },
-	{ "F8", K_F8 },
-	{ "F9", K_F9 },
-	{ "F10", K_F10 },
-	{ "F11", K_F11 },
-	{ "F12", K_F12 },
-	{ "F13", K_F13 },
-	{ "F14", K_F14 },
-	{ "F15", K_F15 },
-
-	{ "INS", K_INS },
-	{ "DEL", K_DEL },
-	{ "PGDN", K_PGDN },
-	{ "PGUP", K_PGUP },
-	{ "HOME", K_HOME },
-	{ "END", K_END },
-
-	{ "WINKEY", K_WIN },
-	//	{"LWINKEY", K_LWIN},
-	//	{"RWINKEY", K_RWIN},
-	{ "POPUPMENU", K_MENU },
-
-	{ "COMMAND", K_COMMAND },
-	{ "OPTION", K_OPTION },
-
-	{ "MOUSE1", K_MOUSE1 },
-	{ "MOUSE2", K_MOUSE2 },
-	{ "MOUSE3", K_MOUSE3 },
-	{ "MOUSE4", K_MOUSE4 },
-	{ "MOUSE5", K_MOUSE5 },
-	{ "MOUSE6", K_MOUSE6 },
-	{ "MOUSE7", K_MOUSE7 },
-	{ "MOUSE8", K_MOUSE8 },
-	{ "MOUSE1DBLCLK", K_MOUSE1DBLCLK },
-
-	{ "KP_HOME", KP_HOME },
-	{ "KP_UPARROW", KP_UPARROW },
-	{ "KP_PGUP", KP_PGUP },
-	{ "KP_LEFTARROW", KP_LEFTARROW },
-	{ "KP_5", KP_5 },
-	{ "KP_RIGHTARROW", KP_RIGHTARROW },
-	{ "KP_END", KP_END },
-	{ "KP_DOWNARROW", KP_DOWNARROW },
-	{ "KP_PGDN", KP_PGDN },
-	{ "KP_ENTER", KP_ENTER },
-	{ "KP_INS", KP_INS },
-	{ "KP_DEL", KP_DEL },
-	{ "KP_STAR", KP_STAR },
-	{ "KP_SLASH", KP_SLASH },
-	{ "KP_MINUS", KP_MINUS },
-	{ "KP_PLUS", KP_PLUS },
-
-	{ "KP_MULT", KP_MULT },
-	{ "KP_EQUAL", KP_EQUAL },
-
-	{ "MWHEELUP", K_MWHEELUP },
-	{ "MWHEELDOWN", K_MWHEELDOWN },
-
-	{ "PAUSE", K_PAUSE },
-
-	{ "SEMICOLON", ';' }, // because a raw semicolon separates commands
-
-	{ NULL, 0 }
-};
-
-static int consolebinded = 0;
-
-/*
-* Key_StringToKeynum
-*
-* Returns a key number to be used to index keybindings[] by looking at
-* the given string.  Single ascii characters return themselves, while
-* the K_* names are matched up.
-*/
-int Key_StringToKeynum( const char *str ) {
-	const keyname_t *kn;
-
-	if( !str || !str[0] ) {
-		return -1;
-	}
-	if( !str[1] ) {
-		return (int)(unsigned char)str[0];
-	}
-
-	for( kn = keynames; kn->name; kn++ ) {
-		if( !Q_stricmp( str, kn->name ) ) {
-			return kn->keynum;
-		}
-	}
-	return -1;
+void KeyBindingsSystem::init() {
+	::keyBindingsSystemHolder.Init();
 }
 
-/*
-* Key_KeynumToString
-*
-* Returns a string (either a single ascii char, or a K_* name) for the
-* given keynum.
-* FIXME: handle quote special (general escape sequence?)
-*/
-const char *Key_KeynumToString( int keynum ) {
-	const keyname_t *kn;
-	static char tinystr[2];
-
-	if( keynum == -1 ) {
-		return "<KEY NOT FOUND>";
-	}
-	if( keynum > 32 && keynum < 127 ) { // printable ascii
-		tinystr[0] = keynum;
-		tinystr[1] = 0;
-		return tinystr;
-	}
-
-	for( kn = keynames; kn->name; kn++ )
-		if( keynum == kn->keynum ) {
-			return kn->name;
-		}
-
-	return "<UNKNOWN KEYNUM>";
+void KeyBindingsSystem::shutdown() {
+	::keyBindingsSystemHolder.Shutdown();
 }
 
+auto KeyBindingsSystem::instance() -> KeyBindingsSystem * {
+	return ::keyBindingsSystemHolder.Instance();
+}
 
-/*
-* Key_SetBinding
-*/
-void Key_SetBinding( int keynum, const char *binding ) {
-	if( keynum == -1 ) {
+KeyBindingsSystem::KeysAndNames::KeysAndNames() {
+	for( unsigned i = 33; i < 127; ++i ) {
+		char *const data = m_printableKeyNames[i - 33].data;
+		std::tie( data[0], data[1] ) = std::make_pair( (char)i, '\0' );
+	}
+
+	addKeyName( K_TAB, "TAB"_asView );
+	addKeyName( K_ENTER, "ENTER"_asView );
+	addKeyName( K_ESCAPE, "ESCAPE"_asView );
+	addKeyName( K_SPACE, "SPACE"_asView );
+	addKeyName( K_CAPSLOCK, "CAPSLOCK"_asView );
+	addKeyName( K_SCROLLLOCK, "SCROLLLOCK"_asView );
+	addKeyName( K_SCROLLLOCK, "SCROLLOCK"_asView );
+	addKeyName( K_NUMLOCK, "NUMLOCK"_asView );
+	addKeyName( K_NUMLOCK, "KP_NUMLOCK"_asView );
+	addKeyName( K_BACKSPACE, "BACKSPACE"_asView );
+	addKeyName( K_UPARROW, "UPARROW"_asView );
+	addKeyName( K_DOWNARROW, "DOWNARROW"_asView );
+	addKeyName( K_LEFTARROW, "LEFTARROW"_asView );
+	addKeyName( K_RIGHTARROW, "RIGHTARROW"_asView );
+
+	addKeyName( K_LALT, "LALT"_asView );
+	addKeyName( K_RALT, "RALT"_asView );
+	addKeyName( K_LCTRL, "LCTRL"_asView );
+	addKeyName( K_RCTRL, "RCTRL"_asView );
+	addKeyName( K_LSHIFT, "LSHIFT"_asView );
+	addKeyName( K_RSHIFT, "RSHIFT"_asView );
+
+	addKeyName( K_F1, "F1"_asView );
+	addKeyName( K_F2, "F2"_asView );
+	addKeyName( K_F3, "F3"_asView );
+	addKeyName( K_F4, "F4"_asView );
+	addKeyName( K_F5, "F5"_asView );
+	addKeyName( K_F6, "F6"_asView );
+	addKeyName( K_F7, "F7"_asView );
+	addKeyName( K_F8, "F8"_asView );
+	addKeyName( K_F9, "F9"_asView );
+	addKeyName( K_F10, "F10"_asView );
+	addKeyName( K_F11, "F11"_asView );
+	addKeyName( K_F12, "F12"_asView );
+	addKeyName( K_F13, "F13"_asView );
+	addKeyName( K_F14, "F14"_asView );
+	addKeyName( K_F15, "F15"_asView );
+
+	addKeyName( K_INS, "INS"_asView );
+	addKeyName( K_DEL, "DEL"_asView );
+	addKeyName( K_PGDN, "PGDN"_asView );
+	addKeyName( K_PGUP, "PGUP"_asView );
+	addKeyName( K_HOME, "HOME"_asView );
+	addKeyName( K_END, "END"_asView );
+
+	addKeyName( K_WIN, "WINKEY"_asView );
+	addKeyName( K_MENU, "POPUPMENU"_asView );
+
+	addKeyName( K_COMMAND, "COMMAND"_asView );
+	addKeyName( K_OPTION, "OPTION"_asView );
+
+	addKeyName( K_MOUSE1, "MOUSE1"_asView );
+	addKeyName( K_MOUSE2, "MOUSE2"_asView );
+	addKeyName( K_MOUSE3, "MOUSE3"_asView );
+	addKeyName( K_MOUSE4, "MOUSE4"_asView );
+	addKeyName( K_MOUSE5, "MOUSE5"_asView );
+	addKeyName( K_MOUSE6, "MOUSE6"_asView );
+	addKeyName( K_MOUSE7, "MOUSE7"_asView );
+	addKeyName( K_MOUSE8, "MOUSE8"_asView );
+
+	addKeyName( KP_HOME, "KP_HOME"_asView );
+	addKeyName( KP_UPARROW, "KP_UPARROW"_asView );
+	addKeyName( KP_PGUP, "KP_PGUP"_asView );
+	addKeyName( KP_LEFTARROW, "KP_LEFTARROW"_asView );
+	addKeyName( KP_5, "KP_5"_asView );
+	addKeyName( KP_RIGHTARROW, "KP_RIGHTARROW"_asView );
+	addKeyName( KP_END, "KP_END"_asView );
+	addKeyName( KP_DOWNARROW, "KP_DOWNARROW"_asView );
+	addKeyName( KP_PGDN, "KP_PGDN"_asView );
+	addKeyName( KP_ENTER, "KP_ENTER"_asView );
+	addKeyName( KP_INS, "KP_INS"_asView );
+	addKeyName( KP_DEL, "KP_DEL"_asView );
+	addKeyName( KP_STAR, "KP_STAR"_asView );
+	addKeyName( KP_SLASH, "KP_SLASH"_asView );
+	addKeyName( KP_MINUS, "KP_MINUS"_asView );
+	addKeyName( KP_PLUS, "KP_PLUS"_asView );
+
+	addKeyName( KP_MULT, "KP_MULT"_asView );
+	addKeyName( KP_EQUAL, "KP_EQUAL"_asView );
+
+	addKeyName( K_MWHEELUP, "MWHEELUP"_asView );
+	addKeyName( K_MWHEELDOWN, "MWHEELDOWN"_asView );
+
+	addKeyName( K_PAUSE, "PAUSE"_asView );
+}
+
+static const wsw::StringView kSemicolon( "SEMICOLON"_asView );
+
+void KeyBindingsSystem::KeysAndNames::addKeyName( int key, const wsw::StringView &name ) {
+	assert( (unsigned)key < 256u );
+
+	m_keysAndNamesStorage.emplace_back( { nullptr, name, key } );
+	auto *entry = std::addressof( m_keysAndNamesStorage.back() );
+	assert( entry->name.equals( name ) && entry->key == key );
+
+	// We actually do not require it as an argument as the constructor
+	// is not currently constexpr and we do not want a runtime code bloat.
+	wsw::HashedStringView hashedName( name );
+	const auto binIndex = hashedName.getHash() % (uint32_t)kNumHashBins;
+
+	// A last name wins if multiple names are supplied
+	m_keyToNameTable[key] = entry;
+
+	entry->next = m_nameToKeyHashBins[binIndex];
+	m_nameToKeyHashBins[binIndex] = entry;
+}
+
+auto KeyBindingsSystem::KeysAndNames::getKeyForName( const wsw::StringView &name ) const -> std::optional<int> {
+	const auto len = name.length();
+	if( !len ) {
+		return std::nullopt;
+	}
+
+	const char *const data = name.data();
+	if( len == 1 ) {
+		unsigned ch = (unsigned char)data[0];
+		if( ch - 33u < kNumPrintableKeys ) {
+			return (int)ch;
+		}
+	}
+
+	const auto binIndex = wsw::HashedStringView( data, len ).getHash() % kNumHashBins;
+	for( const auto *entry = m_nameToKeyHashBins[binIndex]; entry; entry = entry->next ) {
+		if( entry->name.equalsIgnoreCase( name ) ) {
+			return entry->key;
+		}
+	}
+
+	return std::nullopt;
+}
+
+auto KeyBindingsSystem::KeysAndNames::getNameForKey( int key ) const -> std::optional<wsw::StringView> {
+	if( (unsigned)( key - 33 ) < kNumPrintableKeys ) {
+		if( key != ';' ) {
+			return m_printableKeyNames[key - 33].asView();
+		}
+		return kSemicolon;
+	}
+
+	if( (unsigned)key < kMaxBindings ) {
+		if( auto *entry = m_keyToNameTable[key] ) {
+			return entry->name;
+		}
+	}
+
+	return std::nullopt;
+}
+
+auto KeyBindingsSystem::getBindingForKey( int key ) const -> std::optional<wsw::StringView> {
+	if( (unsigned)key < kMaxBindings ) {
+		if( const auto &b = m_bindings[key]; !b.empty() ) {
+			return wsw::StringView( b.data(), b.size(), wsw::StringView::ZeroTerminated );
+		}
+	}
+	return std::nullopt;
+}
+
+auto KeyBindingsSystem::getBindingAndNameForKey( int key ) const
+	-> std::optional<std::pair<wsw::StringView, wsw::StringView>> {
+	if( const auto maybeBinding = getBindingForKey( key ) ) {
+		return std::make_pair( *maybeBinding, *getNameForKey( key ) );
+	}
+	return std::nullopt;
+}
+
+void KeyBindingsSystem::setBinding( int key, const wsw::StringView &binding ) {
+	if( (unsigned)key >= kMaxBindings ) {
 		return;
 	}
 
-	// free old bindings
-	if( keybindings[keynum] ) {
-		if( !Q_stricmp( keybindings[keynum], "toggleconsole" ) ) {
-			consolebinded--;
-		}
-
-		Q_free( keybindings[keynum] );
-		keybindings[keynum] = NULL;
-	}
-
-	if( !binding ) {
+	const auto &old = m_bindings[key];
+	wsw::StringView oldView( old.data(), old.size() );
+	if( oldView.equalsIgnoreCase( binding ) ) {
 		return;
 	}
 
-	// allocate memory for new binding
-	keybindings[keynum] = Q_strdup( binding );
+	if( oldView.equalsIgnoreCase( kToggleConsole ) ) {
+		m_numConsoleBindings--;
+	}
 
-	if( !Q_stricmp( keybindings[keynum], "toggleconsole" ) ) {
-		consolebinded++;
+	m_bindings[key].assign( binding.data(), binding.size() );
+
+	if( binding.equalsIgnoreCase( kToggleConsole ) ) {
+		m_numConsoleBindings++;
 	}
 }
 
-/*
-* Key_Unbind_f
-*/
-static void Key_Unbind_f( void ) {
-	int b;
+void KeyBindingsSystem::unbindAll() {
+	for( auto &s: m_bindings ) {
+		s.clear();
+		// TODO: Shrink to fit?
+	}
+	m_numConsoleBindings = 0;
+}
 
+}
+
+static void Key_Unbind_f() {
 	if( Cmd_Argc() != 2 ) {
 		Com_Printf( "unbind <key> : remove commands from a key\n" );
 		return;
 	}
 
-	b = Key_StringToKeynum( Cmd_Argv( 1 ) );
-	if( b == -1 ) {
+	auto *const bindingsSystem = wsw::cl::KeyBindingsSystem::instance();
+	if( const auto maybeKey = bindingsSystem->getKeyForName( wsw::StringView( Cmd_Argv( 1 ) ) ) ) {
+		bindingsSystem->setBinding( *maybeKey, wsw::StringView() );
+	} else {
 		Com_Printf( "\"%s\" isn't a valid key\n", Cmd_Argv( 1 ) );
-		return;
-	}
-
-	Key_SetBinding( b, NULL );
-}
-
-static void Key_Unbindall( void ) {
-	int i;
-
-	for( i = 0; i < 256; i++ ) {
-		if( keybindings[i] ) {
-			Key_SetBinding( i, NULL );
-		}
 	}
 }
 
+static void Key_Unbindall() {
+	wsw::cl::KeyBindingsSystem::instance()->unbindAll();
+}
 
 /*
 * Key_Bind_f
 */
-static void Key_Bind_f( void ) {
-	int i, c, b;
-	char cmd[1024];
-
-	c = Cmd_Argc();
-	if( c < 2 ) {
+static void Key_Bind_f() {
+	const int argc = Cmd_Argc();
+	if( argc < 2 ) {
 		Com_Printf( "bind <key> [command] : attach a command to a key\n" );
 		return;
 	}
 
-	b = Key_StringToKeynum( Cmd_Argv( 1 ) );
-	if( b == -1 ) {
+	auto *const bindingsSystem = wsw::cl::KeyBindingsSystem::instance();
+	const auto maybeKey = bindingsSystem->getKeyForName( wsw::StringView( Cmd_Argv( 1 ) ) );
+	if( !maybeKey ) {
 		Com_Printf( "\"%s\" isn't a valid key\n", Cmd_Argv( 1 ) );
 		return;
 	}
 
-	if( c == 2 ) {
-		if( keybindings[b] ) {
-			Com_Printf( "\"%s\" = \"%s\"\n", Cmd_Argv( 1 ), keybindings[b] );
+	if( argc == 2 ) {
+		if( const auto maybeBinding = bindingsSystem->getBindingForKey( *maybeKey ) ) {
+			Com_Printf( "\"%s\" = \"%s\"\n", Cmd_Argv( 1 ), maybeBinding->data() );
 		} else {
 			Com_Printf( "\"%s\" is not bound\n", Cmd_Argv( 1 ) );
 		}
@@ -289,15 +310,20 @@ static void Key_Bind_f( void ) {
 	}
 
 	// copy the rest of the command line
-	cmd[0] = 0; // start out with a null string
-	for( i = 2; i < c; i++ ) {
-		Q_strncatz( cmd, Cmd_Argv( i ), sizeof( cmd ) );
-		if( i != ( c - 1 ) ) {
-			Q_strncatz( cmd, " ", sizeof( cmd ) );
+	wsw::StaticString<1024> cmd;
+	for( int i = 2; i < argc; i++ ) {
+		wsw::StringView argView( Cmd_Argv( i ) );
+		if( argView.size() + cmd.size() + 1 > cmd.capacity() ) {
+			Com_Printf( "%s: Binding overflow\n", bindingsSystem->getNameForKey( *maybeKey )->data() );
+			return;
+		}
+		cmd << argView;
+		if( i != ( argc - 1 ) ) {
+			cmd << ' ';
 		}
 	}
 
-	Key_SetBinding( b, cmd );
+	bindingsSystem->setBinding( *maybeKey, cmd.asView() );
 }
 
 /*
@@ -306,27 +332,27 @@ static void Key_Bind_f( void ) {
 * Writes lines containing "bind key value"
 */
 void Key_WriteBindings( int file ) {
-	int i;
-
 	FS_Printf( file, "unbindall\r\n" );
 
-	for( i = 0; i < 256; i++ )
-		if( keybindings[i] && keybindings[i][0] ) {
-			FS_Printf( file, "bind %s \"%s\"\r\n", ( i == ';' ? SEMICOLON_BINDNAME : Key_KeynumToString( i ) ), keybindings[i] );
+	const auto *const bindingsSystem = wsw::cl::KeyBindingsSystem::instance();
+	for( int i = 0; i < 256; i++ ) {
+		if( const auto maybePair = bindingsSystem->getBindingAndNameForKey( i ) ) {
+			const auto [binding, name] = *maybePair;
+			assert( binding.isZeroTerminated() && name.isZeroTerminated() );
+			FS_Printf( file, "bind %s \"%s\"\r\n", name.data(), binding.data() );
 		}
+	}
 }
 
-
-/*
-* Key_Bindlist_f
-*/
-static void Key_Bindlist_f( void ) {
-	int i;
-
-	for( i = 0; i < 256; i++ )
-		if( keybindings[i] && keybindings[i][0] ) {
-			Com_Printf( "%s \"%s\"\n", Key_KeynumToString( i ), keybindings[i] );
+static void Key_Bindlist_f() {
+	const auto *const bindingsSystem = wsw::cl::KeyBindingsSystem::instance();
+	for( int i = 0; i < 256; i++ ) {
+		if( const auto maybePair = bindingsSystem->getBindingAndNameForKey( i ) ) {
+			const auto [binding, name] = *maybePair;
+			assert( binding.isZeroTerminated() && name.isZeroTerminated() );
+			Com_Printf( "%s \"%s\"", name.data(), binding.data() );
 		}
+	}
 }
 
 /*
@@ -342,9 +368,12 @@ static bool Key_IsToggleConsole( int key ) {
 
 	assert( key >= 0 && key <= 255 );
 
-	if( consolebinded > 0 ) {
-		if( keybindings[key] && !Q_stricmp( keybindings[key], "toggleconsole" ) ) {
-			return true;
+	const auto *const bindingsSystem = wsw::cl::KeyBindingsSystem::instance();
+	if( bindingsSystem->isConsoleBound() ) {
+		if( const auto maybeBinding = bindingsSystem->getBindingForKey( key ) ) {
+			if( maybeBinding->equalsIgnoreCase( kToggleConsole ) ) {
+				return true;
+			}
 		}
 		return false;
 	} else {
@@ -378,6 +407,8 @@ void Key_Init( void ) {
 	int i;
 
 	assert( !key_initialized );
+
+	wsw::cl::KeyBindingsSystem::init();
 
 	//
 	// init ascii characters in console mode
@@ -461,6 +492,8 @@ void Key_Shutdown( void ) {
 	Cmd_RemoveCommand( "bindlist" );
 
 	Key_Unbindall();
+
+	wsw::cl::KeyBindingsSystem::shutdown();
 }
 
 /*
@@ -568,7 +601,6 @@ static int Key_NumPadKeyValue( int key ) {
 * Should NOT be called during an interrupt!
 */
 void Key_Event( int key, bool down, int64_t time ) {
-	char *kb;
 	char cmd[1024];
 	bool handled = false;
 	int numkey = Key_NumPadKeyValue( key );
@@ -656,23 +688,25 @@ void Key_Event( int key, bool down, int64_t time ) {
 	if( ( keyDest == key_menu && menubound[key] )
 		|| ( keyDest == key_console && !consolekeys[key] )
 		|| ( keyDest == key_game && ( cls.state == CA_ACTIVE || !consolekeys[key] ) && ( !have_quickmenu || !numeric ) ) ) {
-		kb = keybindings[key];
 
-		if( kb ) {
+		if( const auto maybeBinding = wsw::cl::KeyBindingsSystem::instance()->getBindingForKey( key ) ) {
+			const auto binding = *maybeBinding;
+			assert( binding.isZeroTerminated() );
+
 			if( in_debug && in_debug->integer ) {
-				Com_Printf( "key:%i down:%i time:%" PRIi64 " %s\n", key, down, time, kb );
+				Com_Printf( "key:%i down:%i time:%" PRIi64 " %s\n", key, down, time, maybeBinding->data() );
 			}
 
-			if( kb[0] == '+' ) { // button commands add keynum and time as a parm
+			if( binding.startsWith( '+' ) ) { // button commands add keynum and time as a parm
 				if( down ) {
-					Q_snprintfz( cmd, sizeof( cmd ), "%s %i %" PRIi64 "\n", kb, key, time );
+					Q_snprintfz( cmd, sizeof( cmd ), "%s %i %" PRIi64 "\n", binding.data(), key, time );
 					Cbuf_AddText( cmd );
 				} else if( keydown[key] ) {
-					Q_snprintfz( cmd, sizeof( cmd ), "-%s %i %" PRIi64 "\n", kb + 1, key, time );
+					Q_snprintfz( cmd, sizeof( cmd ), "-%s %i %" PRIi64 "\n", binding.data() + 1, key, time );
 					Cbuf_AddText( cmd );
 				}
 			} else if( down ) {
-				Cbuf_AddText( kb );
+				Cbuf_AddText( binding.data() );
 				Cbuf_AddText( "\n" );
 			}
 		}
@@ -730,17 +764,6 @@ void Key_ClearStates( void ) {
 		keydown[i] = 0;
 		key_repeats[i] = 0;
 	}
-}
-
-
-/*
-* Key_GetBindingBuf
-*/
-const char *Key_GetBindingBuf( int binding ) {
-	if( binding < 0 || binding > 255 ) {
-		return nullptr;
-	}
-	return keybindings[binding];
 }
 
 /*
