@@ -23,11 +23,6 @@ public:
 		ShowCursor = 0x2u,
 	};
 
-	enum Context {
-		MainContext,
-		RespectContext
-	};
-
 	virtual void refresh( unsigned refreshFlags ) = 0;
 
 	virtual void drawSelfInMainContext() = 0;
@@ -35,9 +30,15 @@ public:
 	virtual void beginRegistration() = 0;
 	virtual void endRegistration() = 0;
 
-	virtual void handleKeyEvent( int quakeKey, bool keyDown, Context context ) = 0;
-	virtual void handleCharEvent( int ch ) = 0;
-	virtual void handleMouseMove( int frameTime, int dx, int dy ) = 0;
+	[[nodiscard]]
+	virtual bool requestsKeyboardFocus() const = 0;
+	[[nodiscard]]
+	virtual bool handleKeyEvent( int quakeKey, bool keyDown ) = 0;
+	[[nodiscard]]
+	virtual bool handleCharEvent( int ch ) = 0;
+	[[nodiscard]]
+	virtual bool handleMouseMove( int frameTime, int dx, int dy ) = 0;
+
 	virtual void forceMenuOn() = 0;
 	virtual void forceMenuOff() = 0;
 

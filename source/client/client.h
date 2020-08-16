@@ -360,10 +360,9 @@ void CL_AdjustServerTime( unsigned int gamemsec );
 char *CL_GetClipboardData( void );
 void CL_SetClipboardData( const char *data );
 void CL_FreeClipboardData( char *data );
-keydest_t CL_GetKeyDest( void );
-void CL_SetKeyDest( keydest_t key_dest );
-void CL_PushKeyDest( keydest_t key_dest );
-void CL_PopKeyDest();
+
+bool CG_HasKeyboardFocus();
+
 void CL_ResetServerCount( void );
 void CL_SetClientState( int state );
 connstate_t CL_GetClientState( void );  // wsw : aiwa : we need this information for graphical plugins (e.g. IRC)

@@ -535,7 +535,7 @@ bool SCR_IsQuickMenuShown( void ) {
 */
 void SCR_RunConsole( int msec ) {
 	// decide on the height of the console
-	if( CL_GetKeyDest() == key_console ) {
+	if( Con_HasKeyboardFocus() ) {
 		scr_conlines = bound( 0.1f, scr_consize->value, 1.0f );
 	} else {
 		scr_conlines = 0;

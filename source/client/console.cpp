@@ -42,6 +42,8 @@ static console_t con;
 
 volatile bool con_initialized;
 
+static bool con_hasKeyboardFocus;
+
 static cvar_t *con_notifytime;
 static cvar_t *con_drawNotify;
 static cvar_t *con_chatmode;
@@ -56,6 +58,14 @@ static int edit_line = 0;
 static int history_line = 0;
 static int search_line = 0;
 static char search_text[MAXCMDLINE * 2 + 4];
+
+static inline bool Key_IsDown( int key ) {
+	return wsw::cl::KeyHandlingSystem::instance()->isKeyDown( key );
+}
+
+bool Con_HasKeyboardFocus() {
+	return con_hasKeyboardFocus;
+}
 
 #define ctrl_is_down ( Key_IsDown( K_LCTRL ) || Key_IsDown( K_RCTRL ) )
 
@@ -147,13 +157,7 @@ void Con_ToggleConsole_f( void ) {
 	Con_ClearTyping();
 	Con_ClearNotify();
 
-	if( CL_GetKeyDest() == key_console ) {
-		// close console
-		CL_PopKeyDest();
-	} else {
-		// open console
-		CL_PushKeyDest( key_console );
-	}
+	con_hasKeyboardFocus = !con_hasKeyboardFocus;
 }
 
 /*
@@ -638,7 +642,7 @@ static void Con_DrawInput( int vislines ) {
 	int textwidth;
 	int prewidth;   // width of input line before cursor
 
-	if( CL_GetKeyDest() != key_console ) {
+	if( !Con_HasKeyboardFocus() ) {
 		return;
 	}
 
@@ -688,8 +692,7 @@ void Con_DrawNotify( void ) {
 	int time;
 	float pixelRatio = Con_GetPixelRatio();
 
-	const auto keyDest = CL_GetKeyDest();
-	if( cls.state == CA_ACTIVE && keyDest == key_game ) {
+	if( cls.state == CA_ACTIVE && CG_HasKeyboardFocus() ) {
 		v = 0;
 		if( con_drawNotify->integer || developer->integer ) {
 			int x = 8 * pixelRatio;
@@ -1134,7 +1137,7 @@ static void Con_Key_Paste( void ) {
 *
 * Interactive line editing and console scrollback only for (Unicode) chars
 */
-void Con_CharEvent( wchar_t key ) {
+static void Con_CharEvent( wchar_t key ) {
 	if( !con_initialized ) {
 		return;
 	}
@@ -1251,6 +1254,14 @@ void Con_CharEvent( wchar_t key ) {
 		memcpy( key_lines[edit_line] + key_linepos, utf, utflen );
 		key_linepos += utflen;
 	}
+}
+
+bool Con_HandleCharEvent( wchar_t key ) {
+	if( Con_HasKeyboardFocus() ) {
+		Con_CharEvent( key );
+		return true;
+	}
+	return false;
 }
 
 /*
@@ -1399,7 +1410,7 @@ static void Con_HistoryDown( void ) {
 *
 * Interactive line editing and console scrollback except for ascii char
 */
-void Con_KeyDown( int key ) {
+static void Con_KeyDown( int key ) {
 	if( !con_initialized ) {
 		return;
 	}
@@ -1554,4 +1565,15 @@ void Con_KeyDown( int key ) {
 	}
 
 	// key is a normal printable key normal which wil be HANDLE later in response to WM_CHAR event
+}
+
+bool Con_HandleKeyEvent( int key ) {
+	if( !Con_HasKeyboardFocus() ) {
+		return false;
+	}
+
+	// TODO: Check whether the key is a "consolekey" (see old keys.cpp)
+
+	Con_KeyDown( key );
+	return true;
 }

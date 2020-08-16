@@ -52,10 +52,13 @@ void Con_ChangeFontSize( int ch );
  */
 float Con_GetPixelRatio( void );
 
-void Con_KeyDown( int key );
-void Con_CharEvent( wchar_t key );
-void Con_MessageKeyDown( int key );
-void Con_MessageCharEvent( wchar_t key );
+[[nodiscard]]
+bool Con_HasKeyboardFocus();
+
+[[nodiscard]]
+bool Con_HandleKeyEvent( int key );
+[[nodiscard]]
+bool Con_HandleCharEvent( wchar_t key );
 
 int Q_ColorCharCount( const char *s, int byteofs );
 int Q_ColorCharOffset( const char *s, int charcount );

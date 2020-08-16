@@ -104,17 +104,68 @@ public:
 	auto isConsoleBound() const { return m_numConsoleBindings > 0; }
 };
 
+class KeyHandlingSystem {
+	static constexpr unsigned kMaxKeys = 256;
+
+	struct KeyState {
+		unsigned repeatCounter: 31;
+		bool isDown: 1;
+
+		[[nodiscard]]
+		bool isSet() const {
+			return repeatCounter || isDown;
+		}
+
+		void clear() {
+			repeatCounter = 0;
+			isDown = false;
+		}
+	};
+
+	std::optional<int64_t> m_lastMouse1ClickTime;
+
+	KeyState m_keyStates[kMaxKeys] {};
+	int m_numKeysDown { 0 };
+
+	[[nodiscard]]
+	static bool isAToggleConsoleKey( int key );
+
+	[[nodiscard]]
+	static bool isAnAutoRepeatKey( int key );
+
+	[[nodiscard]]
+	bool updateAutoRepeatStatus( int key, bool down );
+
+	void handleEscapeKey();
+
+	void runSubsystemHandlers( int key, bool down, int64_t time );
+
+	void handleKeyBinding( int key, bool down, int64_t time, const wsw::StringView &binding );
+public:
+	static void init();
+	static void shutdown();
+	static auto instance() -> KeyHandlingSystem *;
+
+	void handleCharEvent( int key, wchar_t ch );
+	void handleKeyEvent( int key, bool down, int64_t time );
+	void handleMouseEvent( int key, bool down, int64_t time );
+
+	void clearStates();
+
+	[[nodiscard]]
+	bool isKeyDown( int key ) const {
+		return (unsigned)key < kMaxKeys && m_keyStates[key].isDown;
+	}
+	[[nodiscard]]
+	bool isAnyKeyDown() const {
+		return m_numKeysDown > 0;
+	}
+};
+
 }
 
 void Key_WriteBindings( int file );
 
-extern int anykeydown;
-
-void Key_CharEvent( int key, wchar_t charkey );
-void Key_Event( int key, bool down, int64_t time );
-void Key_MouseEvent( int key, bool down, int64_t time );
 void Key_Init( void );
 void Key_Shutdown( void );
-void Key_ClearStates( void );
 
-bool Key_IsDown( int keynum );

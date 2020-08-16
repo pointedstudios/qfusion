@@ -37,9 +37,9 @@ static void CL_CreateNewUserCommand( int realMsec );
 * CL_ClearInputState
 */
 void CL_ClearInputState( void ) {
-	Key_ClearStates();
+	wsw::cl::KeyHandlingSystem::instance()->clearStates();
 
-	if( CL_GetKeyDest() == key_game ) {
+	if( CG_HasKeyboardFocus() ) {
 		CL_GameModule_ClearInputState();
 	}
 }
@@ -57,14 +57,9 @@ static void CL_UpdateGameInput( int frameTime ) {
 	// refresh input in cgame
 	CL_GameModule_InputFrame( frameTime );
 
-	const auto keyDest = CL_GetKeyDest();
-	if( keyDest == key_menu ) {
-		UISystem::instance()->handleMouseMove( frameTime, mx, my );
-	} else {
+	if( !UISystem::instance()->handleMouseMove( frameTime, mx, my ) ) {
 		CL_GameModule_MouseMove( mx, my );
-	}
-
-	if( keyDest == key_game || ( ( keyDest == key_console ) && Cvar_Value( "in_grabinconsole" ) != 0 ) ) {
+		// TODO: Check whether a console is open?
 		CL_GameModule_AddViewAngles( cl.viewangles );
 	}
 }
@@ -148,7 +143,7 @@ void CL_ShutdownInput( void ) {
 static void CL_SetUcmdMovement( usercmd_t *ucmd ) {
 	vec3_t movement = { 0.0f, 0.0f, 0.0f };
 
-	if( CL_GetKeyDest() == key_game ) {
+	if( CG_HasKeyboardFocus() ) {
 		CL_GameModule_AddMovement( movement );
 	}
 
@@ -161,9 +156,9 @@ static void CL_SetUcmdMovement( usercmd_t *ucmd ) {
 * CL_SetUcmdButtons
 */
 static void CL_SetUcmdButtons( usercmd_t *ucmd ) {
-	if( CL_GetKeyDest() == key_game ) {
+	if( CG_HasKeyboardFocus() ) {
 		ucmd->buttons |= CL_GameModule_GetButtonBits();
-		if( anykeydown ) {
+		if( wsw::cl::KeyHandlingSystem::instance()->isAnyKeyDown() ) {
 			ucmd->buttons |= BUTTON_ANY;
 		}
 		return;

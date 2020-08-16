@@ -394,12 +394,6 @@ typedef enum {
 } sv_client_state_t;
 
 typedef enum {
-	key_game,
-	key_console,
-	key_menu
-} keydest_t;
-
-typedef enum {
 	rserr_ok,
 	rserr_invalid_fullscreen,
 	rserr_invalid_mode,

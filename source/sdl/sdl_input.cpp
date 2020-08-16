@@ -30,6 +30,18 @@ void IN_SetMouseScalingEnabled( bool isRestore ) {
 void IN_Commands( void ) {
 }
 
+static void Key_Event( int key, bool down, int64_t time ) {
+	wsw::cl::KeyHandlingSystem::instance()->handleKeyEvent( key, down, time );
+}
+
+static void Key_CharEvent( int key, wchar_t ch ) {
+	wsw::cl::KeyHandlingSystem::instance()->handleCharEvent( key, ch );
+}
+
+static void Key_MouseEvent( int key, bool down, int64_t time ) {
+	wsw::cl::KeyHandlingSystem::instance()->handleMouseEvent( key, down, time );
+}
+
 /**
  * Function which is called whenever the mouse is moved.
  * @param ev the SDL event object containing the mouse position et all
@@ -507,7 +519,7 @@ void IN_Frame() {
 		return;
 	}
 
-	if( !input_focus || ( !Cvar_Value( "vid_fullscreen" ) && CL_GetKeyDest() == key_console && !in_grabinconsole->integer ) ) {
+	if( !input_focus || ( !Cvar_Value( "vid_fullscreen" ) && Con_HasKeyboardFocus() && !in_grabinconsole->integer ) ) {
 		if( mouse_active ) {
 			if( mouse_relative ) {
 				mouse_relative = !( SDL_SetRelativeMouseMode( SDL_FALSE ) == 0 );

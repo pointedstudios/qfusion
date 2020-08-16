@@ -31,15 +31,6 @@ key up events are sent even if in console mode
 
 */
 
-int anykeydown;
-
-static wsw::StaticVector<keydest_t, 8> keyDestStack;
-
-static bool consolekeys[256];   // if true, can't be rebound while in console
-static bool menubound[256];     // if true, can't be rebound while in menu
-static int key_repeats[256];   // if > 1, it is autorepeating
-static bool keydown[256];
-
 static bool key_initialized = false;
 
 static cvar_t *in_debug;
@@ -356,117 +347,13 @@ static void Key_Bindlist_f() {
 }
 
 /*
-* Key_IsToggleConsole
-*
-* If nothing is bound to toggleconsole, we use default key for it
-* Also toggleconsole is specially handled, so it's never outputed to the console or so
-*/
-static bool Key_IsToggleConsole( int key ) {
-	if( key == -1 ) {
-		return false;
-	}
-
-	assert( key >= 0 && key <= 255 );
-
-	const auto *const bindingsSystem = wsw::cl::KeyBindingsSystem::instance();
-	if( bindingsSystem->isConsoleBound() ) {
-		if( const auto maybeBinding = bindingsSystem->getBindingForKey( key ) ) {
-			if( maybeBinding->equalsIgnoreCase( kToggleConsole ) ) {
-				return true;
-			}
-		}
-		return false;
-	} else {
-		if( key == '`' || key == '~' ) {
-			return true;
-		}
-		return false;
-	}
-}
-
-/*
-* Key_IsNonPrintable
-*
-* Called by sys code to avoid garbage if the toggleconsole
-* key happens to be a dead key (like in the German layout)
-*/
-bool Key_IsNonPrintable( int key ) {
-	// This may be called before client is initialized. Shouldn't be a problem
-	// for Key_IsToggleConsole, but double check just in case
-	if( !key_initialized ) {
-		return false;
-	}
-
-	return Key_IsToggleConsole( key );
-}
-
-/*
 * Key_Init
 */
-void Key_Init( void ) {
-	int i;
-
+void Key_Init() {
 	assert( !key_initialized );
 
 	wsw::cl::KeyBindingsSystem::init();
-
-	//
-	// init ascii characters in console mode
-	//
-	for( i = 32; i < 128; i++ )
-		consolekeys[i] = true;
-	consolekeys[K_ENTER] = true;
-	consolekeys[KP_ENTER] = true;
-	consolekeys[K_TAB] = true;
-	consolekeys[K_LEFTARROW] = true;
-	consolekeys[KP_LEFTARROW] = true;
-	consolekeys[K_RIGHTARROW] = true;
-	consolekeys[KP_RIGHTARROW] = true;
-	consolekeys[K_UPARROW] = true;
-	consolekeys[KP_UPARROW] = true;
-	consolekeys[K_DOWNARROW] = true;
-	consolekeys[KP_DOWNARROW] = true;
-	consolekeys[K_BACKSPACE] = true;
-	consolekeys[K_HOME] = true;
-	consolekeys[KP_HOME] = true;
-	consolekeys[K_END] = true;
-	consolekeys[KP_END] = true;
-	consolekeys[K_PGUP] = true;
-	consolekeys[KP_PGUP] = true;
-	consolekeys[K_PGDN] = true;
-	consolekeys[KP_PGDN] = true;
-	consolekeys[K_LSHIFT] = true;
-	consolekeys[K_RSHIFT] = true;
-	consolekeys[K_INS] = true;
-	consolekeys[K_DEL] = true;
-	consolekeys[KP_INS] = true;
-	consolekeys[KP_DEL] = true;
-	consolekeys[KP_SLASH] = true;
-	consolekeys[KP_PLUS] = true;
-	consolekeys[KP_MINUS] = true;
-	consolekeys[KP_5] = true;
-
-	consolekeys[K_WIN] = true;
-	//	consolekeys[K_LWIN] = true;
-	//	consolekeys[K_RWIN] = true;
-	consolekeys[K_MENU] = true;
-
-	consolekeys[K_LCTRL] = true; // wsw : pb : ctrl in console for ctrl-v
-	consolekeys[K_RCTRL] = true;
-	consolekeys[K_LALT] = true;
-	consolekeys[K_RALT] = true;
-
-	consolekeys[(int)'`'] = false;
-	consolekeys[(int)'~'] = false;
-
-	// wsw : pb : support mwheel in console
-	consolekeys[K_MWHEELDOWN] = true;
-	consolekeys[K_MWHEELUP] = true;
-
-	menubound[K_ESCAPE] = true;
-	// Vic: allow to bind F1-F12 from the menu
-	//	for (i=0 ; i<12 ; i++)
-	//		menubound[K_F1+i] = true;
+	wsw::cl::KeyHandlingSystem::init();
 
 	//
 	// register our functions
@@ -481,7 +368,7 @@ void Key_Init( void ) {
 	key_initialized = true;
 }
 
-void Key_Shutdown( void ) {
+void Key_Shutdown() {
 	if( !key_initialized ) {
 		return;
 	}
@@ -493,141 +380,171 @@ void Key_Shutdown( void ) {
 
 	Key_Unbindall();
 
+	wsw::cl::KeyHandlingSystem::shutdown();
 	wsw::cl::KeyBindingsSystem::shutdown();
 }
 
-/*
-* Key_CharEvent
-*
-* Called by the system between frames for key down events for standard characters
-* Should NOT be called during an interrupt!
-*/
-void Key_CharEvent( int key, wchar_t charkey ) {
-	if( Key_IsToggleConsole( key ) ) {
-		return;
+static SingletonHolder<wsw::cl::KeyHandlingSystem> keyHandlingSystemHolder;
+
+namespace wsw::cl {
+
+void KeyHandlingSystem::init() {
+	::keyHandlingSystemHolder.Init();
+}
+
+void KeyHandlingSystem::shutdown() {
+	::keyHandlingSystemHolder.Shutdown();
+}
+
+auto KeyHandlingSystem::instance() -> KeyHandlingSystem * {
+	return ::keyHandlingSystemHolder.Instance();
+}
+
+bool KeyHandlingSystem::isAToggleConsoleKey( int key ) {
+	if( (unsigned)key >= kMaxKeys ) {
+		return false;
 	}
 
-	switch( CL_GetKeyDest() ) {
-		case key_menu:
-			UISystem::instance()->handleCharEvent( charkey );
-			break;
-		case key_game:
-		case key_console:
-			Con_CharEvent( charkey );
-			break;
-		default:
-			Com_Error( ERR_FATAL, "Bad cls.key_dest" );
+	const auto *const bindingsSystem = wsw::cl::KeyBindingsSystem::instance();
+	if( !bindingsSystem->isConsoleBound() ) {
+		return key == '`' || key == '~';
+	}
+
+	if( const auto maybeBinding = bindingsSystem->getBindingForKey( key ) ) {
+		if( maybeBinding->equalsIgnoreCase( kToggleConsole ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void KeyHandlingSystem::handleCharEvent( int key, wchar_t ch ) {
+	if( !isAToggleConsoleKey( key ) ) {
+		if( !Con_HandleCharEvent( ch ) ) {
+			(void)UISystem::instance()->handleCharEvent( ch );
+		}
 	}
 }
 
-/*
-* Key_MouseEvent
-*
-* A wrapper around Key_Event to generate double click events
-* A typical sequence of events will look like this:
-* +MOUSE1 - user pressed button
-* -MOUSE1 - user released button
-* +MOUSE1 - user pressed button  (must be within 480 ms or so of the previous down event)
-* +MOUSE1DBLCLK - inserted by Key_MouseEvent
-* -MOUSE1DBLCLK - inserted by Key_MouseEvent
-* -MOUSE1 - user released button
-* (This order is not final! We might want to suppress the second pair of
-* mouse1 down/up events, or make +MOUSE1DBLCLK come before +MOUSE1)
-*/
-void Key_MouseEvent( int key, bool down, int64_t time ) {
-	static int64_t last_button1_click = 0;
-	// use a lower delay than XP default (480 ms) because we don't support width/height yet
-	const int64_t doubleclick_time = 350;  // milliseconds
-	//	static int last_button1_x, last_button1_y; // TODO
-	//	const int doubleclick_width = 4;	// TODO
-	//	const int doubleclick_height = 4;	// TODO
-
+void KeyHandlingSystem::handleMouseEvent( int key, bool down, int64_t time ) {
 	if( key == K_MOUSE1 ) {
 		if( down ) {
-			if( time && last_button1_click && ( ( time - last_button1_click ) < doubleclick_time ) ) {
-				last_button1_click = 0;
-				Key_Event( key, down, time );
-				Key_Event( K_MOUSE1DBLCLK, true, time );
-				Key_Event( K_MOUSE1DBLCLK, false, time );
+			if( time && m_lastMouse1ClickTime && ( time - *m_lastMouse1ClickTime < 480 ) ) {
+				m_lastMouse1ClickTime = std::nullopt;
+				handleKeyEvent( key, true, time );
+				handleKeyEvent( K_MOUSE1DBLCLK, true, time );
+				handleKeyEvent( K_MOUSE1DBLCLK, false, time );
 				return;
 			} else {
-				last_button1_click = time;
+				m_lastMouse1ClickTime = time;
 			}
 		}
 	} else if( key == K_MOUSE2 || key == K_MOUSE3 ) {
-		last_button1_click = 0;
+		m_lastMouse1ClickTime = std::nullopt;
 	}
 
-	Key_Event( key, down, time );
+	handleKeyEvent( key, down, time );
 }
 
-/*
-* Key_NumPadKeyValue
-*
-* Translates numpad keys into 0-9, if possible.
-*/
-static int Key_NumPadKeyValue( int key ) {
-	switch( key ) {
-		case KP_HOME:
-			return '7';
-		case KP_UPARROW:
-			return '8';
-		case KP_PGUP:
-			return '9';
-		case KP_LEFTARROW:
-			return '4';
-		case KP_5:
-			return '5';
-		case KP_RIGHTARROW:
-			return '6';
-		case KP_END:
-			return '1';
-		case KP_DOWNARROW:
-			return '2';
-		case KP_PGDN:
-			return '3';
-		case KP_INS:
-			return '0';
-		default:
-			break;
+static int kAutoRepeatKeys[] = {
+	K_BACKSPACE, K_DEL, K_LEFTARROW, K_RIGHTARROW, K_UPARROW, K_DOWNARROW, K_PGUP, K_PGDN
+};
+
+bool KeyHandlingSystem::isAnAutoRepeatKey( int key ) {
+	if( key >= 32 && key <= 126 ) {
+		return key != '`';
 	}
-	return key;
+	return std::find( std::begin( kAutoRepeatKeys ), std::end( kAutoRepeatKeys ), key ) != std::end( kAutoRepeatKeys );
 }
 
-/*
-* Key_Event
-*
-* Called by the system between frames for both key up and key down events
-* Should NOT be called during an interrupt!
-*/
-void Key_Event( int key, bool down, int64_t time ) {
-	char cmd[1024];
-	bool handled = false;
-	int numkey = Key_NumPadKeyValue( key );
-	bool have_quickmenu = SCR_IsQuickMenuShown();
-	bool numeric = numkey >= '0' && numkey <= '9';
+bool KeyHandlingSystem::updateAutoRepeatStatus( int key, bool down ) {
+	if( !down ) {
+		m_keyStates[key].repeatCounter = 0;
+		return true;
+	}
 
-	const auto keyDest = CL_GetKeyDest();
+	m_keyStates[key].repeatCounter++;
+	if( m_keyStates[key].repeatCounter == 1u ) {
+		return true;
+	}
 
-	// update auto-repeat status
-	if( down ) {
-		key_repeats[key]++;
-		if( key_repeats[key] > 1 ) {
-			if( ( key != K_BACKSPACE && key != K_DEL
-				  && key != K_LEFTARROW && key != K_RIGHTARROW
-				  && key != K_UPARROW && key != K_DOWNARROW
-				  && key != K_PGUP && key != K_PGDN && ( key < 32 || key > 126 || key == '`' ) )
-				|| keyDest == key_game ) {
-				return;
+	// TODO: Check whether UI won't handle key
+	// TODO: Check whether console won't handle key
+	// TODO: It is seemingly not needed at all?
+
+	return isAnAutoRepeatKey( key );
+}
+
+void KeyHandlingSystem::handleEscapeKey() {
+	if( Con_HasKeyboardFocus() ) {
+		Con_ToggleConsole_f();
+		return;
+	}
+
+	if( cls.state != CA_ACTIVE && cls.state != CA_DISCONNECTED ) {
+		Cbuf_AddText( "disconnect\n" );
+		return;
+	}
+
+	if( !UISystem::instance()->handleKeyEvent( K_ESCAPE, true ) ) {
+		CL_GameModule_EscapeKey();
+	}
+}
+
+void KeyHandlingSystem::runSubsystemHandlers( int key, bool down, int64_t time ) {
+	if( Con_HandleKeyEvent( key ) ) {
+		return;
+	}
+
+	if( UISystem::instance()->handleKeyEvent( key, down ) ) {
+		return;
+	}
+
+	// TODO: Split Con_HandleKeyEvent() to Con_CanHandleKeyEvent() and Con_HandleKeyEvent() to reuse keys test here?
+	if( cls.state == CA_ACTIVE || ( key >= K_F1 && key <= K_F15 ) || ( key >= K_MOUSE1 || key <= K_MOUSE8 ) ) {
+		if( auto maybeBinding = KeyBindingsSystem::instance()->getBindingForKey( key ) ) {
+			handleKeyBinding( key, down, time, *maybeBinding );
+		}
+	}
+}
+
+void KeyHandlingSystem::handleKeyBinding( int key, bool down, int64_t time, const wsw::StringView &binding ) {
+	assert( binding.isZeroTerminated() );
+
+	if ( in_debug && in_debug->integer ) {
+		Com_Printf( "key:%i down:%i time:%" PRIi64 " %s\n", key, down, time, binding.data() );
+	}
+
+	if ( binding.startsWith( '+' ) ) {
+		wsw::StaticString<1024> cmd;
+		if( down ) {
+			cmd << binding << ' ' << key << ' ' << time << '\n';
+			Cbuf_AddText( cmd.data() );
+		} else {
+			// If was down
+			if( m_keyStates[key].isDown ) {
+				cmd << '-' << binding.drop( 1 ) << ' ' << key << ' ' << time << '\n';
+				Cbuf_AddText( cmd.data() );
 			}
 		}
-	} else {
-		key_repeats[key] = 0;
+	} else if( down ) {
+		Cbuf_AddText( binding.data() );
+		Cbuf_AddText( "\n" );
+	}
+}
+
+void KeyHandlingSystem::handleKeyEvent( int key, bool down, int64_t time ) {
+	if( (unsigned)key >= kMaxKeys ) {
+		return;
+	}
+
+	if( !updateAutoRepeatStatus( key, down ) ) {
+		return;
 	}
 
 #if !defined( WIN32 ) && !defined( __ANDROID__ )
 	// switch between fullscreen/windowed when ALT+ENTER is pressed
-	if( key == K_ENTER && down && ( keydown[K_LALT] || keydown[K_RALT] ) ) {
+	if ( key == K_ENTER && down && ( isKeyDown( K_LALT ) || isKeyDown( K_RALT ) ) ) {
 		Cbuf_ExecuteText( EXEC_APPEND, "toggle vid_fullscreen\n" );
 		return;
 	}
@@ -635,194 +552,49 @@ void Key_Event( int key, bool down, int64_t time ) {
 
 #if defined ( __MACOSX__ )
 	// quit the game when Control + q is pressed
-	if( key == 'q' && down && keydown[K_COMMAND] ) {
+	if( key == 'q' && down && isKeyDown( K_COMMAND ) ) {
 		Cbuf_ExecuteText( EXEC_APPEND, "quit\n" );
 		return;
 	}
 #endif
 
-	if( Key_IsToggleConsole( key ) ) {
-		if( !down ) {
-			return;
+	if( isAToggleConsoleKey( key ) ) {
+		if( down ) {
+			Con_ToggleConsole_f();
 		}
-		Con_ToggleConsole_f();
 		return;
 	}
 
 	// menu key is hardcoded, so the user can never unbind it
 	if( key == K_ESCAPE ) {
-		if( !down ) {
-			return;
-		}
-
-		if( cls.state != CA_ACTIVE ) {
-			if( keyDest == key_game || keyDest == key_menu ) {
-				if( cls.state != CA_DISCONNECTED ) {
-					Cbuf_AddText( "disconnect\n" );
-				} else if( keyDest == key_menu ) {
-					UISystem::instance()->handleKeyEvent( key, true, UISystem::MainContext );
-				}
-				return;
-			}
-		}
-
-		switch( keyDest ) {
-			case key_menu:
-				UISystem::instance()->handleKeyEvent( key, true, UISystem::MainContext );
-				break;
-			case key_game:
-				CL_GameModule_EscapeKey();
-				break;
-			case key_console:
-				Con_ToggleConsole_f();
-				break;
-			default:
-				Com_Error( ERR_FATAL, "Bad cls.key_dest" );
+		if( down ) {
+			handleEscapeKey();
 		}
 		return;
 	}
 
-	//
-	// if not a consolekey, send to the interpreter no matter what mode is
-	//
-	if( ( keyDest == key_menu && menubound[key] )
-		|| ( keyDest == key_console && !consolekeys[key] )
-		|| ( keyDest == key_game && ( cls.state == CA_ACTIVE || !consolekeys[key] ) && ( !have_quickmenu || !numeric ) ) ) {
+	runSubsystemHandlers( key, down, time );
 
-		if( const auto maybeBinding = wsw::cl::KeyBindingsSystem::instance()->getBindingForKey( key ) ) {
-			const auto binding = *maybeBinding;
-			assert( binding.isZeroTerminated() );
+	// Modify states after handling (command execution checks assume that order)
 
-			if( in_debug && in_debug->integer ) {
-				Com_Printf( "key:%i down:%i time:%" PRIi64 " %s\n", key, down, time, maybeBinding->data() );
-			}
-
-			if( binding.startsWith( '+' ) ) { // button commands add keynum and time as a parm
-				if( down ) {
-					Q_snprintfz( cmd, sizeof( cmd ), "%s %i %" PRIi64 "\n", binding.data(), key, time );
-					Cbuf_AddText( cmd );
-				} else if( keydown[key] ) {
-					Q_snprintfz( cmd, sizeof( cmd ), "-%s %i %" PRIi64 "\n", binding.data() + 1, key, time );
-					Cbuf_AddText( cmd );
-				}
-			} else if( down ) {
-				Cbuf_AddText( binding.data() );
-				Cbuf_AddText( "\n" );
-			}
-		}
-		handled = true; // can't return here, because we want to track keydown & repeats
-	}
-
-	// track if any key is down for BUTTON_ANY
-	keydown[key] = down;
+	m_keyStates[key].isDown = down;
 	if( down ) {
-		if( key_repeats[key] == 1 ) {
-			anykeydown++;
+		if( m_keyStates[key].repeatCounter == 1u ) {
+			m_numKeysDown++;
 		}
 	} else {
-		anykeydown--;
-		if( anykeydown < 0 ) {
-			anykeydown = 0;
+		m_numKeysDown = std::max( 0, m_numKeysDown - 1 );
+	}
+}
+
+void KeyHandlingSystem::clearStates() {
+	for( unsigned i = 0; i < kMaxKeys; ++i ) {
+		if( m_keyStates[i].isSet() ) {
+			handleKeyEvent( (int)i, false, 0 );
 		}
+		m_keyStates[i].clear();
 	}
-
-	if( keyDest == key_menu ) {
-		UISystem::instance()->handleKeyEvent( key, down, UISystem::MainContext );
-		return;
-	}
-
-	if( handled || !down ) {
-		return; // other systems only care about key down events
-
-	}
-	switch( keyDest ) {
-		case key_game:
-			if( have_quickmenu && numeric ) {
-				UISystem::instance()->handleKeyEvent( numkey, down, UISystem::RespectContext );
-				break;
-			}
-		case key_console:
-			Con_KeyDown( key );
-			break;
-		default:
-			Com_Error( ERR_FATAL, "Bad cls.key_dest" );
-	}
+	m_numKeysDown = 0;
 }
 
-/*
-* Key_ClearStates
-*/
-void Key_ClearStates( void ) {
-	int i;
-
-	anykeydown = false;
-
-	for( i = 0; i < 256; i++ ) {
-		if( keydown[i] || key_repeats[i] ) {
-			Key_Event( i, false, 0 );
-		}
-		keydown[i] = 0;
-		key_repeats[i] = 0;
-	}
-}
-
-/*
-* Key_IsDown
-*/
-bool Key_IsDown( int keynum ) {
-	if( keynum < 0 || keynum > 255 ) {
-		return false;
-	}
-	return keydown[keynum];
-}
-
-keydest_t CL_GetKeyDest( void ) {
-	return !keyDestStack.empty() ? keyDestStack.back() : key_game;
-}
-
-void CL_SetKeyDest( keydest_t key_dest ) {
-	if( key_dest < key_game || key_dest > key_menu ) {
-		Com_Error( ERR_DROP, "CL_SetKeyDest: invalid key_dest" );
-	}
-
-	// TODO: Should be reworked completely (check callers)
-	// assert( keyDestStack.size() == 1 );
-
-	std::optional<keydest_t> oldDest;
-	if( keyDestStack.empty() ) {
-		keyDestStack.push_back( key_dest );
-	} else {
-		oldDest = keyDestStack.back();
-		keyDestStack.back() = key_dest;
-	}
-
-	if( oldDest && *oldDest != key_dest ) {
-		CL_ClearInputState();
-	}
-}
-
-void CL_PushKeyDest( keydest_t key_dest ) {
-	if( key_dest < key_game || key_dest > key_menu ) {
-		Com_Error( ERR_DROP, "CL_SetKeyDest: invalid key_dest" );
-	}
-	if( keyDestStack.size() == keyDestStack.capacity() ) {
-		Com_Error( ERR_DROP, "CL_PushKeyDest: stack overflow" );
-	}
-
-	if( keyDestStack.empty() ) {
-		keyDestStack.push_back( key_dest );
-		return;
-	}
-
-	auto oldDest = keyDestStack.back();
-	keyDestStack.push_back( key_dest );
-	if( oldDest != key_dest ) {
-		CL_ClearInputState();
-	}
-}
-
-void CL_PopKeyDest() {
-	if( !keyDestStack.empty() ) {
-		keyDestStack.pop_back();
-	}
 }

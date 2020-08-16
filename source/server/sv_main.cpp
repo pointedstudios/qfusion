@@ -1017,10 +1017,6 @@ void CL_Netchan_Transmit( msg_t *msg ) {
 void Con_Print( const char *text ) {
 }
 
-int CL_GetKeyDest( void ) {
-	return -1;
-}
-
 int CL_GetClientState( void ) {
 	return 0; // CA_UNINITIALIZED
 }
@@ -1040,13 +1036,6 @@ void Key_Init( void ) {
 
 void Key_Shutdown( void ) {
 	Cmd_RemoveCommand( "bind" );
-}
-
-keydest_t Key_DelegatePush( void *keydel, void *chardel ) {
-	return key_console;
-}
-
-void Key_DelegatePop( keydest_t next_dest ) {
 }
 
 struct qfontface_s *SCR_RegisterFont( const char *name ) {

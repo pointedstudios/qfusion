@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "client.h"
 #include "../qcommon/asyncstream.h"
 #include "../ref/frontend.h"
+#include "../ui/uisystem.h"
 
 static void *cge = nullptr;
 
@@ -255,4 +256,8 @@ void CL_GameModule_MouseMove( int dx, int dy ) {
 	if( cge ) {
 		CG_MouseMove( dx, dy );
 	}
+}
+
+bool CG_HasKeyboardFocus() {
+	return cge && !Con_HasKeyboardFocus() && !UISystem::instance()->requestsKeyboardFocus();
 }

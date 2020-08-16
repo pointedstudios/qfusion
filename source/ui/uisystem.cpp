@@ -44,9 +44,14 @@ public:
 	void beginRegistration() override {};
 	void endRegistration() override {};
 
-	void handleKeyEvent( int quakeKey, bool keyDown, Context context ) override;
-	void handleCharEvent( int ch ) override;
-	void handleMouseMove( int frameTime, int dx, int dy ) override;
+	[[nodiscard]]
+	bool requestsKeyboardFocus() const override;
+	[[nodiscard]]
+	bool handleKeyEvent( int quakeKey, bool keyDown ) override;
+	[[nodiscard]]
+	bool handleCharEvent( int ch ) override;
+	[[nodiscard]]
+	bool handleMouseMove( int frameTime, int dx, int dy ) override;
 
 	void forceMenuOn() override {};
 	void forceMenuOff() override {};
@@ -693,6 +698,8 @@ void QWswUISystem::setActiveMenuMask( unsigned activeMask, std::optional<unsigne
 		return;
 	}
 
+	const auto oldActiveMask = m_activeMenuMask;
+
 	const bool wasShowingMainMenu = isShowingMainMenu();
 	const bool wasShowingInGameMenu = isShowingInGameMenu();
 	const bool wasShowingRespectMenu = isShowingRespectMenu();
@@ -719,14 +726,8 @@ void QWswUISystem::setActiveMenuMask( unsigned activeMask, std::optional<unsigne
 		Q_EMIT isShowingDemoPlaybackMenuChanged( _isShowingDemoPlaybackMenu );
 	}
 
-	if( m_activeMenuMask ) {
-		if( CL_GetKeyDest() != key_menu ) {
-			CL_PushKeyDest( key_menu );
-		}
-	} else {
-		while( CL_GetKeyDest() != key_game ) {
-			CL_PopKeyDest();
-		}
+	if( m_activeMenuMask && !oldActiveMask ) {
+		CL_ClearInputState();
 	}
 }
 
@@ -810,9 +811,13 @@ void QWswUISystem::checkPropertyChanges() {
 	}
 }
 
-void QWswUISystem::handleMouseMove( int frameTime, int dx, int dy ) {
+bool QWswUISystem::handleMouseMove( int frameTime, int dx, int dy ) {
+	if( !m_activeMenuMask ) {
+		return false;
+	}
+
 	if( !dx && !dy ) {
-		return;
+		return true;
 	}
 
 	const int bounds[2] = { m_window->width(), m_window->height() };
@@ -851,31 +856,40 @@ void QWswUISystem::handleMouseMove( int frameTime, int dx, int dy ) {
 	QPointF point( m_mouseXY[0], m_mouseXY[1] );
 	QMouseEvent event( QEvent::MouseMove, point, Qt::NoButton, getPressedMouseButtons(), getPressedKeyboardModifiers() );
 	QCoreApplication::sendEvent( m_window, &event );
+	return true;
 }
 
-void QWswUISystem::handleKeyEvent( int quakeKey, bool keyDown, Context context ) {
-	// Currently unsupported
-	if( context == RespectContext ) {
-		return;
+bool QWswUISystem::requestsKeyboardFocus() const {
+	return m_activeMenuMask != 0;
+}
+
+bool QWswUISystem::handleKeyEvent( int quakeKey, bool keyDown ) {
+	if( !m_activeMenuMask ) {
+		return false;
 	}
 
 	if( tryHandlingKeyEventAsAMouseEvent( quakeKey, keyDown ) ) {
-		return;
+		return true;
 	}
 
 	const auto maybeQtKey = convertQuakeKeyToQtKey( quakeKey );
 	if( !maybeQtKey ) {
-		return;
+		return true;
 	}
 
 	const auto type = keyDown ? QEvent::KeyPress : QEvent::KeyRelease;
 	QKeyEvent keyEvent( type, *maybeQtKey, getPressedKeyboardModifiers() );
 	QCoreApplication::sendEvent( m_window, &keyEvent );
+	return true;
 }
 
-void QWswUISystem::handleCharEvent( int ch ) {
+bool QWswUISystem::handleCharEvent( int ch ) {
+	if( !m_activeMenuMask ) {
+		return false;
+	}
+
 	if( !::isAPrintableChar( ch ) ) {
-		return;
+		return true;
 	}
 
 	const auto modifiers = getPressedKeyboardModifiers();
@@ -885,31 +899,36 @@ void QWswUISystem::handleCharEvent( int ch ) {
 	QCoreApplication::sendEvent( m_window, &pressEvent );
 	QKeyEvent releaseEvent( QEvent::KeyRelease, (Qt::Key)ch, modifiers );
 	QCoreApplication::sendEvent( m_window, &releaseEvent );
+	return true;
 }
 
 auto QWswUISystem::getPressedMouseButtons() const -> Qt::MouseButtons {
+	const auto *const keyHandlingSystem = wsw::cl::KeyHandlingSystem::instance();
+
 	auto result = Qt::MouseButtons();
-	if( Key_IsDown( K_MOUSE1 ) ) {
+	if( keyHandlingSystem->isKeyDown( K_MOUSE1 ) ) {
 		result |= Qt::LeftButton;
 	}
-	if( Key_IsDown( K_MOUSE2 ) ) {
+	if( keyHandlingSystem->isKeyDown( K_MOUSE2 ) ) {
 		result |= Qt::RightButton;
 	}
-	if( Key_IsDown( K_MOUSE3 ) ) {
+	if( keyHandlingSystem->isKeyDown( K_MOUSE3 ) ) {
 		result |= Qt::MiddleButton;
 	}
 	return result;
 }
 
 auto QWswUISystem::getPressedKeyboardModifiers() const -> Qt::KeyboardModifiers {
+	const auto *const keyHandlingSystem = wsw::cl::KeyHandlingSystem::instance();
+
 	auto result = Qt::KeyboardModifiers();
-	if( Key_IsDown( K_LCTRL ) || Key_IsDown( K_RCTRL ) ) {
+	if( keyHandlingSystem->isKeyDown( K_LCTRL ) || keyHandlingSystem->isKeyDown( K_RCTRL ) ) {
 		result |= Qt::ControlModifier;
 	}
-	if( Key_IsDown( K_LALT ) || Key_IsDown( K_RALT ) ) {
+	if( keyHandlingSystem->isKeyDown( K_LALT ) || keyHandlingSystem->isKeyDown( K_RALT ) ) {
 		result |= Qt::AltModifier;
 	}
-	if( Key_IsDown( K_LSHIFT ) || Key_IsDown( K_RSHIFT ) ) {
+	if( keyHandlingSystem->isKeyDown( K_LSHIFT ) || keyHandlingSystem->isKeyDown( K_RSHIFT ) ) {
 		result |= Qt::ShiftModifier;
 	}
 	return result;
