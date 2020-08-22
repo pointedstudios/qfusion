@@ -514,16 +514,6 @@ void SCR_ShutdownScreen( void ) {
 */
 void SCR_EnableQuickMenu( bool enable ) {
 	cls.quickmenu = enable;
-	if( auto maybeInstance = UISystem::maybeInstance() ) {
-		( *maybeInstance )->showRespectMenu( cls.quickmenu );
-	}
-}
-
-/*
-* SCR_IsQuickMenuShown
-*/
-bool SCR_IsQuickMenuShown( void ) {
-	return cls.quickmenu && UISystem::instance()->hasRespectMenu();
 }
 
 //=============================================================================

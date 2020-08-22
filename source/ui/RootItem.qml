@@ -16,16 +16,13 @@ Item {
         }
     }
 
-    Keys.forwardTo: [mainMenu, demoPlaybackMenu, respectTokensMenu, inGameMenu]
+    Keys.forwardTo: [mainMenu, demoPlaybackMenu, inGameMenu]
 
     MainMenu {
         id: mainMenu
     }
     DemoPlaybackMenu {
         id: demoPlaybackMenu
-    }
-    RespectTokensMenu {
-        id: respectTokensMenu
     }
     InGameMenu {
         id: inGameMenu

@@ -63,19 +63,11 @@ public:
 
 	void handleConfigString( unsigned configStringNum, const wsw::StringView &configString ) override;
 
-	[[nodiscard]]
-	bool hasRespectMenu() const override {
-		return ( m_activeMenuMask & RespectMenu ) || ( m_backupMenuMask & RespectMenu );
-	};
-
-	void showRespectMenu( bool show ) override;
-
 	void enterUIRenderingMode();
 	void leaveUIRenderingMode();
 
 	Q_PROPERTY( bool isShowingMainMenu READ isShowingMainMenu NOTIFY isShowingMainMenuChanged );
 	Q_PROPERTY( bool isShowingInGameMenu READ isShowingInGameMenu NOTIFY isShowingInGameMenuChanged );
-	Q_PROPERTY( bool isShowingRespectMenu READ isShowingRespectMenu NOTIFY isShowingRespectMenuChanged );
 	Q_PROPERTY( bool isShowingDemoPlaybackMenu READ isShowingDemoPlaybackMenu NOTIFY isShowingDemoPlaybackMenuChanged );
 	Q_PROPERTY( bool isDebuggingNativelyDrawnItems READ isDebuggingNativelyDrawnItems NOTIFY isDebuggingNativelyDrawnItemsChanged );
 
@@ -132,7 +124,6 @@ signals:
 
 	Q_SIGNAL void isShowingMainMenuChanged( bool isShowingMainMenu );
 	Q_SIGNAL void isShowingInGameMenuChanged( bool isShowingInGameMenu );
-	Q_SIGNAL void isShowingRespectMenuChanged( bool isShowingRespectMenu );
 	Q_SIGNAL void isShowingDemoPlaybackMenuChanged( bool isShowingDemoMenu );
 	Q_SIGNAL void isDebuggingNativelyDrawnItemsChanged( bool isDebuggingNativelyDrawnItems );
 	Q_SIGNAL void hasPendingCVarChangesChanged( bool hasPendingCVarChanges );
@@ -180,8 +171,7 @@ private:
 	enum ActiveMenuMask : unsigned {
 		MainMenu             = 0x1,
 		InGameMenu           = 0x2,
-		RespectMenu          = 0x4,
-		DemoPlaybackMenu     = 0x8
+		DemoPlaybackMenu     = 0x4
 	};
 
 	unsigned m_backupMenuMask { 0 };
@@ -243,11 +233,6 @@ private:
 	[[nodiscard]]
 	bool isShowingInGameMenu() const {
 		return ( m_activeMenuMask & InGameMenu ) != 0;
-	};
-
-	[[nodiscard]]
-	bool isShowingRespectMenu() const {
-		return ( m_activeMenuMask & RespectMenu ) != 0;
 	};
 
 	[[nodiscard]]
@@ -655,27 +640,6 @@ void QWswUISystem::toggleInGameMenu() {
 	}
 }
 
-void QWswUISystem::showRespectMenu( bool show ) {
-	if( hasRespectMenu() == show ) {
-		return;
-	}
-
-	if( m_activeMenuMask & MainMenu ) {
-		if( show ) {
-			m_backupMenuMask |= RespectMenu;
-		} else {
-			m_backupMenuMask &= ~RespectMenu;
-		}
-		return;
-	}
-
-	if( show ) {
-		setActiveMenuMask( m_activeMenuMask | RespectMenu );
-	} else {
-		setActiveMenuMask( m_activeMenuMask & ~RespectMenu );
-	}
-};
-
 void QWswUISystem::showMainMenu() {
 	setActiveMenuMask( MainMenu );
 }
@@ -702,7 +666,6 @@ void QWswUISystem::setActiveMenuMask( unsigned activeMask, std::optional<unsigne
 
 	const bool wasShowingMainMenu = isShowingMainMenu();
 	const bool wasShowingInGameMenu = isShowingInGameMenu();
-	const bool wasShowingRespectMenu = isShowingRespectMenu();
 	const bool wasShowingDemoPlaybackMenu = isShowingDemoPlaybackMenu();
 
 	m_backupMenuMask = backupMask ? *backupMask : m_activeMenuMask;
@@ -710,7 +673,6 @@ void QWswUISystem::setActiveMenuMask( unsigned activeMask, std::optional<unsigne
 
 	const bool _isShowingMainMenu = isShowingMainMenu();
 	const bool _isShowingInGameMenu = isShowingInGameMenu();
-	const bool _isShowingRespectMenu = isShowingRespectMenu();
 	const bool _isShowingDemoPlaybackMenu = isShowingDemoPlaybackMenu();
 
 	if( wasShowingMainMenu != _isShowingMainMenu ) {
@@ -718,9 +680,6 @@ void QWswUISystem::setActiveMenuMask( unsigned activeMask, std::optional<unsigne
 	}
 	if( wasShowingInGameMenu != _isShowingInGameMenu ) {
 		Q_EMIT isShowingInGameMenuChanged( _isShowingInGameMenu );
-	}
-	if( wasShowingRespectMenu != _isShowingRespectMenu ) {
-		Q_EMIT isShowingRespectMenuChanged( _isShowingRespectMenu );
 	}
 	if( wasShowingDemoPlaybackMenu != _isShowingDemoPlaybackMenu ) {
 		Q_EMIT isShowingDemoPlaybackMenuChanged( _isShowingDemoPlaybackMenu );

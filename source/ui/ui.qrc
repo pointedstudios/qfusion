@@ -37,7 +37,6 @@
         <file>PlayOnlinePage.qml</file>
         <file>ProfilePage.qml</file>
         <file>QuitPage.qml</file>
-        <file>RespectTokensMenu.qml</file>
         <file>RootItem.qml</file>
         <file>ServerBrowserCard.qml</file>
         <file>ServerBrowserPlayersList.qml</file>
