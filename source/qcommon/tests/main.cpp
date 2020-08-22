@@ -1,6 +1,7 @@
 #include "boundsbuildertest.h"
 #include "bufferedreadertest.h"
 #include "configstringstoragetest.h"
+#include "enumtokenmatchertest.h"
 #include "staticstringtest.h"
 #include "stringsplittertest.h"
 #include "stringviewtest.h"
@@ -41,6 +42,11 @@ int main( int argc, char **argv ) {
 	{
 		ConfigStringStorageTest configStringStorageTest;
 		result |= QTest::qExec( &configStringStorageTest, argc, argv );
+	}
+
+	{
+		EnumTokenMatcherTest enumTokenMatcherTest;
+		result |= QTest::qExec( &enumTokenMatcherTest, argc, argv );
 	}
 
 	{
