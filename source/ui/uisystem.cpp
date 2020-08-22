@@ -9,6 +9,7 @@
 #include "nativelydrawnitems.h"
 #include "serverlistmodel.h"
 #include "keysandbindingsmodel.h"
+#include "wswimageprovider.h"
 
 #include <QGuiApplication>
 #include <QOpenGLContext>
@@ -445,6 +446,7 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 
 	m_engine = new QQmlEngine;
 	m_engine->rootContext()->setContextProperty( "wsw", this );
+	m_engine->addImageProvider( "wsw", new wsw::ui::WswImageProvider );
 
 	m_serverListModel = new ServerListModel;
 
