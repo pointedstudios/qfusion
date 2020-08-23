@@ -138,9 +138,9 @@ class KeyHandlingSystem {
 
 	void handleEscapeKey();
 
-	void runSubsystemHandlers( int key, bool down, int64_t time );
+	void runSubsystemHandlers( int key, bool down, bool wasDown, int64_t time );
 
-	void handleKeyBinding( int key, bool down, int64_t time, const wsw::StringView &binding );
+	void handleKeyBinding( int key, bool down, bool wasDown, int64_t time, const wsw::StringView &binding );
 public:
 	static void init();
 	static void shutdown();

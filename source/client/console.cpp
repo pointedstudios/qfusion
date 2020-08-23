@@ -1567,12 +1567,15 @@ static void Con_KeyDown( int key ) {
 	// key is a normal printable key normal which wil be HANDLE later in response to WM_CHAR event
 }
 
-bool Con_HandleKeyEvent( int key ) {
+bool Con_HandleKeyEvent( int key, bool down ) {
 	if( !Con_HasKeyboardFocus() ) {
 		return false;
 	}
 
 	// TODO: Check whether the key is a "consolekey" (see old keys.cpp)
+	if( !down ) {
+		return true;
+	}
 
 	Con_KeyDown( key );
 	return true;

@@ -56,7 +56,7 @@ float Con_GetPixelRatio( void );
 bool Con_HasKeyboardFocus();
 
 [[nodiscard]]
-bool Con_HandleKeyEvent( int key );
+bool Con_HandleKeyEvent( int key, bool down );
 [[nodiscard]]
 bool Con_HandleCharEvent( wchar_t key );
 

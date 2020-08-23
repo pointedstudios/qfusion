@@ -491,8 +491,8 @@ void KeyHandlingSystem::handleEscapeKey() {
 	}
 }
 
-void KeyHandlingSystem::runSubsystemHandlers( int key, bool down, int64_t time ) {
-	if( Con_HandleKeyEvent( key ) ) {
+void KeyHandlingSystem::runSubsystemHandlers( int key, bool down, bool wasDown, int64_t time ) {
+	if( Con_HandleKeyEvent( key, down ) ) {
 		return;
 	}
 
@@ -503,12 +503,13 @@ void KeyHandlingSystem::runSubsystemHandlers( int key, bool down, int64_t time )
 	// TODO: Split Con_HandleKeyEvent() to Con_CanHandleKeyEvent() and Con_HandleKeyEvent() to reuse keys test here?
 	if( cls.state == CA_ACTIVE || ( key >= K_F1 && key <= K_F15 ) || ( key >= K_MOUSE1 || key <= K_MOUSE8 ) ) {
 		if( auto maybeBinding = KeyBindingsSystem::instance()->getBindingForKey( key ) ) {
-			handleKeyBinding( key, down, time, *maybeBinding );
+			handleKeyBinding( key, down, wasDown, time, *maybeBinding );
 		}
 	}
 }
 
-void KeyHandlingSystem::handleKeyBinding( int key, bool down, int64_t time, const wsw::StringView &binding ) {
+void KeyHandlingSystem::handleKeyBinding( int key, bool down, bool wasDown, int64_t time,
+										  const wsw::StringView &binding ) {
 	assert( binding.isZeroTerminated() );
 
 	if ( in_debug && in_debug->integer ) {
@@ -520,12 +521,9 @@ void KeyHandlingSystem::handleKeyBinding( int key, bool down, int64_t time, cons
 		if( down ) {
 			cmd << binding << ' ' << key << ' ' << time << '\n';
 			Cbuf_AddText( cmd.data() );
-		} else {
-			// If was down
-			if( m_keyStates[key].isDown ) {
-				cmd << '-' << binding.drop( 1 ) << ' ' << key << ' ' << time << '\n';
-				Cbuf_AddText( cmd.data() );
-			}
+		} else if( wasDown ) {
+			cmd << '-' << binding.drop( 1 ) << ' ' << key << ' ' << time << '\n';
+			Cbuf_AddText( cmd.data() );
 		}
 	} else if( down ) {
 		Cbuf_AddText( binding.data() );
@@ -573,10 +571,7 @@ void KeyHandlingSystem::handleKeyEvent( int key, bool down, int64_t time ) {
 		return;
 	}
 
-	runSubsystemHandlers( key, down, time );
-
-	// Modify states after handling (command execution checks assume that order)
-
+	const bool wasDown = m_keyStates[key].isDown;
 	m_keyStates[key].isDown = down;
 	if( down ) {
 		if( m_keyStates[key].repeatCounter == 1u ) {
@@ -585,6 +580,8 @@ void KeyHandlingSystem::handleKeyEvent( int key, bool down, int64_t time ) {
 	} else {
 		m_numKeysDown = std::max( 0, m_numKeysDown - 1 );
 	}
+
+	runSubsystemHandlers( key, down, wasDown, time );
 }
 
 void KeyHandlingSystem::clearStates() {
