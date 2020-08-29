@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // g_utils.c -- misc utility functions for game module
 
 #include "g_local.h"
+#include "../qcommon/wswfs.h"
 
 //==============================================================================
 
@@ -116,95 +117,28 @@ const char *_G_RegisterLevelString( const char *string, const char *filename, in
 * G_AllocCreateNamesList
 */
 char *G_AllocCreateNamesList( const char *path, const char *extension, const char separator ) {
-	char separators[2];
-	char name[MAX_QPATH];
-	char buffer[MAX_STRING_CHARS], *s, *list;
-	int numfiles, i, j, found, length, fulllength;
-
-	if( !extension || !path ) {
-		return NULL;
+	if( !path || !extension || ( extension[0] != '.' ) ) {
+		return nullptr;
 	}
 
-	if( extension[0] != '.' || strlen( extension ) < 2 ) {
-		return NULL;
+	wsw::fs::SearchResultHolder searchResultHolder;
+	auto maybeCallResult = searchResultHolder.findDirFiles( wsw::StringView( path ), wsw::StringView( extension ) );
+	if( !maybeCallResult ) {
+		return nullptr;
 	}
 
-	if( ( numfiles = trap_FS_GetFileList( path, extension, NULL, 0, 0, 0 ) ) == 0 ) {
-		return NULL;
+	char *const result = (char *)Q_malloc( maybeCallResult->getNumFiles() * ( MAX_QPATH + 2 ) + 1 );
+	char *p = result;
+	for( const wsw::StringView &fileName: *maybeCallResult ) {
+		fileName.copyTo( p, MAX_QPATH );
+		COM_StripExtension( p );
+		const auto len = std::strlen( p );
+		p[len + 0] = separator;
+		p[len + 1] = '\0';
+		p += len + 1;
 	}
 
-	separators[0] = separator;
-	separators[1] = 0;
-
-	//
-	// do a first pass just for finding the full len of the list
-	//
-
-	i = 0;
-	found = 0;
-	length = 0;
-	fulllength = 0;
-	do {
-		if( ( j = trap_FS_GetFileList( path, extension, buffer, sizeof( buffer ), i, numfiles ) ) == 0 ) {
-			// can happen if the filename is too long to fit into the buffer or we're done
-			i++;
-			continue;
-		}
-
-		i += j;
-		for( s = buffer; j > 0; j--, s += length + 1 ) {
-			length = strlen( s );
-
-			if( strlen( path ) + 1 + length >= MAX_QPATH ) {
-				Com_Printf( "Warning: G_AllocCreateNamesList :file name too long: %s\n", s );
-				continue;
-			}
-
-			Q_strncpyz( name, s, sizeof( name ) );
-			COM_StripExtension( name );
-
-			fulllength += strlen( name ) + 1;
-			found++;
-		}
-	} while( i < numfiles );
-
-	if( !found ) {
-		return NULL;
-	}
-
-	//
-	// Allocate a string for the full list and do a second pass to copy them in there
-	//
-
-	fulllength += 1;
-	list = ( char * )Q_malloc( fulllength );
-
-	i = 0;
-	length = 0;
-	do {
-		if( ( j = trap_FS_GetFileList( path, extension, buffer, sizeof( buffer ), i, numfiles ) ) == 0 ) {
-			// can happen if the filename is too long to fit into the buffer or we're done
-			i++;
-			continue;
-		}
-
-		i += j;
-		for( s = buffer; j > 0; j--, s += length + 1 ) {
-			length = strlen( s );
-
-			if( strlen( path ) + 1 + length >= MAX_QPATH ) {
-				continue;
-			}
-
-			Q_strncpyz( name, s, sizeof( name ) );
-			COM_StripExtension( name );
-
-			Q_strncatz( list, name, fulllength );
-			Q_strncatz( list, separators, fulllength );
-		}
-	} while( i < numfiles );
-
-	return list;
+	return result;
 }
 
 void G_ProjectSource( vec3_t point, vec3_t distance, vec3_t forward, vec3_t right, vec3_t result ) {

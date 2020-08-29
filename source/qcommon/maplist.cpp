@@ -23,14 +23,20 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "qcommon.h"
 #include "q_trie.h"
 
+#include "wswstringsplitter.h"
+#include "wswstringview.h"
+#include "wswstaticstring.h"
+#include "wswstdtypes.h"
+#include "wswfs.h"
+
+using wsw::operator""_asView;
+
 #define MLIST_CACHE "cache/mapcache.txt"
 #define MLIST_NULL  ""
 
 #define MLIST_TRIE_CASING TRIE_CASE_INSENSITIVE
 
 #define MLIST_UNKNOWN_MAPNAME   "@#$"
-
-#define MLIST_CACHE_EXISTS ( FS_FOpenFile( MLIST_CACHE, NULL, FS_READ | FS_CACHE ) > 0 )
 
 typedef struct mapinfo_s {
 	char *filename, *fullname;
@@ -130,119 +136,85 @@ static void ML_BuildCache( void ) {
 	}
 }
 
-typedef struct mapdir_s {
-	char *filename;
-	struct mapdir_s *prev, *next;
-} mapdir_t;
-
 /*
 * ML_InitFromCache
 * Fills map list array from cache, much faster
 */
-static void ML_InitFromCache( void ) {
-	int count, i, total, len;
-	size_t size = 0;
-	char *buffer, *chr, *current, *curend;
-	char *temp, *maps, *map;
-	mapdir_t *dir, *curmap, *prev;
-
+static void ML_InitFromCache( wsw::fs::BufferedReader &reader ) {
 	if( ml_initialized ) {
 		return;
 	}
 
-	total = FS_GetFileListExt( "maps", ".bsp", NULL, &size, 0, 0 );
-	if( !total ) {
+	wsw::fs::SearchResultHolder searchResultHolder;
+	const auto maybeCallResult = searchResultHolder.findDirFiles( "maps"_asView, ".bsp"_asView );
+	if( !maybeCallResult ) {
 		return;
 	}
 
-	// load maps from directory reading into a list
-	maps = temp = ( char* )Q_malloc( size + sizeof( mapdir_t ) * total );
-	temp += size;
-	FS_GetFileList( "maps", ".bsp", maps, size, 0, 0 );
-	len = 0;
-	prev = NULL;
-	dir = NULL;
-	for( i = 0; i < total; i++ ) {
-		map = maps + len;
-		len += strlen( map ) + 1;
+	wsw::Vector<wsw::StringView> existingFileNames;
+	existingFileNames.reserve( maybeCallResult->getNumFiles() );
+	wsw::String existingFileNameData;
+	existingFileNameData.reserve( maybeCallResult->getNumFiles() * MAX_QPATH );
 
-		curmap = ( mapdir_t * )temp;
-		temp += sizeof( mapdir_t );
+	for( const wsw::StringView &fileName: *maybeCallResult ) {
+		const size_t oldDataLen = existingFileNameData.length();
+		existingFileNameData.append( fileName.data(), fileName.size() );
 
-		COM_StripExtension( map );
+		char *cleanName = existingFileNameData.data() + oldDataLen;
+		COM_StripExtension( cleanName );
+		const size_t cleanNameLen = std::strlen( cleanName );
 
-		if( !i ) {
-			dir = curmap;
-		} else {
-			prev->next = curmap;
-			curmap->prev = prev;
+		existingFileNameData.erase( oldDataLen + cleanNameLen );
+		existingFileNameData.push_back( '\0' );
+
+		existingFileNames.push_back( wsw::StringView( cleanName, cleanNameLen, wsw::StringView::ZeroTerminated ) );
+	}
+
+	constexpr size_t kBufferSize = 1024;
+	char fileNameBuffer[kBufferSize];
+	char fullNameBuffer[kBufferSize];
+	char *buffers[2] = { &fileNameBuffer[0], &fullNameBuffer[0] };
+	unsigned turn = 0;
+
+	for(;; ) {
+		if( reader.isAtEof() ) {
+			break;
 		}
 
-		curmap->filename = map;
-		prev = curmap;
-	}
+		auto readResult = reader.readToNewline( buffers[turn], kBufferSize );
+		// The buffer must be sufficient to read any line
+		if( !readResult ) {
+			break;
+		}
+		if( readResult->wasIncomplete ) {
+			break;
+		}
 
-	FS_LoadCacheFile( MLIST_CACHE, (void **)&buffer, NULL, 0 );
-	if( !buffer ) {
-		Q_free( maps );
-		return;
-	}
+		assert( readResult->bytesRead < kBufferSize );
+		buffers[turn][readResult->bytesRead] = '\0';
 
-	current = curend = buffer;
-	count = 0;
+		const auto oldTurn = turn;
+		turn = ( turn + 1 ) % 2;
+		if( !oldTurn ) {
+			COM_SanitizeFilePath( fileNameBuffer );
+			continue;
+		}
 
-	for( chr = buffer; *chr; chr++ ) {
-		// current character is a delimiter
-		if( *chr == '\n' ) {
-			if( *( chr - 1 ) == '\r' ) {
-				*( chr - 1 ) = '\0';    // clear the CR too
-			}
-			*chr = '\0';            // clear the LF
-
-			// if we have got both params
-			if( !( ++count & 1 ) ) {
-				// check if its in the maps directory
-				for( curmap = dir; curmap; curmap = curmap->next ) {
-					if( !Q_stricmp( curmap->filename, current ) ) {
-						if( curmap->prev ) {
-							curmap->prev->next = curmap->next;
-						} else {
-							dir = curmap->next;
-						}
-
-						if( curmap->next ) {
-							curmap->next->prev = curmap->prev;
-						}
-						break;
-					}
-				}
-
-				// if we found it in the maps directory
-				if( curmap ) {
-					COM_SanitizeFilePath( current );
-
-					// well, if we've got a map with an unknown fullname, load it from map
-					if( !strcmp( curend + 1, MLIST_UNKNOWN_MAPNAME ) ) {
-						ML_AddMap( current, NULL );
-					} else {
-						ML_AddMap( current, curend + 1 );
-					}
-				}
-				current = chr + 1;
-			} else {
-				curend = chr;
-			}
+		// well, if we've got a map with an unknown fullname, load it from map
+		if( !strcmp( fullNameBuffer, MLIST_UNKNOWN_MAPNAME ) ) {
+			ML_AddMap( fileNameBuffer, nullptr );
+		} else {
+			ML_AddMap( fileNameBuffer, fullNameBuffer );
 		}
 	}
 
 	// we've now loaded the mapcache, but there may be files which
 	// have been added to maps directory, and the mapcache isnt aware
 	// these will be left over in our directory list
-	for( curmap = dir; curmap; curmap = curmap->next )
-		ML_AddMap( curmap->filename, NULL );
-
-	Q_free( maps );
-	FS_FreeFile( buffer );
+	for( const wsw::StringView &fileName: existingFileNames ) {
+		assert( fileName.isZeroTerminated() );
+		ML_AddMap( fileName.data(), nullptr );
+	}
 }
 
 /*
@@ -251,45 +223,15 @@ static void ML_InitFromCache( void ) {
 * and should only be called if cache doesnt exist
 */
 static void ML_InitFromMaps( void ) {
-	int i, j, total, len;
-	char maps[2048];
-	char *filename;
+	wsw::fs::SearchResultHolder searchResultHolder;
+	if( auto callResult = searchResultHolder.findDirFiles( "maps"_asView, ".bsp"_asView ) ) {
+		char buffer[MAX_QPATH];
+		for( const wsw::StringView &fileName: *callResult ) {
+			fileName.copyTo( buffer, sizeof( buffer ) );
+			COM_SanitizeFilePath( buffer );
+			COM_StripExtension( buffer );
 
-	if( ml_initialized ) {
-		return;
-	}
-
-	total = FS_GetFileList( "maps", ".bsp", NULL, 0, 0, 0 );
-	if( !total ) {
-		return;
-	}
-
-	i = 0;
-	while( i < total ) {
-		memset( maps, 0, sizeof( maps ) );
-		j = FS_GetFileList( "maps", ".bsp", maps, sizeof( maps ), i, total );
-
-		// no maps returned, map name is too big or end of list?
-		if( !j ) {
-			i++;
-			continue;
-		}
-		i += j;
-
-		// split the maps up and find their fullnames
-		len = 0;
-		while( j-- ) {
-			filename = maps + len;
-			if( !*filename ) {
-				continue;
-			}
-
-			len += strlen( filename ) + 1;
-
-			COM_SanitizeFilePath( filename );
-			COM_StripExtension( filename );
-
-			ML_AddMap( filename, NULL );
+			ML_AddMap( buffer, nullptr );
 		}
 	}
 }
@@ -380,8 +322,8 @@ void ML_Init( void ) {
 
 	Cmd_AddCommand( "maplist", ML_MapListCmd );
 
-	if( MLIST_CACHE_EXISTS ) {
-		ML_InitFromCache();
+	if( auto maybeReader = wsw::fs::openAsBufferedReader( wsw::StringView( MLIST_CACHE ), wsw::fs::UseCacheFS ) ) {
+		ML_InitFromCache( *maybeReader );
 	} else {
 		ML_InitFromMaps();
 	}
@@ -439,32 +381,21 @@ void ML_Restart( bool forcemaps ) {
 * ML_Update
 */
 bool ML_Update( void ) {
-	int i, len, total, newpaks;
-	size_t size;
-	char *map, *maps, *filename;
-
-	newpaks = FS_Rescan();
-	if( !newpaks ) {
+	if( !FS_Rescan() ) {
 		return false;
 	}
 
-	total = FS_GetFileListExt( "maps", ".bsp", NULL, &size, 0, 0 );
-	if( size ) {
-		maps = ( char* )Q_malloc( size );
-		FS_GetFileList( "maps", ".bsp", maps, size, 0, 0 );
-		for( i = 0, len = 0; i < total; i++ ) {
-			map = maps + len;
-			len += strlen( map ) + 1;
-
-			filename = ( char * )COM_FileBase( map );
-			COM_StripExtension( filename );
-
+	wsw::fs::SearchResultHolder searchResultHolder;
+	if( auto callResult = searchResultHolder.findDirFiles( "maps"_asView, ".bsp"_asView ) ) {
+		for( const wsw::StringView &fileName: *callResult ) {
+			char buffer[MAX_QPATH];
+			fileName.copyTo( buffer, sizeof( buffer ) );
+			COM_StripExtension( buffer );
 			// don't check for existance of each file itself, as we've just got the fresh list
-			if( !ML_FilenameExistsExt( filename, true ) ) {
-				ML_AddMap( filename, MLIST_UNKNOWN_MAPNAME );
+			if( !ML_FilenameExistsExt( buffer, true ) ) {
+				ML_AddMap( buffer, MLIST_UNKNOWN_MAPNAME );
 			}
 		}
-		Q_free( maps );
 	}
 
 	return true;

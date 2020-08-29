@@ -776,6 +776,18 @@ int FS_FOpenFile( const char *filename, int *filenum, int mode ) {
 	return trap_FS_FOpenFile( filename, filenum, mode );
 }
 
+int FS_Write( const void *buffer, size_t len, int file ) {
+	return trap_FS_Write( buffer, len, file );
+}
+
+int FS_GetFileList( const char *dir, const char *extension, char *buf, size_t bufsize, int start, int end ) {
+	return trap_FS_GetFileList( dir, extension, buf, bufsize, start, end );
+}
+
+int FS_Eof( int file ) {
+	return trap_FS_Eof( file );
+}
+
 void FS_FCloseFile( int file ) {
 	return trap_FS_FCloseFile( file );
 }

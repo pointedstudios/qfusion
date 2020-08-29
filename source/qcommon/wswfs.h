@@ -4,9 +4,11 @@
 #include <cstdint>
 #include <optional>
 
-namespace wsw {
-	class StringView;
-}
+#include "../gameshared/q_arch.h"
+#include "../gameshared/q_shared.h"
+
+#include "wswstringview.h"
+#include "wswstaticstring.h"
 
 namespace wsw::fs {
 
@@ -206,6 +208,83 @@ public:
 [[nodiscard]]
 auto openAsBufferedReader( const wsw::StringView &path, CacheUsage cacheUsage = SkipCacheFS )
 	-> std::optional<BufferedReader>;
+
+/**
+ * Instances of this class are supposed to hold the FS search result state
+ * (they do not currently do that for ABI reasons) that could be expensive
+ * to recreate and are supposed to be reusable.
+ */
+class SearchResultHolder {
+	int m_totalNumFiles { 0 };
+	unsigned m_invocationNum { 0 };
+	const char *m_ptr { nullptr };
+	int m_lastSearchOff { 0 };
+	int m_lastSearchSize { 0 };
+	int m_lastRetrievalNum { 0 };
+
+	char m_buffer[1024];
+	static_assert( MAX_QPATH * 2 < sizeof( m_buffer ), "Should be capable of storing any path" );
+
+	wsw::StaticString<MAX_QPATH> m_dir;
+	wsw::StaticString<MAX_QPATH> m_ext;
+
+	[[nodiscard]]
+	auto fetchNextInBuffer( int num ) -> wsw::StringView;
+
+	[[nodiscard]]
+	auto getFileForNum( int num ) -> wsw::StringView;
+public:
+	class const_iterator {
+		friend class SearchResultHolder;
+
+		SearchResultHolder *const m_parent;
+		const unsigned m_invocationNum;
+		int m_fileNum;
+
+		const_iterator( SearchResultHolder *parent, int fileNum )
+			: m_parent( parent ), m_invocationNum( parent->m_invocationNum ), m_fileNum( fileNum ) {}
+
+	public:
+		auto operator++() -> const_iterator & {
+			assert( m_parent->m_invocationNum == m_invocationNum );
+			m_fileNum++;
+			return *this;
+		}
+
+		[[nodiscard]]
+		bool operator!=( const const_iterator &that ) const {
+			assert( m_parent->m_invocationNum == m_invocationNum );
+			assert( m_parent == that.m_parent );
+			assert( m_invocationNum == that.m_invocationNum );
+			return m_fileNum != that.m_fileNum;
+		}
+
+		auto operator*() const -> wsw::StringView {
+			assert( m_parent->m_invocationNum == m_invocationNum );
+			return m_parent->getFileForNum( m_fileNum );
+		}
+	};
+
+	class CallResult {
+		friend class SearchResultHolder;
+
+		const_iterator m_begin, m_end;
+		const unsigned m_numFiles;
+
+		CallResult( const_iterator begin_, const_iterator end_, unsigned numFiles_ )
+			: m_begin( begin_ ), m_end( end_ ), m_numFiles( numFiles_ ) {}
+	public:
+		[[nodiscard]]
+		auto getNumFiles() const -> unsigned { return m_numFiles; }
+		[[nodiscard]]
+		auto begin() const -> const_iterator { return m_begin; }
+		[[nodiscard]]
+		auto end() const -> const_iterator { return m_end; }
+	};
+
+	[[nodiscard]]
+	auto findDirFiles( const wsw::StringView &dir, const wsw::StringView &ext ) -> std::optional<CallResult>;
+};
 
 }
 

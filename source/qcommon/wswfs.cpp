@@ -202,4 +202,66 @@ auto openAsBufferedReader( const wsw::StringView &path, CacheUsage cacheUsage ) 
 	return std::nullopt;
 }
 
+auto SearchResultHolder::findDirFiles( const wsw::StringView &dir, const wsw::StringView &ext )
+	-> std::optional<CallResult> {
+	if( dir.length() >= m_dir.capacity() ) {
+		return std::nullopt;
+	}
+	if( ext.length() >= m_ext.capacity() ) {
+		return std::nullopt;
+	}
+
+	m_lastSearchOff = 0;
+	m_lastSearchSize = 0;
+	m_lastRetrievalNum = 0;
+
+	m_invocationNum++;
+
+	m_dir.assign( dir );
+	m_ext.assign( ext );
+
+	m_totalNumFiles = FS_GetFileList( m_dir.data(), m_ext.data(), nullptr, 0, 0, 0 );
+	assert( m_totalNumFiles >= 0 );
+
+	const_iterator begin( this, 0 );
+	const_iterator end( this, m_totalNumFiles );
+	CallResult result { begin, end, (unsigned)m_totalNumFiles };
+	return result;
+}
+
+[[nodiscard]]
+auto SearchResultHolder::fetchNextInBuffer( int num ) -> wsw::StringView {
+	assert( m_ptr );
+	const size_t len = std::strlen( m_ptr );
+	wsw::StringView result( m_ptr, len, wsw::StringView::ZeroTerminated );
+	m_ptr += len + 1;
+	m_lastRetrievalNum = num;
+	return result;
+}
+
+[[nodiscard]]
+auto SearchResultHolder::getFileForNum( int num ) -> wsw::StringView {
+	assert( (unsigned)num < (unsigned)m_totalNumFiles );
+
+	// This is currently optimized for the most realistic use case
+	// of a sequential iteration + single retrieval on every step.
+	// Underlying search facilities should be rewritten anyway.
+	if( num >= m_lastSearchOff && num < m_lastSearchOff + m_lastSearchSize ) {
+		if( m_lastRetrievalNum + 1 == num ) {
+			return fetchNextInBuffer( num );
+		}
+	}
+
+	m_lastSearchSize = FS_GetFileList( m_dir.data(), m_ext.data(), m_buffer, sizeof( m_buffer ), num, m_totalNumFiles );
+	m_lastSearchOff = num;
+	m_ptr = m_buffer;
+
+	if( m_lastSearchSize ) {
+		return fetchNextInBuffer( num );
+	}
+
+	// Should not happen once we start really holding search result values
+	throw std::exception();
+}
+
 }

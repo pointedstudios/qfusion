@@ -43,6 +43,7 @@ file(GLOB GAME_SOURCES
 	"../qcommon/md5.cpp"
 	"../qcommon/hash.cpp"
 	"../qcommon/cjson.cpp"
+	"../qcommon/wswfs.cpp"
 	"../../third-party/recastnavigation/Recast/Source/*.cpp"
 	"../../third-party/recastnavigation/Detour/Source/*.cpp"
 )

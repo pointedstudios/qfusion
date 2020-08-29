@@ -30,6 +30,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include <algorithm>
 
+using wsw::operator""_asView;
+
 static SingletonHolder<MaterialCache> materialCacheInstanceHolder;
 
 void MaterialCache::init() {
@@ -45,7 +47,7 @@ auto MaterialCache::instance() -> MaterialCache * {
 }
 
 MaterialCache::MaterialCache() {
-	for( const char *dir : { "<scripts", ">scripts", "scripts" } ) {
+	for( const wsw::StringView &dir : { "<scripts"_asView, ">scripts"_asView, "scripts"_asView } ) {
 		// TODO: Must be checked if exists
 		loadDirContents( dir );
 	}
@@ -56,29 +58,11 @@ MaterialCache::MaterialCache() {
 	}
 }
 
-void MaterialCache::loadDirContents( const char *dir ) {
-	// enumerate shaders
-	const int numfiles = FS_GetFileList( dir, ".shader", NULL, 0, 0, 0 );
-
-	char shaderPaths[1024];
-
-	int k = 0;
-	// now load them all
-	for( int i = 0; i < numfiles; i += k ) {
-		// TODO: There should be a sane iteration facility
-		if( ( k = FS_GetFileList( dir, ".shader", shaderPaths, sizeof( shaderPaths ), i, numfiles ) ) == 0 ) {
-			k = 1; // advance by one file
-			continue;
-		}
-
-		// TODO: There should be a sane iteration facility
-		const char *fileptr = shaderPaths;
-		for( int j = 0; j < k; j++ ) {
-			this->addFileContents( fileptr );
-			fileptr += strlen( fileptr ) + 1;
-			if( !*fileptr ) {
-				break;
-			}
+void MaterialCache::loadDirContents( const wsw::StringView &dir ) {
+	wsw::fs::SearchResultHolder searchResultHolder;
+	if( auto callResult = searchResultHolder.findDirFiles( dir, ".shader"_asView ) ) {
+		for( const wsw::StringView &fileName: *callResult ) {
+			this->addFileContents( fileName );
 		}
 	}
 }
@@ -749,11 +733,11 @@ auto MaterialCache::newDefaultMaterial( int type, const wsw::HashedStringView &c
 	return nullptr;
 }
 
-auto MaterialCache::readRawContents( const char *filename ) -> const wsw::String * {
+auto MaterialCache::readRawContents( const wsw::StringView &fileName ) -> const wsw::String * {
 	wsw::String &pathName = pathNameBuffer;
 	pathName.clear();
 	pathName.append( "scripts/" );
-	pathName.append( filename );
+	pathName.append( fileName.data(), fileName.size() );
 
 	if ( r_showShaderCache && r_showShaderCache->integer ) {
 		Com_Printf( "...loading '%s'\n", pathName.data() );
@@ -776,8 +760,8 @@ auto MaterialCache::readRawContents( const char *filename ) -> const wsw::String
 	return &fileContentsBuffer;
 }
 
-auto MaterialCache::loadFileContents( const char *filename ) -> MaterialFileContents * {
-	const wsw::String *rawContents = readRawContents( filename );
+auto MaterialCache::loadFileContents( const wsw::StringView &fileName ) -> MaterialFileContents * {
+	const wsw::String *rawContents = readRawContents( fileName );
 	if( !rawContents ) {
 		return nullptr;
 	}
@@ -839,8 +823,8 @@ auto MaterialCache::loadFileContents( const char *filename ) -> MaterialFileCont
 	return result;
 }
 
-void MaterialCache::addFileContents( const char *filename ) {
-	if( MaterialFileContents *contents = loadFileContents( filename ) ) {
+void MaterialCache::addFileContents( const wsw::StringView &fileName ) {
+	if( MaterialFileContents *contents = loadFileContents( fileName ) ) {
 		if( tryAddingFileContents( contents ) ) {
 			assert( !contents->next );
 			contents->next = fileContentsHead;

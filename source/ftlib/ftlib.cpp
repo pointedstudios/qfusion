@@ -22,6 +22,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "ftlib_local.h"
 #include "../ref/frontend.h"
 
+#include "../qcommon/wswstringview.h"
+#include "../qcommon/wswstaticstring.h"
+#include "../qcommon/wswfs.h"
+
+using wsw::operator""_asView;
+
 static qfontfamily_t *fontFamilies;
 
 // ============================================================================
@@ -33,11 +39,6 @@ static qfontfamily_t *fontFamilies;
 #include FT_IMAGE_H
 #include FT_OUTLINE_H
 #include FT_SIZES_H
-
-#define QFT_DIR                     "fonts"
-#define QFT_DIR_FALLBACK            "fonts/fallback"
-#define QFT_FILE_EXTENSION_TRUETYPE ".ttf"
-#define QFT_FILE_EXTENSION_OPENTYPE ".otf"
 
 #define QFTGLYPH_SEARCHED_MAIN      1           // the main font has been searched for the gindex
 #define QFTGLYPH_SEARCHED_FALLBACK  ( 1 << 1 )  // the fallback font has been searched for the gindex
@@ -719,55 +720,27 @@ static void QFT_LoadFamilyFromFile( const char *name, const char *fileName, bool
 
 /*
 * QFT_PrecacheFonts
-*
-* Load fonts given type, storing family name, style, size
-*/
-static void QFT_PrecacheFontsByExt( bool verbose, const char *ext, bool fallback ) {
-	int i, j;
-	const char *dir = ( fallback ? QFT_DIR_FALLBACK : QFT_DIR );
-	int numfiles;
-	char buffer[1024];
-	char fileName[1024];
-	char *s;
-	size_t length;
-
-	assert( ftLibrary != NULL );
-	if( ftLibrary == NULL ) {
-		//Com_Printf( S_COLOR_RED "Error: TTF_LoadFonts called prior initializing FreeType\n" );
-		return;
-	}
-
-	if( ( numfiles = FS_GetFileList( dir, ext, NULL, 0, 0, 0 ) ) == 0 ) {
-		return;
-	}
-
-	i = 0;
-	length = 0;
-	do {
-		if( ( j = FS_GetFileList( dir, ext, buffer, sizeof( buffer ), i, numfiles ) ) == 0 ) {
-			// can happen if the filename is too long to fit into the buffer or we're done
-			i++;
-			continue;
-		}
-
-		i += j;
-		for( s = buffer; j > 0; j--, s += length + 1 ) {
-			length = strlen( s );
-			Q_strncpyz( fileName, va( "%s/%s", dir, s ), sizeof( fileName ) );
-
-			QFT_LoadFamilyFromFile( s, fileName, verbose, fallback );
-		}
-	} while( i < numfiles );
-}
-
-/*
-* QFT_PrecacheFonts
 */
 static void QFT_PrecacheFonts( bool verbose ) {
-	QFT_PrecacheFontsByExt( verbose, QFT_FILE_EXTENSION_TRUETYPE, false );
-	QFT_PrecacheFontsByExt( verbose, QFT_FILE_EXTENSION_OPENTYPE, false );
-	QFT_PrecacheFontsByExt( verbose, QFT_FILE_EXTENSION_TRUETYPE, true );
-	QFT_PrecacheFontsByExt( verbose, QFT_FILE_EXTENSION_OPENTYPE, true );
+	wsw::fs::SearchResultHolder searchResultHolder;
+	wsw::StaticString<MAX_QPATH> path;
+
+	const wsw::StringView dirs[2] = { "fonts"_asView, "fonts/fallback"_asView };
+	for( int dirNum = 0; dirNum < 2; ++dirNum ) {
+		const wsw::StringView &dir = dirs[dirNum];
+		for( const wsw::StringView &ext: { ".ttf"_asView, ".otf"_asView } ) {
+			if( auto callResult = searchResultHolder.findDirFiles( dir, ext ) ) {
+				const bool fallback = ( dirNum == 1 );
+				path.clear();
+				path << dir << '/';
+				for( const wsw::StringView &fileName: *callResult ) {
+					path.erase( dir.length() + 1 );
+					path << fileName;
+					QFT_LoadFamilyFromFile( fileName.data(), path.data(), verbose, fallback );
+				}
+			}
+		}
+	}
 }
 
 /*

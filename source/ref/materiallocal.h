@@ -591,8 +591,8 @@ class MaterialCache {
 	wsw::StaticVector<MaterialLexer, 1> templateLexerHolder;
 	wsw::StaticVector<TokenStream, 1> primaryTokenStreamHolder;
 
-	auto loadFileContents( const char *filename ) -> MaterialFileContents *;
-	auto readRawContents( const char *filename ) -> const wsw::String *;
+	auto loadFileContents( const wsw::StringView &fileName ) -> MaterialFileContents *;
+	auto readRawContents( const wsw::StringView &fileName ) -> const wsw::String *;
 
 	auto findSourceByName( const wsw::StringView &name ) -> MaterialSource * {
 		return findSourceByName( wsw::HashedStringView( name ) );
@@ -603,9 +603,9 @@ class MaterialCache {
 	auto findImage( const wsw::StringView &name, int flags, int imageTags, int minMipSize = 1 ) -> image_s *;
 	void loadMaterial( image_s **images, const wsw::StringView &fullName, int flags, int imageTags, int minMipSize = 1 );
 
-	void loadDirContents( const char *dir );
+	void loadDirContents( const wsw::StringView &dir );
 
-	void addFileContents( const char *filename );
+	void addFileContents( const wsw::StringView &fileName );
 	bool tryAddingFileContents( const MaterialFileContents *contents );
 
 	void unlinkAndFree( shader_t *s );
