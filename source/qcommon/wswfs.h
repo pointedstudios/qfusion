@@ -177,6 +177,11 @@ public:
 	[[nodiscard]]
 	bool isAtEof() const;
 
+	[[nodiscard]]
+	auto getInitialFileSize() -> size_t {
+		return m_handle.getInitialFileSize();
+	}
+
 	template <std::enable_if_t<!std::is_same_v<char, uint8_t>, int> = 0>
 	auto read( char *buffer, size_t length ) -> std::optional<size_t> {
 		return read( (uint8_t *)buffer, length );
