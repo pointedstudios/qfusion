@@ -6,6 +6,7 @@
 #include "../client/client.h"
 #include "callvotesmodel.h"
 #include "chatmodel.h"
+#include "gametypesmodel.h"
 #include "nativelydrawnitems.h"
 #include "serverlistmodel.h"
 #include "keysandbindingsmodel.h"
@@ -439,6 +440,7 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 	qmlRegisterUncreatableType<QWswUISystem>( "net.warsow", 2, 6, "Wsw", reason );
 	qmlRegisterUncreatableType<wsw::ui::ChatModel>( "net.warsow", 2, 6, "ChatModel", reason );
 	qmlRegisterUncreatableType<wsw::ui::CallvotesModel>( "net.warsow", 2, 6, "CallvotesModel", reason );
+	qmlRegisterUncreatableType<wsw::ui::GametypesModel>( "net.warsow", 2, 6, "GametypesModel", reason );
 	qmlRegisterUncreatableType<KeysAndBindingsModel>( "net.warsow", 2, 6, "KeysAndBindings", reason );
 	qmlRegisterUncreatableType<ServerListModel>( "net.warsow", 2, 6, "ServerListModel", reason );
 	qmlRegisterType<NativelyDrawnImage>( "net.warsow", 2, 6, "NativelyDrawnImage_Native" );
@@ -453,6 +455,7 @@ QWswUISystem::QWswUISystem( int initialWidth, int initialHeight ) {
 	QQmlContext *context = m_engine->rootContext();
 	context->setContextProperty( "serverListModel", m_serverListModel );
 	context->setContextProperty( "keysAndBindings", new KeysAndBindingsModel );
+	context->setContextProperty( "gamtypesModel", new wsw::ui::GametypesModel );
 	context->setContextProperty( "compactChatModel", m_chatModel.getCompactModel() );
 	context->setContextProperty( "richChatModel", m_chatModel.getRichModel() );
 	context->setContextProperty( "compactTeamChatModel", m_teamChatModel.getCompactModel() );
