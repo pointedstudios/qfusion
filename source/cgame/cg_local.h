@@ -1004,10 +1004,14 @@ void CG_ExplosionsDust( const vec3_t pos, const vec3_t dir, float radius );
 //
 extern cvar_t *cg_addDecals;
 
-void CG_ClearDecals( void );
-int CG_SpawnDecal( const vec3_t origin, const vec3_t dir, float orient, float radius,
-				   float r, float g, float b, float a, float die, float fadetime, bool fadealpha, struct shader_s *shader );
-void CG_AddDecals( void );
+inline void CG_ClearDecals() {}
+
+inline int CG_SpawnDecal( const vec3_t origin, const vec3_t dir, float orient, float radius,
+				   float r, float g, float b, float a, float die, float fadetime, bool fadealpha, struct shader_s *shader ) {
+	return 1;
+}
+
+inline void CG_AddDecals() {}
 
 //
 // cg_polys.c	-	wsw	: jal
@@ -1042,9 +1046,9 @@ void CG_SetLightStyle( unsigned i, const wsw::StringView &s );
 
 void CG_AddLightStyles( void );
 
-void CG_ClearFragmentedDecals( void );
-void CG_AddFragmentedDecal( vec3_t origin, vec3_t dir, float orient, float radius,
-							float r, float g, float b, float a, struct shader_s *shader );
+inline void CG_ClearFragmentedDecals( void ) {}
+inline void CG_AddFragmentedDecal( vec3_t origin, vec3_t dir, float orient, float radius,
+							float r, float g, float b, float a, struct shader_s *shader ) {}
 
 void CG_AddParticles( void );
 void CG_ParticleEffect( const vec3_t org, const vec3_t dir, float r, float g, float b, int count, float gravity = NAN );
