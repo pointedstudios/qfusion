@@ -50,15 +50,12 @@ void RB_Init( void ) {
 
 	// create VBO's we're going to use for streamed data
 	RB_RegisterStreamVBOs();
-
-	RP_PrecachePrograms();
 }
 
 /*
 * RB_Shutdown
 */
 void RB_Shutdown( void ) {
-	RP_StorePrecacheList();
 }
 
 /*
