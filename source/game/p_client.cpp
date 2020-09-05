@@ -826,7 +826,7 @@ static int G_SanitizeUserString( char *string, size_t size ) {
 * G_SetName
 */
 static void G_SetName( edict_t *ent, const char *original_name ) {
-	const char *invalid_prefixes[] = { "console", "[team]", "[spec]", "[bot]", "[coach]", "[tv]", NULL };
+	const char *invalid_prefixes[] = { "console", "[team]", "[spec]", "[bot]", "[coach]", NULL };
 	edict_t *other;
 	char name[MAX_NAME_BYTES];
 	char colorless[MAX_NAME_BYTES];
