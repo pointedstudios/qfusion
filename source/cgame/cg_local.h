@@ -776,12 +776,6 @@ void CG_ClearHUDInputState( void );
 void CG_ClearAwards( void );
 
 //
-// cg_damage_indicator.c
-//
-void CG_ResetDamageIndicator( void );
-void CG_DamageIndicatorAdd( int damage, const vec3_t dir );
-
-//
 // cg_scoreboard.c
 //
 inline void CG_DrawScoreboard( void ) {}
@@ -947,7 +941,8 @@ extern cvar_t *cg_viewBob;
 
 void CG_ResetKickAngles( void );
 void CG_ResetColorBlend( void );
-
+void CG_ResetDamageIndicator( void );
+void CG_DamageIndicatorAdd( int damage, const vec3_t dir );
 void CG_StartKickAnglesEffect( vec3_t source, float knockback, float radius, int time );
 void CG_StartColorBlendEffect( float r, float g, float b, float a, int time );
 void CG_StartFallKickEffect( int bounceTime );
