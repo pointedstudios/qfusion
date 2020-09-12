@@ -49,7 +49,6 @@ cvar_t *r_subdivisions;
 cvar_t *r_showtris;
 cvar_t *r_shownormals;
 cvar_t *r_draworder;
-cvar_t *r_leafvis;
 
 cvar_t *r_fastsky;
 cvar_t *r_portalonly;
@@ -504,7 +503,6 @@ static void R_Register( const char *screenshotsPrefix ) {
 	r_speeds = Cvar_Get( "r_speeds", "0", 0 );
 	r_drawelements = Cvar_Get( "r_drawelements", "1", 0 );
 	r_showtris = Cvar_Get( "r_showtris", "0", CVAR_CHEAT );
-	r_leafvis = Cvar_Get( "r_leafvis", "0", CVAR_CHEAT );
 	r_lockpvs = Cvar_Get( "r_lockpvs", "0", CVAR_CHEAT );
 	r_nobind = Cvar_Get( "r_nobind", "0", 0 );
 	r_picmip = Cvar_Get( "r_picmip", "0", CVAR_ARCHIVE | CVAR_LATCH_VIDEO );

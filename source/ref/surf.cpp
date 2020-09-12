@@ -532,10 +532,6 @@ static void R_PostCullVisLeaves( void ) {
 		}
 
 		leaf = rsh.worldBrushModel->visleafs[i];
-		if( r_leafvis->integer && !( rn.renderFlags & RF_NONVIEWERREF ) ) {
-			const byte_vec4_t color = { 255, 0, 0, 255 };
-			R_AddDebugBounds( leaf->mins, leaf->maxs, color );
-		}
 
 		// add leaf bounds to view bounds
 		for( j = 0; j < 3; j++ ) {

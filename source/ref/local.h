@@ -471,7 +471,6 @@ extern cvar_t *r_subdivisions;
 extern cvar_t *r_showtris;
 extern cvar_t *r_shownormals;
 extern cvar_t *r_draworder;
-extern cvar_t *r_leafvis;
 
 extern cvar_t *r_fastsky;
 extern cvar_t *r_portalonly;
@@ -786,7 +785,6 @@ rserr_t     R_SetMode( int x, int y, int width, int height, int displayFrequency
 //
 extern drawList_t r_worldlist, r_portalmasklist;
 
-void R_AddDebugBounds( const vec3_t mins, const vec3_t maxs, const byte_vec4_t color );
 void R_ClearScene( void );
 void R_AddEntityToScene( const entity_t *ent );
 void R_AddPolyToScene( const poly_t *poly );

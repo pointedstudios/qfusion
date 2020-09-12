@@ -45,9 +45,6 @@ enum {
 	PPFX_BIT_BLUR = RF_BIT( PPFX_BLUR ),
 };
 
-static void R_ClearDebugBounds( void );
-static void R_RenderDebugBounds( void );
-
 /*
 * R_ClearScene
 */
@@ -78,8 +75,6 @@ void R_ClearScene( void ) {
 	rsc.numBmodelEntities = 0;
 
 	rsc.frameCount++;
-
-	R_ClearDebugBounds();
 
 	R_ClearSkeletalCache();
 
@@ -699,8 +694,6 @@ void R_RenderScene( const refdef_t *fd ) {
 
 	R_RenderDebugSurface( fd );
 
-	R_RenderDebugBounds();
-
 	R_BindFrameBufferObject( 0 );
 
 	R_Set2DMode( true );
@@ -878,104 +871,3 @@ void R_BlurScreen( void ) {
 
 	R_BlitTextureToScrFbo( fd, ppSource, 0, GLSL_PROGRAM_TYPE_NONE, colorWhite, 0, 0, NULL, 0 );
 }
-
-/*
-=============================================================================
-
-BOUNDING BOXES
-
-=============================================================================
-*/
-
-typedef struct {
-	vec3_t mins;
-	vec3_t maxs;
-	byte_vec4_t color;
-} r_debug_bound_t;
-
-static unsigned r_num_debug_bounds;
-static size_t r_debug_bounds_current_size;
-static r_debug_bound_t *r_debug_bounds;
-
-/*
-* R_ClearDebugBounds
-*/
-static void R_ClearDebugBounds( void ) {
-	r_num_debug_bounds = 0;
-}
-
-/*
-* R_AddDebugBounds
-*/
-void R_AddDebugBounds( const vec3_t mins, const vec3_t maxs, const byte_vec4_t color ) {
-	unsigned i;
-
-	i = r_num_debug_bounds;
-	r_num_debug_bounds++;
-
-	if( r_num_debug_bounds > r_debug_bounds_current_size ) {
-		r_debug_bounds_current_size = ALIGN( r_num_debug_bounds, 256 );
-		if( r_debug_bounds ) {
-			r_debug_bounds = (decltype( r_debug_bounds ))Q_realloc( r_debug_bounds, r_debug_bounds_current_size * sizeof( r_debug_bound_t ) );
-		} else {
-			r_debug_bounds = (decltype( r_debug_bounds ))Q_malloc( r_debug_bounds_current_size * sizeof( r_debug_bound_t ) );
-		}
-	}
-
-	VectorCopy( mins, r_debug_bounds[i].mins );
-	VectorCopy( maxs, r_debug_bounds[i].maxs );
-	Vector4Copy( color, r_debug_bounds[i].color );
-}
-
-/*
-* R_RenderDebugBounds
-*/
-static void R_RenderDebugBounds( void ) {
-	unsigned i, j;
-	const vec_t *mins, *maxs;
-	const uint8_t *color;
-	mesh_t mesh;
-	vec4_t verts[8];
-	byte_vec4_t colors[8];
-	elem_t elems[24] =
-	{
-		0, 1, 1, 3, 3, 2, 2, 0,
-		0, 4, 1, 5, 2, 6, 3, 7,
-		4, 5, 5, 7, 7, 6, 6, 4
-	};
-
-	if( !r_num_debug_bounds ) {
-		return;
-	}
-
-	memset( &mesh, 0, sizeof( mesh ) );
-	mesh.numVerts = 8;
-	mesh.xyzArray = verts;
-	mesh.numElems = 24;
-	mesh.elems = elems;
-	mesh.colorsArray[0] = colors;
-
-	RB_SetShaderStateMask( ~0, GLSTATE_NO_DEPTH_TEST );
-
-	for( i = 0; i < r_num_debug_bounds; i++ ) {
-		mins = r_debug_bounds[i].mins;
-		maxs = r_debug_bounds[i].maxs;
-		color = r_debug_bounds[i].color;
-
-		for( j = 0; j < 8; j++ ) {
-			verts[j][0] = ( ( j & 1 ) ? mins[0] : maxs[0] );
-			verts[j][1] = ( ( j & 2 ) ? mins[1] : maxs[1] );
-			verts[j][2] = ( ( j & 4 ) ? mins[2] : maxs[2] );
-			verts[j][3] = 1.0f;
-			Vector4Copy( color, colors[j] );
-		}
-
-		RB_AddDynamicMesh( rsc.worldent, rsh.whiteShader, NULL, NULL, 0, &mesh, GL_LINES, 0.0f, 0.0f );
-	}
-
-	RB_FlushDynamicMeshes();
-
-	RB_SetShaderStateMask( ~0, 0 );
-}
-
-//=======================================================================
