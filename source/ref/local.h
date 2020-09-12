@@ -585,7 +585,6 @@ void        R_AliasModelFrameBounds( const model_t *mod, int frame, vec3_t mins,
 //
 void        R_TakeScreenShot( const char *path, const char *name, const char *fmtString, int x, int y, int w, int h, bool silent );
 void        R_ScreenShot_f( void );
-void        R_ImageList_f( void );
 
 //
 // r_cull.c

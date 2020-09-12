@@ -200,8 +200,6 @@ enum {
 void RP_Init( void );
 void RP_Shutdown( void );
 
-void RP_ProgramList_f( void );
-
 int RP_FindProgram( const char *name );
 int RP_RegisterProgram( int type, const char *name, const DeformSig &deformSig,
 						const deformv_t *deforms, int numDeforms, r_glslfeat_t features );

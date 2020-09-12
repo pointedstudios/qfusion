@@ -167,21 +167,3 @@ void R_ScreenShot_f( void ) {
 	RF_ScreenShot( path, name, r_screenshot_fmtstr->string,
 				   Cmd_Argc() >= 3 && !Q_stricmp( Cmd_Argv( 2 ), "silent" ) ? true : false );
 }
-
-/*
-* R_GlobFilter
-*/
-static bool R_GlobFilter( const char *pattern, const char *value ) {
-	if( *pattern && !glob_match( pattern, value, 0 ) ) {
-		return false;
-	}
-	return true;
-}
-
-/*
-* R_ImageList_f
-*/
-void R_ImageList_f( void ) {
-	R_PrintImageList( Cmd_Argv( 1 ), R_GlobFilter );
-}
-

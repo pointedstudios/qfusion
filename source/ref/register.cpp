@@ -137,7 +137,6 @@ static bool r_verbose;
 static bool r_postinit;
 
 static void R_FinalizeGLExtensions( void );
-static void R_GfxInfo_f( void );
 
 static void R_InitVolatileAssets( void );
 static void R_DestroyVolatileAssets( void );
@@ -369,46 +368,6 @@ static void R_PrintGLExtensionsInfo( void ) {
 			lastOffset = extension->offset;
 			Com_Printf( "%s: %s\n", extension->name, GLINF_FROM( &glConfig.ext, lastOffset ) ? "enabled" : "disabled" );
 		}
-	}
-}
-
-/*
-* R_PrintMemoryInfo
-*/
-static void R_PrintMemoryInfo( void ) {
-	int mem[12];
-
-	Com_Printf( "\n" );
-	Com_Printf( "Video memory information:\n" );
-
-	if( glConfig.ext.gpu_memory_info ) {
-		// NV
-		qglGetIntegerv( GPU_MEMORY_INFO_TOTAL_AVAILABLE_MEMORY_NVX, mem );
-		Com_Printf( "total: %i MB\n", mem[0] >> 10 );
-
-		qglGetIntegerv( GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX, mem );
-		Com_Printf( "dedicated: %i MB\n", mem[0] >> 10 );
-
-		qglGetIntegerv( GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX, mem );
-		Com_Printf( "available: %i MB\n", mem[0] >> 10 );
-
-		qglGetIntegerv( GPU_MEMORY_INFO_EVICTION_COUNT_NVX, mem );
-		Com_Printf( "eviction count: %i MB\n", mem[0] >> 10 );
-
-		qglGetIntegerv( GPU_MEMORY_INFO_EVICTED_MEMORY_NVX, mem );
-		Com_Printf( "totally evicted: %i MB\n", mem[0] >> 10 );
-	} else if( glConfig.ext.meminfo ) {
-		// ATI
-		qglGetIntegerv( VBO_FREE_MEMORY_ATI, mem );
-		qglGetIntegerv( TEXTURE_FREE_MEMORY_ATI, mem + 4 );
-		qglGetIntegerv( RENDERBUFFER_FREE_MEMORY_ATI, mem + 8 );
-
-		Com_Printf( "total memory free in the pool: (VBO:%i, Tex:%i, RBuf:%i) MB\n", mem[0] >> 10, mem[4] >> 10, mem[8] >> 10 );
-		Com_Printf( "largest available free block in the pool: (V:%i, Tex:%i, RBuf:%i) MB\n", mem[5] >> 10, mem[4] >> 10, mem[9] >> 10 );
-		Com_Printf( "total auxiliary memory free: (VBO:%i, Tex:%i, RBuf:%i) MB\n", mem[2] >> 10, mem[6] >> 10, mem[10] >> 10 );
-		Com_Printf( "largest auxiliary free block: (VBO:%i, Tex:%i, RBuf:%i) MB\n", mem[3] >> 10, mem[7] >> 10, mem[11] >> 10 );
-	} else {
-		Com_Printf( "not available\n" );
 	}
 }
 
@@ -661,17 +620,10 @@ static void R_Register( const char *screenshotsPrefix ) {
 		gl_driver = NULL;
 	}
 
-	Cmd_AddCommand( "imagelist", R_ImageList_f );
 	Cmd_AddCommand( "screenshot", R_ScreenShot_f );
-	Cmd_AddCommand( "modellist", Mod_Modellist_f );
-	Cmd_AddCommand( "gfxinfo", R_GfxInfo_f );
-	Cmd_AddCommand( "glslprogramlist", RP_ProgramList_f );
 }
 
-/*
-* R_GfxInfo_f
-*/
-static void R_GfxInfo_f( void ) {
+static void R_PrintInfo() {
 	Com_Printf( "\n" );
 	Com_Printf( "GL_VENDOR: %s\n", glConfig.vendorString );
 	Com_Printf( "GL_RENDERER: %s\n", glConfig.rendererString );
@@ -714,8 +666,6 @@ static void R_GfxInfo_f( void ) {
 	Com_Printf( "vertical sync: %s\n", ( r_swapinterval->integer || r_swapinterval_min->integer ) ? "enabled" : "disabled" );
 
 	R_PrintGLExtensionsInfo();
-
-	R_PrintMemoryInfo();
 }
 
 /*
@@ -890,7 +840,7 @@ static rserr_t R_PostInit( void ) {
 	R_AnisotropicFilter( r_texturefilter->integer );
 
 	if( r_verbose ) {
-		R_GfxInfo_f();
+		R_PrintInfo();
 	}
 
 	// load and compile GLSL programs
@@ -1025,11 +975,7 @@ void R_EndRegistration( void ) {
 * R_Shutdown
 */
 void R_Shutdown( bool verbose ) {
-	Cmd_RemoveCommand( "modellist" );
 	Cmd_RemoveCommand( "screenshot" );
-	Cmd_RemoveCommand( "imagelist" );
-	Cmd_RemoveCommand( "gfxinfo" );
-	Cmd_RemoveCommand( "glslprogramlist" );
 
 	// free shaders, models, etc.
 

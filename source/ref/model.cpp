@@ -942,12 +942,6 @@ static void Mod_TouchBrushModel( model_t *model ) {
 //===============================================================================
 
 /*
-* Mod_Modellist_f
-*/
-void Mod_Modellist_f( void ) {
-}
-
-/*
 * R_InitModels
 */
 void R_InitModels( void ) {

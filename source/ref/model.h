@@ -421,6 +421,4 @@ model_t     *Mod_ForHandle( unsigned int elem );
 
 void        Mod_StripLODSuffix( char *name );
 
-void        Mod_Modellist_f( void );
-
 #endif // R_MODEL_H
