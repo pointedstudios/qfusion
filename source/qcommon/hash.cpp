@@ -20,22 +20,26 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "hash.h"
 
-std::pair<uint32_t, size_t> GetHashAndLength( const char *str ) {
+namespace wsw {
+
+auto getHashAndLength( const char *str ) -> std::pair<uint32_t, size_t> {
 	size_t i = 0;
 	uint32_t v = 0;
 	for(; str[i]; i++ ) {
-		v = NextHashStep( v, str[i] );
+		v = nextHashStep( v, str[i] );
 	}
 
 	return std::make_pair( v, i );
 }
 
-uint32_t GetHashForLength( const char *str, size_t length ) {
+auto getHashForLength( const char *str, size_t length ) -> uint32_t {
 	uint32_t v = 0;
 	for( uint32_t i = 0; i < length; i++ ) {
-		v = NextHashStep( v, str[i] );
+		v = nextHashStep( v, str[i] );
 	}
 	return v;
+}
+
 }
 
 #undef get16bits

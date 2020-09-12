@@ -115,7 +115,7 @@ T *AiWeightConfigVarGroup::GetItemByName( const char *name_, unsigned nameHash_,
 	}
 
 	if( !nameHash_ ) {
-		std::tie( nameHash_, std::ignore ) = GetHashAndLength( name_ );
+		std::tie( nameHash_, std::ignore ) = wsw::getHashAndLength( name_ );
 	}
 
 	unsigned binIndex = nameHash_ % NUM_HASH_BINS;
@@ -161,7 +161,7 @@ T *AiWeightConfigVarGroup::GetItemByPath( const char *path,
 			continue;
 		}
 		if( pathHeadHash == 0 ) {
-			pathHeadHash = GetHashForLength( path, (unsigned)pathHeadLength );
+			pathHeadHash = wsw::getHashForLength( path, (unsigned)pathHeadLength );
 		}
 		if( childGroup->NameHash() != pathHeadHash ) {
 			continue;

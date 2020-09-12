@@ -86,8 +86,7 @@ void GVariousStats::LinkNewNode( unsigned binIndex, const char *key, uint32_t ha
 }
 
 int64_t GVariousStats::GetEntry( const char *key, int64_t defaultValue ) const {
-	unsigned hash, length;
-	std::tie( hash, length ) = GetHashAndLength( key );
+	const auto [hash, length] = wsw::getHashAndLength( key );
 
 	unsigned binIndex = hash % numHashBins;
 	if( const Node *bin = GetNode( binIndex, key, hash, length ) ) {
@@ -98,8 +97,7 @@ int64_t GVariousStats::GetEntry( const char *key, int64_t defaultValue ) const {
 }
 
 void GVariousStats::SetEntry( const char *key, int64_t value ) {
-	unsigned hash, length;
-	std::tie( hash, length ) = GetHashAndLength( key );
+	const auto [hash, length] = wsw::getHashAndLength( key );
 
 	unsigned binIndex = hash % numHashBins;
 	if( Node *node = const_cast<Node *>( GetNode( binIndex, key, hash, length ) ) ) {
@@ -111,8 +109,7 @@ void GVariousStats::SetEntry( const char *key, int64_t value ) {
 }
 
 void GVariousStats::AddToEntry( const char *key, int64_t delta ) {
-	unsigned hash, length;
-	std::tie( hash, length ) = GetHashAndLength( key );
+	const auto [hash, length] = wsw::getHashAndLength( key );
 
 	unsigned binIndex = hash % numHashBins;
 	if( Node *node = const_cast<Node *>( GetNode( binIndex, key, hash, length ) ) ) {

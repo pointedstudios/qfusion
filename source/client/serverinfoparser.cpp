@@ -24,7 +24,7 @@ bool ServerInfoParser::scanForKey() {
 	uint32_t hash = 0;
 	unsigned start = m_index;
 	while( m_index < m_bytesLeft && m_chars[m_index] != '\\' ) {
-		hash = NextHashStep( hash, m_chars[m_index] );
+		hash = wsw::nextHashStep( hash, m_chars[m_index] );
 		m_index++;
 	}
 

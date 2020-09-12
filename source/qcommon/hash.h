@@ -17,12 +17,14 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
-#ifndef _HASH_H
-#define _HASH_H
+#ifndef WSW_43714fdc_cde9_4d78_8ff3_abc86f2ec5d8_H
+#define WSW_43714fdc_cde9_4d78_8ff3_abc86f2ec5d8_H
 
 #include "../gameshared/q_arch.h"
 
 #include <utility>
+
+namespace wsw {
 
 /**
  * An utility to get a case-insensitive hash code of a string along with its length
@@ -31,28 +33,31 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  * @note Use with caution for performance-sensitive code.
  * Case insensitivity is only guaranteed for the ASCII character set.
  */
-std::pair<uint32_t, size_t> GetHashAndLength( const char *s );
+[[nodiscard]]
+auto getHashAndLength( const char *s ) -> std::pair<uint32_t, size_t>;
 
 /**
  * An utility to get a case-insensitive hash code of a string part specified by its length.
- * This is a "dual" (to some degree) version of {@code GetHashAndLength()}
+ * This is a "dual" (to some degree) version of {@code getHashAndLength()}
  * @param s an address of a string part
  * @param length a length of a given string part
  * @return a hash code of the given string part.
  * @note Use with caution for a performance-sensitive code.
  * Case insensitivity is only guaranteed for the ASCII character set.
  */
-uint32_t GetHashForLength( const char *s, size_t length );
+[[nodiscard]]
+auto getHashForLength( const char *s, size_t length ) -> uint32_t;
 
 /**
  * Adds a character to a string hash being built.
- * This is what {@code GetHashAndLength()} and {@code GetHashForLength()} rely upon.
+ * This is what {@code getHashAndLength()} and {@code getHashForLength()} rely upon.
  * This can be useful for some in-place hash computations that yield the same result as aforementioned routines.
  * @param hash a value of the hash so far
  * @param ch a character to add
  * @return a combined hash value
  */
-inline uint32_t NextHashStep( uint32_t hash, char ch ) {
+[[nodiscard]]
+inline auto nextHashStep( uint32_t hash, char ch ) -> uint32_t {
 	auto val = (unsigned char)ch;
 	// Use a fast lowercase conversion for ASCII letters.
 	// First, cast to a signed integer to get a difference.
@@ -63,6 +68,8 @@ inline uint32_t NextHashStep( uint32_t hash, char ch ) {
 		val = '/';
 	}
 	return hash * 37u + val;
+}
+
 }
 
 unsigned int COM_SuperFastHash( const unsigned char * data, size_t len, unsigned int hash );

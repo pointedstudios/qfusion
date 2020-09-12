@@ -29,8 +29,7 @@ protected:
 	bool isTouched : 1;
 
 	explicit AiWeightConfigVarGroupChild( const char *name_ ) : name( name_ ) {
-		unsigned hash, length;
-		std::tie( hash, length ) = GetHashAndLength( name_ );
+		const auto [hash, length] = wsw::getHashAndLength( name_ );
 		this->nameHash = hash;
 		this->nameLength = length;
 		this->isTouched = false;

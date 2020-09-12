@@ -6,10 +6,12 @@
 #include <cstdlib>
 #include <cstring>
 
-std::pair<uint32_t, size_t> GetHashAndLength( const char *s );
-uint32_t GetHashForLength( const char *s, size_t length );
-
 namespace wsw {
+
+[[nodiscard]]
+auto getHashAndLength( const char *s ) -> std::pair<uint32_t, size_t>;
+[[nodiscard]]
+auto getHashForLength( const char *s, size_t length ) -> uint32_t;
 
 class StringView;
 
@@ -435,12 +437,12 @@ public:
 	constexpr HashedStringView() : StringView(), m_hash( 0 ) {}
 
 	explicit HashedStringView( const char *s ) : StringView( s ) {
-		m_hash = GetHashForLength( s, m_len );
+		m_hash = getHashForLength( s, m_len );
 	}
 
 	HashedStringView( const char *s, size_t len, Terminated terminated = Unspecified )
 		: StringView( s, len, terminated ) {
-		m_hash = GetHashForLength( s, len );
+		m_hash = getHashForLength( s, len );
 	}
 
 	HashedStringView( const char *s, size_t len, uint32_t hash, Terminated terminated = Unspecified )
@@ -448,7 +450,7 @@ public:
 
 	explicit HashedStringView( const wsw::StringView &that )
 		: StringView( that.data(), that.size(), that.isZeroTerminated() ? ZeroTerminated : Unspecified ) {
-		m_hash = GetHashForLength( m_s, m_len );
+		m_hash = getHashForLength( m_s, m_len );
 	}
 
 	[[nodiscard]]

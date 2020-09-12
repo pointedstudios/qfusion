@@ -169,7 +169,7 @@ auto MaterialCache::makeCleanName( const wsw::StringView &name ) -> wsw::HashedS
 		}
 		char cleanCh = ch != '\\' ? tolower( ch ) : '/';
 		cleanNameBuffer.push_back( cleanCh );
-		hash = NextHashStep( hash, cleanCh );
+		hash = wsw::nextHashStep( hash, cleanCh );
 		if( cleanNameBuffer.back() == '/' ) {
 			lastSlash = len;
 		}

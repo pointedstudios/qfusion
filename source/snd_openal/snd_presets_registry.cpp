@@ -55,7 +55,7 @@ struct EfxPresetEntry {
 	explicit EfxPresetEntry( const char *presetMacroName )
 		: name( presetMacroName + sizeof( "EFX_REVERB_PRESET_" ) - 1 ) {
 		assert( !Q_strnicmp( presetMacroName, "EFX_REVERB_PRESET_", name - presetMacroName ) );
-		std::tie( nameHash, nameLength ) = ::GetHashAndLength( name );
+		std::tie( nameHash, nameLength ) = wsw::getHashAndLength( name );
 	}
 
 	void RegisterSelf() {
@@ -76,8 +76,7 @@ void EfxPresetsRegistry::Register( EfxPresetEntry *entry ) {
 }
 
 const EfxPresetEntry *EfxPresetsRegistry::FindByName( const char *name ) const {
-	uint32_t hash, length;
-	std::tie( hash, length ) = GetHashAndLength( name );
+	const auto [hash, length] = wsw::getHashAndLength( name );
 	int binIndex = hash % (int)( sizeof( hashBins ) / sizeof( *hashBins ) );
 	for( EfxPresetEntry *entry = hashBins[binIndex]; entry; entry = entry->nextInHashBin ) {
 		if( entry->nameLength == length && !Q_strnicmp( name, entry->name, length ) ) {
