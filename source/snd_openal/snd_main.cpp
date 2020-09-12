@@ -38,7 +38,7 @@ public:
 	void StopAllSounds( unsigned ) override {}
 
 	void Clear() override {}
-	void Update( const float *, const float *, const mat3_t, bool ) override {}
+	void Update( const float *, const float *, const mat3_t ) override {}
 	void Activate( bool ) override {}
 
 	void SetEntitySpatialization( int, const float *, const float * ) override {};
@@ -54,9 +54,6 @@ public:
 	void StartBackgroundTrack( const char *, const char *, int ) override {}
 	void StopBackgroundTrack() override {}
 	void LockBackgroundTrack( bool lock ) override {}
-
-	void BeginAviDemo() override {}
-	void StopAviDemo() override {}
 };
 
 static SingletonHolder<ALSoundSystem> alSoundSystemHolder;
@@ -446,13 +443,13 @@ void ALSoundSystem::AddLoopSound( sfx_s *sfx, int entNum, float fvol, float atte
 	}
 }
 
-void ALSoundSystem::Update( const vec3_t origin, const vec3_t velocity, const mat3_t axis, bool avidump ) {
+void ALSoundSystem::Update( const vec3_t origin, const vec3_t velocity, const mat3_t axis ) {
 	if( s_num_ent_spats ) {
 		S_IssueSetMulEntitySpatializationCmd( pipe, s_num_ent_spats, s_ent_spats );
 		s_num_ent_spats = 0;
 	}
 
-	S_IssueSetListenerCmd( pipe, origin, velocity, axis, avidump );
+	S_IssueSetListenerCmd( pipe, origin, velocity, axis );
 }
 
 void S_Trace( trace_t *tr, const vec3_t start,

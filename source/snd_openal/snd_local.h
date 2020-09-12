@@ -345,7 +345,7 @@ public:
 	void StopAllSounds( unsigned flags ) override;
 
 	void Clear() override;
-	void Update( const float *origin, const float *velocity, const mat3_t axis, bool dumpAvi ) override;
+	void Update( const float *origin, const float *velocity, const mat3_t axis ) override;
 	void Activate( bool isActive ) override;
 
 	void SetEntitySpatialization( int entNum, const float *origin, const float *velocity ) override;
@@ -361,9 +361,6 @@ public:
 	void StartBackgroundTrack( const char *intro, const char *loop, int mode ) override;
 	void StopBackgroundTrack() override;
 	void LockBackgroundTrack( bool lock ) override;
-
-	void BeginAviDemo() override {}
-	void StopAviDemo() override {}
 
 	void ListSounds();
 	void ListDevices();

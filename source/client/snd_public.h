@@ -88,7 +88,7 @@ public:
 	virtual void StopAllSounds( unsigned flags = 0 ) = 0;
 
 	virtual void Clear() = 0;
-	virtual void Update( const float *origin, const float *velocity, const mat3_t axis, bool dumpAvi ) = 0;
+	virtual void Update( const float *origin, const float *velocity, const mat3_t axis ) = 0;
 	virtual void Activate( bool isActive ) = 0;
 
 	virtual void SetEntitySpatialization( int entNum, const float *origin, const float *velocity ) = 0;
@@ -109,9 +109,6 @@ public:
 	virtual void StartBackgroundTrack( const char *intro, const char *loop, int mode ) = 0;
 	virtual void StopBackgroundTrack() = 0;
 	virtual void LockBackgroundTrack( bool lock ) = 0;
-
-	virtual void BeginAviDemo() = 0;
-	virtual void StopAviDemo() = 0;
 };
 
 #endif

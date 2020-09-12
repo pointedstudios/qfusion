@@ -352,44 +352,6 @@ void RF_ReplaceRawSubPic( shader_t *shader, int x, int y, int width, int height,
 	R_ReplaceRawSubPic( shader, x, y, width, height, data );
 }
 
-void RF_BeginAviDemo( void ) {
-}
-
-void RF_WriteAviFrame( int frame, bool scissor ) {
-	int x, y, w, h;
-	const char *writedir;
-	size_t path_size;
-	char *path;
-	char name[32];
-
-	if( !R_IsRenderingToScreen() ) {
-		return;
-	}
-
-	if( scissor ) {
-		x = rsc.refdef.x;
-		y = glConfig.height - rsc.refdef.height - rsc.refdef.y;
-		w = rsc.refdef.width;
-		h = rsc.refdef.height;
-	} else {
-		x = 0;
-		y = 0;
-		w = glConfig.width;
-		h = glConfig.height;
-	}
-
-	writedir = FS_WriteDirectory();
-	path_size = strlen( writedir ) + 1 + strlen( "/avi/" ) + 1;
-	path = (char *)alloca( path_size );
-	Q_snprintfz( path, path_size, "%s/avi/", writedir );
-	Q_snprintfz( name, sizeof( name ), "%06i", frame );
-
-	R_TakeScreenShot( path, name, "", x, y, w, h, true );
-}
-
-void RF_StopAviDemo( void ) {
-}
-
 void RF_TransformVectorToScreen( const refdef_t *rd, const vec3_t in, vec2_t out ) {
 	mat4_t p, m;
 	vec4_t temp, temp2;

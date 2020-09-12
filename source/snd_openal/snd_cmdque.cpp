@@ -149,12 +149,11 @@ void S_IssueSetEntitySpatializationCmd( sndCmdPipe_t *queue, const smdCmdSpatial
 * S_IssueSetListenerCmd
 */
 void S_IssueSetListenerCmd( sndCmdPipe_t *queue, const vec3_t origin,
-							const vec3_t velocity, const mat3_t axis, bool avidump ) {
+							const vec3_t velocity, const mat3_t axis ) {
 	unsigned i;
 
 	sndCmdSetListener_t cmd;
 	cmd.id = SND_CMD_SET_LISTENER;
-	cmd.avidump = (int)avidump;
 	for( i = 0; i < 3; i++ ) {
 		cmd.origin[i] = origin[i];
 		cmd.velocity[i] = velocity[i];

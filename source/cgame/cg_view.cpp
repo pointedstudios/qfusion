@@ -1102,13 +1102,12 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 
 	Q_clamp( cg.lerpfrac, 0.0f, 1.0f );
 
-	const bool dumpAudio = CL_WriteAvi() && cls.demo.avi_audio;
 	if( cgs.configStrings.getWorldModel() == std::nullopt ) {
 		CG_AddLocalSounds();
 
 		RF_DrawStretchPic( 0, 0, cgs.vidWidth, cgs.vidHeight, 0, 0, 1, 1, colorBlack, cgs.shaderWhite );
 
-		SoundSystem::Instance()->Update( vec3_origin, vec3_origin, axis_identity, dumpAudio );
+		SoundSystem::Instance()->Update( vec3_origin, vec3_origin, axis_identity );
 
 		return;
 	}
@@ -1205,7 +1204,7 @@ void CG_RenderView( int frameTime, int realFrameTime, int64_t realTime, int64_t 
 
 	cg.oldAreabits = true;
 
-	SoundSystem::Instance()->Update( cg.view.origin, cg.view.velocity, cg.view.axis, dumpAudio );
+	SoundSystem::Instance()->Update( cg.view.origin, cg.view.velocity, cg.view.axis );
 
 	CG_Draw2D();
 

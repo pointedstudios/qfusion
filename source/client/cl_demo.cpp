@@ -204,59 +204,11 @@ static int demofilehandle;
 static int demofilelen, demofilelentotal;
 
 /*
-* CL_BeginDemoAviDump
-*/
-/*static*/ void CL_BeginDemoAviDump( void ) {
-	if( cls.demo.avi ) {
-		return;
-	}
-
-	cls.demo.avi_video = ( cl_demoavi_video->integer ? true : false );
-	cls.demo.avi_audio = ( cl_demoavi_audio->integer ? true : false );
-	cls.demo.avi = ( cls.demo.avi_video || cls.demo.avi_audio );
-	cls.demo.avi_frame = 0;
-
-	if( cls.demo.avi_video ) {
-		RF_BeginAviDemo();
-	}
-
-	if( cls.demo.avi_audio ) {
-		SoundSystem::Instance()->BeginAviDemo();
-	}
-}
-
-/*
-* CL_StopDemoAviDump
-*/
-static void CL_StopDemoAviDump( void ) {
-	if( !cls.demo.avi ) {
-		return;
-	}
-
-	if( cls.demo.avi_video ) {
-		RF_StopAviDemo();
-		cls.demo.avi_video = false;
-	}
-
-	if( cls.demo.avi_audio ) {
-		SoundSystem::Instance()->StopAviDemo();
-		cls.demo.avi_audio = false;
-	}
-
-	cls.demo.avi = false;
-	cls.demo.avi_frame = 0;
-}
-
-/*
 * CL_DemoCompleted
 *
 * Close the demo file and disable demo state. Called from disconnection proccess
 */
 void CL_DemoCompleted( void ) {
-	if( cls.demo.avi ) {
-		CL_StopDemoAviDump();
-	}
-
 	if( demofilehandle ) {
 		FS_FCloseFile( demofilehandle );
 		demofilehandle = 0;
@@ -532,34 +484,6 @@ void CL_DemoJump_f( void ) {
 		cls.demo.play_jump_time = time; // gametime always starts from 0
 	}
 	cls.demo.play_jump_latched = true;
-}
-
-/*
-* CL_PlayDemoToAvi_f
-*
-* demoavi <demoname> (if no name suplied, toogles demoavi status)
-*/
-void CL_PlayDemoToAvi_f( void ) {
-	if( Cmd_Argc() == 1 && cls.demo.playing ) { // toggle demoavi mode
-		if( !cls.demo.avi ) {
-			CL_BeginDemoAviDump();
-		} else {
-			CL_StopDemoAviDump();
-		}
-	} else if( Cmd_Argc() == 2 ) {
-		char *tempname = Q_strdup( Cmd_Argv( 1 ) );
-
-		CL_StartDemo( tempname, false );
-
-		if( cls.demo.playing ) {
-			cls.demo.pending_avi = true;
-		}
-
-		Q_free( tempname );
-	} else {
-		Com_Printf( "Usage: %sdemoavi <demoname>%s or %sdemoavi%s while playing a demo\n",
-					S_COLOR_YELLOW, S_COLOR_WHITE, S_COLOR_YELLOW, S_COLOR_WHITE );
-	}
 }
 
 /*

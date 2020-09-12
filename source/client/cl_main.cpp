@@ -47,10 +47,6 @@ cvar_t *cl_extrapolationTime;
 cvar_t *cl_extrapolate;
 
 cvar_t *cl_timedemo;
-cvar_t *cl_demoavi_video;
-cvar_t *cl_demoavi_audio;
-cvar_t *cl_demoavi_fps;
-cvar_t *cl_demoavi_scissor;
 
 cvar_t *sensitivity;
 cvar_t *zoomsens;
@@ -1934,11 +1930,6 @@ static void CL_InitLocal( void ) {
 	cl_shownet =        Cvar_Get( "cl_shownet", "0", 0 );
 	cl_timeout =        Cvar_Get( "cl_timeout", "120", 0 );
 	cl_timedemo =       Cvar_Get( "timedemo", "0", CVAR_CHEAT );
-	cl_demoavi_video =  Cvar_Get( "cl_demoavi_video", "1", CVAR_ARCHIVE );
-	cl_demoavi_audio =  Cvar_Get( "cl_demoavi_audio", "0", CVAR_ARCHIVE );
-	cl_demoavi_fps =    Cvar_Get( "cl_demoavi_fps", "30.3", CVAR_ARCHIVE );
-	cl_demoavi_fps->modified = true;
-	cl_demoavi_scissor =    Cvar_Get( "cl_demoavi_scissor", "0", CVAR_ARCHIVE );
 
 	rcon_client_password =  Cvar_Get( "rcon_password", "", 0 );
 	rcon_address =      Cvar_Get( "rcon_address", "", 0 );
@@ -2030,7 +2021,6 @@ static void CL_InitLocal( void ) {
 	Cmd_AddCommand( "writeconfig", CL_WriteConfig_f );
 	Cmd_AddCommand( "showip", CL_ShowIP_f ); // jal : wsw : print our ip
 	Cmd_AddCommand( "demo", CL_PlayDemo_f );
-	Cmd_AddCommand( "demoavi", CL_PlayDemoToAvi_f );
 	Cmd_AddCommand( "next", CL_SetNext_f );
 	Cmd_AddCommand( "demopause", CL_PauseDemo_f );
 	Cmd_AddCommand( "demojump", CL_DemoJump_f );
@@ -2040,7 +2030,6 @@ static void CL_InitLocal( void ) {
 	Cmd_AddCommand( "help", CL_Help_f );
 
 	Cmd_SetCompletionFunc( "demo", CL_DemoComplete );
-	Cmd_SetCompletionFunc( "demoavi", CL_DemoComplete );
 }
 
 /*
@@ -2066,7 +2055,6 @@ static void CL_ShutdownLocal( void ) {
 	Cmd_RemoveCommand( "writeconfig" );
 	Cmd_RemoveCommand( "showip" );
 	Cmd_RemoveCommand( "demo" );
-	Cmd_RemoveCommand( "demoavi" );
 	Cmd_RemoveCommand( "next" );
 	Cmd_RemoveCommand( "demopause" );
 	Cmd_RemoveCommand( "demojump" );
@@ -2401,32 +2389,6 @@ void CL_Frame( int realMsec, int gameMsec ) {
 		cls.demo.play_ignore_next_frametime = false;
 	}
 
-	if( cl_demoavi_fps->modified ) {
-		float newvalue = 1000.0f / (int)( 1000.0f / cl_demoavi_fps->value );
-		if( std::fabs( newvalue - cl_demoavi_fps->value ) > 0.001 ) {
-			Com_Printf( "cl_demoavi_fps value has been adjusted to %.4f\n", newvalue );
-		}
-
-		Cvar_SetValue( "cl_demoavi_fps", newvalue );
-		cl_demoavi_fps->modified = false;
-	}
-
-	// demoavi
-	if( ( cls.demo.avi || cls.demo.pending_avi ) && cls.state == CA_ACTIVE ) {
-		if( cls.demo.pending_avi && !cls.demo.avi ) {
-			cls.demo.pending_avi = false;
-			CL_BeginDemoAviDump();
-		}
-
-		// fixed time for next frame
-		if( cls.demo.avi_video ) {
-			gameMsec = ( 1000.0 / (double)cl_demoavi_fps->integer ) * Cvar_Value( "timescale" );
-			if( gameMsec < 1 ) {
-				gameMsec = 1;
-			}
-		}
-	}
-
 	if( cls.demo.playing ) {
 		if( cls.demo.paused ) {
 			gameMsec = 0;
@@ -2451,8 +2413,7 @@ void CL_Frame( int realMsec, int gameMsec ) {
 		maxFps = 60;
 		minMsec = 1000.0f / maxFps;
 		roundingMsec += 1000.0f / maxFps - minMsec;
-	} else if( cl_maxfps->integer > 0 && !(cl_timedemo->integer && cls.demo.playing)
-			   && !( cls.demo.avi_video && cls.state == CA_ACTIVE ) ) {
+	} else if( cl_maxfps->integer > 0 && !( cl_timedemo->integer && cls.demo.playing ) ) {
 		const int absMinFps = 24;
 
 		// do not allow setting cl_maxfps to very low values to prevent cheating
@@ -2514,13 +2475,6 @@ void CL_Frame( int realMsec, int gameMsec ) {
 		time_after_ref = Sys_Milliseconds();
 	}
 
-	if( CL_WriteAvi() ) {
-		int frame = ++cls.demo.avi_frame;
-		if( cls.demo.avi_video ) {
-			RF_WriteAviFrame( frame, cl_demoavi_scissor->integer );
-		}
-	}
-
 	// update audio
 	if( cls.state != CA_ACTIVE ) {
 		// if the loading plaque is up, clear everything out to make sure we aren't looping a dirty
@@ -2528,7 +2482,7 @@ void CL_Frame( int realMsec, int gameMsec ) {
 		if( cls.disable_screen ) {
 			SoundSystem::Instance()->Clear();
 		} else {
-			SoundSystem::Instance()->Update( vec3_origin, vec3_origin, axis_identity, false );
+			SoundSystem::Instance()->Update( vec3_origin, vec3_origin, axis_identity );
 		}
 	}
 

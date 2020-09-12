@@ -210,11 +210,7 @@ typedef struct {
 	int64_t play_jump_time;
 	bool play_ignore_next_frametime;
 
-	bool avi;
-	bool avi_video, avi_audio;
-	bool pending_avi;
 	bool pause_on_stop;
-	int avi_frame;
 
 	char meta_data[SNAP_MAX_DEMO_META_DATA_SIZE];
 	size_t meta_data_realsize;
@@ -325,10 +321,6 @@ extern cvar_t *cl_extrapolationTime;
 extern cvar_t *cl_extrapolate;
 
 extern cvar_t *cl_timedemo;
-extern cvar_t *cl_demoavi_video;
-extern cvar_t *cl_demoavi_audio;
-extern cvar_t *cl_demoavi_fps;
-extern cvar_t *cl_demoavi_scissor;
 
 // wsw : debug netcode
 extern cvar_t *cl_debug_serverCmd;
@@ -436,17 +428,14 @@ void CL_ClearInputState( void );
 void CL_WriteDemoMessage( msg_t *msg );
 void CL_DemoCompleted( void );
 void CL_PlayDemo_f( void );
-void CL_PlayDemoToAvi_f( void );
 void CL_ReadDemoPackets( void );
 void CL_LatchedDemoJump( void );
 void CL_Stop_f( void );
 void CL_Record_f( void );
 void CL_PauseDemo_f( void );
 void CL_DemoJump_f( void );
-void CL_BeginDemoAviDump( void );
 size_t CL_ReadDemoMetaData( const char *demopath, char *meta_data, size_t meta_data_size );
 char **CL_DemoComplete( const char *partial );
-#define CL_WriteAvi() ( cls.demo.avi && cls.state == CA_ACTIVE && cls.demo.playing && !cls.demo.play_jump )
 #define CL_SetDemoMetaKeyValue( k,v ) cls.demo.meta_data_realsize = SNAP_SetDemoMetaKeyValue( cls.demo.meta_data, sizeof( cls.demo.meta_data ), cls.demo.meta_data_realsize, k, v )
 
 //

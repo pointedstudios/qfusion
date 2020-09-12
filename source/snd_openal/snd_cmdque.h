@@ -112,7 +112,6 @@ typedef struct {
 	float origin[3];
 	float velocity[3];
 	float axis[9];
-	int avidump;
 } sndCmdSetListener_t;
 
 typedef struct {
@@ -241,7 +240,7 @@ void S_IssueSetAttenuationCmd( sndCmdPipe_t *queue, int model,
 							   float maxdistance, float refdistance );
 void S_IssueSetEntitySpatializationCmd( sndCmdPipe_t *queue, const smdCmdSpatialization_t *spat );
 void S_IssueSetListenerCmd( sndCmdPipe_t *queue, const vec3_t origin,
-							const vec3_t velocity, const mat3_t axis, bool avidump );
+							const vec3_t velocity, const mat3_t axis );
 void S_IssueStartLocalSoundCmd( sndCmdPipe_t *queue, int sfx, float fvol );
 void S_IssueStartFixedSoundCmd( sndCmdPipe_t *queue, int sfx, const vec3_t origin,
 								int channel, float fvol, float attenuation );
