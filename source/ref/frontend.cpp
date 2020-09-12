@@ -327,12 +327,6 @@ void RF_ScreenShot( const char *path, const char *name, const char *fmtstring, b
 	}
 }
 
-void RF_EnvShot( const char *path, const char *name, unsigned pixels ) {
-	if( RF_RenderingEnabled() ) {
-		R_TakeEnvShot( path, name, pixels );
-	}
-}
-
 bool RF_RenderingEnabled( void ) {
 	return GLimp_RenderingEnabled();
 }

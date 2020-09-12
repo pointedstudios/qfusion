@@ -18,12 +18,17 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "local.h"
-#include "imagelib.h"
 #include "../qcommon/hash.h"
 #include "../qcommon/qcommon.h"
+#include "../qcommon/wswfs.h"
 
 #include <algorithm>
 #include <tuple>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "../../third-party/stb/stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "../../third-party/stb/stb_image_write.h"
 
 #define MAX_GLIMAGES        8192
 #define IMAGES_HASH_SIZE    64
@@ -391,51 +396,38 @@ static uint8_t *_R_AllocImageBufferCb( void *ptr, size_t size, const char *filen
 */
 static int R_ReadImageFromDisk( char *pathname, size_t pathname_size,
 								uint8_t **pic, int *width, int *height, int *flags, int side ) {
-	const char *extension;
-	int samples;
-
-	*pic = NULL;
+	*pic = nullptr;
 	*width = *height = 0;
-	samples = 0;
 
-	extension =FS_FirstExtension( pathname, IMAGE_EXTENSIONS, NUM_IMAGE_EXTENSIONS - 1 );
-	if( extension ) {
-		r_imginfo_t imginfo;
-		loaderCbInfo_t cbinfo = { side };
-
-		COM_ReplaceExtension( pathname, extension, pathname_size );
-
-		if( !Q_stricmp( extension, ".jpg" ) ) {
-			imginfo = LoadJPG( pathname, _R_AllocImageBufferCb, (void *)&cbinfo );
-		} else if( !Q_stricmp( extension, ".tga" ) ) {
-			imginfo = LoadTGA( pathname, _R_AllocImageBufferCb, (void *)&cbinfo );
-		} else if( !Q_stricmp( extension, ".png" ) ) {
-			imginfo = LoadPNG( pathname, _R_AllocImageBufferCb, (void *)&cbinfo );
-		} else {
-			return 0;
-		}
-
-		if( imginfo.samples >= 3 ) {
-			if( ( ( imginfo.comp & ~1 ) == IMGCOMP_BGR ) && ( !glConfig.ext.bgra || !flags ) ) {
-				R_SwapBlueRed( imginfo.pixels, imginfo.width, imginfo.height, imginfo.samples, 1 );
-				imginfo.comp = (decltype( imginfo.comp ))( IMGCOMP_RGB | ( imginfo.comp & 1 ) );
-			}
-		}
-
-		*pic = imginfo.pixels;
-		*width = imginfo.width;
-		*height = imginfo.height;
-		samples = imginfo.samples;
-		if( flags ) {
-			if( ( imginfo.samples >= 3 ) && ( ( imginfo.comp & ~1 ) == IMGCOMP_BGR ) ) {
-				*flags |= IT_BGRA;
-			}
-			if( imginfo.samples > 0 && !Q_stricmp( extension, ".wal" ) ) {
-				*flags = ( *flags | IT_WAL ) & ~IT_SRGB;
-			}
-		}
+	const char *extension = FS_FirstExtension( pathname, IMAGE_EXTENSIONS, NUM_IMAGE_EXTENSIONS - 1 );
+	if( !extension ) {
+		return 0;
 	}
 
+	COM_ReplaceExtension( pathname, extension, pathname_size );
+
+	auto maybeHandle = wsw::fs::openAsReadHandle( wsw::StringView( pathname ) );
+	if( !maybeHandle ) {
+		return 0;
+	}
+
+	const size_t fileSize = maybeHandle->getInitialFileSize();
+	// TODO: Reuse or provide the "callbacks" interface
+	wsw::Vector<uint8_t> buffer;
+	buffer.resize( fileSize );
+
+	if( !maybeHandle->readExact( buffer.data(), fileSize ) ) {
+		return 0;
+	}
+
+	int samples = 0;
+	stbi_uc *bytes = stbi_load_from_memory( (const stbi_uc *)buffer.data(), (int)fileSize, width, height, &samples, 0 );
+	if( !bytes ) {
+		return 0;
+	}
+
+	// TODO: This leaks, the fix is postponed to the major overhaul of the image system
+	*pic = bytes;
 	return samples;
 }
 
@@ -1730,28 +1722,28 @@ SCREEN SHOTS
 ==============================================================================
 */
 
+static void wsw_stb_write_func( void *context, void *data, int size ) {
+	auto handle = *( (int *)( context ) );
+	FS_Write( data, size, handle );
+}
+
 /*
 * R_ScreenShot
 */
-void R_ScreenShot( const char *filename, int x, int y, int width, int height, int quality,
-				   bool flipx, bool flipy, bool flipdiagonal, bool silent ) {
-	size_t size, buf_size;
-	uint8_t *buffer, *flipped, *rgb, *rgba;
-	r_imginfo_t imginfo;
-	const char *extension;
-
+void R_ScreenShot( const char *filename, int x, int y, int width, int height, int quality, bool silent ) {
 	if( !R_IsRenderingToScreen() ) {
 		return;
 	}
 
-	extension = COM_FileExtension( filename );
+	const char *extension = COM_FileExtension( filename );
 	if( !extension ) {
 		Com_Printf( "R_ScreenShot: Invalid filename\n" );
 		return;
 	}
 
-	size = width * height * 3;
-	buf_size = width * height * 4;
+	const bool isJpeg = !Q_stricmp( extension, ".jpg" );
+	size_t buf_size = width * ( height + 1 ) * ( isJpeg ? 3 : 4 );
+
 	if( buf_size > r_screenShotBufferSize ) {
 		if( r_screenShotBuffer ) {
 			Q_free( r_screenShotBuffer );
@@ -1760,55 +1752,35 @@ void R_ScreenShot( const char *filename, int x, int y, int width, int height, in
 		r_screenShotBufferSize = buf_size;
 	}
 
-	buffer = r_screenShotBuffer;
-	if( flipx || flipy || flipdiagonal ) {
-		flipped = buffer + size;
+	uint8_t *const buffer = r_screenShotBuffer;
+	if( isJpeg ) {
+		qglReadPixels( 0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, buffer );
 	} else {
-		flipped = NULL;
+		qglReadPixels( 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer );
 	}
 
-	imginfo.width = width;
-	imginfo.height = height;
-	imginfo.samples = 3;
-	imginfo.pixels = flipped ? flipped : buffer;
-	imginfo.comp = Q_stricmp( extension, ".jpg" ) ? IMGCOMP_BGR : IMGCOMP_RGB;
+	// TODO: Flip
 
-	qglReadPixels( 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer );
+	int handle = 0;
+	if( FS_FOpenAbsoluteFile( filename, &handle, FS_WRITE ) < 0 ) {
+		Com_Printf( "R_ScreenShot: Failed to open %s\n", filename );
+		return;
+	}
 
-	rgb = rgba = buffer;
-	if( imginfo.comp == IMGCOMP_BGR ) {
-		while( ( size_t )( rgb - buffer ) < size ) {
-			int b = rgba[0]; // the first 3 pixels of rgb and rgba are aliased
-			rgb[0] = rgba[2];
-			rgb[1] = rgba[1];
-			rgb[2] = b;
-			rgb += 3;
-			rgba += 4;
-		}
+	auto *context = (void *)&handle;
+	int result;
+	if( isJpeg ) {
+		result = stbi_write_jpg_to_func( wsw_stb_write_func, context, width, height, 3, buffer, quality );
 	} else {
-		while( ( size_t )( rgb - buffer ) < size ) {
-			*( rgb++ ) = *( rgba++ );
-			*( rgb++ ) = *( rgba++ );
-			*( rgb++ ) = *( rgba++ );
-			rgba++;
-		}
+		result = stbi_write_tga_to_func( wsw_stb_write_func, context, width, height, 4, buffer );
 	}
 
-	if( flipped ) {
-		R_FlipTexture( buffer, flipped, width, height, 3,
-					   flipx, flipy, flipdiagonal );
+	FS_FCloseFile( handle );
+
+	if( result ) {
+		Com_Printf( "Wrote %s\n", filename );
 	}
 
-	if( !Q_stricmp( extension, ".jpg" ) ) {
-		if( WriteJPG( filename, &imginfo, quality ) && !silent ) {
-			Com_Printf( "Wrote %s\n", filename );
-		}
-
-	} else {
-		if( WriteTGA( filename, &imginfo, 100 ) && !silent ) {
-			Com_Printf( "Wrote %s\n", filename );
-		}
-	}
 }
 
 //=======================================================
@@ -2359,8 +2331,6 @@ static void R_ReleaseBuiltinImages( void ) {
 void R_InitImages( void ) {
 	int i;
 
-	R_Imagelib_Init();
-
 	r_unpackAlignment = 4;
 	qglPixelStorei( GL_PACK_ALIGNMENT, 1 );
 
@@ -2483,6 +2453,4 @@ void R_ShutdownImages( void ) {
 
 	r_imagePathBuf = r_imagePathBuf2 = NULL;
 	r_sizeof_imagePathBuf = r_sizeof_imagePathBuf2 = 0;
-
-	R_Imagelib_Shutdown();
 }

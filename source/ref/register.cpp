@@ -663,7 +663,6 @@ static void R_Register( const char *screenshotsPrefix ) {
 
 	Cmd_AddCommand( "imagelist", R_ImageList_f );
 	Cmd_AddCommand( "screenshot", R_ScreenShot_f );
-	Cmd_AddCommand( "envshot", R_EnvShot_f );
 	Cmd_AddCommand( "modellist", Mod_Modellist_f );
 	Cmd_AddCommand( "gfxinfo", R_GfxInfo_f );
 	Cmd_AddCommand( "glslprogramlist", RP_ProgramList_f );
@@ -1028,7 +1027,6 @@ void R_EndRegistration( void ) {
 void R_Shutdown( bool verbose ) {
 	Cmd_RemoveCommand( "modellist" );
 	Cmd_RemoveCommand( "screenshot" );
-	Cmd_RemoveCommand( "envshot" );
 	Cmd_RemoveCommand( "imagelist" );
 	Cmd_RemoveCommand( "gfxinfo" );
 	Cmd_RemoveCommand( "glslprogramlist" );

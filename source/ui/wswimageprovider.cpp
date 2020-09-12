@@ -9,7 +9,6 @@
 
 #include "../qcommon/wswfs.h"
 
-#define STB_IMAGE_IMPLEMENTATION
 #include "../../third-party/stb/stb_image.h"
 
 namespace wsw::ui {

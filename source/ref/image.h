@@ -114,8 +114,7 @@ image_t *R_GetPortalTexture( int viewportWidth, int viewportHeight, int flags, u
 void R_FreeImageBuffers( void );
 
 void R_PrintImageList( const char *pattern, bool ( *filter )( const char *filter, const char *value ) );
-void R_ScreenShot( const char *filename, int x, int y, int width, int height, int quality,
-				   bool flipx, bool flipy, bool flipdiagonal, bool silent );
+void R_ScreenShot( const char *filename, int x, int y, int width, int height, int quality, bool silent );
 
 void R_TextureMode( char *string );
 void R_AnisotropicFilter( int value );
