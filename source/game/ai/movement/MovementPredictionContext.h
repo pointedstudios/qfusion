@@ -5,7 +5,6 @@ class BaseMovementAction;
 
 #include "BotInput.h"
 #include "MovementState.h"
-#include "NavMeshQueryCache.h"
 #include "FloorClusterAreasCache.h"
 #include "EnvironmentTraceCache.h"
 
@@ -98,7 +97,6 @@ public:
 
 	SameFloorClusterAreasCache sameFloorClusterAreasCache;
 	NextFloorClusterAreasCache nextFloorClusterAreasCache;
-	BotNavMeshQueryCache navMeshQueryCache;
 private:
 	struct PredictedMovementAction {
 		AiEntityPhysicsState entityPhysicsState;

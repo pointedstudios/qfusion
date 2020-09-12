@@ -3,7 +3,6 @@
 #include "FallbackMovementAction.h"
 #include "EnvironmentTraceCache.h"
 #include "BestJumpableSpotDetector.h"
-#include "../navigation/NavMeshManager.h"
 #include "../ai_manager.h"
 #include "../bot.h"
 
@@ -317,104 +316,6 @@ void BestAreaCenterJumpableSpotDetector::FillCandidateSpotsWithoutRoutingTest( c
 	}
 }
 
-class BestNavMeshPolyJumpableSpotDetector: public BestRegularJumpableSpotDetector {
-	wsw::StaticVector<SpotAndScore, 64> spotsHeap;
-	const AiNavMeshManager *navMeshManager;
-
-	void GetCandidateSpots( SpotAndScore **begin, SpotAndScore **end ) override;
-	inline uint32_t GetStartPolyRef();
-	void FillCandidateSpotsUsingRoutingTest( const uint32_t *polyRefs, int numPolyRefs );
-	void FillCandidateSpotsWithoutRoutingTest( const uint32_t *polyRefs, int numPolyRefs );
-public:
-	BestNavMeshPolyJumpableSpotDetector() : navMeshManager( nullptr ), navMeshQuery( nullptr ) {
-		SetTestSpotAreaNums( true );
-	}
-
-	// Should be set for the query owned by the corresponding client
-	AiNavMeshQuery *navMeshQuery;
-
-	const SpotAndScore *Exec( const vec3_t startOrigin_, unsigned *millis ) override {
-		navMeshManager = AiNavMeshManager::Instance();
-		const SpotAndScore *result = BestRegularJumpableSpotDetector::Exec( startOrigin_, millis );
-		// Nullify the supplied reference to avoid unintended reusing
-		navMeshQuery = nullptr;
-		return result;
-	}
-};
-
-static BestNavMeshPolyJumpableSpotDetector bestNavMeshPolyJumpableSpotDetector;
-
-uint32_t BestNavMeshPolyJumpableSpotDetector::GetStartPolyRef() {
-	Vec3 polySearchMins( -24, -24, playerbox_stand_mins[2] - 1.0f );
-	Vec3 polySearchMaxs( +24, +24, playerbox_stand_maxs[2] );
-	polySearchMins += startOrigin;
-	polySearchMaxs += startOrigin;
-	return navMeshQuery->FindNearestPoly( polySearchMins.Data(), polySearchMaxs.Data() );
-}
-
-void BestNavMeshPolyJumpableSpotDetector::GetCandidateSpots( SpotAndScore **begin, SpotAndScore **end ) {
-	spotsHeap.clear();
-
-	uint32_t startPolyRef = GetStartPolyRef();
-	if( !startPolyRef ) {
-		*begin = spotsHeap.begin();
-		*end = spotsHeap.end();
-		return;
-	}
-
-	uint32_t polyRefs[64];
-	int numPolyRefs = navMeshQuery->FindPolysInRadius( startPolyRef, 96.0f, polyRefs, 64 );
-	if( routeCache ) {
-		FillCandidateSpotsUsingRoutingTest( polyRefs, numPolyRefs );
-	} else {
-		FillCandidateSpotsWithoutRoutingTest( polyRefs, numPolyRefs );
-	}
-
-	std::make_heap( spotsHeap.begin(), spotsHeap.end() );
-
-	*begin = spotsHeap.begin();
-	*end = spotsHeap.end();
-}
-
-void BestNavMeshPolyJumpableSpotDetector::FillCandidateSpotsUsingRoutingTest( const uint32_t *polyRefs, int numPolyRefs ) {
-	vec3_t targetOrigin;
-	for( int i = 0; i < numPolyRefs; ++i ) {
-		navMeshManager->GetPolyCenter( polyRefs[i], targetOrigin );
-		// Poly center corresponds to the center of the grounded poly.
-		// Add some height above ground
-		targetOrigin[2] += -playerbox_stand_mins[2];
-		// Dont try jumping to nearby spots
-		if( DistanceSquared( startOrigin, targetOrigin ) < SQUARE( 48.0f ) ) {
-			continue;
-		}
-		int areaNum = aasWorld->FindAreaNum( targetOrigin );
-		if( !areaNum ) {
-			continue;
-		}
-		int travelTime = routeCache->PreferredRouteToGoalArea( areaNum, navTargetAreaNum );
-		if( !travelTime || travelTime > startTravelTimeToTarget ) {
-			continue;
-		}
-		targetOrigin[2] += playerbox_stand_maxs[2];
-		// Use the negated travel time as a spot score (closest to target spots should get evicted first)
-		new( spotsHeap.unsafe_grow_back() )SpotAndScore( targetOrigin, -travelTime, areaNum, -1 );
-	}
-}
-
-void BestNavMeshPolyJumpableSpotDetector::FillCandidateSpotsWithoutRoutingTest( const uint32_t *polyRefs, int numPolyRefs ) {
-	vec3_t targetOrigin;
-	for( int i = 0; i < numPolyRefs; ++i ) {
-		navMeshManager->GetPolyCenter( polyRefs[i], targetOrigin );
-		// Use greater Z offset in this case
-		targetOrigin[2] += -playerbox_stand_mins[2] + playerbox_stand_maxs[2];
-		// Dont try cutting off by distance in this case since we're likely to be jumping from lava
-		float spotScore = DistanceSquared( startOrigin, targetOrigin );
-		targetOrigin[2] += playerbox_stand_maxs[2];
-		// Farthest spots should get evicted first
-		new( spotsHeap.unsafe_grow_back() )SpotAndScore( targetOrigin, spotScore, aasWorld->FindAreaNum( targetOrigin ), -1 );
-	}
-}
-
 MovementScript *FallbackMovementAction::TryFindJumpToSpotFallback( Context *context, bool testTravelTime ) {
 	// Cut off these extremely expensive computations
 	if( !bot->TryGetVitalComputationQuota() ) {
@@ -425,7 +326,6 @@ MovementScript *FallbackMovementAction::TryFindJumpToSpotFallback( Context *cont
 	auto *const fallback = &module->jumpToSpotScript;
 
 	auto *const areaDetector = &::bestAreaCenterJumpableSpotDetector;
-	auto *const polyDetector = &::bestNavMeshPolyJumpableSpotDetector;
 
 	// Prepare auxiliary travel time data
 	if( testTravelTime ) {
@@ -438,24 +338,11 @@ MovementScript *FallbackMovementAction::TryFindJumpToSpotFallback( Context *cont
 			return nullptr;
 		}
 		areaDetector->AddRoutingParams( bot->RouteCache(), navTargetAreaNum, startTravelTimeToTarget );
-		polyDetector->AddRoutingParams( bot->RouteCache(), navTargetAreaNum, startTravelTimeToTarget );
 	}
 
 	unsigned jumpTravelTime;
 	areaDetector->SetJumpPhysicsProps( context->GetRunSpeed(), context->GetJumpSpeed() );
 	if( const auto *spot = areaDetector->Exec( entityPhysicsState.Origin(), &jumpTravelTime ) ) {
-		fallback->Activate( entityPhysicsState.Origin(), spot->origin, jumpTravelTime );
-		return fallback;
-	}
-
-	// We have found nothing.. Try polys
-	if( !bot->navMeshQuery ) {
-		bot->navMeshQuery = AiNavMeshManager::Instance()->AllocQuery( game.edicts[bot->EntNum()].r.client );
-	}
-
-	polyDetector->SetJumpPhysicsProps( context->GetRunSpeed(), context->GetJumpSpeed() );
-	polyDetector->navMeshQuery = bot->navMeshQuery;
-	if( const auto *spot = polyDetector->Exec( entityPhysicsState.Origin(), &jumpTravelTime ) ) {
 		fallback->Activate( entityPhysicsState.Origin(), spot->origin, jumpTravelTime );
 		return fallback;
 	}

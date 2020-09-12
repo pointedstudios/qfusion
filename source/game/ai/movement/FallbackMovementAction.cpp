@@ -233,16 +233,6 @@ MovementScript *FallbackMovementAction::TryNodeBasedFallbacksLeft( Context *cont
 		return nodeFallback;
 	}
 
-	if( context->navMeshQueryCache.GetClosestToTargetPoint( context, areaPoint ) ) {
-		float squareDistance = Distance2DSquared( context->movementState->entityPhysicsState.Origin(), areaPoint );
-		if( squareDistance > SQUARE( 8 ) ) {
-			areaNum = AiAasWorld::Instance()->FindAreaNum( areaPoint );
-			float reachRadius = std::min( 64.0f, Q_Sqrt( squareDistance ) );
-			nodeFallback->Activate( areaPoint, reachRadius, areaNum );
-			return nodeFallback;
-		}
-	}
-
 	if( millisInBlockedState > 1500 ) {
 		// Notify the nav target selection code
 		bot->OnMovementToNavTargetBlocked();

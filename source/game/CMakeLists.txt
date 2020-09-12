@@ -20,8 +20,6 @@ file(GLOB GAME_HEADERS
 	"../qcommon/hash.h"
 	"../qcommon/links.h"
 	"../qcommon/md5.h"
-	"../../third-party/recastnavigation/Recast/Include/*.h"
-	"../../third-party/recastnavigation/Detour/Include/*.h"
 	"../qcommon/net.h" # constants and types for address parsing
 	"../qcommon/snap.h" # constants for the antihack system
 )
@@ -44,8 +42,6 @@ file(GLOB GAME_SOURCES
 	"../qcommon/hash.cpp"
 	"../qcommon/cjson.cpp"
 	"../qcommon/wswfs.cpp"
-	"../../third-party/recastnavigation/Recast/Source/*.cpp"
-	"../../third-party/recastnavigation/Detour/Source/*.cpp"
 )
 
 add_library(game SHARED ${GAME_SOURCES} ${GAME_HEADERS})

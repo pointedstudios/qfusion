@@ -1,9 +1,6 @@
 [submodule "third-party/angelscript"]
 	path = third-party/angelscript
 	url = https://github.com/Qfusion/angelscript.git
-[submodule "third-party/recastnavigation"]
-	path = third-party/recastnavigation
-	url = https://github.com/Warsow/recastnavigation.git
 [submodule "third-party/openal-soft"]
 	path = third-party/openal-soft
 	url = https://github.com/Warsow/openal-soft.git

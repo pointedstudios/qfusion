@@ -91,7 +91,6 @@ class Bot: public Ai {
 	friend class BotWeaponsUsageModule;
 	friend class BotRoamingManager;
 	friend class TacticalSpotsRegistry;
-	friend class BotNavMeshQueryCache;
 	friend class BotTacticalSpotsCache;
 	friend class RoamGoal;
 	friend class WorldState;
@@ -420,9 +419,6 @@ private:
 
 		return level.time - noItemAvailableSince > 3000;
 	}
-
-	// TODO: Move to the movement module
-	class AiNavMeshQuery *navMeshQuery { nullptr };
 
 	bool CanChangeWeapons() const {
 		return movementModule.CanChangeWeapons();

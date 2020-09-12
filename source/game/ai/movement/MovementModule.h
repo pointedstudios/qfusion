@@ -14,7 +14,6 @@
 #include "BunnyTestingMultipleTurnsAction.h"
 #include "BunnyToBestVisibleReachAction.h"
 #include "BunnyToBestClusterPointAction.h"
-#include "BunnyToBestNavMeshPointAction.h"
 #include "CampASpotAction.h"
 #include "CombatDodgeToTargetAction.h"
 #include "FallbackMovementAction.h"
@@ -104,7 +103,6 @@ class BotMovementModule {
 	friend class BunnyToBestVisibleReachAction;
 	friend class BunnyToBestFloorClusterPointAction;
 	friend class BunnyTestingMultipleTurnsAction;
-	friend class BunnyToBestNavMeshPointAction;
 	friend class CombatDodgeSemiRandomlyToTargetAction;
 	friend class ScheduleWeaponJumpAction;
 	friend class TryTriggerWeaponJumpAction;
@@ -147,7 +145,6 @@ class BotMovementModule {
 	BunnyToBestVisibleReachAction bunnyToBestVisibleReachAction;
 	BunnyToBestFloorClusterPointAction bunnyToBestFloorClusterPointAction;
 	BunnyTestingMultipleTurnsAction bunnyTestingMultipleTurnsAction;
-	BunnyToBestNavMeshPointAction bunnyToBestNavMeshPointAction;
 	CombatDodgeSemiRandomlyToTargetAction combatDodgeSemiRandomlyToTargetAction;
 	ScheduleWeaponJumpAction scheduleWeaponJumpAction;
 	TryTriggerWeaponJumpAction tryTriggerWeaponJumpAction;
