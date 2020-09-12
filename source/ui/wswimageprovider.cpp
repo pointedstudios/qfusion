@@ -4,8 +4,13 @@
 #include <QtConcurrent>
 #include <QSvgRenderer>
 #include <QThreadPool>
+#include <QImageReader>
+#include <QBuffer>
 
 #include "../qcommon/wswfs.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "../../third-party/stb/stb_image.h"
 
 namespace wsw::ui {
 
@@ -38,17 +43,15 @@ void WswImageRunnable::run() {
 	Q_EMIT m_response->ready();
 }
 
-// TODO: Add workarounds for TGA loading?
-static const char *kExtensions[] = { ".svg", ".png", ".webp", ".jpg" };
+static const char *kExtensions[] = { ".svg", ".tga", ".png", ".webp", ".jpg" };
+static const char *kTag = "WswImageResponse";
 
 void WswImageResponse::exec() {
-	constexpr const char *tag = "WswImageResponse";
-
 	// TODO: Use some sane API
 	const auto numExtensions = (int)( std::end( kExtensions ) - std::begin( kExtensions ) );
 	const char *ext = FS_FirstExtension( m_name.constData(), kExtensions, numExtensions );
 	if( !ext ) {
-		Com_Printf( S_COLOR_YELLOW "%s: Failed to find a first extension for %s\n", tag, m_name.constData() );
+		Com_Printf( S_COLOR_YELLOW "%s: Failed to find a first extension for %s\n", kTag, m_name.constData() );
 		return;
 	}
 
@@ -57,48 +60,98 @@ void WswImageResponse::exec() {
 
 	auto fileHandle = wsw::fs::openAsReadHandle( path.asView() );
 	if( !fileHandle ) {
-		Com_Printf( S_COLOR_YELLOW "%s: Failed to open %s\n", tag, path.data() );
+		Com_Printf( S_COLOR_YELLOW "%s: Failed to open %s\n", kTag, path.data() );
 		return;
 	}
 
 	QByteArray fileData( fileHandle->getInitialFileSize(), Qt::Uninitialized );
 	if( fileHandle->read( fileData.data(), fileData.size() ) != std::optional( fileData.size() ) ) {
-		Com_Printf( S_COLOR_YELLOW "%s: Failed to read %s\n", tag, path.data() );
+		Com_Printf( S_COLOR_YELLOW "%s: Failed to read %s\n", kTag, path.data() );
 		return;
 	}
 
 	if( !strcmp( ext, ".svg" ) ) {
-		QSvgRenderer renderer( fileData );
-		if( !renderer.isValid() ) {
-			Com_Printf( S_COLOR_YELLOW "%s: Failed to parse SVG for %s\n", tag, m_name.constData() );
-			return;
-		}
-		if( renderer.animated() ) {
-			Com_Printf( S_COLOR_YELLOW "%s: %s is an animated SVG\n", tag, m_name.constData() );
-			return;
-		}
-
-		QSize size = m_requestedSize.isValid() ? m_requestedSize : QSize( 128, 128 );
-		m_image = QImage( size, QImage::Format_ARGB32 );
-		QPainter painter( &m_image );
-		painter.setRenderHint( QPainter::Antialiasing, true );
-		painter.setRenderHint( QPainter::HighQualityAntialiasing, true );
-		renderer.render( &painter );
+		// No resize needed
+		(void)loadSvg( fileData );
 		return;
 	}
 
-	if( !m_image.loadFromData( fileData ) ) {
-		Com_Printf( S_COLOR_YELLOW "%s: Failed to load %s from data", tag, m_name.constData() );
-		return;
+	if( !strcmp( ext, ".tga" ) ) {
+		if( !loadTga( fileData ) ) {
+			return;
+		}
+	} else {
+		if( !loadOther( fileData, ext ) ) {
+			return;
+		}
 	}
 
 	if( m_requestedSize.isValid() ) {
 		m_image = m_image.scaled( m_requestedSize );
 		if( m_image.isNull() ) {
 			auto [w, h] = std::make_pair( m_requestedSize.width(), m_requestedSize.height() );
-			Com_Printf( S_COLOR_YELLOW "%s: Failed to scale %s to %dx%d", tag, m_name.constData(), w, h );
+			Com_Printf( S_COLOR_YELLOW "%s: Failed to scale %s to %dx%d\n", kTag, m_name.constData(), w, h );
 		}
 	}
+}
+
+bool WswImageResponse::loadSvg( const QByteArray &fileData ) {
+	QSvgRenderer renderer( fileData );
+	if( !renderer.isValid() ) {
+		Com_Printf( S_COLOR_YELLOW "%s: Failed to parse SVG for %s\n", kTag, m_name.constData() );
+		return false;
+	}
+	if( renderer.animated() ) {
+		Com_Printf( S_COLOR_YELLOW "%s: %s is an animated SVG\n", kTag, m_name.constData() );
+		return false;
+	}
+
+	QSize size = m_requestedSize.isValid() ? m_requestedSize : QSize( 128, 128 );
+	m_image = QImage( size, QImage::Format_ARGB32 );
+	QPainter painter( &m_image );
+	painter.setRenderHint( QPainter::Antialiasing, true );
+	painter.setRenderHint( QPainter::HighQualityAntialiasing, true );
+	renderer.render( &painter );
+	return true;
+}
+
+bool WswImageResponse::loadTga( const QByteArray &fileData ) {
+	int w = 0, h = 0, chans = 0;
+	// No in-place loading wtf?
+	// How does this thing get broadly suggested in the internets?
+	stbi_uc *bytes = stbi_load_from_memory((stbi_uc *)fileData.data(), fileData.length(), &w, &h, &chans, 0 );
+	if( !bytes ) {
+		Com_Printf( S_COLOR_YELLOW "%s: Failed to load %s.tga from data\n", kTag, m_name.constData() );
+		return false;
+	}
+
+	if( chans == 3 ) {
+		m_image = QImage( bytes, w, h, QImage::Format_RGB888, stbi_image_free );
+	} else if( chans == 4 ) {
+		m_image = QImage( bytes, w, h, QImage::Format_RGBA8888, stbi_image_free );
+	} else {
+		Com_Printf( S_COLOR_YELLOW "%s: Weird number of %s.tga image channels %d\n", kTag, m_name.constData(), chans );
+		stbi_image_free( bytes );
+		return false;
+	}
+
+	if( m_image.isNull() ) {
+		Com_Printf( S_COLOR_YELLOW "%s: Failed to load %s.tga", kTag, m_name.constData() );
+		return false;
+	}
+
+	return true;
+}
+
+bool WswImageResponse::loadOther( const QByteArray &fileData, const char *ext ) {
+	QBuffer buffer( const_cast<QByteArray *>( std::addressof( fileData ) ) );
+	QImageReader reader( &buffer );
+	if( !reader.read( &m_image ) ) {
+		const char *format = S_COLOR_YELLOW "%s: Failed to load %s from data with %s\n";
+		Com_Printf( format, kTag, m_name.constData(), ext, reader.errorString().constData() );
+		return false;
+	}
+	return true;
 }
 
 auto WswImageResponse::textureFactory() const -> QQuickTextureFactory * {

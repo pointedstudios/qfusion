@@ -20,6 +20,12 @@ class WswImageResponse : public QQuickImageResponse {
 
 	QImage m_image;
 
+	[[nodiscard]]
+	bool loadSvg( const QByteArray &fileData );
+	[[nodiscard]]
+	bool loadTga( const QByteArray &fileData );
+	[[nodiscard]]
+	bool loadOther( const QByteArray &fileData, const char *ext );
 public:
 	WswImageResponse( const QString &name, const QSize &requestedSize )
 		: m_name( name.toUtf8() ), m_requestedSize( requestedSize ) {}

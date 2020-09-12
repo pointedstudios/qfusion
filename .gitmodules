@@ -16,3 +16,6 @@
 [submodule "third-party/magic_enum"]
 	path = third-party/magic_enum
 	url = https://github.com/Warsow/magic_enum.git
+[submodule "third-party/stb"]
+	path = third-party/stb
+	url = https://github.com/Warsow/stb.git
