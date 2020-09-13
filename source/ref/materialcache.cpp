@@ -277,7 +277,7 @@ auto MaterialCache::loadMaterial( const wsw::StringView &name, int type, bool fo
 	}
 
 	material->registrationSequence = rsh.registrationSequence;
-	::Link( material, &materialBins[binIndex], shader_t::kBinLinks );
+	wsw::link( material, &materialBins[binIndex], shader_t::kBinLinks );
 	return material;
 }
 

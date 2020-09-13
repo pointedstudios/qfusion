@@ -1,7 +1,9 @@
-#ifndef QFUSION_LINKS_H
-#define QFUSION_LINKS_H
+#ifndef WSW_a12c8f1d_84d5_404d_9746_2a20dfdb8145_H
+#define WSW_a12c8f1d_84d5_404d_9746_2a20dfdb8145_H
 
-#include <assert.h>
+#include <cassert>
+
+namespace wsw {
 
 /**
  * Links an item that has an intrusive array of links to a list head.
@@ -19,7 +21,8 @@
  * @return the newly linked item (same as the argument) conforming to fluent API style.
  */
 template<typename Item>
-inline Item *Link( Item *item, Item **listHeadRef, int linksIndex ) {
+[[maybe_unused]]
+inline auto link( Item *item, Item **listHeadRef, int linksIndex ) -> Item * {
 	if( *listHeadRef ) {
 		( *listHeadRef )->prev[linksIndex] = item;
 	}
@@ -44,7 +47,8 @@ inline Item *Link( Item *item, Item **listHeadRef, int linksIndex ) {
  * @return the newly unlinked item (same as the argument) conforming to fluent API style.
  */
 template<typename Item>
-inline Item *Unlink( Item *item, Item **listHeadRef, int listIndex ) {
+[[maybe_unused]]
+inline auto unlink( Item *item, Item **listHeadRef, int listIndex ) -> Item * {
 	if( auto *next = item->next[listIndex] ) {
 		next->prev[listIndex] = item->prev[listIndex];
 	}
@@ -61,7 +65,7 @@ inline Item *Unlink( Item *item, Item **listHeadRef, int listIndex ) {
 }
 
 /**
- * A specialized version of {@code Link} that is similar to {@code Link(Item *, Item**, int)}
+ * A specialized version of {@code link} that is similar to {@code link(Item *, Item**, int)}
  * but operates on 16-bit signed indices for links instead of pointers
  * and accepts a base array as an additional argument.
  * Non-negative link indices are assumed to be valid and refer to the corresponding {@code basePtr} cells.
@@ -78,7 +82,8 @@ inline Item *Unlink( Item *item, Item **listHeadRef, int listIndex ) {
  * @return the newly linked item (same as the argument) conforming to fluent API style.
  */
 template<typename Item>
-inline Item *Link( Item *item, int16_t *listHeadRef, int listIndex, Item *basePtr ) {
+[[maybe_unused]]
+inline auto link( Item *item, int16_t *listHeadRef, int listIndex, Item *basePtr ) -> Item * {
 	const intptr_t offset = item - basePtr;
 	assert( offset >= 0 );
 	assert( offset <= ( 1 << 15u ) );
@@ -99,7 +104,7 @@ inline Item *Link( Item *item, int16_t *listHeadRef, int listIndex, Item *basePt
 }
 
 /**
- * A specialized version of {@code Unlink} that is similar to {@code Unlink(Item *, Item**, int)}
+ * A specialized version of {@code unlink} that is similar to {@code unlink(Item *, Item**, int)}
  * but operates on 16-bit signed indices for links instead of pointers
  * and accepts a base array as an additional argument.
  * Non-negative link indices are assumed to be valid and refer to the corresponding {@code basePtr} cells.
@@ -116,7 +121,7 @@ inline Item *Link( Item *item, int16_t *listHeadRef, int listIndex, Item *basePt
  * @return the newly unlinked item (same as the argument) conforming to fluent API style.
  */
 template <typename Item>
-inline Item *Unlink( Item *item, int16_t *listHeadRef, int listIndex, Item *basePtr ) {
+inline auto unlink( Item *item, int16_t *listHeadRef, int listIndex, Item *basePtr ) -> Item * {
 	const int16_t nextItemIndex = item->next[listIndex];
 	// If the next item for the item is defined
 	if( nextItemIndex >= 0 ) {
@@ -147,7 +152,8 @@ inline Item *Unlink( Item *item, int16_t *listHeadRef, int listIndex, Item *base
  * @return the newly linked item (same as the argument) conforming to fluent API style.
  */
 template<typename Item>
-inline Item *Link( Item *item, Item **listHeadRef ) {
+[[maybe_unused]]
+inline auto link( Item *item, Item **listHeadRef ) -> Item * {
 	if( *listHeadRef ) {
 		( *listHeadRef )->prev = item;
 	}
@@ -165,7 +171,8 @@ inline Item *Link( Item *item, Item **listHeadRef ) {
  * @return the newly unlinked item (same as the argument) conforming to fluent API style.
  */
 template<typename Item>
-inline Item *Unlink( Item *item, Item **listHeadRef ) {
+[[maybe_unused]]
+inline auto unlink( Item *item, Item **listHeadRef ) -> Item * {
 	if( auto *next = item->next ) {
 		next->prev = item->prev;
 	}
@@ -179,6 +186,8 @@ inline Item *Unlink( Item *item, Item **listHeadRef ) {
 	item->prev = nullptr;
 	item->next = nullptr;
 	return item;
+}
+
 }
 
 #endif

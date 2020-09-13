@@ -867,7 +867,7 @@ void AiSquad::FindSupplierCandidates( Bot *consumer, Bot **suppliersListHead ) c
 
 	*suppliersListHead = nullptr;
 	for( BotAndScore &botAndScore: candidates ) {
-		::Link( botAndScore.bot, suppliersListHead, Bot::TMP_LINKS );
+		wsw::link( botAndScore.bot, suppliersListHead, Bot::TMP_LINKS );
 	}
 }
 
@@ -1123,7 +1123,7 @@ void AiSquad::AddBot( Bot *bot ) {
 		}
 	}
 
-	Link( bot, &botsListHead, Bot::SQUAD_LINKS );
+	wsw::link( bot, &botsListHead, Bot::SQUAD_LINKS );
 	numBots++;
 	bot->OnAttachedToSquad( this );
 }
@@ -1223,8 +1223,8 @@ void AiSquadBasedTeam::Frame() {
 		if( squad->IsValid() ) {
 			continue;
 		}
-		Unlink( squad, &usedSquadsHead );
-		Link( squad, &freeSquadsHead );
+		wsw::unlink( squad, &usedSquadsHead );
+		wsw::link( squad, &freeSquadsHead );
 	}
 
 	// This should be called before AiSquad::Update() (since squads expect this to be valid)
@@ -1240,7 +1240,7 @@ void AiSquadBasedTeam::Frame() {
 
 void AiSquadBasedTeam::OnBotAdded( Bot *bot ) {
 	// Link to orphan bots and wait for squads clustering
-	Link( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
+	wsw::link( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
 }
 
 void AiSquadBasedTeam::OnBotRemoved( Bot *bot ) {
@@ -1269,7 +1269,7 @@ void AiSquadBasedTeam::OnBotRemoved( Bot *bot ) {
 	// Now the bot should be in orphans list regardless whether was it in squad or not.
 	for( Bot *orphanBot = orphanBotsHead; orphanBot; orphanBot = orphanBot->NextInSquad() ) {
 		if( orphanBot == bot ) {
-			Unlink( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
+			wsw::unlink( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
 			return;
 		}
 	}
@@ -1379,7 +1379,7 @@ sortPairs:
 		for( int clientNum : { pair.clientNum1, pair.clientNum2 } ) {
 			isClientAssigned[clientNum] = true;
 			Bot *bot = ents[clientNum + 1].ai->botRef;
-			::Unlink( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
+			wsw::unlink( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
 			squad->AddBot( bot );
 		}
 	}
@@ -1407,7 +1407,7 @@ sortPairs:
 		}
 
 		// Unlink the bot from orphans list
-		::Unlink( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
+		wsw::unlink( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
 		// Link the bot to the squad
 		bestSquad->AddBot( bot );
 	}
@@ -1418,8 +1418,8 @@ AiSquad *AiSquadBasedTeam::AllocSquad() {
 	// We never exhaust squads capacity as MAX_CLIENTS is the maximum number of squads
 	assert( freeSquadsHead );
 
-	AiSquad *const squad = Unlink( freeSquadsHead, &freeSquadsHead );
-	Link( squad, &usedSquadsHead );
+	AiSquad *const squad = wsw::unlink( freeSquadsHead, &freeSquadsHead );
+	wsw::link( squad, &usedSquadsHead );
 	// This is very important action, otherwise the squad will not think
 	squad->SetFrameAffinity( frameAffinityModulo, frameAffinityOffset );
 	squad->PrepareToAddBots();
@@ -1432,7 +1432,7 @@ void AiSquadBasedTeam::AddToOrphansList( Bot *bot ) {
 			AI_FailWith( "AiSquadBasedTeam::AddToOrphansList()", "A bot is already in the list\n" );
 		}
 	}
-	::Link( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
+	wsw::link( bot, &orphanBotsHead, Bot::SQUAD_LINKS );
 }
 
 AiSquadBasedTeam *AiSquadBasedTeam::InstantiateTeam( int teamNum ) {

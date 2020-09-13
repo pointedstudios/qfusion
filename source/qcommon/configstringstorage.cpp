@@ -41,7 +41,7 @@ void ConfigStringStorage::makeFreeListLinks() {
 	m_freeHead = nullptr;
 	m_usedHead = nullptr;
 	for( ShortStringBlock &s: m_localBlocks ) {
-		::Link( std::addressof( s ), &m_freeHead );
+		wsw::link( std::addressof( s ), &m_freeHead );
 	}
 }
 
@@ -90,8 +90,8 @@ void ConfigStringStorage::setNoCheck( unsigned index, const wsw::StringView &str
 		}
 
 		if( auto *block = getUnderlyingLocalStorage( data ) ) {
-			::Unlink( block, &m_usedHead );
-			::Link( block, &m_freeHead );
+			wsw::unlink( block, &m_usedHead );
+			wsw::link( block, &m_freeHead );
 			return;
 		}
 
@@ -102,8 +102,8 @@ void ConfigStringStorage::setNoCheck( unsigned index, const wsw::StringView &str
 	// There's no string at this index
 	if( !entry->data ) {
 		if( len <= kMaxShortStringSize && m_freeHead ) {
-			auto *block = ::Unlink( m_freeHead, &m_freeHead );
-			::Link( block, &m_usedHead );
+			auto *block = wsw::unlink( m_freeHead, &m_freeHead );
+			wsw::link( block, &m_usedHead );
 			assignEntryData( entry, block->buffer, kMaxShortStringSize, string );
 			return;
 		}
@@ -118,8 +118,8 @@ void ConfigStringStorage::setNoCheck( unsigned index, const wsw::StringView &str
 			assignEntryData( entry, entry->data, kMaxShortStringSize, string );
 			return;
 		}
-		::Unlink( block, &m_usedHead );
-		::Link( block, &m_freeHead );
+		wsw::unlink( block, &m_usedHead );
+		wsw::link( block, &m_freeHead );
 		assignEntryData( entry, (char *)( Q_malloc( len + 1 ) ), len, string );
 		return;
 	}

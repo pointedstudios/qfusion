@@ -53,8 +53,8 @@ class AiAasRouteCache {
 	 */
 	mutable int dummyIntPtr[1];
 
-	template<typename T> friend T *Link( T *, T ** );
-	template<typename T> friend T *Unlink( T *, T ** );
+	template<typename T> friend auto wsw::link( T *, T ** ) -> T *;
+	template<typename T> friend auto wsw::unlink( T *, T ** ) -> T *;
 
 	/**
 	 * Links for maintaining a list of all instances of the class.

@@ -71,7 +71,7 @@ void AiAasRouteCache::Shutdown() {
 
 AiAasRouteCache *AiAasRouteCache::NewInstance( const int *travelFlags_ ) {
 	auto *instance = new( Q_malloc( sizeof( AiAasRouteCache ) ) )AiAasRouteCache( Shared(), travelFlags_ );
-	::Link( instance, &AiAasRouteCache::instancesHead );
+	wsw::link( instance, &AiAasRouteCache::instancesHead );
 	return instance;
 }
 
@@ -80,7 +80,7 @@ void AiAasRouteCache::ReleaseInstance( AiAasRouteCache *instance ) {
 		AI_FailWith( "AiAasRouteCache::ReleaseInstance()", "Attempt to release the shared instance\n" );
 	}
 
-	::Unlink( instance, &AiAasRouteCache::instancesHead );
+	wsw::unlink( instance, &AiAasRouteCache::instancesHead );
 	instance->~AiAasRouteCache();
 	Q_free( instance );
 }
@@ -572,7 +572,7 @@ class FreelistPool {
 public:
 	/**
 	 * A header that is put at a beginning of a block before actual user-visible data.
-	 * Links are arrays so generic {@code ::Link()/::Unlink()} facilities can be used.
+	 * Links are arrays so generic {@code ::link()/::unlink()} facilities can be used.
 	 */
 	struct BlockHeader {
 		BlockHeader *prev[1];
@@ -756,7 +756,7 @@ void *FreelistPool::Alloc( size_t size ) {
 	}
 #endif
 
-	BlockHeader *const block = Unlink( freeBlock, &freeBlock, 0 );
+	BlockHeader *const block = wsw::unlink( freeBlock, &freeBlock, 0 );
 	++blocksInUse;
 	// Return a pointer to a datum after the header
 	return block + 1;
@@ -764,7 +764,7 @@ void *FreelistPool::Alloc( size_t size ) {
 
 void FreelistPool::Free( void *ptr ) {
 	BlockHeader *const block = ( (BlockHeader *)ptr ) - 1;
-	Link( block, &freeBlock, 0 );
+	wsw::link( block, &freeBlock, 0 );
 	--blocksInUse;
 }
 
@@ -876,11 +876,11 @@ void AiAasRouteCache::ResultCache::Clear() {
 
 inline void AiAasRouteCache::ResultCache::LinkToHashBin( uint16_t binIndex, Node *node ) {
 	node->binIndex = binIndex;
-	Link( node, &bins[binIndex], Node::BIN_LINKS, nodes );
+	wsw::link( node, &bins[binIndex], Node::BIN_LINKS, nodes );
 }
 
 inline void AiAasRouteCache::ResultCache::LinkToUsedList( Node *node ) {
-	Link( node, &newestUsedNode, Node::LIST_LINKS, nodes );
+	wsw::link( node, &newestUsedNode, Node::LIST_LINKS, nodes );
 
 	// If there is no oldestUsedNode, set the node as it.
 	if( oldestUsedNode < 0 ) {
@@ -891,9 +891,9 @@ inline void AiAasRouteCache::ResultCache::LinkToUsedList( Node *node ) {
 inline AiAasRouteCache::ResultCache::Node *AiAasRouteCache::ResultCache::UnlinkOldestUsedNode() {
 	Node *result = nodes + oldestUsedNode;
 	// Unlink the node from its bin
-	Unlink( result, &bins[result->binIndex], Node::BIN_LINKS, nodes );
+	wsw::unlink( result, &bins[result->binIndex], Node::BIN_LINKS, nodes );
 	// Unlink the node from nodes list
-	Unlink( result, &oldestUsedNode, Node::LIST_LINKS, nodes );
+	wsw::unlink( result, &oldestUsedNode, Node::LIST_LINKS, nodes );
 	return result;
 }
 
@@ -917,7 +917,7 @@ AiAasRouteCache::ResultCache::AllocAndRegisterForKey( uint16_t binIndex, uint64_
 	if( freeNode >= 0 ) {
 		// Unlink the node from free list
 		result = nodes + freeNode;
-		Unlink( result, &freeNode, Node::LIST_LINKS, nodes );
+		wsw::unlink( result, &freeNode, Node::LIST_LINKS, nodes );
 	} else {
 		result = UnlinkOldestUsedNode();
 	}

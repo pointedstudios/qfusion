@@ -401,10 +401,10 @@ void ServerList::onServerAddressReceived( const netadr_t &address ) {
 
 	auto *const server = new PolledGameServer;
 	server->m_networkAddress = address;
-	::Link( server, &m_serversHead, PolledGameServer::LIST_LINKS );
+	wsw::link( server, &m_serversHead, PolledGameServer::LIST_LINKS );
 	server->m_addressHash = hash;
 	server->m_hashBinIndex = binIndex;
-	::Link( server, &m_serversHashBins[binIndex], PolledGameServer::BIN_LINKS );
+	wsw::link( server, &m_serversHashBins[binIndex], PolledGameServer::BIN_LINKS );
 }
 
 ServerList::ServerList() {
@@ -496,8 +496,8 @@ void ServerList::dropTimedOutServers() {
 
 void ServerList::dropServer( PolledGameServer *server ) {
 	m_listener->onServerRemoved( server );
-	Unlink( server, &m_serversHead, PolledGameServer::LIST_LINKS );
-	Unlink( server, &m_serversHashBins[server->m_hashBinIndex], PolledGameServer::BIN_LINKS );
+	wsw::unlink( server, &m_serversHead, PolledGameServer::LIST_LINKS );
+	wsw::unlink( server, &m_serversHashBins[server->m_hashBinIndex], PolledGameServer::BIN_LINKS );
 	delete server;
 }
 

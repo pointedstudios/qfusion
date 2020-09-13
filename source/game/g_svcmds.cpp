@@ -452,17 +452,17 @@ void GIPFilter::UnlinkAndFreeEntry( Entry *entry ) {
 	GroupHeader *header = entry->group;
 
 	// Unlink from hash bin
-	Unlink( entry, entry->binRef, BIN_LINKS );
+	wsw::unlink( entry, entry->binRef, BIN_LINKS );
 	// Unlink from used list
-	Unlink( entry, &usedListHead, LIST_LINKS );
+	wsw::unlink( entry, &usedListHead, LIST_LINKS );
 	// Link to free list
-	Link( entry, &freeListHead, LIST_LINKS );
+	wsw::link( entry, &freeListHead, LIST_LINKS );
 
 	// Decrease the number of filters in use for the mask group
 	header->numFiltersInUse--;
 	// If there is no filters in use left for the group, unlink the group header from the active headers list
 	if( !header->numFiltersInUse ) {
-		Unlink( header, &groupListHeads[addressIndex], GROUP_LINKS );
+		wsw::unlink( header, &groupListHeads[addressIndex], GROUP_LINKS );
 	}
 
 	// Prevent use-after-free bugs
@@ -531,7 +531,7 @@ GIPFilter::Entry *GIPFilter::AllocEntry() {
 	}
 
 	if( freeListHead ) {
-		return Unlink( freeListHead, &freeListHead, LIST_LINKS );
+		return wsw::unlink( freeListHead, &freeListHead, LIST_LINKS );
 	}
 
 	// Try collecting garbage
@@ -546,7 +546,7 @@ GIPFilter::Entry *GIPFilter::AllocEntry() {
 	}
 
 	if( freeListHead ) {
-		return Unlink( freeListHead, &freeListHead, LIST_LINKS );
+		return wsw::unlink( freeListHead, &freeListHead, LIST_LINKS );
 	}
 
 	return nullptr;
@@ -567,12 +567,12 @@ GIPFilter::Entry *GIPFilter::AllocAndLinkEntry( unsigned addressIndex, unsigned 
 	}
 
 	// Link to the used list
-	Link( entry, &usedListHead, LIST_LINKS );
+	wsw::link( entry, &usedListHead, LIST_LINKS );
 
 	GroupHeader *group = &groupsForAddress[addressIndex][groupIndex];
 
 	// Link to the hash bin
-	Link( entry, group->bins + binIndex, BIN_LINKS );
+	wsw::link( entry, group->bins + binIndex, BIN_LINKS );
 
 	entry->group = group;
 	entry->binRef = group->bins + binIndex;
@@ -581,7 +581,7 @@ GIPFilter::Entry *GIPFilter::AllocAndLinkEntry( unsigned addressIndex, unsigned 
 	// If there were no active filters for the group that is described by the group
 	if( group->numFiltersInUse == 1 ) {
 		// Link the group to the list of active groups
-		Link( group, &groupListHeads[addressIndex], GROUP_LINKS );
+		wsw::link( group, &groupListHeads[addressIndex], GROUP_LINKS );
 	}
 
 	return entry;

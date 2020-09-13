@@ -993,7 +993,7 @@ void QWswUISystem::registerNativelyDrawnItem( QQuickItem *item ) {
 		Com_Printf( "Too many natively drawn items, skipping this one\n" );
 		return;
 	}
-	::Link( nativelyDrawn, &this->m_nativelyDrawnListHead );
+	wsw::link( nativelyDrawn, &this->m_nativelyDrawnListHead );
 	nativelyDrawn->m_isLinked = true;
 	m_numNativelyDrawnItems++;
 }
@@ -1007,7 +1007,7 @@ void QWswUISystem::unregisterNativelyDrawnItem( QQuickItem *item ) {
 	if( !nativelyDrawn->m_isLinked ) {
 		return;
 	}
-	::Unlink( nativelyDrawn, &this->m_nativelyDrawnListHead );
+	wsw::unlink( nativelyDrawn, &this->m_nativelyDrawnListHead );
 	nativelyDrawn->m_isLinked = false;
 	m_numNativelyDrawnItems--;
 	assert( m_numNativelyDrawnItems >= 0 );

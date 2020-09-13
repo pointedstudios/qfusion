@@ -119,11 +119,16 @@ struct alignas( 8 )RaceRun {
 class QueryObject;
 class StatsowFacade;
 
+namespace wsw {
+template <typename T> auto link( T*, T** ) -> T *;
+template <typename T> auto unlink( T*, T** ) -> T *;
+}
+
 class RunStatusQuery {
 	friend class StatsowFacade;
 
-	template <typename T> friend T *Link( T*, T** );
-	template <typename T> friend T *Unlink( T*, T** );
+	template <typename T> friend auto wsw::link( T*, T** ) -> T *;
+	template <typename T> friend auto wsw::unlink( T*, T** ) -> T *;
 
 	const int64_t createdAt;
 	int64_t nextRetryAt { 0 };

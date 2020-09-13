@@ -17,8 +17,8 @@ class AiSquad : public AiFrameAwareComponent {
 	friend class AiSquadBasedTeam;
 	friend class SquadsBuilder;
 
-	template <typename T> friend T *Link( T *, T ** );
-	template <typename T> friend T *Unlink( T *, T ** );
+	template <typename T> friend auto wsw::link( T *, T ** ) -> T *;
+	template <typename T> friend auto wsw::unlink( T *, T ** ) -> T *;
 public:
 	static constexpr unsigned MAX_SQUAD_SIZE = 3;
 private:

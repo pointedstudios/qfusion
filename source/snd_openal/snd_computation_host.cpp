@@ -58,7 +58,7 @@ bool ParallelComputationHost::TryAddTask( PartialTask *task ) {
 	// If there is no tasks, just link the task.
 	// It will be executed in a caller thread even if other tasks are added.
 	if( !tasksHead ) {
-		Link( task, &tasksHead, 0 );
+		wsw::link( task, &tasksHead, 0 );
 		return true;
 	}
 
@@ -72,7 +72,7 @@ bool ParallelComputationHost::TryAddTask( PartialTask *task ) {
 	}
 
 	task->threadHandle = threadHandle;
-	Link( task, &tasksHead, 0 );
+	wsw::link( task, &tasksHead, 0 );
 	return true;
 }
 

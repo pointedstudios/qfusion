@@ -162,8 +162,8 @@ class StatsowFacadeTask : public StatsowNetworkTask {
 	friend class SVStatsowFacade;
 
 	template <typename> friend class StatsowTasksRunner;
-	template <typename T> friend T *Link( T *, T ** );
-	template <typename T> friend T *Unlink( T *, T ** );
+	template <typename T> friend auto wsw::link( T *, T ** ) -> T *;
+	template <typename T> friend auto wsw::unlink( T *, T ** ) -> T *;
 
 	/*
 	 * A timestamp corresponding to the first query launching attempt.

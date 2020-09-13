@@ -166,7 +166,7 @@ public:
 
 	uint8_t *Alloc() {
 		if( freeChunksHead ) {
-			auto *const chunk = ::Unlink( freeChunksHead, &freeChunksHead );
+			auto *const chunk = wsw::unlink( freeChunksHead, &freeChunksHead );
 			numUsedChunks++;
 			return chunk->data;
 		}
@@ -184,7 +184,7 @@ public:
 			return;
 		}
 		auto *chunk = (Chunk *)( ( (uint8_t *)p ) - sizeof( Chunk ) - DATA_PADDING );
-		::Link( chunk, &freeChunksHead );
+		wsw::link( chunk, &freeChunksHead );
 		numUsedChunks--;
 	}
 };

@@ -103,8 +103,8 @@ class Bot: public Ai {
 
 	friend class CachedTravelTimesMatrix;
 
-	template <typename T> friend T *Link( T *, T **, int );
-	template <typename T> friend T *Unlink( T *, T **, int );
+	template <typename T> friend auto wsw::link( T *, T **, int ) -> T *;
+	template <typename T> friend auto wsw::unlink( T *, T **, int ) -> T *;
 public:
 	static constexpr auto PREFERRED_TRAVEL_FLAGS =
 		TFL_WALK | TFL_WALKOFFLEDGE | TFL_JUMP | TFL_STRAFEJUMP | TFL_AIR | TFL_TELEPORT | TFL_JUMPPAD;

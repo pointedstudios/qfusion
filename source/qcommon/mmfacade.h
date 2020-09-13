@@ -29,7 +29,7 @@ class StatsowTasksRunner {
 			return false;
 		}
 		if( task->Start() ) {
-			::Link( task, &activeTasksHead );
+			wsw::link( task, &activeTasksHead );
 			return true;
 		}
 		task->DeleteSelf();
@@ -52,7 +52,7 @@ class StatsowTasksRunner {
 	 * Must be called by {@code TaskType::DeleteSelf()}
 	 */
 	void UnlinkTask( TaskType *task ) {
-		::Unlink( task, &activeTasksHead );
+		wsw::unlink( task, &activeTasksHead );
 	}
 };
 

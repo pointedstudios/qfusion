@@ -55,13 +55,13 @@ Spot *AiObjectiveBasedTeam::SpotsContainer<Spot, N, ScriptSpot>::Add( const Scri
 		return nullptr;
 	}
 
-	Spot *spot = ::Unlink( freeSpotsHead, &freeSpotsHead, Spot::STORAGE_LIST );
+	Spot *spot = wsw::unlink( freeSpotsHead, &freeSpotsHead, Spot::STORAGE_LIST );
 	// Set an address of the spot in the lookup by id table
 	spotsForId[scriptSpot.id] = spot;
 	// Construct a new spot in-place before linking based on the script-visible spot
 	new( spot )Spot( scriptSpot );
 	// Set valid links
-	::Link( spot, &usedSpotsHead, Spot::STORAGE_LIST );
+	wsw::link( spot, &usedSpotsHead, Spot::STORAGE_LIST );
 	size++;
 
 	return spot;
@@ -74,8 +74,8 @@ Spot *AiObjectiveBasedTeam::SpotsContainer<Spot, N, ScriptSpot>::Remove( int id 
 	}
 
 	if( Spot *spot = GetById( id ) ) {
-		::Unlink( spot, &usedSpotsHead, Spot::STORAGE_LIST );
-		::Link( spot, &freeSpotsHead, Spot::STORAGE_LIST );
+		wsw::unlink( spot, &usedSpotsHead, Spot::STORAGE_LIST );
+		wsw::link( spot, &freeSpotsHead, Spot::STORAGE_LIST );
 		spotsForId[id] = nullptr;
 		size--;
 		spot->ReleaseHelpers();
@@ -548,7 +548,7 @@ void AiObjectiveBasedTeam::DefenceSpot::ComputeRawScores( Candidates &candidates
 }
 
 inline void AiObjectiveBasedTeam::ObjectiveSpotImpl::Link( Bot *bot ) {
-	::Link( bot, &botsListHead, Bot::OBJECTIVE_LINKS );
+	wsw::link( bot, &botsListHead, Bot::OBJECTIVE_LINKS );
 }
 
 void AiObjectiveBasedTeam::ObjectiveSpotImpl::ComputeEffectiveScores( Candidates &candidates ) {

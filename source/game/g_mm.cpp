@@ -476,11 +476,11 @@ RunStatusQuery *StatsowFacade::AddRunStatusQuery( const mm_uuid_t &runId ) {
 
 	void *mem = Q_malloc( sizeof( RunStatusQuery ) );
 	auto *statusQuery = new( mem )RunStatusQuery( this, underlyingQuery, runId );
-	return ::Link( statusQuery, &runQueriesHead );
+	return wsw::link( statusQuery, &runQueriesHead );
 }
 
 void StatsowFacade::DeleteRunStatusQuery( RunStatusQuery *query ) {
-	::Unlink( query, &runQueriesHead );
+	wsw::unlink( query, &runQueriesHead );
 	query->~RunStatusQuery();
 	Q_free( query );
 }

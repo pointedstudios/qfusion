@@ -248,7 +248,7 @@ NavEntity *NavEntitiesRegistry::AddNavEntity( edict_t *ent, int aasAreaNum, NavE
 	auto *const navEntity = new( mem )NavEntity( ent, aasAreaNum, flags );
 
 	entityToNavEntity[num] = navEntity;
-	::Link( navEntity, &activeNavEntsHead );
+	wsw::link( navEntity, &activeNavEntsHead );
 
 	return navEntity;
 }
@@ -258,7 +258,7 @@ void NavEntitiesRegistry::RemoveNavEntity( NavEntity *navEntity ) {
 	const auto num = (int)( navEntity->ent - game.edicts );
 	assert( entityToNavEntity[num] );
 
-	::Unlink( navEntity, &activeNavEntsHead );
+	wsw::unlink( navEntity, &activeNavEntsHead );
 	entityToNavEntity[num] = nullptr;
 
 	navEntity->~NavEntity();

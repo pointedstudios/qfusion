@@ -4,6 +4,11 @@
 #include <atomic>
 #include <assert.h>
 
+namespace wsw {
+template <typename T> auto link( T *, T **, int ) -> T *;
+template <typename T> auto unlink( T *, T **, int ) -> T *;
+}
+
 /**
  * A host for computations done in parallel fashion.
  * A user splits the necessary workload between instances of {@code PartialTask} manually.
@@ -26,8 +31,8 @@ public:
 		friend class ParallelComputationHost;
 		friend void *TaskThreadFunc( void * );
 
-		template <typename Item> friend Item *Link( Item *, Item **, int );
-		template <typename Item> friend Item *Unlink( Item *, Item **, int );
+		template <typename T> friend auto wsw::link( T *, T **, int ) -> T *;
+		template <typename T> friend auto wsw::unlink( T *, T **, int ) -> T *;
 
 		// Note: we are aware of false sharing.
 		// These vars are accessed at the same time very rarely (even if a concurrent access happens).

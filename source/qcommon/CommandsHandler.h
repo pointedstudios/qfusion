@@ -116,16 +116,16 @@ bool CommandsHandler<Callback>::addOrReplace( Callback *entry ) {
 template <typename Callback>
 void CommandsHandler<Callback>::link( Callback *entry, unsigned binIndex ) {
 	entry->binIndex = binIndex;
-	::Link( entry, &hashBins[binIndex], Callback::HASH_LINKS );
-	::Link( entry, &listHead, Callback::LIST_LINKS );
+	wsw::link( entry, &hashBins[binIndex], Callback::HASH_LINKS );
+	wsw::link( entry, &listHead, Callback::LIST_LINKS );
 	size++;
 }
 
 template <typename Callback>
 void CommandsHandler<Callback>::unlinkAndDelete( Callback *entry ) {
 	assert( entry->binIndex < NUM_BINS );
-	::Link( entry, &hashBins[entry->binIndex], Callback::HASH_LINKS );
-	::Link( entry, &listHead, Callback::LIST_LINKS );
+	wsw::link( entry, &hashBins[entry->binIndex], Callback::HASH_LINKS );
+	wsw::link( entry, &listHead, Callback::LIST_LINKS );
 	assert( size > 0 );
 	size--;
 	delete entry;

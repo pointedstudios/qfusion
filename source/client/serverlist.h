@@ -113,10 +113,15 @@ public:
 	}
 };
 
+namespace wsw {
+template <typename T> auto link( T *, T **, int ) -> T *;
+template <typename T> auto unlink( T *, T **, int ) -> T *;
+}
+
 class PolledGameServer {
 	friend class ServerList;
-	template <typename T> friend T *Link( T *, T **, int );
-	template <typename T> friend T *Unlink( T *, T **, int );
+	template <typename T> friend auto wsw::link( T *, T **, int ) -> T *;
+	template <typename T> friend auto wsw::unlink( T *, T **, int ) -> T *;
 
 	enum { LIST_LINKS, BIN_LINKS };
 	PolledGameServer *prev[2] { nullptr, nullptr };

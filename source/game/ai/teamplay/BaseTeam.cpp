@@ -109,7 +109,7 @@ void AiBaseTeam::AddBot( Bot *bot ) {
 	Debug( "new bot %s has been added\n", bot->Nick() );
 
 	// Link first
-	::Link( bot, &teamBotsHead, Bot::TEAM_LINKS );
+	wsw::link( bot, &teamBotsHead, Bot::TEAM_LINKS );
 	// Acquire affinity after linking
 	AcquireBotFrameAffinity( ENTNUM( bot->self ) );
 	// Call subtype method (if any) last
@@ -124,7 +124,7 @@ void AiBaseTeam::RemoveBot( Bot *bot ) {
 	// Release affinity before linking
 	ReleaseBotFrameAffinity( ENTNUM( bot->self ) );
 	// Unlink last
-	::Unlink( bot, &teamBotsHead, Bot::TEAM_LINKS );
+	wsw::unlink( bot, &teamBotsHead, Bot::TEAM_LINKS );
 }
 
 void AiBaseTeam::TransferStateFrom( AiBaseTeam *that ) {

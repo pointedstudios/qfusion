@@ -164,11 +164,11 @@ void AiManager::OnBotDropped( edict_t *ent ) {
 }
 
 void AiManager::LinkAi( ai_handle_t *aiHandle ) {
-	Link( aiHandle, &aiHandlesListHead, 0 );
+	wsw::link( aiHandle, &aiHandlesListHead, 0 );
 }
 
 void AiManager::UnlinkAi( ai_handle_t *aiHandle ) {
-	Unlink( aiHandle, &aiHandlesListHead, 0 );
+	wsw::unlink( aiHandle, &aiHandlesListHead, 0 );
 
 	// All links related to the unlinked AI become invalid.
 	// Reset CPU quota cycling state to prevent use-after-free.

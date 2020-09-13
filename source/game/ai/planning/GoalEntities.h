@@ -80,8 +80,8 @@ public:
 // A Goal is often based on a NavEntity
 class NavEntity final : public NavTarget {
 	friend class NavEntitiesRegistry;
-	template <typename T> friend T *Link( T *, T ** );
-	template <typename T> friend T *Unlink( T *, T ** );
+	template <typename T> friend auto wsw::link( T *, T ** ) -> T *;
+	template <typename T> friend auto wsw::unlink( T *, T ** ) -> T *;
 
 	// An entity this goal is based on
 	const edict_t *const ent;
