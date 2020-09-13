@@ -63,7 +63,8 @@ public:
 	void addToChat( const wsw::StringView &name, int64_t frameTimestamp, const wsw::StringView &message ) override;
 	void addToTeamChat( const wsw::StringView &name, int64_t frameTimestamp, const wsw::StringView &message ) override;
 
-	void handleConfigString( unsigned configStringNum, const wsw::StringView &configString ) override;
+	void handleCallvoteInfoString( unsigned configStringNum, const wsw::StringView &configString ) override;
+	void handleGametypeOptionString( unsigned configStringNum, const wsw::StringView &configString ) override;
 
 	void enterUIRenderingMode();
 	void leaveUIRenderingMode();
@@ -1214,8 +1215,13 @@ void QWswUISystem::addToTeamChat( const wsw::StringView &name, int64_t frameTime
 	m_teamChatModel.addMessage( name, frameTimestamp, message );
 }
 
-void QWswUISystem::handleConfigString( unsigned configStringIndex, const wsw::StringView &string ) {
+void QWswUISystem::handleCallvoteInfoString( unsigned configStringIndex, const wsw::StringView &string ) {
+	assert( configStringIndex - CS_CALLVOTEINFOS < MAX_CALLVOTEINFOS );
 	m_callvotesModel.handleConfigString( configStringIndex, string );
+}
+
+void QWswUISystem::handleGametypeOptionString( unsigned configStringIndex, const wsw::StringView &string ) {
+	assert( configStringIndex - CS_GAMETYPE_OPTIONS < MAX_GAMETYPE_OPTIONS );
 }
 
 #include "uisystem.moc"

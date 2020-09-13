@@ -173,7 +173,9 @@ void CG_ConfigString( int i, const wsw::StringView &string ) {
 	} else if( i >= CS_WEAPONDEFS && i < CS_WEAPONDEFS + MAX_WEAPONDEFS ) {
 		CG_OverrideWeapondef( i - CS_WEAPONDEFS, string.data() );
 	} else if( i >= CS_CALLVOTEINFOS && i < CS_CALLVOTEINFOS + MAX_CALLVOTEINFOS ) {
-		UISystem::instance()->handleConfigString( i, string );
+		UISystem::instance()->handleCallvoteInfoString( i, string );
+	} else if( i >= CS_GAMETYPE_OPTIONS && i < CS_GAMETYPE_OPTIONS + MAX_GAMETYPE_OPTIONS ) {
+		UISystem::instance()->handleGametypeOptionString( i, string );
 	}
 }
 
