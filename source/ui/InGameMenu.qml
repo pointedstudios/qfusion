@@ -13,6 +13,32 @@ Rectangle {
     readonly property real heightFrac: (Math.min(1080, rootItem.height - 720)) / (1080 - 720)
 
     Rectangle {
+        width: parent.width
+        height: tabBar.implicitHeight
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        color: Material.backgroundColor
+
+        TabBar {
+            id: tabBar
+            visible: stackView.depth < 2
+            width: mainPane.width
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            background: null
+
+            Behavior on opacity {
+                NumberAnimation { duration: 66 }
+            }
+
+            TabButton { text: "General" }
+            TabButton { text: "Chat" }
+            TabButton { text: "Players" }
+        }
+    }
+
+    Rectangle {
+        id: mainPane
         focus: true
         width: 480 + 120 * heightFrac
         height: 560 + 210 * heightFrac
@@ -24,12 +50,21 @@ Rectangle {
         layer.enabled: parent.enabled
         layer.effect: ElevationEffect { elevation: 64 }
 
-        StackView {
-            id: stackView
+        SwipeView {
+            id: swipeView
             anchors.fill: parent
             anchors.margins: 16
-            focus: true
-            initialItem: selectorComponent
+            interactive: false
+            currentIndex: tabBar.currentIndex
+
+            StackView {
+                id: stackView
+                focus: true
+                initialItem: selectorComponent
+            }
+
+            Item {}
+            Item {}
         }
 
         Component {
@@ -54,6 +89,11 @@ Rectangle {
         }
 
         event.accepted = true
+        if (tabBar.currentIndex) {
+            tabBar.currentIndex = 0
+            return
+        }
+
         if (stackView.depth === 1) {
             wsw.returnFromInGameMenu()
             mainMenu.forceActiveFocus()

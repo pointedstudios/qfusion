@@ -22,9 +22,6 @@ Item {
             text: wsw.isSpectator ? "Join" : "Spectate"
         }
         InGameSelectorButton {
-            text: "Chat"
-        }
-        InGameSelectorButton {
             text: "Gametype Options"
         }
     }
@@ -50,9 +47,6 @@ Item {
         }
         InGameSelectorButton {
             text: "Call a vote"
-        }
-        InGameSelectorButton {
-            text: "Players"
         }
         InGameSelectorButton {
             text: "Disconnect"
